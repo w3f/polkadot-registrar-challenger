@@ -1,3 +1,5 @@
+mod adapters;
+
 #[cfg(test)]
 mod tests {
     #[test]

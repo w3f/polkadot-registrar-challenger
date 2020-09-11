@@ -1,0 +1,21 @@
+[!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]
+
+This contact address was discovered in the Polkadot on-chain naming system and
+the issuer has requested the Web3 Registrar service to judge the specified
+information:
+
+{:ON-CHAIN-DATA}
+
+Please execute the following instructions in order to verify this address.
+If you did not issue such request, then simply ignore this or respond with
+a "reject" message.
+
+1.) Sign the following payload using the private key of the Polkadot account
+    the on-chain identity is based on.
+
+    Payload: {:PAYLOAD}
+
+2.) Responds to this message by copy-pasting the resulting signature and
+    pressing send. No additional data must be included.
+
+Polkadot Wiki guide: https://wiki.polkadot.network/
