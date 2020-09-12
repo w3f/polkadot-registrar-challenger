@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate serde;
 
+use rand::{thread_rng, Rng};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -35,8 +36,36 @@ impl<'de> Deserialize<'de> for PubKey {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct Challenge;
+struct Challenge(Vec<u8>);
+
+impl Challenge {
+    fn gen_random() -> Challenge {
+        let random: [u8; 16] = thread_rng().gen();
+        Challenge(random.to_vec())
+    }
+    fn as_hex(&self) -> String {
+        hex::encode(&self.0)
+    }
+}
+
+impl Serialize for Challenge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&hex::encode(&self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for Challenge {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
+        Ok(Challenge(hex::decode(hex_str).unwrap()))
+    }
+}
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 struct Address;

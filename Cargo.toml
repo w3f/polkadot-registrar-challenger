@@ -19,5 +19,4 @@ matrix-sdk = { version = "0.1.0", git = "https://github.com/matrix-org/matrix-ru
 rocksdb = "0.15.0"
 schnorrkel = "0.9.1"
 rand = "0.7.3"
-sha2 = "0.9.1"
 hex = "0.4.2"
