@@ -1,12 +1,40 @@
 #[macro_use]
 extern crate serde;
 
+use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
+use serde::de::Error as SerdeError;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cell::Cell;
 
 mod adapters;
 
-#[derive(Serialize, Deserialize)]
-struct PubKey;
+struct PubKey(SchnorrkelPubKey);
+
+impl Serialize for PubKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&hex::encode(self.0.to_bytes()))
+    }
+}
+
+impl<'de> Deserialize<'de> for PubKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
+        Ok(PubKey(
+            SchnorrkelPubKey::from_bytes(
+                &hex::decode(hex_str)
+                    .map_err(|_| SerdeError::custom("failed to decode public key from hex"))?,
+            )
+            .map_err(|_| SerdeError::custom("failed creating public key from bytes"))?,
+        ))
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct Challenge;
 
