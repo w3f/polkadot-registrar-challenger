@@ -2,7 +2,9 @@
 extern crate serde;
 
 use rand::{thread_rng, Rng};
+use schnorrkel::context::SigningContext;
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
+use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cell::Cell;
@@ -10,6 +12,7 @@ use std::cell::Cell;
 mod adapters;
 
 struct PubKey(SchnorrkelPubKey);
+struct Signature(SchnorrkelSignature);
 #[derive(Serialize, Deserialize)]
 struct Challenge(String);
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -75,16 +78,17 @@ struct AddressState {
 }
 
 impl AddressState {
-    fn verify_challenge(&self) -> bool {
-        // If valid...
-        let valid = false;
-        if valid {
-            // Update db
-            self.confirmed.set(true);
-            true
-        } else {
-            false
-        }
+    fn verify_challenge(&self, sig: Signature) -> bool {
+        self.pub_key
+            .0
+            // TODO: Check context in substrate.
+            .verify_simple(b"", self.challenge.0.as_bytes(), &sig.0)
+            .and_then(|_| {
+                self.confirmed.set(true);
+                Ok(true)
+            })
+            .or_else::<(), _>(|_| Ok(false))
+            .unwrap()
     }
 }
 
