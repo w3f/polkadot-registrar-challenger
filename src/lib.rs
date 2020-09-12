@@ -10,65 +10,17 @@ use std::cell::Cell;
 mod adapters;
 
 struct PubKey(SchnorrkelPubKey);
-
-impl Serialize for PubKey {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&hex::encode(self.0.to_bytes()))
-    }
-}
-
-impl<'de> Deserialize<'de> for PubKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
-        Ok(PubKey(
-            SchnorrkelPubKey::from_bytes(
-                &hex::decode(hex_str)
-                    .map_err(|_| SerdeError::custom("failed to decode public key from hex"))?,
-            )
-            .map_err(|_| SerdeError::custom("failed creating public key from bytes"))?,
-        ))
-    }
-}
-
-struct Challenge(Vec<u8>);
+#[derive(Serialize, Deserialize)]
+struct Challenge(String);
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
+struct Address;
 
 impl Challenge {
     fn gen_random() -> Challenge {
         let random: [u8; 16] = thread_rng().gen();
-        Challenge(random.to_vec())
-    }
-    fn as_hex(&self) -> String {
-        hex::encode(&self.0)
+        Challenge(hex::encode(random))
     }
 }
-
-impl Serialize for Challenge {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&hex::encode(&self.0))
-    }
-}
-
-impl<'de> Deserialize<'de> for Challenge {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
-        Ok(Challenge(hex::decode(hex_str).unwrap()))
-    }
-}
-
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
-struct Address;
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 enum AddressType {
@@ -91,6 +43,7 @@ struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
+    // Get the address state based on the address type (Email, Riot, etc.).
     fn address_state(&self, addr_type: &AddressType) -> &AddressState {
         match addr_type {
             AddressType::Email(_) => &self.email,
@@ -99,6 +52,9 @@ impl OnChainIdentity {
             AddressType::Riot(_) => &self.riot,
         }
     }
+    // Get the address state based on the addresses type. If the addresses
+    // themselves match (`me@email.com == me@email.com`), it returns the state
+    // wrapped in `Some(_)`, or `None` if the match is invalid.
     fn address_state_match(&self, addr_type: &AddressType) -> Option<&AddressState> {
         let addr_state = self.address_state(addr_type);
 
@@ -148,5 +104,30 @@ impl IdentityManager {
             .iter()
             .find(|ident| ident.address_state_match(&addr_type).is_some())
             .map(|ident| ident.address_state(&addr_type))
+    }
+}
+
+impl Serialize for PubKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&hex::encode(self.0.to_bytes()))
+    }
+}
+
+impl<'de> Deserialize<'de> for PubKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
+        Ok(PubKey(
+            SchnorrkelPubKey::from_bytes(
+                &hex::decode(hex_str)
+                    .map_err(|_| SerdeError::custom("failed to decode public key from hex"))?,
+            )
+            .map_err(|_| SerdeError::custom("failed creating public key from bytes"))?,
+        ))
     }
 }
