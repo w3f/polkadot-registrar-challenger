@@ -1,6 +1,5 @@
 use crate::identity::IdentityManager;
 use crate::{Address, AddressType};
-use std::convert::TryInto;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -10,6 +9,7 @@ use matrix_sdk::{
     },
     Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
+use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
 
