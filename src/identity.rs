@@ -20,19 +20,19 @@ impl OnChainIdentity {
     // Get the address state based on the address type (Email, Riot, etc.).
     fn address_state(&self, addr_type: &AddressType) -> &AddressState {
         match addr_type {
-            AddressType::Email(_) => &self.email,
-            AddressType::Web(_) => &self.web,
-            AddressType::Twitter(_) => &self.twitter,
-            AddressType::Riot(_) => &self.riot,
+            AddressType::Email => &self.email,
+            AddressType::Web => &self.web,
+            AddressType::Twitter => &self.twitter,
+            AddressType::Riot => &self.riot,
         }
     }
     // Get the address state based on the addresses type. If the addresses
     // themselves match (`me@email.com == me@email.com`), it returns the state
     // wrapped in `Some(_)`, or `None` if the match is invalid.
-    fn address_state_match(&self, addr_type: &AddressType) -> Option<&AddressState> {
+    fn address_state_match(&self, addr_type: &AddressType, addr: &Address) -> Option<&AddressState> {
         let addr_state = self.address_state(addr_type);
 
-        if &addr_state.addr_type == addr_type {
+        if &addr_state.addr == addr {
             Some(addr_state)
         } else {
             None
@@ -48,6 +48,7 @@ impl OnChainIdentity {
 
 #[derive(Serialize, Deserialize)]
 struct AddressState {
+    addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
     challenge: Challenge,
@@ -72,7 +73,7 @@ pub struct IdentityScope<'a> {
 
 impl<'a> IdentityScope<'a> {
     pub fn address(&self) -> &Address {
-        self.addr_state.addr_type.raw()
+        &self.addr_state.addr
     }
     fn verify_challenge(&self, sig: Signature) -> bool {
         self.identity
@@ -130,10 +131,10 @@ impl<'a> IdentityManager {
             .find(|ident| &ident.pub_key == pub_key)
             .is_some()
     }
-    pub fn get_identity_scope(&'a self, addr_type: AddressType) -> Option<IdentityScope<'a>> {
+    pub fn get_identity_scope(&'a self, addr_type: &AddressType, addr: &Address) -> Option<IdentityScope<'a>> {
         self.idents
             .iter()
-            .find(|ident| ident.address_state_match(&addr_type).is_some())
+            .find(|ident| ident.address_state_match(addr_type, addr).is_some())
             .map(|ident| IdentityScope {
                 identity: &ident,
                 addr_state: &ident.address_state(&addr_type),

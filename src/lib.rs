@@ -22,20 +22,10 @@ struct Address(String);
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 enum AddressType {
-    Email(Address),
-    Web(Address),
-    Twitter(Address),
-    Riot(Address),
-}
-
-impl AddressType {
-    fn raw(&self) -> &Address {
-        use AddressType::*;
-
-        match self {
-            Email(a) | Web(a) | Twitter(a) | Riot(a) => a,
-        }
-    }
+    Email,
+    Web,
+    Twitter,
+    Riot,
 }
 
 #[derive(Serialize, Deserialize)]

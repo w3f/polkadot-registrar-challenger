@@ -67,7 +67,7 @@ impl<'a> MatrixClient<'a> {
 
             for ident in self
                 .manager
-                .get_uninitialized_channel(AddressType::Riot(Address("".to_string())))
+                .get_uninitialized_channel(AddressType::Riot)
             {
                 // TODO: Fix this
                 let to_invite = [ident.address().0.clone().try_into().unwrap()];
