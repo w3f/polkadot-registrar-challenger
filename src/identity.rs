@@ -7,36 +7,39 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub struct OnChainIdentity {
     pub_key: PubKey,
     // TODO: Should this just be a String?
-    display_name: AddressState,
+    display_name: Option<AddressState>,
     // TODO: Should this just be a String?
-    legal_name: AddressState,
-    email: AddressState,
-    web: AddressState,
-    twitter: AddressState,
-    riot: AddressState,
+    legal_name: Option<AddressState>,
+    email: Option<AddressState>,
+    web: Option<AddressState>,
+    twitter: Option<AddressState>,
+    riot: Option<AddressState>,
 }
 
 impl OnChainIdentity {
     // Get the address state based on the address type (Email, Riot, etc.).
-    fn address_state(&self, addr_type: &AddressType) -> &AddressState {
+    fn address_state(&self, addr_type: &AddressType) -> Option<&AddressState> {
         match addr_type {
-            AddressType::Email => &self.email,
-            AddressType::Web => &self.web,
-            AddressType::Twitter => &self.twitter,
-            AddressType::Riot => &self.riot,
+            AddressType::Email => self.email.as_ref(),
+            AddressType::Web => self.web.as_ref(),
+            AddressType::Twitter => self.twitter.as_ref(),
+            AddressType::Riot => self.riot.as_ref(),
         }
     }
     // Get the address state based on the addresses type. If the addresses
     // themselves match (`me@email.com == me@email.com`), it returns the state
     // wrapped in `Some(_)`, or `None` if the match is invalid.
-    fn address_state_match(&self, addr_type: &AddressType, addr: &Address) -> Option<&AddressState> {
-        let addr_state = self.address_state(addr_type);
-
-        if &addr_state.addr == addr {
-            Some(addr_state)
-        } else {
-            None
+    fn address_state_match(
+        &self,
+        addr_type: &AddressType,
+        addr: &Address,
+    ) -> Option<&AddressState> {
+        if let Some(addr_state) = self.address_state(addr_type) {
+            if &addr_state.addr == addr {
+                return Some(addr_state);
+            }
         }
+        None
     }
     fn from_json(val: &[u8]) -> Self {
         serde_json::from_slice(&val).unwrap()
@@ -131,13 +134,19 @@ impl<'a> IdentityManager {
             .find(|ident| &ident.pub_key == pub_key)
             .is_some()
     }
-    pub fn get_identity_scope(&'a self, addr_type: &AddressType, addr: &Address) -> Option<IdentityScope<'a>> {
+    pub fn get_identity_scope(
+        &'a self,
+        addr_type: &AddressType,
+        addr: &Address,
+    ) -> Option<IdentityScope<'a>> {
         self.idents
             .iter()
             .find(|ident| ident.address_state_match(addr_type, addr).is_some())
             .map(|ident| IdentityScope {
                 identity: &ident,
-                addr_state: &ident.address_state(&addr_type),
+                // Unwrapping is fine here, since `Some` is verified in the
+                // previous `find()` combinator.
+                addr_state: &ident.address_state(&addr_type).unwrap(),
                 db: &self.db,
             })
     }
@@ -145,11 +154,17 @@ impl<'a> IdentityManager {
         self.idents
             .iter()
             .filter(|ident| {
-                ident.address_state(&addr_type).addr_validity == AddressValidity::Unknown
+                if let Some(addr_state) = ident.address_state(&addr_type) {
+                    addr_state.addr_validity == AddressValidity::Unknown
+                } else {
+                    false
+                }
             })
             .map(|ident| IdentityScope {
                 identity: &ident,
-                addr_state: &ident.address_state(&addr_type),
+                // Unwrapping is fine here, since `None` values are filtered out
+                // in the previous `filter` combinator.
+                addr_state: &ident.address_state(&addr_type).unwrap(),
                 db: &self.db,
             })
             .collect()

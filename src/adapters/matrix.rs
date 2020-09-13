@@ -65,15 +65,13 @@ impl<'a> MatrixClient<'a> {
         loop {
             interval.tick().await;
 
-            for ident in self
-                .manager
-                .get_uninitialized_channel(AddressType::Riot)
-            {
+            for ident in self.manager.get_uninitialized_channel(AddressType::Riot) {
                 // TODO: Fix this
                 let to_invite = [ident.address().0.clone().try_into().unwrap()];
 
                 let mut request = Request::default();
                 request.invite = &to_invite;
+                request.name = Some("W3F Registrar Verification");
 
                 self.client.create_room(request).await;
             }
