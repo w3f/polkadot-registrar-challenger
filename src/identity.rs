@@ -81,7 +81,7 @@ impl<'a> IdentityScope<'a> {
     }
 }
 
-struct IdentityManager {
+pub struct IdentityManager {
     idents: Vec<OnChainIdentity>,
     db: DB,
 }
