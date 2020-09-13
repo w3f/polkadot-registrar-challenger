@@ -2,6 +2,7 @@
 extern crate serde;
 
 use rand::{thread_rng, Rng};
+use rocksdb::{IteratorMode, DB};
 use schnorrkel::context::SigningContext;
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
@@ -35,6 +36,7 @@ enum AddressType {
 
 #[derive(Serialize, Deserialize)]
 struct OnChainIdentity {
+    pub_key: PubKey,
     // TODO: Should this just be a String?
     display_name: AddressState,
     // TODO: Should this just be a String?
@@ -72,19 +74,34 @@ impl OnChainIdentity {
 #[derive(Serialize, Deserialize)]
 struct AddressState {
     addr_type: AddressType,
-    pub_key: PubKey,
     challenge: Challenge,
     confirmed: Cell<bool>,
 }
 
-impl AddressState {
+struct IdentityScope<'a> {
+    identity: &'a OnChainIdentity,
+    addr_state: &'a AddressState,
+    db: &'a DB,
+}
+
+impl<'a> IdentityScope<'a> {
     fn verify_challenge(&self, sig: Signature) -> bool {
-        self.pub_key
+        self.identity
+            .pub_key
             .0
             // TODO: Check context in substrate.
-            .verify_simple(b"", self.challenge.0.as_bytes(), &sig.0)
+            .verify_simple(b"", self.addr_state.challenge.0.as_bytes(), &sig.0)
             .and_then(|_| {
-                self.confirmed.set(true);
+                self.addr_state.confirmed.set(true);
+
+                // Keep track of the current progress on disk.
+                self.db
+                    .put(
+                        self.identity.pub_key.0.to_bytes(),
+                        serde_json::to_vec(self.identity).unwrap(),
+                    )
+                    .unwrap();
+
                 Ok(true)
             })
             .or_else::<(), _>(|_| Ok(false))
@@ -94,20 +111,41 @@ impl AddressState {
 
 struct IdentityManager {
     idents: Vec<OnChainIdentity>,
+    db: DB,
 }
 
 impl IdentityManager {
-    pub fn new() -> Self {
-        IdentityManager { idents: vec![] }
+    pub fn new(db: DB) -> Self {
+        let mut idents = vec![];
+
+        // Read pending on-chain identities from storage. Ideally, there are none.
+        db.iterator(IteratorMode::Start).for_each(|(_, value)| {
+            idents.push(serde_json::from_slice::<OnChainIdentity>(&value).unwrap());
+        });
+
+        IdentityManager {
+            idents: idents,
+            db: db,
+        }
     }
     pub fn register_request(&mut self, ident: OnChainIdentity) {
+        // Save the pending on-chain identity to disk.
+        self.db.put(
+            ident.pub_key.0.to_bytes(),
+            serde_json::to_vec(&ident).unwrap(),
+        );
+
         self.idents.push(ident);
     }
-    pub fn get_identity_scope(&self, addr_type: AddressType) -> Option<&AddressState> {
+    pub fn get_identity_scope<'a>(&'a self, addr_type: AddressType) -> Option<IdentityScope<'a>> {
         self.idents
             .iter()
             .find(|ident| ident.address_state_match(&addr_type).is_some())
-            .map(|ident| ident.address_state(&addr_type))
+            .map(|ident| IdentityScope {
+                identity: &ident,
+                addr_state: &ident.address_state(&addr_type),
+                db: &self.db,
+            })
     }
 }
 
