@@ -1,5 +1,4 @@
-use url::Url;
-
+use crate::identity::IdentityManager;
 use matrix_sdk::{
     self,
     events::{
@@ -8,9 +7,11 @@ use matrix_sdk::{
     },
     Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
-pub struct MatrixClient {
+use url::Url;
+pub struct MatrixClient<'a> {
     config: MatrixConfig,
     client: Client, // `Client` from matrix_sdk
+    manager: &'a IdentityManager,
 }
 
 pub struct MatrixConfig {
@@ -19,8 +20,8 @@ pub struct MatrixConfig {
     password: String,
 }
 
-impl MatrixClient {
-    pub async fn new(config: MatrixConfig) -> Self {
+impl<'a> MatrixClient<'a> {
+    pub async fn new(config: MatrixConfig, manager: &'a IdentityManager) -> MatrixClient<'a> {
         // Setup client
         let homeserver_url =
             Url::parse(&config.homeserver_url).expect("Couldn't parse the homeserver URL");
@@ -38,9 +39,13 @@ impl MatrixClient {
         MatrixClient {
             config: config,
             client: client,
+            manager: manager,
         }
     }
-    pub async fn start(&self) -> Result<(), ()> {
+    pub async fn start(&'static mut self) -> Result<(), ()> {
+        self.client
+            .add_event_emitter(Box::new(MessageHandler::new(self.manager)));
+
         // Blocks forever
         self.client
             .sync_forever(SyncSettings::new(), |_| async {})
@@ -48,6 +53,18 @@ impl MatrixClient {
         Ok(())
     }
 }
+
+struct MessageHandler<'a> {
+    manager: &'a IdentityManager,
+}
+
+impl<'a> MessageHandler<'a> {
+    fn new(manager: &'a IdentityManager) -> Self {
+        MessageHandler { manager: manager }
+    }
+}
+
+impl<'a> EventEmitter for MessageHandler<'a> {}
 
 #[cfg(test)]
 mod tests {

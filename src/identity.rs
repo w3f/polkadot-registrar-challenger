@@ -1,10 +1,10 @@
 use super::{Address, AddressType, Challenge, PubKey, Signature};
 use rocksdb::{IteratorMode, DB};
 use schnorrkel::context::SigningContext;
-use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Serialize, Deserialize)]
-struct OnChainIdentity {
+pub struct OnChainIdentity {
     pub_key: PubKey,
     // TODO: Should this just be a String?
     display_name: AddressState,
@@ -50,7 +50,7 @@ impl OnChainIdentity {
 struct AddressState {
     addr_type: AddressType,
     challenge: Challenge,
-    confirmed: Cell<bool>,
+    confirmed: AtomicBool,
 }
 
 struct IdentityScope<'a> {
@@ -67,7 +67,7 @@ impl<'a> IdentityScope<'a> {
             // TODO: Check context in substrate.
             .verify_simple(b"", self.addr_state.challenge.0.as_bytes(), &sig.0)
             .and_then(|_| {
-                self.addr_state.confirmed.set(true);
+                self.addr_state.confirmed.store(true, Ordering::Relaxed);
 
                 // Keep track of the current progress on disk.
                 self.db
