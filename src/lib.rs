@@ -70,6 +70,12 @@ impl OnChainIdentity {
             None
         }
     }
+    fn from_json(val: &[u8]) -> Self {
+        serde_json::from_slice(&val).unwrap()
+    }
+    fn to_json(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap()
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -97,10 +103,7 @@ impl<'a> IdentityScope<'a> {
 
                 // Keep track of the current progress on disk.
                 self.db
-                    .put(
-                        self.identity.pub_key.0.to_bytes(),
-                        serde_json::to_vec(self.identity).unwrap(),
-                    )
+                    .put(self.identity.pub_key.0.to_bytes(), self.identity.to_json())
                     .unwrap();
 
                 Ok(true)
@@ -121,7 +124,7 @@ impl IdentityManager {
 
         // Read pending on-chain identities from storage. Ideally, there are none.
         db.iterator(IteratorMode::Start).for_each(|(_, value)| {
-            idents.push(serde_json::from_slice::<OnChainIdentity>(&value).unwrap());
+            idents.push(OnChainIdentity::from_json(&*value));
         });
 
         IdentityManager {
@@ -135,10 +138,7 @@ impl IdentityManager {
         }
 
         // Save the pending on-chain identity to disk.
-        self.db.put(
-            ident.pub_key.0.to_bytes(),
-            serde_json::to_vec(&ident).unwrap(),
-        );
+        self.db.put(ident.pub_key.0.to_bytes(), ident.to_json());
 
         self.idents.push(ident);
     }
