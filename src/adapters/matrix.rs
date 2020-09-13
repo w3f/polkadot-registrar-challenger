@@ -64,11 +64,17 @@ impl<'a> MessageHandler<'a> {
     }
 }
 
-impl<'a> EventEmitter for MessageHandler<'a> {}
+#[async_trait]
+impl<'a> EventEmitter for MessageHandler<'a> {
+    async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::IdentityManager;
+    use rocksdb::DB;
     use std::env;
     use std::future::Future;
     use tokio::runtime::Runtime;
@@ -80,17 +86,21 @@ mod tests {
     }
 
     // Convenience function
-    async fn client() -> MatrixClient {
-        MatrixClient::new(MatrixConfig {
-            homeserver_url: env::var("TEST_MATRIX_HOMESERVER").unwrap(),
-            username: env::var("TEST_MATRIX_USER").unwrap(),
-            password: env::var("TEST_MATRIX_PASSWORD").unwrap(),
-        })
+    async fn client<'a>(manager: &'a IdentityManager) -> MatrixClient<'a> {
+        MatrixClient::new(
+            MatrixConfig {
+                homeserver_url: env::var("TEST_MATRIX_HOMESERVER").unwrap(),
+                username: env::var("TEST_MATRIX_USER").unwrap(),
+                password: env::var("TEST_MATRIX_PASSWORD").unwrap(),
+            },
+            manager,
+        )
         .await
     }
 
     #[test]
     fn matrix_login_and_sync() {
-        run(client())
+        let mut manager = IdentityManager::new(DB::open_default("/tmp/test_matrix").unwrap());
+        run(client(&manager))
     }
 }

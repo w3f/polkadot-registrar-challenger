@@ -1,4 +1,6 @@
 #[macro_use]
+extern crate async_trait;
+#[macro_use]
 extern crate serde;
 
 use rand::{thread_rng, Rng};
