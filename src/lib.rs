@@ -12,6 +12,7 @@ use std::cell::Cell;
 
 mod adapters;
 
+#[derive(Eq, PartialEq)]
 struct PubKey(SchnorrkelPubKey);
 struct Signature(SchnorrkelSignature);
 #[derive(Serialize, Deserialize)]
@@ -129,6 +130,10 @@ impl IdentityManager {
         }
     }
     pub fn register_request(&mut self, ident: OnChainIdentity) {
+        if self.pub_key_exists(&ident.pub_key) {
+            return;
+        }
+
         // Save the pending on-chain identity to disk.
         self.db.put(
             ident.pub_key.0.to_bytes(),
@@ -136,6 +141,12 @@ impl IdentityManager {
         );
 
         self.idents.push(ident);
+    }
+    fn pub_key_exists(&self, pub_key: &PubKey) -> bool {
+        self.idents
+            .iter()
+            .find(|ident| &ident.pub_key == pub_key)
+            .is_some()
     }
     pub fn get_identity_scope<'a>(&'a self, addr_type: AddressType) -> Option<IdentityScope<'a>> {
         self.idents
