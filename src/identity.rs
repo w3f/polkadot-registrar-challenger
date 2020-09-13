@@ -49,17 +49,31 @@ impl OnChainIdentity {
 #[derive(Serialize, Deserialize)]
 struct AddressState {
     addr_type: AddressType,
+    addr_validity: AddressValidity,
     challenge: Challenge,
     confirmed: AtomicBool,
 }
 
-struct IdentityScope<'a> {
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
+enum AddressValidity {
+    #[serde(rename = "unknown")]
+    Unknown,
+    #[serde(rename = "valid")]
+    Valid,
+    #[serde(rename = "invalid")]
+    Invalid,
+}
+
+pub struct IdentityScope<'a> {
     identity: &'a OnChainIdentity,
     addr_state: &'a AddressState,
     db: &'a DB,
 }
 
 impl<'a> IdentityScope<'a> {
+    pub fn address(&self) -> &Address {
+        self.addr_state.addr_type.raw()
+    }
     fn verify_challenge(&self, sig: Signature) -> bool {
         self.identity
             .pub_key
@@ -86,7 +100,7 @@ pub struct IdentityManager {
     db: DB,
 }
 
-impl IdentityManager {
+impl<'a> IdentityManager {
     pub fn new(db: DB) -> Self {
         let mut idents = vec![];
 
@@ -116,7 +130,7 @@ impl IdentityManager {
             .find(|ident| &ident.pub_key == pub_key)
             .is_some()
     }
-    pub fn get_identity_scope<'a>(&'a self, addr_type: AddressType) -> Option<IdentityScope<'a>> {
+    pub fn get_identity_scope(&'a self, addr_type: AddressType) -> Option<IdentityScope<'a>> {
         self.idents
             .iter()
             .find(|ident| ident.address_state_match(&addr_type).is_some())
@@ -125,5 +139,18 @@ impl IdentityManager {
                 addr_state: &ident.address_state(&addr_type),
                 db: &self.db,
             })
+    }
+    pub fn get_uninitialized_channel(&'a self, addr_type: AddressType) -> Vec<IdentityScope<'a>> {
+        self.idents
+            .iter()
+            .filter(|ident| {
+                ident.address_state(&addr_type).addr_validity == AddressValidity::Unknown
+            })
+            .map(|ident| IdentityScope {
+                identity: &ident,
+                addr_state: &ident.address_state(&addr_type),
+                db: &self.db,
+            })
+            .collect()
     }
 }

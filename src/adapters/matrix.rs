@@ -1,13 +1,18 @@
 use crate::identity::IdentityManager;
+use crate::{Address, AddressType};
+use std::convert::TryInto;
 use matrix_sdk::{
     self,
+    api::r0::room::create_room::Request,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
         SyncMessageEvent,
     },
     Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
+use tokio::time::{self, Duration};
 use url::Url;
+
 pub struct MatrixClient<'a> {
     config: MatrixConfig,
     client: Client, // `Client` from matrix_sdk
@@ -42,15 +47,37 @@ impl<'a> MatrixClient<'a> {
             manager: manager,
         }
     }
-    pub async fn start(&'static mut self) -> Result<(), ()> {
+    pub async fn start(&'static mut self) {
         self.client
             .add_event_emitter(Box::new(MessageHandler::new(self.manager)));
 
         // Blocks forever
-        self.client
-            .sync_forever(SyncSettings::new(), |_| async {})
-            .await;
-        Ok(())
+        join!(
+            // Room initializer
+            self.room_init(),
+            // Message responder
+            self.client.sync_forever(SyncSettings::new(), |_| async {})
+        );
+    }
+    pub async fn room_init(&'static self) {
+        let mut interval = time::interval(Duration::from_secs(3));
+
+        loop {
+            interval.tick().await;
+
+            for ident in self
+                .manager
+                .get_uninitialized_channel(AddressType::Riot(Address("".to_string())))
+            {
+                // TODO: Fix this
+                let to_invite = [ident.address().0.clone().try_into().unwrap()];
+
+                let mut request = Request::default();
+                request.invite = &to_invite;
+
+                self.client.create_room(request).await;
+            }
+        }
     }
 }
 
@@ -67,6 +94,7 @@ impl<'a> MessageHandler<'a> {
 #[async_trait]
 impl<'a> EventEmitter for MessageHandler<'a> {
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+        if let SyncRoom::Joined(room) = room {}
     }
 }
 

@@ -1,4 +1,6 @@
 #[macro_use]
+extern crate futures;
+#[macro_use]
 extern crate async_trait;
 #[macro_use]
 extern crate serde;
@@ -16,7 +18,7 @@ mod identity;
 struct PubKey(SchnorrkelPubKey);
 struct Signature(SchnorrkelSignature);
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
-struct Address;
+struct Address(String);
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 enum AddressType {
@@ -24,6 +26,16 @@ enum AddressType {
     Web(Address),
     Twitter(Address),
     Riot(Address),
+}
+
+impl AddressType {
+    fn raw(&self) -> &Address {
+        use AddressType::*;
+
+        match self {
+            Email(a) | Web(a) | Twitter(a) | Riot(a) => a,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
