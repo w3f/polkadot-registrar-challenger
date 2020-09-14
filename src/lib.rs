@@ -14,20 +14,20 @@ use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::result::Result as StdResult;
 
-mod adapters;
-mod db;
-mod identity;
+pub mod adapters;
+pub mod db;
+pub mod identity;
 
 type Result<T> = StdResult<T, failure::Error>;
 
 #[derive(Eq, PartialEq)]
-struct PubKey(SchnorrkelPubKey);
-struct Signature(SchnorrkelSignature);
+pub struct PubKey(SchnorrkelPubKey);
+pub struct Signature(SchnorrkelSignature);
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
-struct Address(String);
+pub struct Address(String);
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
-enum AddressType {
+pub enum AddressType {
     Email,
     Web,
     Twitter,

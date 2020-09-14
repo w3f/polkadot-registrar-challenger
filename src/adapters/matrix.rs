@@ -91,7 +91,7 @@ impl<'a> MatrixClient<'a> {
                     .room_send(
                         &room_id,
                         AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                            TextMessageEventContent::plain("string"),
+                            TextMessageEventContent::plain(include_str!("../../messages/instructions")),
                         )),
                         None,
                     )
@@ -122,11 +122,13 @@ impl<'a> EventEmitter for MessageHandler<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::IdentityManager;
-    use rocksdb::DB;
+    use crate::{PubKey, Address, AddressType};
+    use crate::db::Database;
+    use crate::identity::{IdentityManager, OnChainIdentity, AddressState};
     use std::env;
     use std::future::Future;
     use tokio::runtime::Runtime;
+    use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 
     // Convenience function for running async tasks
     fn run<F: Future>(future: F) {
@@ -135,7 +137,7 @@ mod tests {
     }
 
     // Convenience function
-    async fn client<'a>(manager: &'a IdentityManager) -> MatrixClient<'a> {
+    async fn client<'a>(manager: &'a IdentityManager<'a>) -> MatrixClient<'a> {
         MatrixClient::new(
             MatrixConfig {
                 homeserver_url: env::var("TEST_MATRIX_HOMESERVER").unwrap(),
@@ -149,7 +151,30 @@ mod tests {
 
     #[test]
     fn matrix_login_and_sync() {
-        let mut manager = IdentityManager::new(DB::open_default("/tmp/test_matrix").unwrap());
-        run(client(&manager))
+        let db = Database::new("/tmp/test_matrix").unwrap();
+        let mut manager = IdentityManager::new(&db).unwrap();
+        run(client(&manager));
+    }
+
+    #[test]
+    fn matrix_send_msg() {
+        run(async move {
+            let db = Database::new("/tmp/test_matrix").unwrap();
+            let mut manager = IdentityManager::new(&db).unwrap();
+            manager.register_request(
+                OnChainIdentity {
+                    pub_key: PubKey(SchnorrkelPubKey::default()),
+                    display_name: None,
+                    legal_name: None,
+                    email: None,
+                    web: None,
+                    twitter: None,
+                    riot: Some(AddressState::new(Address("@fabio:web3.foundation".to_string()), AddressType::Riot)),
+                }
+            );
+
+            let mut client = client(&manager).await;
+            client.start().await;
+        });
     }
 }

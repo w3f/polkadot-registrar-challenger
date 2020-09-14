@@ -6,15 +6,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Serialize, Deserialize)]
 pub struct OnChainIdentity {
-    pub_key: PubKey,
+    pub pub_key: PubKey,
     // TODO: Should this just be a String?
-    display_name: Option<AddressState>,
+    pub display_name: Option<AddressState>,
     // TODO: Should this just be a String?
-    legal_name: Option<AddressState>,
-    email: Option<AddressState>,
-    web: Option<AddressState>,
-    twitter: Option<AddressState>,
-    riot: Option<AddressState>,
+    pub legal_name: Option<AddressState>,
+    pub email: Option<AddressState>,
+    pub web: Option<AddressState>,
+    pub twitter: Option<AddressState>,
+    pub riot: Option<AddressState>,
 }
 
 impl OnChainIdentity {
@@ -53,12 +53,24 @@ impl OnChainIdentity {
 }
 
 #[derive(Serialize, Deserialize)]
-struct AddressState {
+pub struct AddressState {
     addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
     challenge: Challenge,
     confirmed: AtomicBool,
+}
+
+impl AddressState {
+    pub fn new(addr: Address, addr_type: AddressType) -> Self {
+        AddressState {
+            addr: addr,
+            addr_type: addr_type,
+            addr_validity: AddressValidity::Unknown,
+            challenge: Challenge::gen_random(),
+            confirmed: AtomicBool::new(false),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
