@@ -19,11 +19,13 @@ pub struct OnChainIdentity {
 impl OnChainIdentity {
     // Get the address state based on the address type (Email, Riot, etc.).
     fn address_state(&self, addr_type: &AddressType) -> Option<&AddressState> {
+        use AddressType::*;
+
         match addr_type {
-            AddressType::Email => self.email.as_ref(),
-            AddressType::Web => self.web.as_ref(),
-            AddressType::Twitter => self.twitter.as_ref(),
-            AddressType::Riot => self.riot.as_ref(),
+            Email => self.email.as_ref(),
+            Web => self.web.as_ref(),
+            Twitter => self.twitter.as_ref(),
+            Riot => self.riot.as_ref(),
         }
     }
     // Get the address state based on the addresses type. If the addresses
