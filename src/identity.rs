@@ -152,6 +152,9 @@ pub struct IdentityManager<'a> {
 struct CommsTable {
     to_main: Sender<CommsMessage>,
     listener: Receiver<CommsMessage>,
+    email: Option<CommsMain>,
+    web: Option<CommsMain>,
+    twitter: Option<CommsMain>,
     matrix: Option<CommsMain>,
 }
 
@@ -174,6 +177,9 @@ impl<'a> IdentityManager<'a> {
             comms: CommsTable {
                 to_main: tx,
                 listener: recv,
+                email: None,
+                web: None,
+                twitter: None,
                 matrix: None,
             },
         })
@@ -195,6 +201,15 @@ impl<'a> IdentityManager<'a> {
         let (cm, cv) = self.get_comms();
 
         match addr_type {
+            Email => {
+                self.comms.email = Some(cm);
+            }
+            Web => {
+                self.comms.web = Some(cm);
+            }
+            Twitter => {
+                self.comms.twitter = Some(cm);
+            }
             Matrix => {
                 self.comms.matrix = Some(cm);
             }
