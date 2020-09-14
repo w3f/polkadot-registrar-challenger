@@ -1,5 +1,5 @@
 use super::{Address, AddressType, Challenge, PubKey, Signature};
-use rocksdb::{IteratorMode, DB};
+use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use schnorrkel::context::SigningContext;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -90,6 +90,7 @@ impl<'a> IdentityScope<'a> {
                 self.addr_state.confirmed.store(true, Ordering::Relaxed);
 
                 // Keep track of the current progress on disk.
+                let cf = self.db.cf_handle("pending_identities").unwrap();
                 self.db
                     .put(self.identity.pub_key.0.to_bytes(), self.identity.to_json())
                     .unwrap();
@@ -102,18 +103,26 @@ impl<'a> IdentityScope<'a> {
 }
 
 pub struct IdentityManager {
-    idents: Vec<OnChainIdentity>,
-    db: DB,
+    pub idents: Vec<OnChainIdentity>,
+    pub db: DB,
 }
 
 impl<'a> IdentityManager {
-    pub fn new(db: DB) -> Self {
+    pub fn new(db_path: &str) -> Self {
+        let mut db = DB::open_cf(&Options::default(), db_path, vec!["pending_identities"]).unwrap();
+
+        db.create_cf("pending_identities", &Options::default());
+        db.create_cf("matrix_rooms", &Options::default());
+
+        let cf = db.cf_handle("pending_identities").unwrap();
+
         let mut idents = vec![];
 
         // Read pending on-chain identities from storage. Ideally, there are none.
-        db.iterator(IteratorMode::Start).for_each(|(_, value)| {
-            idents.push(OnChainIdentity::from_json(&*value));
-        });
+        db.iterator_cf(cf, IteratorMode::Start)
+            .for_each(|(_, value)| {
+                idents.push(OnChainIdentity::from_json(&*value));
+            });
 
         IdentityManager {
             idents: idents,
@@ -126,7 +135,9 @@ impl<'a> IdentityManager {
         }
 
         // Save the pending on-chain identity to disk.
-        self.db.put(ident.pub_key.0.to_bytes(), ident.to_json());
+        let cf = self.db.cf_handle("pending_identities").unwrap();
+        self.db
+            .put_cf(cf, ident.pub_key.0.to_bytes(), ident.to_json());
 
         self.idents.push(ident);
     }

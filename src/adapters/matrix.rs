@@ -9,6 +9,7 @@ use matrix_sdk::{
     },
     Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
+use rocksdb::Options;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
@@ -61,6 +62,7 @@ impl<'a> MatrixClient<'a> {
     }
     pub async fn room_init(&'static self) {
         let mut interval = time::interval(Duration::from_secs(3));
+        let cf = self.manager.db.cf_handle("matrix_rooms").unwrap();
 
         loop {
             interval.tick().await;
