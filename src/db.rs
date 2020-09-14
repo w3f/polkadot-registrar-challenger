@@ -17,7 +17,11 @@ impl Database {
         opts.create_if_missing(true);
 
         Ok(Database {
-            db: DB::open(&opts, path)?,
+            //db: DB::open(&opts, path)?,
+            db: DB::open_cf(&opts, path, &[
+                "pending_identities",
+                "matrix_rooms"
+            ])?,
         })
     }
     pub fn scope<'a>(&'a self, cf_name: &str) -> ScopedDatabase<'a> {

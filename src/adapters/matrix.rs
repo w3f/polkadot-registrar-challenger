@@ -1,22 +1,19 @@
 use crate::identity::IdentityManager;
-use crate::{Address, AddressType};
+use crate::AddressType;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
-        AnyMessageEventContent, SyncMessageEvent,
+        AnyMessageEventContent,
     },
-    Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
+    Client, SyncSettings,
 };
-use rocksdb::Options;
-use ruma_identifiers::RoomId;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
 
 pub struct MatrixClient<'a> {
-    config: MatrixConfig,
     client: Client, // `Client` from matrix_sdk
     manager: &'a IdentityManager<'a>,
 }
@@ -32,7 +29,7 @@ impl<'a> MatrixClient<'a> {
         // Setup client
         let homeserver_url =
             Url::parse(&config.homeserver_url).expect("Couldn't parse the homeserver URL");
-        let mut client = Client::new(homeserver_url).unwrap();
+        let client = Client::new(homeserver_url).unwrap();
 
         // Login with credentials
         client
@@ -44,24 +41,29 @@ impl<'a> MatrixClient<'a> {
         client.sync(SyncSettings::default()).await.unwrap();
 
         MatrixClient {
-            config: config,
             client: client,
             manager: manager,
         }
     }
-    pub async fn start(&'static mut self) {
-        self.client
-            .add_event_emitter(Box::new(MessageHandler::new(self.manager)));
+    pub async fn start(&mut self) {
+        let mut interval = time::interval(Duration::from_secs(1));
 
         // Blocks forever
         join!(
             // Room initializer
             self.room_init(),
-            // Message responder
-            self.client.sync_forever(SyncSettings::new(), |_| async {})
+            // Client sync
+            async {
+                // `sync_forever` results in a panic. Related:
+                // https://github.com/rust-lang/rust/issues/64496
+                loop {
+                    interval.tick().await;
+                    self.client.sync(SyncSettings::new()).await.unwrap();
+                }
+            }
         );
     }
-    pub async fn room_init(&'static self) {
+    pub async fn room_init(&self) {
         let mut interval = time::interval(Duration::from_secs(3));
 
         let db = &self.manager.db.scope("matrix_rooms");
@@ -83,7 +85,7 @@ impl<'a> MatrixClient<'a> {
                     request.name = Some("W3F Registrar Verification");
 
                     let resp = self.client.create_room(request).await.unwrap();
-                    db.put(&ident.address().0, resp.room_id.as_str());
+                    db.put(&ident.address().0, resp.room_id.as_str()).unwrap();
                     resp.room_id
                 };
 
@@ -91,44 +93,35 @@ impl<'a> MatrixClient<'a> {
                     .room_send(
                         &room_id,
                         AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                            TextMessageEventContent::plain(include_str!("../../messages/instructions")),
+                            // TODO: Make a proper Message Creator for this
+                            TextMessageEventContent::plain(include_str!(
+                                "../../messages/instructions"
+                            ).replace("{:PAYLOAD}", &ident.addr_state.challenge.0)),
                         )),
                         None,
                     )
                     .await
                     .unwrap();
+
+                // Prevent the sending of multiple messages.
+                ident.addr_state.attempt_contact();
+
+                // TODO: Handle response
             }
         }
-    }
-}
-
-struct MessageHandler<'a> {
-    manager: &'a IdentityManager<'a>,
-}
-
-impl<'a> MessageHandler<'a> {
-    fn new(manager: &'a IdentityManager<'a>) -> Self {
-        MessageHandler { manager: manager }
-    }
-}
-
-#[async_trait]
-impl<'a> EventEmitter for MessageHandler<'a> {
-    async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
-        if let SyncRoom::Joined(room) = room {}
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{PubKey, Address, AddressType};
     use crate::db::Database;
-    use crate::identity::{IdentityManager, OnChainIdentity, AddressState};
+    use crate::identity::{AddressState, IdentityManager, OnChainIdentity};
+    use crate::{Address, AddressType, PubKey};
+    use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
     use std::env;
     use std::future::Future;
     use tokio::runtime::Runtime;
-    use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 
     // Convenience function for running async tasks
     fn run<F: Future>(future: F) {
@@ -152,27 +145,29 @@ mod tests {
     #[test]
     fn matrix_login_and_sync() {
         let db = Database::new("/tmp/test_matrix").unwrap();
-        let mut manager = IdentityManager::new(&db).unwrap();
+        let manager = IdentityManager::new(&db).unwrap();
         run(client(&manager));
     }
 
     #[test]
     fn matrix_send_msg() {
-        run(async move {
-            let db = Database::new("/tmp/test_matrix").unwrap();
-            let mut manager = IdentityManager::new(&db).unwrap();
-            manager.register_request(
-                OnChainIdentity {
-                    pub_key: PubKey(SchnorrkelPubKey::default()),
-                    display_name: None,
-                    legal_name: None,
-                    email: None,
-                    web: None,
-                    twitter: None,
-                    riot: Some(AddressState::new(Address("@fabio:web3.foundation".to_string()), AddressType::Riot)),
-                }
-            );
+        let db = Database::new("/tmp/test_matrix").unwrap();
+        let mut manager = IdentityManager::new(&db).unwrap();
+        manager.register_request(OnChainIdentity {
+            pub_key: PubKey(SchnorrkelPubKey::default()),
+            display_name: None,
+            legal_name: None,
+            email: None,
+            web: None,
+            twitter: None,
+            riot: Some(AddressState::new(
+                Address("@fabio:web3.foundation".to_string()),
+                AddressType::Riot,
+            )),
+        }).unwrap();
 
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
             let mut client = client(&manager).await;
             client.start().await;
         });

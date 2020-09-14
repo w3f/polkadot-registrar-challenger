@@ -1,7 +1,5 @@
 use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
 use crate::db::{Database, ScopedDatabase};
-use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
-use schnorrkel::context::SigningContext;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Serialize, Deserialize)]
@@ -57,7 +55,8 @@ pub struct AddressState {
     addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
-    challenge: Challenge,
+    pub challenge: Challenge,
+    pub attempt_contact: AtomicBool,
     confirmed: AtomicBool,
 }
 
@@ -68,8 +67,12 @@ impl AddressState {
             addr_type: addr_type,
             addr_validity: AddressValidity::Unknown,
             challenge: Challenge::gen_random(),
+            attempt_contact: AtomicBool::new(false),
             confirmed: AtomicBool::new(false),
         }
+    }
+    pub fn attempt_contact(&self) {
+        self.attempt_contact.store(true, Ordering::Relaxed);
     }
 }
 
@@ -84,8 +87,8 @@ enum AddressValidity {
 }
 
 pub struct IdentityScope<'a> {
-    identity: &'a OnChainIdentity,
-    addr_state: &'a AddressState,
+    pub identity: &'a OnChainIdentity,
+    pub addr_state: &'a AddressState,
     db: &'a ScopedDatabase<'a>,
 }
 
@@ -93,7 +96,7 @@ impl<'a> IdentityScope<'a> {
     pub fn address(&self) -> &Address {
         &self.addr_state.addr
     }
-    fn verify_challenge(&self, sig: Signature) -> Result<bool> {
+    pub fn verify_challenge(&self, sig: Signature) -> Result<bool> {
         if let Ok(_) = self
             .identity
             .pub_key
@@ -126,11 +129,9 @@ impl<'a> IdentityManager<'a> {
         let mut idents = vec![];
 
         // Read pending on-chain identities from storage. Ideally, there are none.
-        /*
-        db.all()?.iter().map(|(_, value)| {
+        for (_, value) in db.all()? {
             idents.push(OnChainIdentity::from_json(&*value)?);
-        })?;
-        */
+        };
 
         Ok(IdentityManager {
             idents: idents,
@@ -140,7 +141,7 @@ impl<'a> IdentityManager<'a> {
     pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         if !self.pub_key_exists(&ident.pub_key) {
             // Save the pending on-chain identity to disk.
-            self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?);
+            self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
             self.idents.push(ident);
         }
 
@@ -173,7 +174,7 @@ impl<'a> IdentityManager<'a> {
             .iter()
             .filter(|ident| {
                 if let Some(addr_state) = ident.address_state(&addr_type) {
-                    addr_state.addr_validity == AddressValidity::Unknown
+                    addr_state.addr_validity == AddressValidity::Unknown && !addr_state.attempt_contact.load(Ordering::Relaxed)
                 } else {
                     false
                 }
