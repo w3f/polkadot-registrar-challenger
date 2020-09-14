@@ -1,6 +1,7 @@
 use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
 use crate::db::{Database, ScopedDatabase};
 use std::sync::atomic::{AtomicBool, Ordering};
+use crossbeam::channel::{unbounded, Sender, Receiver};
 
 #[derive(Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -117,12 +118,79 @@ impl<'a> IdentityScope<'a> {
     }
 }
 
+struct CommsMessage {
+    addr_type: AddressType,
+    msg_type: CommsMessageType,
+}
+
+enum CommsMessageType {
+    Inform {
+        pub_key: PubKey,
+        address: Address,
+        challenge: Challenge,
+    },
+    ValidAddress(Address),
+    InvalidAddress(Address),
+}
+
+pub struct CommsMain {
+    tx: Sender<CommsMessage>,
+    rcv: Receiver<CommsMessage>,
+}
+
+pub struct CommsVerifier {
+    tx: Sender<CommsMessage>,
+    rcv: Receiver<CommsMessage>,
+}
+
+fn gen_comms() -> (CommsMain, CommsVerifier) {
+    let (tx1, rcv1) = unbounded();
+    let (tx2, rcv2) = unbounded();
+
+    (
+        CommsMain {
+            tx: tx1,
+            rcv: rcv2,
+        },
+        CommsVerifier {
+            tx: tx2,
+            rcv: rcv1,
+        }
+    )
+}
+
 pub struct IdentityManager<'a> {
     pub idents: Vec<OnChainIdentity>,
     pub db: ScopedDatabase<'a>,
+    comms: CommsTable,
+}
+
+struct CommsTable {
+    matrix: Option<CommsMain>
+}
+
+impl Default for CommsTable {
+    fn default() -> Self {
+        CommsTable {
+            matrix: None,
+        }
+    }
 }
 
 impl<'a> IdentityManager<'a> {
+    pub fn register_comms(&mut self, addr_type: &AddressType) -> CommsVerifier {
+        use AddressType::*;
+
+        match addr_type {
+            Riot => {
+                let (main, veri) = gen_comms();
+                self.comms.matrix = Some(main);
+                veri
+            },
+            _ => panic!("TODO") 
+        }
+
+    }
     pub fn new(db: &'a Database) -> Result<Self> {
         let db = db.scope("pending_identities");
 
@@ -136,6 +204,7 @@ impl<'a> IdentityManager<'a> {
         Ok(IdentityManager {
             idents: idents,
             db: db,
+            comms: CommsTable::default(),
         })
     }
     pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
