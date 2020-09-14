@@ -16,13 +16,12 @@ impl Database {
         opts.create_missing_column_families(true);
         opts.create_if_missing(true);
 
-        let mut db = DB::open(&opts, path)?;
-        db.create_cf("pending_identities", &opts)?;
-        db.create_cf("matrix_rooms", &opts)?;
-
         Ok(Database {
             //db: DB::open(&opts, path)?,
-            db: db,
+            db: DB::open_cf(&opts, path, &[
+                "pending_identities",
+                "matrix_rooms"
+            ])?,
         })
     }
     pub fn scope<'a>(&'a self, cf_name: &str) -> ScopedDatabase<'a> {

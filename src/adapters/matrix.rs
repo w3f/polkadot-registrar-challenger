@@ -1,22 +1,19 @@
 use crate::identity::IdentityManager;
-use crate::{Address, AddressType};
+use crate::AddressType;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
-        AnyMessageEventContent, SyncMessageEvent,
+        AnyMessageEventContent,
     },
-    Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
+    Client, SyncSettings,
 };
-use rocksdb::Options;
-use ruma_identifiers::RoomId;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
 
 pub struct MatrixClient<'a> {
-    config: MatrixConfig,
     client: Client, // `Client` from matrix_sdk
     manager: &'a IdentityManager<'a>,
 }
@@ -32,7 +29,7 @@ impl<'a> MatrixClient<'a> {
         // Setup client
         let homeserver_url =
             Url::parse(&config.homeserver_url).expect("Couldn't parse the homeserver URL");
-        let mut client = Client::new(homeserver_url).unwrap();
+        let client = Client::new(homeserver_url).unwrap();
 
         // Login with credentials
         client
@@ -44,7 +41,6 @@ impl<'a> MatrixClient<'a> {
         client.sync(SyncSettings::default()).await.unwrap();
 
         MatrixClient {
-            config: config,
             client: client,
             manager: manager,
         }
@@ -89,7 +85,7 @@ impl<'a> MatrixClient<'a> {
                     request.name = Some("W3F Registrar Verification");
 
                     let resp = self.client.create_room(request).await.unwrap();
-                    db.put(&ident.address().0, resp.room_id.as_str());
+                    db.put(&ident.address().0, resp.room_id.as_str()).unwrap();
                     resp.room_id
                 };
 
@@ -106,6 +102,11 @@ impl<'a> MatrixClient<'a> {
                     )
                     .await
                     .unwrap();
+
+                // Prevent the sending of multiple messages.
+                ident.addr_state.attempt_contact();
+
+                // TODO: Handle response
             }
         }
     }
@@ -144,7 +145,7 @@ mod tests {
     #[test]
     fn matrix_login_and_sync() {
         let db = Database::new("/tmp/test_matrix").unwrap();
-        let mut manager = IdentityManager::new(&db).unwrap();
+        let manager = IdentityManager::new(&db).unwrap();
         run(client(&manager));
     }
 
@@ -163,7 +164,7 @@ mod tests {
                 Address("@fabio:web3.foundation".to_string()),
                 AddressType::Riot,
             )),
-        });
+        }).unwrap();
 
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {

@@ -1,11 +1,7 @@
 #[macro_use]
 extern crate futures;
 #[macro_use]
-extern crate async_trait;
-#[macro_use]
 extern crate serde;
-#[macro_use]
-extern crate failure;
 
 use rand::{thread_rng, Rng};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
