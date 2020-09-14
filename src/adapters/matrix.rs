@@ -10,6 +10,7 @@ use matrix_sdk::{
     Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
 use rocksdb::Options;
+use ruma_identifiers::RoomId;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
@@ -62,20 +63,30 @@ impl<'a> MatrixClient<'a> {
     }
     pub async fn room_init(&'static self) {
         let mut interval = time::interval(Duration::from_secs(3));
-        let cf = self.manager.db.cf_handle("matrix_rooms").unwrap();
+
+        let db = &self.manager.db;
+        let cf = db.cf_handle("matrix_rooms").unwrap();
 
         loop {
             interval.tick().await;
 
             for ident in self.manager.get_uninitialized_channel(AddressType::Riot) {
-                // TODO: Fix this
-                let to_invite = [ident.address().0.clone().try_into().unwrap()];
+                let address = &ident.address().0;
 
-                let mut request = Request::default();
-                request.invite = &to_invite;
-                request.name = Some("W3F Registrar Verification");
+                let room_id = if let Some(val) = db.get_cf(cf, address).unwrap() {
+                    std::str::from_utf8(&val).unwrap().try_into().unwrap()
+                } else {
+                    // TODO: Handle this better
+                    let to_invite = [ident.address().0.clone().try_into().unwrap()];
 
-                self.client.create_room(request).await;
+                    let mut request = Request::default();
+                    request.invite = &to_invite;
+                    request.name = Some("W3F Registrar Verification");
+
+                    let resp = self.client.create_room(request).await.unwrap();
+                    &db.put_cf(cf, &ident.address().0, resp.room_id.as_str());
+                    resp.room_id
+                };
             }
         }
     }
