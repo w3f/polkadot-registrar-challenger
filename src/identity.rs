@@ -218,21 +218,45 @@ impl<'a> IdentityManager<'a> {
 
         cv
     }
-    pub async fn run(&self) {}
+    pub async fn run(&mut self) -> Result<()> {
+        use CommsMessage::*;
+
+        if let Ok(msg) = self.comms.listener.recv() {
+            match msg {
+                CommsMessage::NewOnChainIdentity(ident) => {
+                    self.register_request(ident)?;
+                }
+                CommsMessage::Inform { .. } => {
+                    // INVALID
+                    // TODO: log
+                }
+                ValidAddress {
+                    address,
+                    address_ty,
+                } => {}
+                InvalidAddress {
+                    address,
+                    address_ty,
+                } => {}
+            }
+        }
+
+        Ok(())
+    }
     pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
-        if !self.pub_key_exists(&ident.pub_key) {
+        // Only add the identity to the list if it doesn't exists yet.
+        if self
+            .idents
+            .iter()
+            .find(|ident| ident.pub_key == ident.pub_key)
+            .is_none()
+        {
             // Save the pending on-chain identity to disk.
             self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
             self.idents.push(ident);
         }
 
         Ok(())
-    }
-    fn pub_key_exists(&self, pub_key: &PubKey) -> bool {
-        self.idents
-            .iter()
-            .find(|ident| &ident.pub_key == pub_key)
-            .is_some()
     }
     pub fn get_identity_scope(
         &'a self,
