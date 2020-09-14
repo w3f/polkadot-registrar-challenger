@@ -72,6 +72,8 @@ impl<'a> MatrixClient<'a> {
             interval.tick().await;
 
             for ident in self.manager.get_uninitialized_channel(AddressType::Riot) {
+                // NOTE/TODO: `unwrap`s will be handled.
+
                 let address = &ident.address().0;
 
                 let room_id = if let Some(val) = db.get(address).unwrap() {
