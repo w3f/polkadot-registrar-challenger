@@ -1,5 +1,5 @@
+use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
 use crate::db::{Database, ScopedDatabase};
-use super::{Address, AddressType, Challenge, PubKey, Signature};
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use schnorrkel::context::SigningContext;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,11 +44,11 @@ impl OnChainIdentity {
         }
         None
     }
-    fn from_json(val: &[u8]) -> Self {
-        serde_json::from_slice(&val).unwrap()
+    fn from_json(val: &[u8]) -> Result<Self> {
+        Ok(serde_json::from_slice(&val)?)
     }
-    fn to_json(&self) -> Vec<u8> {
-        serde_json::to_vec(self).unwrap()
+    fn to_json(&self) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(self)?)
     }
 }
 
@@ -81,24 +81,24 @@ impl<'a> IdentityScope<'a> {
     pub fn address(&self) -> &Address {
         &self.addr_state.addr
     }
-    fn verify_challenge(&self, sig: Signature) -> bool {
-        self.identity
+    fn verify_challenge(&self, sig: Signature) -> Result<bool> {
+        if let Ok(_) = self
+            .identity
             .pub_key
             .0
             // TODO: Check context in substrate.
             .verify_simple(b"", self.addr_state.challenge.0.as_bytes(), &sig.0)
-            .and_then(|_| {
-                self.addr_state.confirmed.store(true, Ordering::Relaxed);
+        {
+            self.addr_state.confirmed.store(true, Ordering::Relaxed);
 
-                // Keep track of the current progress on disk.
-                self.db
-                    .put(self.identity.pub_key.0.to_bytes(), self.identity.to_json())
-                    .unwrap();
+            // Keep track of the current progress on disk.
+            self.db
+                .put(self.identity.pub_key.0.to_bytes(), self.identity.to_json()?)?;
 
-                Ok(true)
-            })
-            .or_else::<(), _>(|_| Ok(false))
-            .unwrap()
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 
@@ -108,34 +108,31 @@ pub struct IdentityManager<'a> {
 }
 
 impl<'a> IdentityManager<'a> {
-    pub fn new(db: &'a Database) -> Self {
+    pub fn new(db: &'a Database) -> Result<Self> {
         let db = db.scope("pending_identities");
 
         let mut idents = vec![];
 
         // Read pending on-chain identities from storage. Ideally, there are none.
         /*
-        db.all().iter()
-            .for_each(|(_, value)| {
-                idents.push(OnChainIdentity::from_json(&*value));
-            });
-            */
+        db.all()?.iter().map(|(_, value)| {
+            idents.push(OnChainIdentity::from_json(&*value)?);
+        })?;
+        */
 
-        IdentityManager {
+        Ok(IdentityManager {
             idents: idents,
             db: db,
-        }
+        })
     }
-    pub fn register_request(&mut self, ident: OnChainIdentity) {
-        if self.pub_key_exists(&ident.pub_key) {
-            return;
+    pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
+        if !self.pub_key_exists(&ident.pub_key) {
+            // Save the pending on-chain identity to disk.
+            self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?);
+            self.idents.push(ident);
         }
 
-        // Save the pending on-chain identity to disk.
-        self.db
-            .put(ident.pub_key.0.to_bytes(), ident.to_json());
-
-        self.idents.push(ident);
+        Ok(())
     }
     fn pub_key_exists(&self, pub_key: &PubKey) -> bool {
         self.idents

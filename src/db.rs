@@ -1,12 +1,7 @@
 use super::Result;
+use failure::err_msg;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use std::convert::AsRef;
-
-#[derive(Debug, Fail)]
-enum Error {
-    #[fail(display = "column family not found")]
-    CfNotFound,
-}
 
 /// A simple abstraction layer over rocksdb. This is used primarily to have a
 /// single database object and to create `ScopedDatabase` types, in order to
@@ -43,7 +38,10 @@ pub struct ScopedDatabase<'a> {
 
 impl<'a> ScopedDatabase<'a> {
     fn cf(&self) -> Result<&ColumnFamily> {
-        Ok(self.db.cf_handle(&self.cf_name).ok_or(Error::CfNotFound)?)
+        Ok(self
+            .db
+            .cf_handle(&self.cf_name)
+            .ok_or(err_msg("fatal error: column family not found"))?)
     }
     pub fn put<K: AsRef<[u8]>, V: AsRef<[u8]>>(&self, key: K, val: V) -> Result<()> {
         Ok(self.db.put_cf(self.cf()?, key, val)?)
@@ -52,7 +50,10 @@ impl<'a> ScopedDatabase<'a> {
         Ok(self.db.get_cf(self.cf()?, key)?)
     }
     pub fn all(&self) -> Result<Vec<(Box<[u8]>, Box<[u8]>)>> {
-        Ok(self.db.iterator_cf(self.cf()?, IteratorMode::Start).collect())
+        Ok(self
+            .db
+            .iterator_cf(self.cf()?, IteratorMode::Start)
+            .collect())
     }
     pub fn scope(&self, cf_name: &str) -> ScopedDatabase<'a> {
         self.parent.scope(cf_name)
