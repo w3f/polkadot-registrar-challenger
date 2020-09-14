@@ -1,5 +1,6 @@
 use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
 use crate::db::{Database, ScopedDatabase};
+use crossbeam::channel::{Receiver, Sender};
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use schnorrkel::context::SigningContext;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -57,7 +58,7 @@ pub struct AddressState {
     addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
-    challenge: Challenge,
+    pub challenge: Challenge,
     confirmed: AtomicBool,
 }
 
@@ -85,7 +86,7 @@ enum AddressValidity {
 
 pub struct IdentityScope<'a> {
     identity: &'a OnChainIdentity,
-    addr_state: &'a AddressState,
+    pub addr_state: &'a AddressState,
     db: &'a ScopedDatabase<'a>,
 }
 
@@ -126,11 +127,9 @@ impl<'a> IdentityManager<'a> {
         let mut idents = vec![];
 
         // Read pending on-chain identities from storage. Ideally, there are none.
-        /*
-        db.all()?.iter().map(|(_, value)| {
+        for (_, value) in db.all()? {
             idents.push(OnChainIdentity::from_json(&*value)?);
-        })?;
-        */
+        };
 
         Ok(IdentityManager {
             idents: idents,

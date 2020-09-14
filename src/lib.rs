@@ -35,7 +35,7 @@ pub enum AddressType {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Challenge(String);
+pub struct Challenge(String);
 
 impl Challenge {
     fn gen_random() -> Challenge {
