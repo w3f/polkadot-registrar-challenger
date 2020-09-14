@@ -18,7 +18,7 @@ use url::Url;
 pub struct MatrixClient<'a> {
     config: MatrixConfig,
     client: Client, // `Client` from matrix_sdk
-    manager: &'a IdentityManager,
+    manager: &'a IdentityManager<'a>,
 }
 
 pub struct MatrixConfig {
@@ -28,7 +28,7 @@ pub struct MatrixConfig {
 }
 
 impl<'a> MatrixClient<'a> {
-    pub async fn new(config: MatrixConfig, manager: &'a IdentityManager) -> MatrixClient<'a> {
+    pub async fn new(config: MatrixConfig, manager: &'a IdentityManager<'a>) -> MatrixClient<'a> {
         // Setup client
         let homeserver_url =
             Url::parse(&config.homeserver_url).expect("Couldn't parse the homeserver URL");
@@ -64,8 +64,7 @@ impl<'a> MatrixClient<'a> {
     pub async fn room_init(&'static self) {
         let mut interval = time::interval(Duration::from_secs(3));
 
-        let db = &self.manager.db;
-        let cf = db.cf_handle("matrix_rooms").unwrap();
+        let db = &self.manager.db.scope("matrix_rooms");
 
         loop {
             interval.tick().await;
@@ -73,7 +72,7 @@ impl<'a> MatrixClient<'a> {
             for ident in self.manager.get_uninitialized_channel(AddressType::Riot) {
                 let address = &ident.address().0;
 
-                let room_id = if let Some(val) = db.get_cf(cf, address).unwrap() {
+                let room_id = if let Some(val) = db.get(address).unwrap() {
                     std::str::from_utf8(&val).unwrap().try_into().unwrap()
                 } else {
                     // TODO: Handle this better
@@ -84,7 +83,7 @@ impl<'a> MatrixClient<'a> {
                     request.name = Some("W3F Registrar Verification");
 
                     let resp = self.client.create_room(request).await.unwrap();
-                    &db.put_cf(cf, &ident.address().0, resp.room_id.as_str());
+                    db.put(&ident.address().0, resp.room_id.as_str());
                     resp.room_id
                 };
 
@@ -104,11 +103,11 @@ impl<'a> MatrixClient<'a> {
 }
 
 struct MessageHandler<'a> {
-    manager: &'a IdentityManager,
+    manager: &'a IdentityManager<'a>,
 }
 
 impl<'a> MessageHandler<'a> {
-    fn new(manager: &'a IdentityManager) -> Self {
+    fn new(manager: &'a IdentityManager<'a>) -> Self {
         MessageHandler { manager: manager }
     }
 }
