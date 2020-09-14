@@ -1,7 +1,7 @@
 use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
 use crate::db::{Database, ScopedDatabase};
+use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
-use crossbeam::channel::{unbounded, Sender, Receiver};
 
 #[derive(Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -118,45 +118,29 @@ impl<'a> IdentityScope<'a> {
     }
 }
 
-struct CommsMessage {
-    addr_type: AddressType,
-    msg_type: CommsMessageType,
-}
-
-enum CommsMessageType {
+enum CommsMessage {
+    NewOnChainIdentity(OnChainIdentity),
     Inform {
         pub_key: PubKey,
         address: Address,
+        address_ty: AddressType,
         challenge: Challenge,
     },
-    ValidAddress(Address),
-    InvalidAddress(Address),
+    ValidAddress {
+        address: Address,
+        address_ty: AddressType,
+    },
+    InvalidAddress {
+        address: Address,
+        address_ty: AddressType,
+    },
 }
 
-pub struct CommsMain {
-    tx: Sender<CommsMessage>,
-    rcv: Receiver<CommsMessage>,
-}
+pub struct CommsMain(Sender<CommsMessage>);
 
 pub struct CommsVerifier {
     tx: Sender<CommsMessage>,
-    rcv: Receiver<CommsMessage>,
-}
-
-fn gen_comms() -> (CommsMain, CommsVerifier) {
-    let (tx1, rcv1) = unbounded();
-    let (tx2, rcv2) = unbounded();
-
-    (
-        CommsMain {
-            tx: tx1,
-            rcv: rcv2,
-        },
-        CommsVerifier {
-            tx: tx2,
-            rcv: rcv1,
-        }
-    )
+    recv: Receiver<CommsMessage>,
 }
 
 pub struct IdentityManager<'a> {
@@ -166,31 +150,12 @@ pub struct IdentityManager<'a> {
 }
 
 struct CommsTable {
-    matrix: Option<CommsMain>
-}
-
-impl Default for CommsTable {
-    fn default() -> Self {
-        CommsTable {
-            matrix: None,
-        }
-    }
+    to_main: Sender<CommsMessage>,
+    listener: Receiver<CommsMessage>,
+    matrix: Option<CommsMain>,
 }
 
 impl<'a> IdentityManager<'a> {
-    pub fn register_comms(&mut self, addr_type: &AddressType) -> CommsVerifier {
-        use AddressType::*;
-
-        match addr_type {
-            Riot => {
-                let (main, veri) = gen_comms();
-                self.comms.matrix = Some(main);
-                veri
-            },
-            _ => panic!("TODO") 
-        }
-
-    }
     pub fn new(db: &'a Database) -> Result<Self> {
         let db = db.scope("pending_identities");
 
@@ -199,14 +164,46 @@ impl<'a> IdentityManager<'a> {
         // Read pending on-chain identities from storage. Ideally, there are none.
         for (_, value) in db.all()? {
             idents.push(OnChainIdentity::from_json(&*value)?);
-        };
+        }
+
+        let (tx, recv) = unbounded();
 
         Ok(IdentityManager {
             idents: idents,
             db: db,
-            comms: CommsTable::default(),
+            comms: CommsTable {
+                to_main: tx,
+                listener: recv,
+                matrix: None,
+            },
         })
     }
+    fn get_comms(&self) -> (CommsMain, CommsVerifier) {
+        let (tx, recv) = unbounded();
+
+        (
+            CommsMain(tx),
+            CommsVerifier {
+                tx: self.comms.to_main.clone(),
+                recv: recv,
+            },
+        )
+    }
+    pub fn register_comms(&'static mut self, addr_type: &AddressType) -> CommsVerifier {
+        use AddressType::*;
+
+        let (cm, cv) = self.get_comms();
+
+        match addr_type {
+            Riot => {
+                self.comms.matrix = Some(cm);
+            }
+            _ => panic!("TODO"),
+        }
+
+        cv
+    }
+    pub async fn run(&self) {}
     pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         if !self.pub_key_exists(&ident.pub_key) {
             // Save the pending on-chain identity to disk.
@@ -243,7 +240,8 @@ impl<'a> IdentityManager<'a> {
             .iter()
             .filter(|ident| {
                 if let Some(addr_state) = ident.address_state(&addr_type) {
-                    addr_state.addr_validity == AddressValidity::Unknown && !addr_state.attempt_contact.load(Ordering::Relaxed)
+                    addr_state.addr_validity == AddressValidity::Unknown
+                        && !addr_state.attempt_contact.load(Ordering::Relaxed)
                 } else {
                     false
                 }

@@ -18,10 +18,7 @@ impl Database {
 
         Ok(Database {
             //db: DB::open(&opts, path)?,
-            db: DB::open_cf(&opts, path, &[
-                "pending_identities",
-                "matrix_rooms"
-            ])?,
+            db: DB::open_cf(&opts, path, &["pending_identities", "matrix_rooms"])?,
         })
     }
     pub fn scope<'a>(&'a self, cf_name: &str) -> ScopedDatabase<'a> {

@@ -96,9 +96,10 @@ impl<'a> MatrixClient<'a> {
                         &room_id,
                         AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
                             // TODO: Make a proper Message Creator for this
-                            TextMessageEventContent::plain(include_str!(
-                                "../../messages/instructions"
-                            ).replace("{:PAYLOAD}", &ident.addr_state.challenge.0)),
+                            TextMessageEventContent::plain(
+                                include_str!("../../messages/instructions")
+                                    .replace("{:PAYLOAD}", &ident.addr_state.challenge.0),
+                            ),
                         )),
                         None,
                     )
@@ -155,18 +156,20 @@ mod tests {
     fn matrix_send_msg() {
         let db = Database::new("/tmp/test_matrix").unwrap();
         let mut manager = IdentityManager::new(&db).unwrap();
-        manager.register_request(OnChainIdentity {
-            pub_key: PubKey(SchnorrkelPubKey::default()),
-            display_name: None,
-            legal_name: None,
-            email: None,
-            web: None,
-            twitter: None,
-            riot: Some(AddressState::new(
-                Address("@fabio:web3.foundation".to_string()),
-                AddressType::Riot,
-            )),
-        }).unwrap();
+        manager
+            .register_request(OnChainIdentity {
+                pub_key: PubKey(SchnorrkelPubKey::default()),
+                display_name: None,
+                legal_name: None,
+                email: None,
+                web: None,
+                twitter: None,
+                riot: Some(AddressState::new(
+                    Address("@fabio:web3.foundation".to_string()),
+                    AddressType::Riot,
+                )),
+            })
+            .unwrap();
 
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
