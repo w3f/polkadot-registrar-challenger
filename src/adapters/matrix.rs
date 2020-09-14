@@ -5,7 +5,7 @@ use matrix_sdk::{
     api::r0::room::create_room::Request,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
-        SyncMessageEvent,
+        AnyMessageEventContent, SyncMessageEvent,
     },
     Client, ClientConfig, EventEmitter, SyncRoom, SyncSettings,
 };
@@ -87,6 +87,17 @@ impl<'a> MatrixClient<'a> {
                     &db.put_cf(cf, &ident.address().0, resp.room_id.as_str());
                     resp.room_id
                 };
+
+                self.client
+                    .room_send(
+                        &room_id,
+                        AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+                            TextMessageEventContent::plain("string"),
+                        )),
+                        None,
+                    )
+                    .await
+                    .unwrap();
             }
         }
     }
