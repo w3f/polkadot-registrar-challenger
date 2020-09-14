@@ -4,15 +4,21 @@ extern crate futures;
 extern crate async_trait;
 #[macro_use]
 extern crate serde;
+#[macro_use]
+extern crate failure;
 
 use rand::{thread_rng, Rng};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::result::Result as StdResult;
 
 mod adapters;
+mod db;
 mod identity;
+
+type Result<T> = StdResult<T, failure::Error>;
 
 #[derive(Eq, PartialEq)]
 struct PubKey(SchnorrkelPubKey);
@@ -39,7 +45,7 @@ impl Challenge {
 }
 
 impl Serialize for PubKey {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -48,7 +54,7 @@ impl Serialize for PubKey {
 }
 
 impl<'de> Deserialize<'de> for PubKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
