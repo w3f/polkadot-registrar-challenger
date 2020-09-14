@@ -27,7 +27,7 @@ pub enum AddressType {
     Email,
     Web,
     Twitter,
-    Riot,
+    Matrix,
 }
 
 #[derive(Serialize, Deserialize)]

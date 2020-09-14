@@ -13,11 +13,11 @@ pub struct OnChainIdentity {
     pub email: Option<AddressState>,
     pub web: Option<AddressState>,
     pub twitter: Option<AddressState>,
-    pub riot: Option<AddressState>,
+    pub matrix: Option<AddressState>,
 }
 
 impl OnChainIdentity {
-    // Get the address state based on the address type (Email, Riot, etc.).
+    // Get the address state based on the address type (Email, Matrix, etc.).
     fn address_state(&self, addr_type: &AddressType) -> Option<&AddressState> {
         use AddressType::*;
 
@@ -25,7 +25,7 @@ impl OnChainIdentity {
             Email => self.email.as_ref(),
             Web => self.web.as_ref(),
             Twitter => self.twitter.as_ref(),
-            Riot => self.riot.as_ref(),
+            Matrix => self.matrix.as_ref(),
         }
     }
     // Get the address state based on the addresses type. If the addresses
@@ -195,7 +195,7 @@ impl<'a> IdentityManager<'a> {
         let (cm, cv) = self.get_comms();
 
         match addr_type {
-            Riot => {
+            Matrix => {
                 self.comms.matrix = Some(cm);
             }
             _ => panic!("TODO"),

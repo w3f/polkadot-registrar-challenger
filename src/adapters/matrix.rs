@@ -71,7 +71,7 @@ impl<'a> MatrixClient<'a> {
         loop {
             interval.tick().await;
 
-            for ident in self.manager.get_uninitialized_channel(AddressType::Riot) {
+            for ident in self.manager.get_uninitialized_channel(AddressType::Matrix) {
                 // NOTE/TODO: `unwrap`s will be handled.
 
                 let address = &ident.address().0;
@@ -164,9 +164,9 @@ mod tests {
                 email: None,
                 web: None,
                 twitter: None,
-                riot: Some(AddressState::new(
+                matrix: Some(AddressState::new(
                     Address("@fabio:web3.foundation".to_string()),
-                    AddressType::Riot,
+                    AddressType::Matrix,
                 )),
             })
             .unwrap();
