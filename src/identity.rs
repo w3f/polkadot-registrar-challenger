@@ -123,21 +123,21 @@ impl<'a> IdentityScope<'a> {
 pub enum CommsMessage {
     NewOnChainIdentity(OnChainIdentity),
     Inform {
-        pub_key: PubKey,
-        address: Address,
-        address_ty: AddressType,
+        context: AddressContext,
         challenge: Challenge,
     },
     ValidAddress {
-        pub_key: PubKey,
-        address: Address,
-        address_ty: AddressType,
+        context: AddressContext,
     },
     InvalidAddress {
-        pub_key: PubKey,
-        address: Address,
-        address_ty: AddressType,
+        context: AddressContext,
     },
+}
+
+pub struct AddressContext {
+    pub pub_key: PubKey,
+    pub address: Address,
+    pub address_ty: AddressType,
 }
 
 pub struct CommsMain {
@@ -151,9 +151,11 @@ impl CommsMain {
     fn inform(&self, pub_key: &PubKey, address: &Address, challenge: &Challenge) {
         self.sender
             .send(CommsMessage::Inform {
-                pub_key: pub_key.clone(),
-                address: address.clone(),
-                address_ty: self.address_ty.clone(),
+                context: AddressContext {
+                    pub_key: pub_key.clone(),
+                    address: address.clone(),
+                    address_ty: self.address_ty.clone(),
+                },
                 challenge: challenge.clone(),
             })
             .unwrap();
@@ -171,21 +173,34 @@ impl CommsVerifier {
     pub fn recv(&self) -> CommsMessage {
         self.recv.recv().unwrap()
     }
+    /// Receive a `Inform` message. This is only used by the Matrix client as
+    /// any other message type will panic.
+    pub fn recv_inform(&self) -> (AddressContext, Challenge) {
+        if let CommsMessage::Inform { context, challenge} = self.recv() {
+            (context, challenge)
+        } else {
+            panic!("received invalid message type on Matrix client");
+        }
+    }
     pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Address) {
         self.tx
             .send(CommsMessage::ValidAddress {
-                pub_key: pub_key.clone(),
-                address: addr.clone(),
-                address_ty: self.address_ty.clone(),
+                context: AddressContext {
+                    pub_key: pub_key.clone(),
+                    address: addr.clone(),
+                    address_ty: self.address_ty.clone(),
+                }
             })
             .unwrap();
     }
     pub fn invalid_feedback(&self, pub_key: &PubKey, addr: &Address) {
         self.tx
             .send(CommsMessage::InvalidAddress {
-                pub_key: pub_key.clone(),
-                address: addr.clone(),
-                address_ty: self.address_ty.clone(),
+                context: AddressContext {
+                    pub_key: pub_key.clone(),
+                    address: addr.clone(),
+                    address_ty: self.address_ty.clone(),
+                }
             })
             .unwrap();
     }
@@ -256,14 +271,10 @@ impl<'a> IdentityManager<'a> {
                     // TODO: log
                 }
                 ValidAddress {
-                    pub_key,
-                    address,
-                    address_ty,
+                    context
                 } => {}
                 InvalidAddress {
-                    pub_key,
-                    address,
-                    address_ty,
+                    context
                 } => {}
             }
         }

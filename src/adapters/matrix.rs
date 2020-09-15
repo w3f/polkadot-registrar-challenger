@@ -64,48 +64,42 @@ impl MatrixClient {
         );
     }
     pub async fn room_init(&self) {
-        // TODO: `address_ty` is not required.
-        if let CommsMessage::Inform {
-            pub_key,
-            address,
-            address_ty,
-            challenge,
-        } = self.comms.recv()
-        {
-            // TODO: Check if a room already exists.
-            // TODO: Handle this better.
-            let to_invite = [address.0.clone().try_into().unwrap()];
+        let (context, challenge) = self.comms.recv_inform();
 
-            let mut request = Request::default();
-            request.invite = &to_invite;
-            request.name = Some("W3F Registrar Verification");
+        let pub_key = context.pub_key;
+        let address = context.address;
 
-            let resp = self.client.create_room(request).await.unwrap();
-            //db.put(address.0, resp.room_id.as_str()).unwrap();
-            let room_id = resp.room_id;
+        // TODO: Check if a room already exists.
+        // TODO: Handle this better.
+        let to_invite = [address.0.clone().try_into().unwrap()];
 
-            self.client
-                .room_send(
-                    &room_id,
-                    AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                        // TODO: Make a proper Message Creator for this
-                        TextMessageEventContent::plain(
-                            include_str!("../../messages/instructions")
-                                .replace("{:PAYLOAD}", &challenge.0),
-                        ),
-                    )),
-                    None,
-                )
-                .await
-                .unwrap();
+        let mut request = Request::default();
+        request.invite = &to_invite;
+        request.name = Some("W3F Registrar Verification");
 
-            // Prevent the sending of multiple messages.
-            self.comms.valid_feedback(&pub_key, &address);
+        let resp = self.client.create_room(request).await.unwrap();
+        //db.put(address.0, resp.room_id.as_str()).unwrap();
+        let room_id = resp.room_id;
+
+        self.client
+            .room_send(
+                &room_id,
+                AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+                    // TODO: Make a proper Message Creator for this
+                    TextMessageEventContent::plain(
+                        include_str!("../../messages/instructions")
+                            .replace("{:PAYLOAD}", &challenge.0),
+                    ),
+                )),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Prevent the sending of multiple messages.
+        self.comms.valid_feedback(&pub_key, &address);
 
         // TODO: Handle response
-        } else {
-            panic!("Matrix client received invalid message type");
-        }
     }
 }
 
