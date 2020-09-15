@@ -3,18 +3,54 @@ extern crate futures;
 #[macro_use]
 extern crate serde;
 
+use failure::err_msg;
 use rand::{thread_rng, Rng};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::result::Result as StdResult;
 use std::convert::TryFrom;
-use failure::err_msg;
+use std::result::Result as StdResult;
+use futures::join;
 
-pub mod adapters;
-pub mod db;
-pub mod identity;
+use adapters::MatrixClient;
+use db::Database;
+use identity::IdentityManager;
+
+mod adapters;
+mod db;
+mod identity;
+
+pub struct Config {
+    pub db_path: String,
+    pub matrix_homeserver: String,
+    pub matrix_username: String,
+    pub matrix_password: String,
+}
+
+pub async fn run(config: Config) -> Result<()> {
+    // Setup database and identity manager
+    let db = Database::new(&config.db_path)?;
+    let mut manager = IdentityManager::new(&db)?;
+
+    // Prepare communication channels between manager and clients.
+    let c_matrix = manager.register_comms(AddressType::Matrix);
+
+    // Setup clients.
+    let mut matrix = MatrixClient::new(
+        &config.matrix_homeserver,
+        &config.matrix_username,
+        &config.matrix_password,
+        c_matrix,
+    ).await;
+
+    join!(
+        manager.start(),
+        matrix.start()
+    );
+
+    Ok(())
+}
 
 type Result<T> = StdResult<T, failure::Error>;
 
@@ -26,13 +62,16 @@ pub struct Signature(SchnorrkelSignature);
 pub struct Address(String);
 
 #[derive(Clone)]
+///
 pub struct RoomId(String);
 
 impl TryFrom<Vec<u8>> for RoomId {
     type Error = failure::Error;
 
     fn try_from(value: Vec<u8>) -> Result<Self> {
-        Ok(RoomId(String::from_utf8(value).map_err(|_| err_msg("invalid room id"))?))
+        Ok(RoomId(
+            String::from_utf8(value).map_err(|_| err_msg("invalid room id"))?,
+        ))
     }
 }
 

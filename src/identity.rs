@@ -3,20 +3,20 @@ use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
 use std::convert::TryInto;
+use std::sync::atomic::AtomicBool;
 
 #[derive(Serialize, Deserialize)]
 pub struct OnChainIdentity {
-    pub pub_key: PubKey,
+    pub_key: PubKey,
     // TODO: Should this just be a String?
-    pub display_name: Option<AddressState>,
+    display_name: Option<AddressState>,
     // TODO: Should this just be a String?
-    pub legal_name: Option<AddressState>,
-    pub email: Option<AddressState>,
-    pub web: Option<AddressState>,
-    pub twitter: Option<AddressState>,
-    pub matrix: Option<AddressState>,
+    legal_name: Option<AddressState>,
+    email: Option<AddressState>,
+    web: Option<AddressState>,
+    twitter: Option<AddressState>,
+    matrix: Option<AddressState>,
 }
 
 impl OnChainIdentity {
@@ -208,7 +208,7 @@ impl<'a> IdentityManager<'a> {
             },
         })
     }
-    pub fn register_comms(&'static mut self, addr_type: AddressType) -> CommsVerifier {
+    pub fn register_comms(&mut self, addr_type: AddressType) -> CommsVerifier {
         let (tx, recv) = unbounded();
 
         self.comms.pairs.insert(
@@ -225,29 +225,31 @@ impl<'a> IdentityManager<'a> {
             address_ty: addr_type,
         }
     }
-    pub async fn run(&mut self) -> Result<()> {
+    pub async fn start(&mut self) -> Result<()> {
         use CommsMessage::*;
 
-        if let Ok(msg) = self.comms.listener.recv() {
-            match msg {
-                CommsMessage::NewOnChainIdentity(ident) => {
-                    self.register_request(ident)?;
-                }
-                CommsMessage::Inform { .. } => {
-                    // INVALID
-                    // TODO: log
-                }
-                ValidAddress { context: _ } => {}
-                InvalidAddress { context: _ } => {}
-                RoomId { pub_key, room_id } => {
-                    self.db_rooms.put(pub_key.0, room_id.0.as_bytes()).unwrap();
+        loop {
+            if let Ok(msg) = self.comms.listener.recv() {
+                match msg {
+                    CommsMessage::NewOnChainIdentity(ident) => {
+                        self.register_request(ident)?;
+                    }
+                    CommsMessage::Inform { .. } => {
+                        // INVALID
+                        // TODO: log
+                    }
+                    ValidAddress { context: _ } => {}
+                    InvalidAddress { context: _ } => {}
+                    RoomId { pub_key, room_id } => {
+                        self.db_rooms.put(pub_key.0, room_id.0.as_bytes()).unwrap();
+                    }
                 }
             }
         }
 
         Ok(())
     }
-    pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
+    fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         // Only add the identity to the list if it doesn't exists yet.
         if self
             .idents
@@ -268,7 +270,11 @@ impl<'a> IdentityManager<'a> {
 
         // TODO: Handle additional address types.
         ident.matrix.as_ref().map(|state| {
-            let room_id = self.db_rooms.get(&ident.pub_key.0).unwrap().map(|bytes| bytes.try_into().unwrap());
+            let room_id = self
+                .db_rooms
+                .get(&ident.pub_key.0)
+                .unwrap()
+                .map(|bytes| bytes.try_into().unwrap());
 
             self.comms.pairs.get(&state.addr_type).unwrap().inform(
                 &ident.pub_key,

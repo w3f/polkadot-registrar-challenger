@@ -18,22 +18,20 @@ pub struct MatrixClient {
     comms: CommsVerifier,
 }
 
-pub struct MatrixConfig {
-    homeserver_url: String,
-    username: String,
-    password: String,
-}
-
 impl MatrixClient {
-    pub async fn new(config: MatrixConfig, comms: CommsVerifier) -> MatrixClient {
+    pub async fn new(
+        homeserver: &str,
+        username: &str,
+        password: &str,
+        comms: CommsVerifier,
+    ) -> MatrixClient {
         // Setup client
-        let homeserver_url =
-            Url::parse(&config.homeserver_url).expect("Couldn't parse the homeserver URL");
-        let client = Client::new(homeserver_url).unwrap();
+        let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
+        let client = Client::new(homeserver).unwrap();
 
         // Login with credentials
         client
-            .login(&config.username, &config.password, None, Some("rust-sdk"))
+            .login(username, password, None, Some("rust-sdk"))
             .await
             .unwrap();
 
