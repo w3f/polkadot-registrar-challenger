@@ -1,9 +1,10 @@
-use super::{Address, AddressType, Challenge, PubKey, Result, RoomId, Signature};
+use super::{Address, AddressType, Challenge, PubKey, Result, RoomId};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+use std::convert::TryInto;
 
 #[derive(Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -19,32 +20,6 @@ pub struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
-    // Get the address state based on the address type (Email, Matrix, etc.).
-    fn address_state(&self, addr_type: &AddressType) -> Option<&AddressState> {
-        use AddressType::*;
-
-        match addr_type {
-            Email => self.email.as_ref(),
-            Web => self.web.as_ref(),
-            Twitter => self.twitter.as_ref(),
-            Matrix => self.matrix.as_ref(),
-        }
-    }
-    // Get the address state based on the addresses type. If the addresses
-    // themselves match (`me@email.com == me@email.com`), it returns the state
-    // wrapped in `Some(_)`, or `None` if the match is invalid.
-    fn address_state_match(
-        &self,
-        addr_type: &AddressType,
-        addr: &Address,
-    ) -> Option<&AddressState> {
-        if let Some(addr_state) = self.address_state(addr_type) {
-            if &addr_state.addr == addr {
-                return Some(addr_state);
-            }
-        }
-        None
-    }
     fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
     }
@@ -262,8 +237,8 @@ impl<'a> IdentityManager<'a> {
                     // INVALID
                     // TODO: log
                 }
-                ValidAddress { context } => {}
-                InvalidAddress { context } => {}
+                ValidAddress { context: _ } => {}
+                InvalidAddress { context: _ } => {}
                 RoomId { pub_key, room_id } => {
                     self.db_rooms.put(pub_key.0, room_id.0.as_bytes()).unwrap();
                 }
@@ -293,13 +268,13 @@ impl<'a> IdentityManager<'a> {
 
         // TODO: Handle additional address types.
         ident.matrix.as_ref().map(|state| {
-            let room_id = self.db_rooms.get(&ident.pub_key.0).unwrap();
+            let room_id = self.db_rooms.get(&ident.pub_key.0).unwrap().map(|bytes| bytes.try_into().unwrap());
 
             self.comms.pairs.get(&state.addr_type).unwrap().inform(
                 &ident.pub_key,
                 &state.addr,
                 &state.challenge,
-                None,
+                room_id,
             );
         });
 

@@ -9,6 +9,8 @@ use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::result::Result as StdResult;
+use std::convert::TryFrom;
+use failure::err_msg;
 
 pub mod adapters;
 pub mod db;
@@ -25,6 +27,14 @@ pub struct Address(String);
 
 #[derive(Clone)]
 pub struct RoomId(String);
+
+impl TryFrom<Vec<u8>> for RoomId {
+    type Error = failure::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self> {
+        Ok(RoomId(String::from_utf8(value).map_err(|_| err_msg("invalid room id"))?))
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 pub enum AddressType {

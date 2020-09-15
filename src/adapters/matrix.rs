@@ -1,5 +1,5 @@
-use crate::identity::{CommsMessage, CommsVerifier, IdentityManager};
-use crate::{AddressType, RoomId};
+use crate::identity::CommsVerifier;
+use crate::RoomId;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -105,69 +105,5 @@ impl MatrixClient {
         // TODO: Handle response
 
         self.comms.valid_feedback(&pub_key, &address);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::db::Database;
-    use crate::identity::{AddressState, IdentityManager, OnChainIdentity};
-    use crate::{Address, AddressType, PubKey};
-    use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
-    use std::env;
-    use std::future::Future;
-    use tokio::runtime::Runtime;
-
-    // Convenience function for running async tasks
-    fn run<F: Future>(future: F) {
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(future);
-    }
-
-    // Convenience function
-    async fn client<'a>(manager: &'a IdentityManager<'a>) -> MatrixClient<'a> {
-        MatrixClient::new(
-            MatrixConfig {
-                homeserver_url: env::var("TEST_MATRIX_HOMESERVER").unwrap(),
-                username: env::var("TEST_MATRIX_USER").unwrap(),
-                password: env::var("TEST_MATRIX_PASSWORD").unwrap(),
-            },
-            manager,
-        )
-        .await
-    }
-
-    #[test]
-    fn matrix_login_and_sync() {
-        let db = Database::new("/tmp/test_matrix").unwrap();
-        let manager = IdentityManager::new(&db).unwrap();
-        run(client(&manager));
-    }
-
-    #[test]
-    fn matrix_send_msg() {
-        let db = Database::new("/tmp/test_matrix").unwrap();
-        let mut manager = IdentityManager::new(&db).unwrap();
-        manager
-            .register_request(OnChainIdentity {
-                pub_key: PubKey(SchnorrkelPubKey::default()),
-                display_name: None,
-                legal_name: None,
-                email: None,
-                web: None,
-                twitter: None,
-                matrix: Some(AddressState::new(
-                    Address("@fabio:web3.foundation".to_string()),
-                    AddressType::Matrix,
-                )),
-            })
-            .unwrap();
-
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            let mut client = client(&manager).await;
-            client.start().await;
-        });
     }
 }
