@@ -1,5 +1,5 @@
 use crate::identity::CommsVerifier;
-use crate::RoomId;
+use crate::{Result, RoomId};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -43,26 +43,29 @@ impl MatrixClient {
             comms: comms,
         }
     }
-    pub async fn start(&mut self) {
+    /// Sync the Matrix client. Syncing was separated from `start` since
+    /// running `sync` within `join!` results in a panic. Slightly Related:
+    /// https://github.com/rust-lang/rust/issues/64496.
+    pub async fn start_sync(&self) {
+        // Running `sync_forever` also results in a panic... so just loop.
         let mut interval = time::interval(Duration::from_secs(1));
-
-        // Blocks forever
-        join!(
-            // Room initializer
-            self.room_init(),
-            // Client sync
-            async {
-                // `sync_forever` results in a panic. Related:
-                // https://github.com/rust-lang/rust/issues/64496
-                loop {
-                    interval.tick().await;
-                    self.client.sync(SyncSettings::new()).await.unwrap();
-                }
-            }
-        );
+        loop {
+            interval.tick().await;
+            self.client.sync(SyncSettings::new()).await.unwrap();
+        }
     }
-    pub async fn room_init(&self) {
+    pub async fn start(&self) -> Result<()> {
+        println!("Starting room init loop...");
+        loop {
+            self.room_init().await;
+        }
+
+        Ok(())
+    }
+    async fn room_init(&self) {
+        println!("Waiting for messages...");
         let (context, challenge, room_id) = self.comms.recv_inform();
+        println!("Message received");
 
         let pub_key = context.pub_key;
         let address = context.address;
@@ -102,6 +105,6 @@ impl MatrixClient {
 
         // TODO: Handle response
 
-        self.comms.valid_feedback(&pub_key, &address);
+        // self.comms.valid_feedback(&pub_key, &address);
     }
 }

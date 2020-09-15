@@ -15,11 +15,40 @@ use futures::join;
 
 use adapters::MatrixClient;
 use db::Database;
-use identity::IdentityManager;
+use identity::{IdentityManager, OnChainIdentity, AddressState, CommsMessage, CommsVerifier};
 
 mod adapters;
 mod db;
 mod identity;
+
+// TODO: add cfg
+struct TestClient {
+    comms: CommsVerifier,
+}
+
+impl TestClient {
+    fn new(comms: CommsVerifier) -> Self {
+        TestClient {
+            comms: comms,
+        }
+    }
+    fn gen_data(&self) {
+        self.comms.new_on_chain_identity(
+            &OnChainIdentity {
+                pub_key: PubKey(SchnorrkelPubKey::default()),
+                display_name: None,
+                legal_name: None,
+                email: None,
+                web: None,
+                twitter: None,
+                matrix: Some(AddressState::new(
+                    Address("@fabio:web3.foundation".to_string()),
+                    AddressType::Matrix,
+                ))
+            }
+        );
+    }
+}
 
 pub struct Config {
     pub db_path: String,
@@ -35,30 +64,35 @@ pub async fn run(config: Config) -> Result<()> {
 
     // Prepare communication channels between manager and clients.
     let c_matrix = manager.register_comms(AddressType::Matrix);
+    let c_temp = manager.register_comms(AddressType::Email);
 
     // Setup clients.
-    let mut matrix = MatrixClient::new(
+    let matrix = MatrixClient::new(
         &config.matrix_homeserver,
         &config.matrix_username,
         &config.matrix_password,
         c_matrix,
     ).await;
 
-    join!(
-        manager.start(),
-        matrix.start()
-    );
+    TestClient::new(c_temp).gen_data();
+
+    println!("Starting all...");
+    /*
+    tokio::spawn(manager.start());
+    tokio::spawn(matrix.start());
+    tokio::spawn(matrix.start_sync());
+    */
 
     Ok(())
 }
 
 type Result<T> = StdResult<T, failure::Error>;
 
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct PubKey(SchnorrkelPubKey);
-#[derive(Eq, PartialEq, Clone)]
+#[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Signature(SchnorrkelSignature);
-#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Address(String);
 
 #[derive(Clone)]
@@ -75,7 +109,7 @@ impl TryFrom<Vec<u8>> for RoomId {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum AddressType {
     #[serde(rename = "email")]
     Email,
@@ -87,7 +121,7 @@ pub enum AddressType {
     Matrix,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Challenge(String);
 
 impl Challenge {

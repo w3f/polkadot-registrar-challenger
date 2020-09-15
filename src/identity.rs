@@ -4,19 +4,18 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::sync::atomic::AtomicBool;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
-    pub_key: PubKey,
+    pub pub_key: PubKey,
     // TODO: Should this just be a String?
-    display_name: Option<AddressState>,
+    pub display_name: Option<AddressState>,
     // TODO: Should this just be a String?
-    legal_name: Option<AddressState>,
-    email: Option<AddressState>,
-    web: Option<AddressState>,
-    twitter: Option<AddressState>,
-    matrix: Option<AddressState>,
+    pub legal_name: Option<AddressState>,
+    pub email: Option<AddressState>,
+    pub web: Option<AddressState>,
+    pub twitter: Option<AddressState>,
+    pub matrix: Option<AddressState>,
 }
 
 impl OnChainIdentity {
@@ -28,13 +27,13 @@ impl OnChainIdentity {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AddressState {
     addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
     challenge: Challenge,
-    confirmed: AtomicBool,
+    confirmed: bool,
 }
 
 impl AddressState {
@@ -44,12 +43,12 @@ impl AddressState {
             addr_type: addr_type,
             addr_validity: AddressValidity::Unknown,
             challenge: Challenge::gen_random(),
-            confirmed: AtomicBool::new(false),
+            confirmed: false,
         }
     }
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 enum AddressValidity {
     #[serde(rename = "unknown")]
     Unknown,
@@ -137,6 +136,9 @@ impl CommsVerifier {
         } else {
             panic!("received invalid message type on Matrix client");
         }
+    }
+    pub fn new_on_chain_identity(&self, ident: &OnChainIdentity) {
+        self.tx.send(CommsMessage::NewOnChainIdentity(ident.clone())).unwrap();
     }
     pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Address) {
         self.tx
@@ -228,6 +230,7 @@ impl<'a> IdentityManager<'a> {
     pub async fn start(&mut self) -> Result<()> {
         use CommsMessage::*;
 
+        println!("Started manager");
         loop {
             if let Ok(msg) = self.comms.listener.recv() {
                 match msg {
@@ -241,7 +244,7 @@ impl<'a> IdentityManager<'a> {
                     ValidAddress { context: _ } => {}
                     InvalidAddress { context: _ } => {}
                     RoomId { pub_key, room_id } => {
-                        self.db_rooms.put(pub_key.0, room_id.0.as_bytes()).unwrap();
+                        self.db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
                     }
                 }
             }
@@ -250,22 +253,18 @@ impl<'a> IdentityManager<'a> {
         Ok(())
     }
     fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
-        // Only add the identity to the list if it doesn't exists yet.
-        if self
-            .idents
-            .iter()
-            .find(|ident| ident.pub_key == ident.pub_key)
-            .is_none()
-        {
-            // Save the pending on-chain identity to disk.
-            self.db_idents
-                .put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
-            self.idents.push(ident);
-        }
+        // TODO: Handle updates
 
+        // Save the pending on-chain identity to disk.
+        self.db_idents
+            .put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
+        self.idents.push(ident);
+
+        println!("New identity request");
         let ident = self
             .idents
             .last()
+            // TODO: necessary?
             .ok_or(err_msg("last registered identity not found."))?;
 
         // TODO: Handle additional address types.
@@ -276,12 +275,15 @@ impl<'a> IdentityManager<'a> {
                 .unwrap()
                 .map(|bytes| bytes.try_into().unwrap());
 
+            //println!(">> {:?}", state);
+            println!("informing...");
             self.comms.pairs.get(&state.addr_type).unwrap().inform(
                 &ident.pub_key,
                 &state.addr,
                 &state.challenge,
                 room_id,
             );
+            println!("done informing...");
         });
 
         Ok(())
