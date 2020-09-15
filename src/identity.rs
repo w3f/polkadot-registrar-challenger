@@ -1,4 +1,4 @@
-use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
+use super::{Address, AddressType, Challenge, PubKey, Result, RoomId, Signature};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -89,12 +89,17 @@ pub enum CommsMessage {
     Inform {
         context: AddressContext,
         challenge: Challenge,
+        room_id: Option<RoomId>,
     },
     ValidAddress {
         context: AddressContext,
     },
     InvalidAddress {
         context: AddressContext,
+    },
+    RoomId {
+        pub_key: PubKey,
+        room_id: RoomId,
     },
 }
 
@@ -112,7 +117,13 @@ pub struct CommsMain {
 
 // TODO: Avoid clones
 impl CommsMain {
-    fn inform(&self, pub_key: &PubKey, address: &Address, challenge: &Challenge) {
+    fn inform(
+        &self,
+        pub_key: &PubKey,
+        address: &Address,
+        challenge: &Challenge,
+        room_id: Option<RoomId>,
+    ) {
         self.sender
             .send(CommsMessage::Inform {
                 context: AddressContext {
@@ -121,6 +132,7 @@ impl CommsMain {
                     address_ty: self.address_ty.clone(),
                 },
                 challenge: challenge.clone(),
+                room_id,
             })
             .unwrap();
     }
@@ -139,9 +151,14 @@ impl CommsVerifier {
     }
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
-    pub fn recv_inform(&self) -> (AddressContext, Challenge) {
-        if let CommsMessage::Inform { context, challenge} = self.recv() {
-            (context, challenge)
+    pub fn recv_inform(&self) -> (AddressContext, Challenge, Option<RoomId>) {
+        if let CommsMessage::Inform {
+            context,
+            challenge,
+            room_id,
+        } = self.recv()
+        {
+            (context, challenge, room_id)
         } else {
             panic!("received invalid message type on Matrix client");
         }
@@ -153,7 +170,7 @@ impl CommsVerifier {
                     pub_key: pub_key.clone(),
                     address: addr.clone(),
                     address_ty: self.address_ty.clone(),
-                }
+                },
             })
             .unwrap();
     }
@@ -164,15 +181,24 @@ impl CommsVerifier {
                     pub_key: pub_key.clone(),
                     address: addr.clone(),
                     address_ty: self.address_ty.clone(),
-                }
+                },
+            })
+            .unwrap();
+    }
+    pub fn track_room_id(&self, pub_key: &PubKey, room_id: &RoomId) {
+        self.tx
+            .send(CommsMessage::RoomId {
+                pub_key: pub_key.clone(),
+                room_id: room_id.clone(),
             })
             .unwrap();
     }
 }
 
 pub struct IdentityManager<'a> {
-    pub idents: Vec<OnChainIdentity>,
-    pub db: ScopedDatabase<'a>,
+    idents: Vec<OnChainIdentity>,
+    db_idents: ScopedDatabase<'a>,
+    db_rooms: ScopedDatabase<'a>,
     comms: CommsTable,
 }
 
@@ -184,12 +210,13 @@ struct CommsTable {
 
 impl<'a> IdentityManager<'a> {
     pub fn new(db: &'a Database) -> Result<Self> {
-        let db = db.scope("pending_identities");
+        let db_idents = db.scope("pending_identities");
+        let db_rooms = db.scope("pending_identities");
 
         let mut idents = vec![];
 
         // Read pending on-chain identities from storage. Ideally, there are none.
-        for (_, value) in db.all()? {
+        for (_, value) in db_idents.all()? {
             idents.push(OnChainIdentity::from_json(&*value)?);
         }
 
@@ -197,7 +224,8 @@ impl<'a> IdentityManager<'a> {
 
         Ok(IdentityManager {
             idents: idents,
-            db: db,
+            db_idents: db_idents,
+            db_rooms: db_rooms,
             comms: CommsTable {
                 to_main: tx,
                 listener: recv,
@@ -234,12 +262,11 @@ impl<'a> IdentityManager<'a> {
                     // INVALID
                     // TODO: log
                 }
-                ValidAddress {
-                    context
-                } => {}
-                InvalidAddress {
-                    context
-                } => {}
+                ValidAddress { context } => {}
+                InvalidAddress { context } => {}
+                RoomId { pub_key, room_id } => {
+                    self.db_rooms.put(pub_key.0, room_id.0.as_bytes()).unwrap();
+                }
             }
         }
 
@@ -254,7 +281,8 @@ impl<'a> IdentityManager<'a> {
             .is_none()
         {
             // Save the pending on-chain identity to disk.
-            self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
+            self.db_idents
+                .put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
             self.idents.push(ident);
         }
 
@@ -265,10 +293,13 @@ impl<'a> IdentityManager<'a> {
 
         // TODO: Handle additional address types.
         ident.matrix.as_ref().map(|state| {
+            let room_id = self.db_rooms.get(&ident.pub_key.0).unwrap();
+
             self.comms.pairs.get(&state.addr_type).unwrap().inform(
                 &ident.pub_key,
                 &state.addr,
                 &state.challenge,
+                None,
             );
         });
 

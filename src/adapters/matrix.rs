@@ -1,5 +1,5 @@
 use crate::identity::{CommsMessage, CommsVerifier, IdentityManager};
-use crate::AddressType;
+use crate::{AddressType, RoomId};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -64,22 +64,28 @@ impl MatrixClient {
         );
     }
     pub async fn room_init(&self) {
-        let (context, challenge) = self.comms.recv_inform();
+        let (context, challenge, room_id) = self.comms.recv_inform();
 
         let pub_key = context.pub_key;
         let address = context.address;
 
-        // TODO: Check if a room already exists.
-        // TODO: Handle this better.
-        let to_invite = [address.0.clone().try_into().unwrap()];
+        // If a room already exists, don't create a new one.
+        let room_id = if let Some(room_id) = room_id {
+            room_id.0.try_into().unwrap()
+        } else {
+            // TODO: Handle this better.
+            let to_invite = [address.0.clone().try_into().unwrap()];
 
-        let mut request = Request::default();
-        request.invite = &to_invite;
-        request.name = Some("W3F Registrar Verification");
+            let mut request = Request::default();
+            request.invite = &to_invite;
+            request.name = Some("W3F Registrar Verification");
 
-        let resp = self.client.create_room(request).await.unwrap();
-        //db.put(address.0, resp.room_id.as_str()).unwrap();
-        let room_id = resp.room_id;
+            let resp = self.client.create_room(request).await.unwrap();
+
+            self.comms
+                .track_room_id(&pub_key, &RoomId(resp.room_id.as_str().to_string()));
+            resp.room_id
+        };
 
         self.client
             .room_send(

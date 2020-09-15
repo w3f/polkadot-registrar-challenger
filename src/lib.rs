@@ -23,6 +23,9 @@ pub struct Signature(SchnorrkelSignature);
 #[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Address(String);
 
+#[derive(Clone)]
+pub struct RoomId(String);
+
 #[derive(Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 pub enum AddressType {
     #[serde(rename = "email")]
