@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate futures;
 #[macro_use]
+extern crate async_trait;
+#[macro_use]
 extern crate serde;
 
 use failure::err_msg;
@@ -61,6 +63,7 @@ pub async fn run(config: Config) -> Result<()> {
 
     // Prepare communication channels between manager and clients.
     let c_matrix = manager.register_comms(AddressType::Matrix);
+    let c_matrix_emitter = manager.emitter_comms();
     let c_temp = manager.register_comms(AddressType::Email);
 
     // Setup clients.
@@ -69,6 +72,7 @@ pub async fn run(config: Config) -> Result<()> {
         &config.matrix_username,
         &config.matrix_password,
         c_matrix,
+        c_matrix_emitter
     )
     .await;
 
@@ -137,7 +141,7 @@ impl Challenge {
     pub fn verify_challenge(&self, pub_key: &PubKey, sig: &Signature) -> bool {
         pub_key
             .0
-            .verify_simple(b"", self.0.as_bytes(), &sig.0)
+            .verify_simple(b"substrate", self.0.as_bytes(), &sig.0)
             .is_ok()
     }
 }

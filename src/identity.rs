@@ -76,6 +76,7 @@ pub enum CommsMessage {
         pub_key: PubKey,
         room_id: RoomId,
     },
+    RequestFromUserId(Address),
 }
 
 pub struct AddressContext {
@@ -113,6 +114,7 @@ impl CommsMain {
     }
 }
 
+#[derive(Clone)]
 pub struct CommsVerifier {
     tx: Sender<CommsMessage>,
     recv: Receiver<CommsMessage>,
@@ -192,6 +194,8 @@ pub struct IdentityManager {
 struct CommsTable {
     to_main: Sender<CommsMessage>,
     listener: Receiver<CommsMessage>,
+    to_emitter: CommsMain,
+    from_emitter: CommsVerifier,
     pairs: HashMap<AddressType, CommsMain>,
 }
 
@@ -206,14 +210,24 @@ impl IdentityManager {
             idents.push(OnChainIdentity::from_json(&*value)?);
         }
 
-        let (tx, recv) = unbounded();
+        let (tx1, recv1) = unbounded();
+        let (tx2, recv2) = unbounded();
 
         Ok(IdentityManager {
             idents: idents,
             db: db,
             comms: CommsTable {
-                to_main: tx,
-                listener: recv,
+                to_main: tx1.clone(),
+                listener: recv1,
+                to_emitter: CommsMain {
+                    sender: tx2,
+                    address_ty: AddressType::Web,
+                },
+                from_emitter: CommsVerifier {
+                    tx: tx1,
+                    recv: recv2,
+                    address_ty: AddressType::Web,
+                },
                 pairs: HashMap::new(),
             },
         })
@@ -235,6 +249,10 @@ impl IdentityManager {
             address_ty: addr_type,
         }
     }
+    // TODO: Maybe return this directly rather than cloning?
+    pub fn emitter_comms(&self) -> CommsVerifier {
+        self.comms.from_emitter.clone()
+    }
     pub async fn start(mut self) -> Result<()> {
         use CommsMessage::*;
         let mut interval = time::interval(Duration::from_millis(50));
@@ -255,6 +273,16 @@ impl IdentityManager {
                     RoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
+                    }
+                    RequestFromUserId(addr) => {
+                        // Find the identity based on the corresponding Matrix UserId.
+                        let ident = self.idents.iter().find(|ident| {
+                            if let Some(state) = ident.matrix.as_ref() {
+                                state.addr == addr
+                            } else {
+                                false
+                            }
+                        });
                     }
                 }
             } else {

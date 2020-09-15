@@ -5,9 +5,9 @@ use matrix_sdk::{
     api::r0::room::create_room::Request,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
-        AnyMessageEventContent,
+        AnyMessageEventContent, SyncMessageEvent,
     },
-    Client, SyncSettings,
+    Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
@@ -24,10 +24,11 @@ impl MatrixClient {
         username: &str,
         password: &str,
         comms: CommsVerifier,
+        comms_emmiter: CommsVerifier,
     ) -> MatrixClient {
         // Setup client
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
-        let client = Client::new(homeserver).unwrap();
+        let mut client = Client::new(homeserver).unwrap();
 
         // Login with credentials
         client
@@ -37,6 +38,9 @@ impl MatrixClient {
 
         // Sync up, avoid responding to old messages.
         client.sync(SyncSettings::default()).await.unwrap();
+
+        // Add event emitter (responder)
+        client.add_event_emitter(Box::new(Responder::new(client.clone(), comms_emmiter)));
 
         MatrixClient {
             client: client,
@@ -81,13 +85,11 @@ impl MatrixClient {
             self.client
                 .room_send(
                     &room_id,
-                    AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                        // TODO: Make a proper Message Creator for this
-                        TextMessageEventContent::plain(
-                            include_str!("../../messages/instructions")
-                                .replace("{:PAYLOAD}", &challenge.0),
-                        ),
-                    )),
+                    create_msg(
+                        include_str!("../../messages/instructions")
+                            .replace("{:PAYLOAD}", &challenge.0)
+                            .as_str(),
+                    ),
                     None,
                 )
                 .await
@@ -97,5 +99,53 @@ impl MatrixClient {
         }
 
         Ok(())
+    }
+}
+
+fn create_msg(content: &str) -> AnyMessageEventContent {
+    AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+        // TODO: Make a proper Message Creator for this
+        TextMessageEventContent::plain(content),
+    ))
+}
+
+struct Responder {
+    client: Client,
+    comms: CommsVerifier,
+}
+
+impl Responder {
+    fn new(client: Client, comms: CommsVerifier) -> Self {
+        Responder {
+            client: client,
+            comms: comms,
+        }
+    }
+}
+
+#[async_trait]
+impl EventEmitter for Responder {
+    async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+        if let SyncRoom::Joined(room) = room {
+            let members = &room.read().await.joined_members;
+
+            if members.len() > 2 {}
+
+            let my_user_id = self.client.user_id().await.unwrap();
+            let target_user_id = members
+                .iter()
+                .map(|(user_id, _)| user_id)
+                .find(|user_id| user_id.as_str() != my_user_id.as_str());
+
+            let msg_body = if let SyncMessageEvent {
+                content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
+                ..
+            } = event
+            {
+                msg_body.clone()
+            } else {
+                return;
+            };
+        }
     }
 }
