@@ -58,8 +58,7 @@ pub struct AddressState {
     addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
-    pub challenge: Challenge,
-    pub attempt_contact: AtomicBool,
+    challenge: Challenge,
     confirmed: AtomicBool,
 }
 
@@ -70,12 +69,8 @@ impl AddressState {
             addr_type: addr_type,
             addr_validity: AddressValidity::Unknown,
             challenge: Challenge::gen_random(),
-            attempt_contact: AtomicBool::new(false),
             confirmed: AtomicBool::new(false),
         }
-    }
-    pub fn attempt_contact(&self) {
-        self.attempt_contact.store(true, Ordering::Relaxed);
     }
 }
 
@@ -87,37 +82,6 @@ enum AddressValidity {
     Valid,
     #[serde(rename = "invalid")]
     Invalid,
-}
-
-pub struct IdentityScope<'a> {
-    pub identity: &'a OnChainIdentity,
-    pub addr_state: &'a AddressState,
-    db: &'a ScopedDatabase<'a>,
-}
-
-impl<'a> IdentityScope<'a> {
-    pub fn address(&self) -> &Address {
-        &self.addr_state.addr
-    }
-    pub fn verify_challenge(&self, sig: Signature) -> Result<bool> {
-        if let Ok(_) = self
-            .identity
-            .pub_key
-            .0
-            // TODO: Check context in substrate.
-            .verify_simple(b"", self.addr_state.challenge.0.as_bytes(), &sig.0)
-        {
-            self.addr_state.confirmed.store(true, Ordering::Relaxed);
-
-            // Keep track of the current progress on disk.
-            self.db
-                .put(self.identity.pub_key.0.to_bytes(), self.identity.to_json()?)?;
-
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
 }
 
 pub enum CommsMessage {
@@ -309,41 +273,5 @@ impl<'a> IdentityManager<'a> {
         });
 
         Ok(())
-    }
-    pub fn get_identity_scope(
-        &'a self,
-        addr_type: &AddressType,
-        addr: &Address,
-    ) -> Option<IdentityScope<'a>> {
-        self.idents
-            .iter()
-            .find(|ident| ident.address_state_match(addr_type, addr).is_some())
-            .map(|ident| IdentityScope {
-                identity: &ident,
-                // Unwrapping is fine here, since `Some` is verified in the
-                // previous `find()` combinator.
-                addr_state: &ident.address_state(&addr_type).unwrap(),
-                db: &self.db,
-            })
-    }
-    pub fn get_uninitialized_channel(&'a self, addr_type: AddressType) -> Vec<IdentityScope<'a>> {
-        self.idents
-            .iter()
-            .filter(|ident| {
-                if let Some(addr_state) = ident.address_state(&addr_type) {
-                    addr_state.addr_validity == AddressValidity::Unknown
-                        && !addr_state.attempt_contact.load(Ordering::Relaxed)
-                } else {
-                    false
-                }
-            })
-            .map(|ident| IdentityScope {
-                identity: &ident,
-                // Unwrapping is fine here, since `None` values are filtered out
-                // in the previous `filter` combinator.
-                addr_state: &ident.address_state(&addr_type).unwrap(),
-                db: &self.db,
-            })
-            .collect()
     }
 }

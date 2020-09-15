@@ -43,6 +43,12 @@ impl Challenge {
         let random: [u8; 16] = thread_rng().gen();
         Challenge(hex::encode(random))
     }
+    pub fn verify_challenge(&self, pub_key: &PubKey, sig: &Signature) -> bool {
+        pub_key
+            .0
+            .verify_simple(b"", self.0.as_bytes(), &sig.0)
+            .is_ok()
+    }
 }
 
 impl Serialize for PubKey {

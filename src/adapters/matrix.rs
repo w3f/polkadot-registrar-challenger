@@ -96,10 +96,9 @@ impl MatrixClient {
             .await
             .unwrap();
 
-        // Prevent the sending of multiple messages.
-        self.comms.valid_feedback(&pub_key, &address);
-
         // TODO: Handle response
+
+        self.comms.valid_feedback(&pub_key, &address);
     }
 }
 
