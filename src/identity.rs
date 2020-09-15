@@ -129,10 +129,12 @@ enum CommsMessage {
         challenge: Challenge,
     },
     ValidAddress {
+        pub_key: PubKey,
         address: Address,
         address_ty: AddressType,
     },
     InvalidAddress {
+        pub_key: PubKey,
         address: Address,
         address_ty: AddressType,
     },
@@ -140,6 +142,7 @@ enum CommsMessage {
 
 pub struct CommsMain {
     sender: Sender<CommsMessage>,
+    // TODO: This can be removed.
     address_ty: AddressType,
 }
 
@@ -158,6 +161,28 @@ impl CommsMain {
 pub struct CommsVerifier {
     tx: Sender<CommsMessage>,
     recv: Receiver<CommsMessage>,
+    address_ty: AddressType,
+}
+
+// TODO: Avoid clones
+impl CommsVerifier {
+    fn recv(&self) -> CommsMessage {
+        self.recv.recv().unwrap()
+    }
+    fn valid_feedback(&self, pub_key: &PubKey ,addr: &Address) {
+        self.tx.send(CommsMessage::ValidAddress {
+            pub_key: pub_key.clone(),
+            address: addr.clone(),
+            address_ty: self.address_ty.clone(),
+        }).unwrap();
+    }
+    fn invalid_feedback(&self, pub_key: &PubKey, addr: &Address) {
+        self.tx.send(CommsMessage::InvalidAddress {
+            pub_key: pub_key.clone(),
+            address: addr.clone(),
+            address_ty: self.address_ty.clone(),
+        }).unwrap();
+    }
 }
 
 pub struct IdentityManager<'a> {
@@ -202,13 +227,14 @@ impl<'a> IdentityManager<'a> {
             addr_type.clone(),
             CommsMain {
                 sender: tx,
-                address_ty: addr_type,
+                address_ty: addr_type.clone(),
             },
         );
 
         CommsVerifier {
             tx: self.comms.to_main.clone(),
             recv: recv,
+            address_ty: addr_type,
         }
     }
     pub async fn run(&mut self) -> Result<()> {
@@ -224,10 +250,12 @@ impl<'a> IdentityManager<'a> {
                     // TODO: log
                 }
                 ValidAddress {
+                    pub_key,
                     address,
                     address_ty,
                 } => {}
                 InvalidAddress {
+                    pub_key,
                     address,
                     address_ty,
                 } => {}
