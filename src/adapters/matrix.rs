@@ -43,60 +43,59 @@ impl MatrixClient {
             comms: comms,
         }
     }
-    pub async fn start(self) -> Result<()> {
-        println!("Starting room init loop...");
-        loop {
-            self.room_init().await;
-        }
-
-        Ok(())
-    }
     async fn sync_client(&self) -> Result<()> {
         Ok(self.client.sync(SyncSettings::new()).await.map(|_| ())?)
     }
-    async fn room_init(&self) {
-        println!("Waiting for messages...");
-        let (context, challenge, room_id) = self.comms.recv_inform();
-        println!("Message received");
+    pub async fn start(self) -> Result<()> {
+        println!("Starting room init loop...");
 
-        let pub_key = context.pub_key;
-        let address = context.address;
+        loop {
+            println!("Waiting for messages...");
+            // TODO: Improve async situation here..
+            let (context, challenge, room_id) = self.comms.recv_inform().await;
+            println!("Message received");
 
-        self.sync_client().await.unwrap();
+            let pub_key = context.pub_key;
+            let address = context.address;
 
-        // If a room already exists, don't create a new one.
-        let room_id = if let Some(room_id) = room_id {
-            room_id.0.try_into().unwrap()
-        } else {
-            // TODO: Handle this better.
-            let to_invite = [address.0.clone().try_into().unwrap()];
+            self.sync_client().await.unwrap();
 
-            let mut request = Request::default();
-            request.invite = &to_invite;
-            request.name = Some("W3F Registrar Verification");
+            // If a room already exists, don't create a new one.
+            let room_id = if let Some(room_id) = room_id {
+                room_id.0.try_into().unwrap()
+            } else {
+                // TODO: Handle this better.
+                let to_invite = [address.0.clone().try_into().unwrap()];
 
-            let resp = self.client.create_room(request).await.unwrap();
+                let mut request = Request::default();
+                request.invite = &to_invite;
+                request.name = Some("W3F Registrar Verification");
 
-            self.comms
-                .track_room_id(&pub_key, &RoomId(resp.room_id.as_str().to_string()));
-            resp.room_id
-        };
+                let resp = self.client.create_room(request).await.unwrap();
 
-        self.client
-            .room_send(
-                &room_id,
-                AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                    // TODO: Make a proper Message Creator for this
-                    TextMessageEventContent::plain(
-                        include_str!("../../messages/instructions")
-                            .replace("{:PAYLOAD}", &challenge.0),
-                    ),
-                )),
-                None,
-            )
-            .await
-            .unwrap();
+                self.comms
+                    .track_room_id(&pub_key, &RoomId(resp.room_id.as_str().to_string()));
+                resp.room_id
+            };
 
-        self.sync_client().await.unwrap();
+            self.client
+                .room_send(
+                    &room_id,
+                    AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+                        // TODO: Make a proper Message Creator for this
+                        TextMessageEventContent::plain(
+                            include_str!("../../messages/instructions")
+                                .replace("{:PAYLOAD}", &challenge.0),
+                        ),
+                    )),
+                    None,
+                )
+                .await
+                .unwrap();
+
+            self.sync_client().await.unwrap();
+        }
+
+        Ok(())
     }
 }

@@ -4,6 +4,7 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use tokio::time::{self, Duration};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -120,17 +121,25 @@ pub struct CommsVerifier {
 
 // TODO: Avoid clones
 impl CommsVerifier {
-    pub fn recv(&self) -> CommsMessage {
-        self.recv.recv().unwrap()
+    pub async fn recv(&self) -> CommsMessage {
+        let mut interval = time::interval(Duration::from_millis(50));
+
+        loop {
+            if let Ok(msg) = self.recv.try_recv() {
+                return msg;
+            } else {
+                interval.tick().await;
+            }
+        }
     }
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
-    pub fn recv_inform(&self) -> (AddressContext, Challenge, Option<RoomId>) {
+    pub async fn recv_inform(&self) -> (AddressContext, Challenge, Option<RoomId>) {
         if let CommsMessage::Inform {
             context,
             challenge,
             room_id,
-        } = self.recv()
+        } = self.recv().await
         {
             (context, challenge, room_id)
         } else {
@@ -228,10 +237,11 @@ impl IdentityManager {
     }
     pub async fn start(mut self) -> Result<()> {
         use CommsMessage::*;
+        let mut interval = time::interval(Duration::from_millis(50));
 
         println!("Started manager");
         loop {
-            if let Ok(msg) = self.comms.listener.recv() {
+            if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.register_request(ident)?;
@@ -247,6 +257,8 @@ impl IdentityManager {
                         db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
                     }
                 }
+            } else {
+                interval.tick().await;
             }
         }
 

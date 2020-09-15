@@ -81,8 +81,9 @@ pub async fn run(config: Config) -> Result<()> {
     tokio::spawn(async move {
         matrix.start().await;
     });
-    //tokio::spawn(matrix.start_sync());
-    let mut interval = time::interval(Duration::from_secs(1));
+
+    // TODO: Adjust this
+    let mut interval = time::interval(Duration::from_secs(60));
     loop {
         interval.tick().await;
     }
