@@ -257,7 +257,6 @@ impl IdentityManager {
         use CommsMessage::*;
         let mut interval = time::interval(Duration::from_millis(50));
 
-        println!("Started manager");
         loop {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
@@ -283,6 +282,8 @@ impl IdentityManager {
                                 false
                             }
                         });
+
+                        // TODO: Report back whether the identity was found.
                     }
                 }
             } else {
@@ -302,7 +303,6 @@ impl IdentityManager {
         db_idents.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
         self.idents.push(ident);
 
-        println!("New identity request");
         let ident = self
             .idents
             .last()
@@ -316,15 +316,12 @@ impl IdentityManager {
                 .unwrap()
                 .map(|bytes| bytes.try_into().unwrap());
 
-            //println!(">> {:?}", state);
-            println!("informing...");
             self.comms.pairs.get(&state.addr_type).unwrap().inform(
                 &ident.pub_key,
                 &state.addr,
                 &state.challenge,
                 room_id,
             );
-            println!("done informing...");
         });
 
         Ok(())

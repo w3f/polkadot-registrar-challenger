@@ -10,5 +10,5 @@ async fn main() {
         matrix_password: env::var("TEST_MATRIX_PASSWORD").unwrap(),
     };
 
-    run(config).await;
+    run(config).await.unwrap();
 }

@@ -13,6 +13,7 @@ use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
 
+#[derive(Clone)]
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
     comms: CommsVerifier,
@@ -27,8 +28,11 @@ impl MatrixClient {
         comms_emmiter: CommsVerifier,
     ) -> MatrixClient {
         // Setup client
+        let store = JsonStore::open("/tmp/matrix_store").unwrap();
+        let client_config = ClientConfig::new().state_store(Box::new(store));
+
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
-        let mut client = Client::new(homeserver).unwrap();
+        let mut client = Client::new_with_config(homeserver, client_config).unwrap();
 
         // Login with credentials
         client
@@ -40,29 +44,30 @@ impl MatrixClient {
         client.sync(SyncSettings::default()).await.unwrap();
 
         // Add event emitter (responder)
-        client.add_event_emitter(Box::new(Responder::new(client.clone(), comms_emmiter)));
+        client
+            .add_event_emitter(Box::new(
+                Responder::new(client.clone(), comms_emmiter).await,
+            ))
+            .await;
+
+        let sync_client = client.clone();
+        tokio::spawn(async move {
+            sync_client
+                .sync_forever(SyncSettings::default(), |_| async {})
+                .await;
+        });
 
         MatrixClient {
             client: client,
             comms: comms,
         }
     }
-    async fn sync_client(&self) -> Result<()> {
-        Ok(self.client.sync(SyncSettings::new()).await.map(|_| ())?)
-    }
     pub async fn start(self) -> Result<()> {
-        println!("Starting room init loop...");
-
         loop {
-            println!("Waiting for messages...");
-            // TODO: Improve async situation here..
             let (context, challenge, room_id) = self.comms.recv_inform().await;
-            println!("Message received");
 
             let pub_key = context.pub_key;
             let address = context.address;
-
-            self.sync_client().await.unwrap();
 
             // If a room already exists, don't create a new one.
             let room_id = if let Some(room_id) = room_id {
@@ -94,8 +99,6 @@ impl MatrixClient {
                 )
                 .await
                 .unwrap();
-
-            self.sync_client().await.unwrap();
         }
 
         Ok(())
@@ -115,7 +118,7 @@ struct Responder {
 }
 
 impl Responder {
-    fn new(client: Client, comms: CommsVerifier) -> Self {
+    async fn new(client: Client, comms: CommsVerifier) -> Self {
         Responder {
             client: client,
             comms: comms,
@@ -126,11 +129,18 @@ impl Responder {
 #[async_trait]
 impl EventEmitter for Responder {
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+        // Do not respond to its own messages. It's weird that the EventEmitter
+        // even processes its own messages anyway...
+        if event.sender == self.client.user_id().await.unwrap() {
+            return;
+        }
+
         if let SyncRoom::Joined(room) = room {
             let members = &room.read().await.joined_members;
 
             if members.len() > 2 {}
 
+            // TODO: Just get sender
             let my_user_id = self.client.user_id().await.unwrap();
             let target_user_id = members
                 .iter()
@@ -146,6 +156,12 @@ impl EventEmitter for Responder {
             } else {
                 return;
             };
+
+            let room_id = room.read().await.room_id.clone();
+            self.client
+                .room_send(&room_id, create_msg("Hi"), None)
+                .await
+                .unwrap();
         }
     }
 }

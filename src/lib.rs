@@ -72,7 +72,7 @@ pub async fn run(config: Config) -> Result<()> {
         &config.matrix_username,
         &config.matrix_password,
         c_matrix,
-        c_matrix_emitter
+        c_matrix_emitter,
     )
     .await;
 
@@ -80,10 +80,10 @@ pub async fn run(config: Config) -> Result<()> {
 
     println!("Starting all...");
     tokio::spawn(async move {
-        manager.start().await;
+        manager.start().await.unwrap();
     });
     tokio::spawn(async move {
-        matrix.start().await;
+        matrix.start().await.unwrap();
     });
 
     // TODO: Adjust this
