@@ -1,4 +1,4 @@
-use crate::identity::IdentityManager;
+use crate::identity::{CommsMessage, CommsVerifier, IdentityManager};
 use crate::AddressType;
 use matrix_sdk::{
     self,
@@ -13,9 +13,9 @@ use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
 
-pub struct MatrixClient<'a> {
+pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
-    manager: &'a IdentityManager<'a>,
+    comms: CommsVerifier,
 }
 
 pub struct MatrixConfig {
@@ -24,8 +24,8 @@ pub struct MatrixConfig {
     password: String,
 }
 
-impl<'a> MatrixClient<'a> {
-    pub async fn new(config: MatrixConfig, manager: &'a IdentityManager<'a>) -> MatrixClient<'a> {
+impl MatrixClient {
+    pub async fn new(config: MatrixConfig, comms: CommsVerifier) -> MatrixClient {
         // Setup client
         let homeserver_url =
             Url::parse(&config.homeserver_url).expect("Couldn't parse the homeserver URL");
@@ -42,7 +42,7 @@ impl<'a> MatrixClient<'a> {
 
         MatrixClient {
             client: client,
-            manager: manager,
+            comms: comms,
         }
     }
     pub async fn start(&mut self) {
@@ -64,53 +64,47 @@ impl<'a> MatrixClient<'a> {
         );
     }
     pub async fn room_init(&self) {
-        let mut interval = time::interval(Duration::from_secs(3));
+        // TODO: `address_ty` is not required.
+        if let CommsMessage::Inform {
+            pub_key,
+            address,
+            address_ty,
+            challenge,
+        } = self.comms.recv()
+        {
+            // TODO: Check if a room already exists.
+            // TODO: Handle this better.
+            let to_invite = [address.0.clone().try_into().unwrap()];
 
-        let db = &self.manager.db.scope("matrix_rooms");
+            let mut request = Request::default();
+            request.invite = &to_invite;
+            request.name = Some("W3F Registrar Verification");
 
-        loop {
-            interval.tick().await;
+            let resp = self.client.create_room(request).await.unwrap();
+            //db.put(address.0, resp.room_id.as_str()).unwrap();
+            let room_id = resp.room_id;
 
-            for ident in self.manager.get_uninitialized_channel(AddressType::Matrix) {
-                // NOTE/TODO: `unwrap`s will be handled.
+            self.client
+                .room_send(
+                    &room_id,
+                    AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+                        // TODO: Make a proper Message Creator for this
+                        TextMessageEventContent::plain(
+                            include_str!("../../messages/instructions")
+                                .replace("{:PAYLOAD}", &challenge.0),
+                        ),
+                    )),
+                    None,
+                )
+                .await
+                .unwrap();
 
-                let address = &ident.address().0;
+            // Prevent the sending of multiple messages.
+            self.comms.valid_feedback(&pub_key, &address);
 
-                let room_id = if let Some(val) = db.get(address).unwrap() {
-                    std::str::from_utf8(&val).unwrap().try_into().unwrap()
-                } else {
-                    // TODO: Handle this better
-                    let to_invite = [ident.address().0.clone().try_into().unwrap()];
-
-                    let mut request = Request::default();
-                    request.invite = &to_invite;
-                    request.name = Some("W3F Registrar Verification");
-
-                    let resp = self.client.create_room(request).await.unwrap();
-                    db.put(&ident.address().0, resp.room_id.as_str()).unwrap();
-                    resp.room_id
-                };
-
-                self.client
-                    .room_send(
-                        &room_id,
-                        AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                            // TODO: Make a proper Message Creator for this
-                            TextMessageEventContent::plain(
-                                include_str!("../../messages/instructions")
-                                    .replace("{:PAYLOAD}", &ident.addr_state.challenge.0),
-                            ),
-                        )),
-                        None,
-                    )
-                    .await
-                    .unwrap();
-
-                // Prevent the sending of multiple messages.
-                ident.addr_state.attempt_contact();
-
-                // TODO: Handle response
-            }
+        // TODO: Handle response
+        } else {
+            panic!("Matrix client received invalid message type");
         }
     }
 }

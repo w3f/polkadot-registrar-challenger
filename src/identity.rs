@@ -120,7 +120,7 @@ impl<'a> IdentityScope<'a> {
     }
 }
 
-enum CommsMessage {
+pub enum CommsMessage {
     NewOnChainIdentity(OnChainIdentity),
     Inform {
         pub_key: PubKey,
@@ -149,12 +149,14 @@ pub struct CommsMain {
 // TODO: Avoid clones
 impl CommsMain {
     fn inform(&self, pub_key: &PubKey, address: &Address, challenge: &Challenge) {
-        self.sender.send(CommsMessage::Inform {
-            pub_key: pub_key.clone(),
-            address: address.clone(),
-            address_ty: self.address_ty.clone(),
-            challenge: challenge.clone(),
-        }).unwrap();
+        self.sender
+            .send(CommsMessage::Inform {
+                pub_key: pub_key.clone(),
+                address: address.clone(),
+                address_ty: self.address_ty.clone(),
+                challenge: challenge.clone(),
+            })
+            .unwrap();
     }
 }
 
@@ -166,22 +168,26 @@ pub struct CommsVerifier {
 
 // TODO: Avoid clones
 impl CommsVerifier {
-    fn recv(&self) -> CommsMessage {
+    pub fn recv(&self) -> CommsMessage {
         self.recv.recv().unwrap()
     }
-    fn valid_feedback(&self, pub_key: &PubKey ,addr: &Address) {
-        self.tx.send(CommsMessage::ValidAddress {
-            pub_key: pub_key.clone(),
-            address: addr.clone(),
-            address_ty: self.address_ty.clone(),
-        }).unwrap();
+    pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Address) {
+        self.tx
+            .send(CommsMessage::ValidAddress {
+                pub_key: pub_key.clone(),
+                address: addr.clone(),
+                address_ty: self.address_ty.clone(),
+            })
+            .unwrap();
     }
-    fn invalid_feedback(&self, pub_key: &PubKey, addr: &Address) {
-        self.tx.send(CommsMessage::InvalidAddress {
-            pub_key: pub_key.clone(),
-            address: addr.clone(),
-            address_ty: self.address_ty.clone(),
-        }).unwrap();
+    pub fn invalid_feedback(&self, pub_key: &PubKey, addr: &Address) {
+        self.tx
+            .send(CommsMessage::InvalidAddress {
+                pub_key: pub_key.clone(),
+                address: addr.clone(),
+                address_ty: self.address_ty.clone(),
+            })
+            .unwrap();
     }
 }
 
@@ -283,15 +289,13 @@ impl<'a> IdentityManager<'a> {
             .ok_or(err_msg("last registered identity not found."))?;
 
         // TODO: Handle additional address types.
-        ident
-            .matrix
-            .as_ref()
-            .map(|state| {
-                self.comms
-                    .pairs
-                    .get(&state.addr_type).unwrap()
-                    .inform(&ident.pub_key, &state.addr, &state.challenge);
-            });
+        ident.matrix.as_ref().map(|state| {
+            self.comms.pairs.get(&state.addr_type).unwrap().inform(
+                &ident.pub_key,
+                &state.addr,
+                &state.challenge,
+            );
+        });
 
         Ok(())
     }
