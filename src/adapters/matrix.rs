@@ -43,24 +43,16 @@ impl MatrixClient {
             comms: comms,
         }
     }
-    /// Sync the Matrix client. Syncing was separated from `start` since
-    /// running `sync` within `join!` results in a panic. Slightly Related:
-    /// https://github.com/rust-lang/rust/issues/64496.
-    pub async fn start_sync(&self) {
-        // Running `sync_forever` also results in a panic... so just loop.
-        let mut interval = time::interval(Duration::from_secs(1));
-        loop {
-            interval.tick().await;
-            self.client.sync(SyncSettings::new()).await.unwrap();
-        }
-    }
-    pub async fn start(&self) -> Result<()> {
+    pub async fn start(self) -> Result<()> {
         println!("Starting room init loop...");
         loop {
             self.room_init().await;
         }
 
         Ok(())
+    }
+    async fn sync_client(&self) -> Result<()> {
+        Ok(self.client.sync(SyncSettings::new()).await.map(|_| ())?)
     }
     async fn room_init(&self) {
         println!("Waiting for messages...");
@@ -69,6 +61,8 @@ impl MatrixClient {
 
         let pub_key = context.pub_key;
         let address = context.address;
+
+        self.sync_client().await.unwrap();
 
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = room_id {
@@ -103,8 +97,6 @@ impl MatrixClient {
             .await
             .unwrap();
 
-        // TODO: Handle response
-
-        // self.comms.valid_feedback(&pub_key, &address);
+        self.sync_client().await.unwrap();
     }
 }

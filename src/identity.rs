@@ -138,7 +138,9 @@ impl CommsVerifier {
         }
     }
     pub fn new_on_chain_identity(&self, ident: &OnChainIdentity) {
-        self.tx.send(CommsMessage::NewOnChainIdentity(ident.clone())).unwrap();
+        self.tx
+            .send(CommsMessage::NewOnChainIdentity(ident.clone()))
+            .unwrap();
     }
     pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Address) {
         self.tx
@@ -172,10 +174,9 @@ impl CommsVerifier {
     }
 }
 
-pub struct IdentityManager<'a> {
+pub struct IdentityManager {
     idents: Vec<OnChainIdentity>,
-    db_idents: ScopedDatabase<'a>,
-    db_rooms: ScopedDatabase<'a>,
+    db: Database,
     comms: CommsTable,
 }
 
@@ -185,14 +186,13 @@ struct CommsTable {
     pairs: HashMap<AddressType, CommsMain>,
 }
 
-impl<'a> IdentityManager<'a> {
-    pub fn new(db: &'a Database) -> Result<Self> {
-        let db_idents = db.scope("pending_identities");
-        let db_rooms = db.scope("pending_identities");
-
+// let db_rooms = db.scope("pending_identities");
+impl IdentityManager {
+    pub fn new(db: Database) -> Result<Self> {
         let mut idents = vec![];
 
         // Read pending on-chain identities from storage. Ideally, there are none.
+        let db_idents = db.scope("pending_identities");
         for (_, value) in db_idents.all()? {
             idents.push(OnChainIdentity::from_json(&*value)?);
         }
@@ -201,8 +201,7 @@ impl<'a> IdentityManager<'a> {
 
         Ok(IdentityManager {
             idents: idents,
-            db_idents: db_idents,
-            db_rooms: db_rooms,
+            db: db,
             comms: CommsTable {
                 to_main: tx,
                 listener: recv,
@@ -227,7 +226,7 @@ impl<'a> IdentityManager<'a> {
             address_ty: addr_type,
         }
     }
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn start(mut self) -> Result<()> {
         use CommsMessage::*;
 
         println!("Started manager");
@@ -244,7 +243,8 @@ impl<'a> IdentityManager<'a> {
                     ValidAddress { context: _ } => {}
                     InvalidAddress { context: _ } => {}
                     RoomId { pub_key, room_id } => {
-                        self.db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
+                        let db_rooms = self.db.scope("matrix_rooms");
+                        db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
                     }
                 }
             }
@@ -255,9 +255,11 @@ impl<'a> IdentityManager<'a> {
     fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         // TODO: Handle updates
 
+        let db_idents = self.db.scope("pending_identities");
+        let db_rooms = self.db.scope("matrix_rooms");
+
         // Save the pending on-chain identity to disk.
-        self.db_idents
-            .put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
+        db_idents.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
         self.idents.push(ident);
 
         println!("New identity request");
@@ -269,8 +271,7 @@ impl<'a> IdentityManager<'a> {
 
         // TODO: Handle additional address types.
         ident.matrix.as_ref().map(|state| {
-            let room_id = self
-                .db_rooms
+            let room_id = db_rooms
                 .get(&ident.pub_key.0)
                 .unwrap()
                 .map(|bytes| bytes.try_into().unwrap());

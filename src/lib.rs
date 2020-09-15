@@ -4,6 +4,7 @@ extern crate futures;
 extern crate serde;
 
 use failure::err_msg;
+use futures::join;
 use rand::{thread_rng, Rng};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
@@ -11,11 +12,11 @@ use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
-use futures::join;
+use tokio::time::{self, Duration};
 
 use adapters::MatrixClient;
 use db::Database;
-use identity::{IdentityManager, OnChainIdentity, AddressState, CommsMessage, CommsVerifier};
+use identity::{AddressState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
 
 mod adapters;
 mod db;
@@ -28,25 +29,21 @@ struct TestClient {
 
 impl TestClient {
     fn new(comms: CommsVerifier) -> Self {
-        TestClient {
-            comms: comms,
-        }
+        TestClient { comms: comms }
     }
     fn gen_data(&self) {
-        self.comms.new_on_chain_identity(
-            &OnChainIdentity {
-                pub_key: PubKey(SchnorrkelPubKey::default()),
-                display_name: None,
-                legal_name: None,
-                email: None,
-                web: None,
-                twitter: None,
-                matrix: Some(AddressState::new(
-                    Address("@fabio:web3.foundation".to_string()),
-                    AddressType::Matrix,
-                ))
-            }
-        );
+        self.comms.new_on_chain_identity(&OnChainIdentity {
+            pub_key: PubKey(SchnorrkelPubKey::default()),
+            display_name: None,
+            legal_name: None,
+            email: None,
+            web: None,
+            twitter: None,
+            matrix: Some(AddressState::new(
+                Address("@fabio:web3.foundation".to_string()),
+                AddressType::Matrix,
+            )),
+        });
     }
 }
 
@@ -60,7 +57,7 @@ pub struct Config {
 pub async fn run(config: Config) -> Result<()> {
     // Setup database and identity manager
     let db = Database::new(&config.db_path)?;
-    let mut manager = IdentityManager::new(&db)?;
+    let mut manager = IdentityManager::new(db)?;
 
     // Prepare communication channels between manager and clients.
     let c_matrix = manager.register_comms(AddressType::Matrix);
@@ -72,16 +69,23 @@ pub async fn run(config: Config) -> Result<()> {
         &config.matrix_username,
         &config.matrix_password,
         c_matrix,
-    ).await;
+    )
+    .await;
 
     TestClient::new(c_temp).gen_data();
 
     println!("Starting all...");
-    /*
-    tokio::spawn(manager.start());
-    tokio::spawn(matrix.start());
-    tokio::spawn(matrix.start_sync());
-    */
+    tokio::spawn(async move {
+        manager.start().await;
+    });
+    tokio::spawn(async move {
+        matrix.start().await;
+    });
+    //tokio::spawn(matrix.start_sync());
+    let mut interval = time::interval(Duration::from_secs(1));
+    loop {
+        interval.tick().await;
+    }
 
     Ok(())
 }
