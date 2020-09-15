@@ -16,21 +16,26 @@ pub mod identity;
 
 type Result<T> = StdResult<T, failure::Error>;
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct PubKey(SchnorrkelPubKey);
+#[derive(Eq, PartialEq, Clone)]
 pub struct Signature(SchnorrkelSignature);
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Address(String);
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Hash, Clone, Serialize, Deserialize)]
 pub enum AddressType {
+    #[serde(rename = "email")]
     Email,
+    #[serde(rename = "web")]
     Web,
+    #[serde(rename = "twitter")]
     Twitter,
+    #[serde(rename = "matrix")]
     Matrix,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Challenge(String);
 
 impl Challenge {

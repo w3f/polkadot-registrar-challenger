@@ -1,6 +1,8 @@
 use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
+use failure::err_msg;
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Serialize, Deserialize)]
@@ -136,7 +138,22 @@ enum CommsMessage {
     },
 }
 
-pub struct CommsMain(Sender<CommsMessage>);
+pub struct CommsMain {
+    sender: Sender<CommsMessage>,
+    address_ty: AddressType,
+}
+
+// TODO: Avoid clones
+impl CommsMain {
+    fn inform(&self, pub_key: &PubKey, address: &Address, challenge: &Challenge) {
+        self.sender.send(CommsMessage::Inform {
+            pub_key: pub_key.clone(),
+            address: address.clone(),
+            address_ty: self.address_ty.clone(),
+            challenge: challenge.clone(),
+        }).unwrap();
+    }
+}
 
 pub struct CommsVerifier {
     tx: Sender<CommsMessage>,
@@ -152,10 +169,7 @@ pub struct IdentityManager<'a> {
 struct CommsTable {
     to_main: Sender<CommsMessage>,
     listener: Receiver<CommsMessage>,
-    email: Option<CommsMain>,
-    web: Option<CommsMain>,
-    twitter: Option<CommsMain>,
-    matrix: Option<CommsMain>,
+    pairs: HashMap<AddressType, CommsMain>,
 }
 
 impl<'a> IdentityManager<'a> {
@@ -177,46 +191,25 @@ impl<'a> IdentityManager<'a> {
             comms: CommsTable {
                 to_main: tx,
                 listener: recv,
-                email: None,
-                web: None,
-                twitter: None,
-                matrix: None,
+                pairs: HashMap::new(),
             },
         })
     }
-    fn get_comms(&self) -> (CommsMain, CommsVerifier) {
+    pub fn register_comms(&'static mut self, addr_type: AddressType) -> CommsVerifier {
         let (tx, recv) = unbounded();
 
-        (
-            CommsMain(tx),
-            CommsVerifier {
-                tx: self.comms.to_main.clone(),
-                recv: recv,
+        self.comms.pairs.insert(
+            addr_type.clone(),
+            CommsMain {
+                sender: tx,
+                address_ty: addr_type,
             },
-        )
-    }
-    pub fn register_comms(&'static mut self, addr_type: &AddressType) -> CommsVerifier {
-        use AddressType::*;
+        );
 
-        let (cm, cv) = self.get_comms();
-
-        match addr_type {
-            Email => {
-                self.comms.email = Some(cm);
-            }
-            Web => {
-                self.comms.web = Some(cm);
-            }
-            Twitter => {
-                self.comms.twitter = Some(cm);
-            }
-            Matrix => {
-                self.comms.matrix = Some(cm);
-            }
-            _ => panic!("TODO"),
+        CommsVerifier {
+            tx: self.comms.to_main.clone(),
+            recv: recv,
         }
-
-        cv
     }
     pub async fn run(&mut self) -> Result<()> {
         use CommsMessage::*;
@@ -255,6 +248,22 @@ impl<'a> IdentityManager<'a> {
             self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
             self.idents.push(ident);
         }
+
+        let ident = self
+            .idents
+            .last()
+            .ok_or(err_msg("last registered identity not found."))?;
+
+        // TODO: Handle additional address types.
+        ident
+            .matrix
+            .as_ref()
+            .map(|state| {
+                self.comms
+                    .pairs
+                    .get(&state.addr_type).unwrap()
+                    .inform(&ident.pub_key, &state.addr, &state.challenge);
+            });
 
         Ok(())
     }
