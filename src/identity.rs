@@ -203,8 +203,6 @@ pub struct IdentityManager {
 struct CommsTable {
     to_main: Sender<CommsMessage>,
     listener: Receiver<CommsMessage>,
-    to_emitter: CommsMain,
-    from_emitter: CommsVerifier,
     pairs: HashMap<AccountType, CommsMain>,
 }
 
@@ -220,7 +218,6 @@ impl IdentityManager {
         }
 
         let (tx1, recv1) = unbounded();
-        let (tx2, recv2) = unbounded();
 
         Ok(IdentityManager {
             idents: idents,
@@ -228,15 +225,6 @@ impl IdentityManager {
             comms: CommsTable {
                 to_main: tx1.clone(),
                 listener: recv1,
-                to_emitter: CommsMain {
-                    sender: tx2,
-                    address_ty: AccountType::Web,
-                },
-                from_emitter: CommsVerifier {
-                    tx: tx1,
-                    recv: recv2,
-                    address_ty: AccountType::Web,
-                },
                 pairs: HashMap::new(),
             },
         })
@@ -257,10 +245,6 @@ impl IdentityManager {
             recv: recv,
             address_ty: account_ty,
         }
-    }
-    // TODO: Maybe return this directly rather than cloning?
-    pub fn emitter_comms(&self) -> CommsVerifier {
-        self.comms.from_emitter.clone()
     }
     pub async fn start(mut self) -> Result<()> {
         use CommsMessage::*;
@@ -302,12 +286,11 @@ impl IdentityManager {
                         let state = ident.matrix.as_ref().unwrap();
 
                         // TODO: Report back whether the identity was found.
-                        self.comms.to_emitter.inform(
-                            &ident.pub_key,
-                            &state.account,
-                            &state.challenge,
-                            None,
-                        );
+                        self.comms
+                            .pairs
+                            .get(&AccountType::ReservedEmitter)
+                            .unwrap()
+                            .inform(&ident.pub_key, &state.account, &state.challenge, None);
                     }
                 }
             } else {

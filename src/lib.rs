@@ -23,9 +23,9 @@ use db::Database;
 use identity::{AccountState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
 
 mod adapters;
+mod connector;
 mod db;
 mod identity;
-mod connector;
 mod verifier;
 
 pub struct Config {
@@ -40,12 +40,11 @@ pub async fn run(config: Config) -> Result<()> {
     let db = Database::new(&config.db_path)?;
     let mut manager = IdentityManager::new(db)?;
 
-    // Prepare communication channels between manager and clients.
+    // Prepare communication channels between manager and tasks.
+    let c_connector = manager.register_comms(AccountType::ReservedConnector);
+    let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
-    let c_temp = manager.register_comms(AccountType::Email);
-
-    // Prepare special-purpose communication channels.
-    let c_matrix_emitter = manager.emitter_comms();
+    let c_test = manager.register_comms(AccountType::Email);
 
     // Setup clients.
     let matrix = MatrixClient::new(
@@ -53,11 +52,12 @@ pub async fn run(config: Config) -> Result<()> {
         &config.matrix_username,
         &config.matrix_password,
         c_matrix,
-        c_matrix_emitter,
+        //c_matrix_emitter,
+        c_emitter,
     )
     .await;
 
-    TestClient::new(c_temp).gen_data();
+    TestClient::new(c_test).gen_data();
 
     println!("Starting all...");
     tokio::spawn(async move {
@@ -156,6 +156,8 @@ pub enum AccountType {
     Twitter,
     #[serde(rename = "matrix")]
     Matrix,
+    ReservedConnector,
+    ReservedEmitter,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
