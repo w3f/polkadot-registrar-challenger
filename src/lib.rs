@@ -20,9 +20,10 @@ use adapters::MatrixClient;
 use db::Database;
 use identity::{AddressState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
 
-mod adapters;
 mod db;
+mod adapters;
 mod identity;
+mod listener;
 
 // TODO: add cfg
 struct TestClient {
