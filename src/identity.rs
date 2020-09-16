@@ -134,8 +134,12 @@ impl CommsVerifier {
             }
         }
     }
+    pub fn try_recv(&self) -> Option<CommsMessage> {
+        self.recv.try_recv().ok()
+    }
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
+    // TODO: Just use `recv` and match directly. Remove this method
     pub async fn recv_inform(&self) -> (AccountContext, Challenge, Option<RoomId>) {
         if let CommsMessage::Inform {
             context,
