@@ -15,6 +15,7 @@ use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
@@ -31,6 +32,7 @@ mod verifier;
 
 pub struct Config {
     pub db_path: String,
+    pub watcher_url: String,
     pub matrix_homeserver: String,
     pub matrix_username: String,
     pub matrix_password: String,
@@ -48,7 +50,7 @@ pub async fn run(config: Config) -> Result<()> {
     // TODO: move to a test suite
     let c_test = manager.register_comms(AccountType::Email);
 
-    let connector = Connector::new("url", c_connector).await?;
+    let connector = Connector::new(&config.watcher_url, c_connector).await?;
 
     // Setup clients.
     let matrix = MatrixClient::new(
@@ -119,12 +121,26 @@ impl From<&str> for Account {
 #[derive(Clone)]
 pub struct NetworkAddress {
     network_address: String,
+    algo: Algorithm,
     pub_key: PubKey,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+enum Algorithm {
+    #[serde(rename = "schnorr")]
+    Schnorr,
+    #[serde(rename = "edwards")]
+    Edwards,
+    #[serde(rename = "ecdsa")]
+    ECDSA
 }
 
 impl NetworkAddress {
     fn network_address(&self) -> &str {
         self.network_address.as_str()
+    }
+    fn algo(&self) -> &Algorithm {
+        &self.algo
     }
     fn pub_key(&self) -> &PubKey {
         &self.pub_key
@@ -133,12 +149,11 @@ impl NetworkAddress {
 
 use base58::FromBase58;
 
-impl TryFrom<String> for NetworkAddress {
+impl TryFrom<Account> for NetworkAddress {
     type Error = failure::Error;
 
-    // TODO: Verify checksum?
-    fn try_from(value: String) -> Result<Self> {
-        let bytes = value
+    fn try_from(value: Account) -> Result<Self> {
+        let bytes = value.0
             .from_base58()
             .map_err(|_| err_msg("failed to decode address from base58"))?;
 
@@ -147,8 +162,8 @@ impl TryFrom<String> for NetworkAddress {
         }
 
         Ok(NetworkAddress {
-            network_address: value,
-            // TODO: Should also work for slices
+            network_address: value.0,
+            algo: Algorithm::Schnorr,
             pub_key: PubKey::try_from(bytes[1..33].to_vec())?,
         })
     }
@@ -164,7 +179,9 @@ pub enum AccountType {
     Twitter,
     #[serde(rename = "matrix")]
     Matrix,
+    #[serde(rename = "reserved_connector")]
     ReservedConnector,
+    #[serde(rename = "reserved_emitter")]
     ReservedEmitter,
 }
 
@@ -181,6 +198,28 @@ impl Challenge {
             .0
             .verify_simple(b"substrate", self.0.as_bytes(), &sig.0)
             .is_ok()
+    }
+}
+
+trait Fatal<T> {
+    fn fatal(self) -> T;
+}
+
+impl<T: Debug, E: Debug> Fatal<T> for StdResult<T, E> {
+    fn fatal(self) -> T {
+        if self.is_err() {
+            let err = self.unwrap_err();
+            // TODO: log
+            panic!("Fatal error encountered. Report as a bug: {:?}", err);
+        }
+
+        self.unwrap()
+    }
+}
+
+impl<T: Debug> Fatal<T> for Option<T> {
+    fn fatal(self) -> T {
+        self.expect("Fatal error encountered. Report as a bug.")
     }
 }
 

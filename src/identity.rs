@@ -1,4 +1,4 @@
-use super::{Account, AccountType, Challenge, PubKey, Result};
+use super::{Fatal, Account, AccountType, Challenge, PubKey, Result};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -71,12 +71,12 @@ pub enum CommsMessage {
     InvalidAccount {
         context: AccountContext,
     },
-    RoomId {
+    TrackRoomId {
         pub_key: PubKey,
         room_id: RoomId,
     },
     // TODO: add AccountType option
-    RequestFromUserId(Account),
+    RequestAccountState(Account),
 }
 
 pub struct AccountContext {
@@ -85,13 +85,13 @@ pub struct AccountContext {
     pub address_ty: AccountType,
 }
 
+#[derive(Debug, Clone)]
 pub struct CommsMain {
     sender: Sender<CommsMessage>,
     // TODO: This can be removed.
     address_ty: AccountType,
 }
 
-// TODO: Avoid clones
 impl CommsMain {
     fn inform(
         &self,
@@ -110,18 +110,17 @@ impl CommsMain {
                 challenge: challenge.clone(),
                 room_id,
             })
-            .unwrap();
+            .fatal();
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CommsVerifier {
     tx: Sender<CommsMessage>,
     recv: Receiver<CommsMessage>,
     address_ty: AccountType,
 }
 
-// TODO: Avoid clones
 impl CommsVerifier {
     pub async fn recv(&self) -> CommsMessage {
         let mut interval = time::interval(Duration::from_millis(50));
@@ -152,15 +151,15 @@ impl CommsVerifier {
             panic!("received invalid message type on Matrix client");
         }
     }
-    pub fn request_address_sate(&self, address: &Account) {
+    pub fn request_account_state(&self, address: &Account) {
         self.tx
-            .send(CommsMessage::RequestFromUserId(address.clone()))
-            .unwrap();
+            .send(CommsMessage::RequestAccountState(address.clone()))
+            .fatal();
     }
     pub fn new_on_chain_identity(&self, ident: &OnChainIdentity) {
         self.tx
             .send(CommsMessage::NewOnChainIdentity(ident.clone()))
-            .unwrap();
+            .fatal();
     }
     pub fn valid_feedback(&self, pub_key: &PubKey, account: &Account) {
         self.tx
@@ -171,7 +170,7 @@ impl CommsVerifier {
                     address_ty: self.address_ty.clone(),
                 },
             })
-            .unwrap();
+            .fatal();
     }
     pub fn invalid_feedback(&self, pub_key: &PubKey, account: &Account) {
         self.tx
@@ -182,15 +181,15 @@ impl CommsVerifier {
                     address_ty: self.address_ty.clone(),
                 },
             })
-            .unwrap();
+            .fatal();
     }
     pub fn track_room_id(&self, pub_key: &PubKey, room_id: &RoomId) {
         self.tx
-            .send(CommsMessage::RoomId {
+            .send(CommsMessage::TrackRoomId {
                 pub_key: pub_key.clone(),
                 room_id: room_id.clone(),
             })
-            .unwrap();
+            .fatal();
     }
 }
 
@@ -262,35 +261,12 @@ impl IdentityManager {
                     }
                     ValidAccount { context: _ } => {}
                     InvalidAccount { context: _ } => {}
-                    RoomId { pub_key, room_id } => {
+                    TrackRoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(pub_key.0, room_id.as_bytes())?;
                     }
-                    RequestFromUserId(account) => {
-                        // Find the identity based on the corresponding Matrix UserId.
-                        let ident = self
-                            .idents
-                            .iter()
-                            .find(|ident| {
-                                if let Some(state) = ident.matrix.as_ref() {
-                                    state.account == account
-                                } else {
-                                    false
-                                }
-                            })
-                            .unwrap();
-                        // TODO: Handle that unwrap.
-
-                        // Unwrapping is safe here, since it's guaranteed in the
-                        // `find` filter.
-                        let state = ident.matrix.as_ref().unwrap();
-
-                        // TODO: Report back whether the identity was found.
-                        self.comms
-                            .pairs
-                            .get(&AccountType::ReservedEmitter)
-                            .unwrap()
-                            .inform(&ident.pub_key, &state.account, &state.challenge, None);
+                    RequestAccountState(account) => {
+                        self.request_account_state(account);
                     }
                 }
             } else {
@@ -316,24 +292,48 @@ impl IdentityManager {
             // TODO: necessary?
             .ok_or(err_msg("last registered identity not found."))?;
 
-        // TODO: Handle additional address types.
-        ident.matrix.as_ref().ok_or(err_msg("")).and_then(|state| {
-            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key.0)? {
-                Some(std::str::from_utf8(&bytes)?.try_into()?)
+        // Only matrix supported for now.
+        ident.matrix.as_ref().map::<(), _>(|state| {
+            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key.0).fatal() {
+                Some(std::str::from_utf8(&bytes).fatal().try_into().fatal())
             } else {
                 None
             };
 
-            self.comms.pairs.get(&state.account_ty).unwrap().inform(
+            self.comms.pairs.get(&state.account_ty).fatal().inform(
                 &ident.pub_key,
                 &state.account,
                 &state.challenge,
                 room_id,
             );
-
-            Ok(())
         });
 
         Ok(())
+    }
+    fn request_account_state(&self, account: Account) {
+        // Account state requests are always available, since such a request
+        // cannot occur if it isn't.
+
+        // Find the identity based on the corresponding Matrix UserId.
+        let ident = self
+            .idents
+            .iter()
+            .find(|ident| {
+                if let Some(state) = ident.matrix.as_ref() {
+                    state.account == account
+                } else {
+                    false
+                }
+            })
+            .fatal();
+
+        let state = ident.matrix.as_ref().fatal();
+
+        // TODO: Report back whether the identity was found.
+        self.comms
+            .pairs
+            .get(&AccountType::ReservedEmitter)
+            .fatal()
+            .inform(&ident.pub_key, &state.account, &state.challenge, None);
     }
 }

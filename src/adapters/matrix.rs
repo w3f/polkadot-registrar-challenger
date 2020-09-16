@@ -166,10 +166,8 @@ impl Responder {
         if let SyncRoom::Joined(room) = room {
             let members = &room.read().await.joined_members;
 
-            if members.len() > 2 {}
-
             self.comms
-                .request_address_sate(&Account(event.sender.as_str().to_string()));
+                .request_account_state(&Account(event.sender.as_str().to_string()));
             let (context, challenge, _) = self.comms.recv_inform().await;
 
             let verifier = Verifier::new(context, challenge);
