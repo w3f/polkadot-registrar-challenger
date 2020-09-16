@@ -19,6 +19,7 @@ use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
 use adapters::MatrixClient;
+use connector::Connector;
 use db::Database;
 use identity::{AccountState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
 
@@ -44,7 +45,10 @@ pub async fn run(config: Config) -> Result<()> {
     let c_connector = manager.register_comms(AccountType::ReservedConnector);
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
+    // TODO: move to a test suite
     let c_test = manager.register_comms(AccountType::Email);
+
+    let connector = Connector::new("url", c_connector).await?;
 
     // Setup clients.
     let matrix = MatrixClient::new(
@@ -57,6 +61,7 @@ pub async fn run(config: Config) -> Result<()> {
     )
     .await;
 
+    // TODO: move to a test suite
     TestClient::new(c_test).gen_data();
 
     println!("Starting all...");
@@ -64,7 +69,10 @@ pub async fn run(config: Config) -> Result<()> {
         manager.start().await.unwrap();
     });
     tokio::spawn(async move {
-        matrix.start().await.unwrap();
+        connector.start().await;
+    });
+    tokio::spawn(async move {
+        matrix.start().await;
     });
 
     // TODO: Adjust this

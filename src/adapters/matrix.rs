@@ -1,6 +1,7 @@
 use crate::identity::CommsVerifier;
 use crate::verifier::Verifier;
 use crate::{Account, Result, Signature};
+use failure::err_msg;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -68,39 +69,44 @@ impl MatrixClient {
     async fn send_msg(&self, msg: &str, room_id: &RoomId) -> Result<()> {
         send_msg(&self.client, msg, room_id).await
     }
-    pub async fn start(self) -> Result<()> {
+    pub async fn start(self) {
         loop {
-            let (context, challenge, room_id) = self.comms.recv_inform().await;
-
-            let pub_key = context.pub_key;
-            let address = context.address;
-
-            // If a room already exists, don't create a new one.
-            let room_id = if let Some(room_id) = room_id {
-                room_id
-            } else {
-                // TODO: Handle this better.
-                let to_invite = [address.0.clone().try_into().unwrap()];
-
-                let mut request = Request::default();
-                request.invite = &to_invite;
-                request.name = Some("W3F Registrar Verification");
-
-                let resp = self.client.create_room(request).await.unwrap();
-
-                self.comms.track_room_id(&pub_key, &resp.room_id);
-                resp.room_id
-            };
-
-            self.send_msg(
-                include_str!("../../messages/instructions")
-                    .replace("{:PAYLOAD}", &challenge.0)
-                    .as_str(),
-                &room_id,
-            )
-            .await
-            .unwrap();
+            let _ = self.local().await.map_err(|err| {
+                // TODO: log...
+                err
+            });
         }
+    }
+    async fn local(&self) -> Result<()> {
+        let (context, challenge, room_id) = self.comms.recv_inform().await;
+
+        let pub_key = context.pub_key;
+        let address = context.address;
+
+        // If a room already exists, don't create a new one.
+        let room_id = if let Some(room_id) = room_id {
+            room_id
+        } else {
+            // TODO: Handle this better.
+            let to_invite = [address.0.clone().try_into()?];
+
+            let mut request = Request::default();
+            request.invite = &to_invite;
+            request.name = Some("W3F Registrar Verification");
+
+            let resp = self.client.create_room(request).await?;
+
+            self.comms.track_room_id(&pub_key, &resp.room_id);
+            resp.room_id
+        };
+
+        self.send_msg(
+            include_str!("../../messages/instructions")
+                .replace("{:PAYLOAD}", &challenge.0)
+                .as_str(),
+            &room_id,
+        )
+        .await?;
 
         Ok(())
     }
@@ -140,15 +146,21 @@ impl Responder {
     async fn send_msg(&self, msg: &str, room_id: &matrix_sdk::identifiers::RoomId) -> Result<()> {
         send_msg(&self.client, msg, room_id).await
     }
-}
-
-#[async_trait]
-impl EventEmitter for Responder {
-    async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+    async fn local(
+        &self,
+        room: SyncRoom,
+        event: &SyncMessageEvent<MessageEventContent>,
+    ) -> Result<()> {
         // Do not respond to its own messages. It's weird that the EventEmitter
         // even processes its own messages anyway...
-        if event.sender == self.client.user_id().await.unwrap() {
-            return;
+        if event.sender
+            == self
+                .client
+                .user_id()
+                .await
+                .ok_or(err_msg("no user id found"))?
+        {
+            return Ok(());
         }
 
         if let SyncRoom::Joined(room) = room {
@@ -170,15 +182,27 @@ impl EventEmitter for Responder {
             {
                 msg_body.clone()
             } else {
-                return;
+                return Ok(());
             };
 
             let room_id = room.read().await.room_id.clone();
 
             match verifier.verify(&msg_body) {
-                Ok(msg) => self.send_msg(&msg, &room_id).await.unwrap(),
-                Err(err) => self.send_msg(&err.to_string(), &room_id).await.unwrap(),
+                Ok(msg) => self.send_msg(&msg, &room_id).await?,
+                Err(err) => self.send_msg(&err.to_string(), &room_id).await?,
             };
         }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl EventEmitter for Responder {
+    async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+        let _ = self.local(room, event).await.map_err(|err| {
+            // TODO: log...
+            err
+        });
     }
 }
