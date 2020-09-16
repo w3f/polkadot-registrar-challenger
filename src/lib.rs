@@ -91,6 +91,12 @@ type Result<T> = StdResult<T, failure::Error>;
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct PubKey(SchnorrkelPubKey);
 
+impl PubKey {
+    fn to_bytes(&self) -> [u8; 32] {
+        self.0.to_bytes()
+    }
+}
+
 impl TryFrom<Vec<u8>> for PubKey {
     type Error = failure::Error;
 
@@ -103,8 +109,23 @@ impl TryFrom<Vec<u8>> for PubKey {
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Signature(SchnorrkelSignature);
+
+impl Signature {
+    fn to_bytes(&self) -> [u8; 64] {
+        self.0.to_bytes()
+    }
+    fn to_string(&self) -> String {
+        hex::encode(&self.to_bytes())
+    }
+}
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
+
+impl Account {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
 
 impl From<String> for Account {
     fn from(value: String) -> Self {
