@@ -28,42 +28,6 @@ mod identity;
 mod listener;
 mod verifier;
 
-// TODO: add cfg
-struct TestClient {
-    comms: CommsVerifier,
-}
-
-impl TestClient {
-    fn new(comms: CommsVerifier) -> Self {
-        TestClient { comms: comms }
-    }
-    fn gen_data(&self) {
-        let sk = schnorrkel::keys::SecretKey::generate();
-        let pk = sk.to_public();
-
-        let mut ident = OnChainIdentity {
-            //pub_key: PubKey(SchnorrkelPubKey::default()),
-            pub_key: PubKey(pk),
-            display_name: None,
-            legal_name: None,
-            email: None,
-            web: None,
-            twitter: None,
-            matrix: Some(AccountState::new(
-                Account("@fabio:web3.foundation".to_string()),
-                AccountType::Matrix,
-            )),
-        };
-
-        let random = &ident.matrix.as_ref().unwrap().challenge;
-
-        let sig = sk.sign_simple(b"substrate", &random.0.as_bytes(), &pk);
-        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
-
-        self.comms.new_on_chain_identity(&ident);
-    }
-}
-
 pub struct Config {
     pub db_path: String,
     pub matrix_homeserver: String,
@@ -78,8 +42,10 @@ pub async fn run(config: Config) -> Result<()> {
 
     // Prepare communication channels between manager and clients.
     let c_matrix = manager.register_comms(AccountType::Matrix);
-    let c_matrix_emitter = manager.emitter_comms();
     let c_temp = manager.register_comms(AccountType::Email);
+
+    // Prepare special-purpose communication channels.
+    let c_matrix_emitter = manager.emitter_comms();
 
     // Setup clients.
     let matrix = MatrixClient::new(
@@ -114,10 +80,33 @@ type Result<T> = StdResult<T, failure::Error>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct PubKey(SchnorrkelPubKey);
+
+impl TryFrom<Vec<u8>> for PubKey {
+    type Error = failure::Error;
+
+    fn try_from(value: Vec<u8>) -> Result<Self> {
+        Ok(PubKey(
+            SchnorrkelPubKey::from_bytes(&value).map_err(|_| err_msg("invalid public key"))?,
+        ))
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Signature(SchnorrkelSignature);
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
+
+impl From<String> for Account {
+    fn from(value: String) -> Self {
+        Account(value)
+    }
+}
+
+impl From<&str> for Account {
+    fn from(value: &str) -> Self {
+        Account(value.to_owned())
+    }
+}
 
 #[derive(Clone)]
 /// TODO: Just use Account
@@ -158,6 +147,42 @@ impl Challenge {
             .0
             .verify_simple(b"substrate", self.0.as_bytes(), &sig.0)
             .is_ok()
+    }
+}
+
+// TODO: add cfg
+struct TestClient {
+    comms: CommsVerifier,
+}
+
+impl TestClient {
+    fn new(comms: CommsVerifier) -> Self {
+        TestClient { comms: comms }
+    }
+    fn gen_data(&self) {
+        let sk = schnorrkel::keys::SecretKey::generate();
+        let pk = sk.to_public();
+
+        let mut ident = OnChainIdentity {
+            //pub_key: PubKey(SchnorrkelPubKey::default()),
+            pub_key: PubKey(pk),
+            display_name: None,
+            legal_name: None,
+            email: None,
+            web: None,
+            twitter: None,
+            matrix: Some(AccountState::new(
+                Account("@fabio:web3.foundation".to_string()),
+                AccountType::Matrix,
+            )),
+        };
+
+        let random = &ident.matrix.as_ref().unwrap().challenge;
+
+        let sig = sk.sign_simple(b"substrate", &random.0.as_bytes(), &pk);
+        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
+
+        self.comms.new_on_chain_identity(&ident);
     }
 }
 

@@ -9,10 +9,8 @@ use tokio::time::{self, Duration};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
     pub pub_key: PubKey,
-    // TODO: Should this just be a String?
-    pub display_name: Option<AccountState>,
-    // TODO: Should this just be a String?
-    pub legal_name: Option<AccountState>,
+    pub display_name: Option<String>,
+    pub legal_name: Option<String>,
     pub email: Option<AccountState>,
     pub web: Option<AccountState>,
     pub twitter: Option<AccountState>,

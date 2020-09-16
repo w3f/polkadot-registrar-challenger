@@ -162,6 +162,7 @@ impl EventEmitter for Responder {
 
             let verifier = Verifier::new(context, challenge);
 
+            // TODO: Write a nicer function for this.
             let msg_body = if let SyncMessageEvent {
                 content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
                 ..
