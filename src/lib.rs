@@ -18,6 +18,7 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
+use base58::FromBase58;
 
 use adapters::MatrixClient;
 use connector::Connector;
@@ -118,6 +119,28 @@ impl Signature {
         hex::encode(&self.to_bytes())
     }
 }
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct NetAccount(String);
+
+impl NetAccount {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<String> for NetAccount {
+    fn from(value: String) -> Self {
+        NetAccount(value)
+    }
+}
+
+impl From<&str> for NetAccount {
+    fn from(value: &str) -> Self {
+        NetAccount(value.to_owned())
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
 
@@ -141,7 +164,7 @@ impl From<&str> for Account {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkAddress {
-    address: Account,
+    address: NetAccount,
     algo: Algorithm,
     pub_key: PubKey,
 }
@@ -168,12 +191,10 @@ impl NetworkAddress {
     }
 }
 
-use base58::FromBase58;
-
-impl TryFrom<Account> for NetworkAddress {
+impl TryFrom<NetAccount> for NetworkAddress {
     type Error = failure::Error;
 
-    fn try_from(value: Account) -> Result<Self> {
+    fn try_from(value: NetAccount) -> Result<Self> {
         let bytes = value.as_str()
             .from_base58()
             .map_err(|_| err_msg("failed to decode address from base58"))?;
@@ -265,7 +286,7 @@ impl TestClient {
 
         let mut ident = OnChainIdentity {
             network_address: NetworkAddress {
-                address: Account::from("test"),
+                address: NetAccount::from("test"),
                 algo: Algorithm::Schnorr,
                 pub_key: PubKey(pk),
             },

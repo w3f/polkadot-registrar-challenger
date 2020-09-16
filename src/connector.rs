@@ -1,13 +1,13 @@
 use super::Result;
 use crate::identity::{AccountState, CommsMessage, CommsVerifier, OnChainIdentity};
-use crate::{Account, AccountType, PubKey, NetworkAddress};
+use crate::{NetAccount, Account, AccountType, PubKey, NetworkAddress};
 use std::convert::{TryFrom, TryInto};
 use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
 
 #[derive(Serialize, Deserialize)]
 struct JudgementResponse {
-    address: Account,
+    address: NetAccount,
     judgement: Judgement,
 }
 
@@ -20,13 +20,13 @@ enum Judgement {
 }
 
 impl JudgementResponse {
-    fn reasonable(address: Account) -> Result<String> {
+    fn reasonable(address: NetAccount) -> Result<String> {
         Ok(serde_json::to_string(&JudgementResponse {
             address: address,
             judgement: Judgement::Reasonable,
         })?)
     }
-    fn erroneous(address: Account) -> Result<String> {
+    fn erroneous(address: NetAccount) -> Result<String> {
         Ok(serde_json::to_string(&JudgementResponse {
             address: address,
             judgement: Judgement::Erroneous,
@@ -36,7 +36,7 @@ impl JudgementResponse {
 
 #[derive(Serialize, Deserialize)]
 struct JudgementRequest {
-    address: Account,
+    address: NetAccount,
     accounts: Accounts,
 }
 
@@ -72,7 +72,7 @@ impl Connector {
                 Some(ValidAccount { context }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::reasonable(Account::from("TODO")).unwrap(),
+                            JudgementResponse::reasonable(NetAccount::from("TODO")).unwrap(),
                             false,
                             true,
                         )
@@ -82,7 +82,7 @@ impl Connector {
                 Some(InvalidAccount { context }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::erroneous(Account::from("TODO")).unwrap(),
+                            JudgementResponse::erroneous(NetAccount::from("TODO")).unwrap(),
                             false,
                             true,
                         )

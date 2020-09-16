@@ -1,4 +1,4 @@
-use super::{Account, AccountType, Challenge, Fatal, PubKey, Result, NetworkAddress};
+use super::{Account, NetAccount, AccountType, Challenge, Fatal, PubKey, Result, NetworkAddress};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -19,7 +19,7 @@ pub struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
-    pub fn address(&self) -> &Account {
+    pub fn address(&self) -> &NetAccount {
         &self.network_address.address
     }
     pub fn pub_key(&self) -> &PubKey {
