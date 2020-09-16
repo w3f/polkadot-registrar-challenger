@@ -1,5 +1,5 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
-use crate::db::{Database};
+use crate::db::Database;
 use crate::primitives::{
     Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
 };
@@ -61,9 +61,6 @@ pub struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
-    pub fn address(&self) -> &NetAccount {
-        &self.network_address.address()
-    }
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
@@ -175,8 +172,6 @@ impl IdentityManager {
                 interval.tick().await;
             }
         }
-
-        Ok(())
     }
     fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         // TODO: Handle updates

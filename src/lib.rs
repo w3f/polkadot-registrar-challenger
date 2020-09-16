@@ -1,6 +1,4 @@
 #[macro_use]
-extern crate futures;
-#[macro_use]
 extern crate async_trait;
 #[macro_use]
 extern crate serde;
@@ -12,11 +10,9 @@ use tokio::time::{self, Duration};
 use adapters::MatrixClient;
 use connector::Connector;
 use db::Database;
+use identity::IdentityManager;
 use identity::TestClient;
-use identity::{AccountState, IdentityManager, OnChainIdentity};
-use primitives::{
-    Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
-};
+use primitives::{AccountType, Result};
 
 mod adapters;
 mod comms;
@@ -78,6 +74,4 @@ pub async fn run(config: Config) -> Result<()> {
     loop {
         interval.tick().await;
     }
-
-    Ok(())
 }

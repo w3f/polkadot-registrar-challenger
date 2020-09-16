@@ -10,7 +10,6 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 
-
 pub type Result<T> = StdResult<T, failure::Error>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -66,15 +65,6 @@ impl<'de> Deserialize<'de> for PubKey {
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Signature(SchnorrkelSignature);
 
-impl Signature {
-    pub fn to_bytes(&self) -> [u8; 64] {
-        self.0.to_bytes()
-    }
-    pub fn to_string(&self) -> String {
-        hex::encode(&self.to_bytes())
-    }
-}
-
 impl From<SchnorrkelSignature> for Signature {
     fn from(value: SchnorrkelSignature) -> Self {
         Signature(value)
@@ -104,12 +94,6 @@ impl From<&str> for NetAccount {
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
-
-impl Account {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
 
 impl From<String> for Account {
     fn from(value: String) -> Self {
@@ -144,9 +128,6 @@ pub enum Algorithm {
 impl NetworkAddress {
     pub fn address(&self) -> &NetAccount {
         &self.address
-    }
-    pub fn algo(&self) -> &Algorithm {
-        &self.algo
     }
     pub fn pub_key(&self) -> &PubKey {
         &self.pub_key
