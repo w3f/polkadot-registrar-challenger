@@ -20,10 +20,11 @@ use adapters::MatrixClient;
 use db::Database;
 use identity::{AddressState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
 
-mod db;
 mod adapters;
+mod db;
 mod identity;
 mod listener;
+mod verifier;
 
 // TODO: add cfg
 struct TestClient {
@@ -38,12 +39,7 @@ impl TestClient {
         let sk = schnorrkel::keys::SecretKey::generate();
         let pk = sk.to_public();
 
-        let random = "TO-SIGN-THIS999".as_bytes();
-
-        let sig = sk.sign_simple(b"substrate", &random, &pk);
-        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
-
-        self.comms.new_on_chain_identity(&OnChainIdentity {
+        let mut ident = OnChainIdentity {
             //pub_key: PubKey(SchnorrkelPubKey::default()),
             pub_key: PubKey(pk),
             display_name: None,
@@ -55,7 +51,14 @@ impl TestClient {
                 Address("@fabio:web3.foundation".to_string()),
                 AddressType::Matrix,
             )),
-        });
+        };
+
+        let random = &ident.matrix.as_ref().unwrap().challenge;
+
+        let sig = sk.sign_simple(b"substrate", &random.0.as_bytes(), &pk);
+        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
+
+        self.comms.new_on_chain_identity(&ident);
     }
 }
 
@@ -145,11 +148,8 @@ pub struct Challenge(String);
 
 impl Challenge {
     fn gen_random() -> Challenge {
-        // TODO:
-        //let random: [u8; 16] = thread_rng().gen();
-        //Challenge(hex::encode(random))
-        let random = "TO-SIGN-THIS999";
-        Challenge(random.to_string())
+        let random: [u8; 16] = thread_rng().gen();
+        Challenge(hex::encode(random))
     }
     pub fn verify_challenge(&self, pub_key: &PubKey, sig: &Signature) -> bool {
         pub_key

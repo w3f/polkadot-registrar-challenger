@@ -1,6 +1,5 @@
 use crate::identity::CommsVerifier;
-use crate::{Result, RoomId, Address, Signature};
-use schnorrkel::sign::Signature as SchnorrkelSignature;
+use crate::{Address, Result, RoomId, Signature};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -10,6 +9,7 @@ use matrix_sdk::{
     },
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
+use schnorrkel::sign::Signature as SchnorrkelSignature;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
@@ -142,7 +142,8 @@ impl EventEmitter for Responder {
             if members.len() > 2 {}
 
             //self.comms.
-            self.comms.request_address_sate(&Address(event.sender.as_str().to_string()));
+            self.comms
+                .request_address_sate(&Address(event.sender.as_str().to_string()));
             let (context, challenge, _) = self.comms.recv_inform().await;
 
             let msg_body = if let SyncMessageEvent {
@@ -159,11 +160,13 @@ impl EventEmitter for Responder {
 
             println!("M Challenge: {}", challenge.0);
 
-            let sig = if let Ok(sig) = SchnorrkelSignature::from_bytes(&hex::decode(msg_body).unwrap()) {
+            let sig = if let Ok(sig) =
+                SchnorrkelSignature::from_bytes(&hex::decode(msg_body).unwrap())
+            {
                 sig
             } else {
                 self.client
-                    .room_send(&room_id, create_msg("Invalid signature"), None)
+                    .room_send(&room_id, create_msg("This is not a valid signature output. Please refer to the guide as noted above."), None)
                     .await
                     .unwrap();
 
@@ -171,9 +174,9 @@ impl EventEmitter for Responder {
             };
 
             let resp = if challenge.verify_challenge(&context.pub_key, &Signature(sig)) {
-                "VALID".to_string()
+                "The signature is VALID. This address is confirmed.".to_string()
             } else {
-                "INVALID".to_string()
+                "The signature is INVALID. Please sign the challenge with the key which belongs to the on-chain identity address.".to_string()
             };
 
             self.client

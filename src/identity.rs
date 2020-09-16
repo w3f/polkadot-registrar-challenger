@@ -20,10 +20,10 @@ pub struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
-    fn from_json(val: &[u8]) -> Result<Self> {
+    pub fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
     }
-    fn to_json(&self) -> Result<Vec<u8>> {
+    pub fn to_json(&self) -> Result<Vec<u8>> {
         Ok(serde_json::to_vec(self)?)
     }
 }
@@ -33,7 +33,8 @@ pub struct AddressState {
     addr: Address,
     addr_type: AddressType,
     addr_validity: AddressValidity,
-    challenge: Challenge,
+    // TODO: remove pub
+    pub challenge: Challenge,
     confirmed: bool,
 }
 
@@ -150,7 +151,9 @@ impl CommsVerifier {
         }
     }
     pub fn request_address_sate(&self, address: &Address) {
-        self.tx.send(CommsMessage::RequestFromUserId(address.clone())).unwrap();
+        self.tx
+            .send(CommsMessage::RequestFromUserId(address.clone()))
+            .unwrap();
     }
     pub fn new_on_chain_identity(&self, ident: &OnChainIdentity) {
         self.tx
@@ -279,13 +282,17 @@ impl IdentityManager {
                     }
                     RequestFromUserId(addr) => {
                         // Find the identity based on the corresponding Matrix UserId.
-                        let ident = self.idents.iter().find(|ident| {
-                            if let Some(state) = ident.matrix.as_ref() {
-                                state.addr == addr
-                            } else {
-                                false
-                            }
-                        }).unwrap();
+                        let ident = self
+                            .idents
+                            .iter()
+                            .find(|ident| {
+                                if let Some(state) = ident.matrix.as_ref() {
+                                    state.addr == addr
+                                } else {
+                                    false
+                                }
+                            })
+                            .unwrap();
                         // TODO: Handle that unwrap.
 
                         // Unwrapping is safe here, since it's guaranteed in the
@@ -293,7 +300,12 @@ impl IdentityManager {
                         let state = ident.matrix.as_ref().unwrap();
 
                         // TODO: Report back whether the identity was found.
-                        self.comms.to_emitter.inform(&ident.pub_key, &state.addr, &state.challenge, None);
+                        self.comms.to_emitter.inform(
+                            &ident.pub_key,
+                            &state.addr,
+                            &state.challenge,
+                            None,
+                        );
                     }
                 }
             } else {
