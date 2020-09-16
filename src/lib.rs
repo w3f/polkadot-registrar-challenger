@@ -42,7 +42,7 @@ pub async fn run(config: Config) -> Result<()> {
     // TODO: move to a test suite
     let c_test = manager.register_comms(AccountType::Email);
 
-    let connector = Connector::new(&config.watcher_url, c_connector).await?;
+    //let connector = Connector::new(&config.watcher_url, c_connector).await?;
 
     // Setup clients.
     let matrix = MatrixClient::new(
@@ -62,9 +62,11 @@ pub async fn run(config: Config) -> Result<()> {
     tokio::spawn(async move {
         manager.start().await.unwrap();
     });
+    /*
     tokio::spawn(async move {
         connector.start().await;
     });
+    */
     tokio::spawn(async move {
         matrix.start().await;
     });

@@ -1,5 +1,7 @@
 use crate::identity::OnChainIdentity;
-use crate::primitives::{Account, AccountType, Challenge, Fatal, NetworkAddress, PubKey};
+use crate::primitives::{
+    Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress, PubKey,
+};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 
 use matrix_sdk::identifiers::RoomId;
@@ -26,6 +28,7 @@ pub enum CommsMessage {
     NewOnChainIdentity(OnChainIdentity),
     Inform {
         network_address: NetworkAddress,
+        account: Account,
         challenge: Challenge,
         room_id: Option<RoomId>,
     },
@@ -36,7 +39,7 @@ pub enum CommsMessage {
         network_address: NetworkAddress,
     },
     TrackRoomId {
-        pub_key: PubKey,
+        address: NetAccount,
         room_id: RoomId,
     },
     RequestAccountState {
@@ -55,12 +58,15 @@ impl CommsMain {
     pub fn inform(
         &self,
         network_address: NetworkAddress,
+        account: Account,
         challenge: Challenge,
         room_id: Option<RoomId>,
     ) {
+        println!("INFORMING");
         self.sender
             .send(CommsMessage::Inform {
                 network_address: network_address,
+                account: account,
                 challenge: challenge,
                 room_id,
             })
@@ -96,14 +102,15 @@ impl CommsVerifier {
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
     // TODO: Just use `recv` and match directly. Remove this method
-    pub async fn recv_inform(&self) -> (NetworkAddress, Challenge, Option<RoomId>) {
+    pub async fn recv_inform(&self) -> (NetworkAddress, Account, Challenge, Option<RoomId>) {
         if let CommsMessage::Inform {
             network_address,
+            account,
             challenge,
             room_id,
         } = self.recv().await
         {
-            (network_address, challenge, room_id)
+            (network_address, account, challenge, room_id)
         } else {
             panic!("received invalid message type on Matrix client");
         }
@@ -135,10 +142,10 @@ impl CommsVerifier {
             })
             .fatal();
     }
-    pub fn track_room_id(&self, pub_key: PubKey, room_id: RoomId) {
+    pub fn track_room_id(&self, address: NetAccount, room_id: RoomId) {
         self.tx
             .send(CommsMessage::TrackRoomId {
-                pub_key: pub_key,
+                address: address,
                 room_id: room_id,
             })
             .fatal();

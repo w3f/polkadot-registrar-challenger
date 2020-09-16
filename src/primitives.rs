@@ -95,6 +95,12 @@ impl From<&str> for NetAccount {
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
 
+impl Account {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 impl From<String> for Account {
     fn from(value: String) -> Self {
         Account(value)

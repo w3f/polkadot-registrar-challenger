@@ -156,15 +156,15 @@ impl IdentityManager {
                     }
                     ValidAccount { network_address: _ } => {}
                     InvalidAccount { network_address: _ } => {}
-                    TrackRoomId { pub_key, room_id } => {
+                    TrackRoomId { address, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
-                        db_rooms.put(&pub_key.to_bytes(), room_id.as_bytes())?;
+                        db_rooms.put(address.as_str(), room_id.as_bytes())?;
                     }
                     RequestAccountState {
                         account,
-                        account_ty: _,
+                        account_ty,
                     } => {
-                        self.request_account_state(account);
+                        self.request_account_state(account, account_ty);
                     }
                     _ => panic!("Received unrecognized message type. Report as a bug"),
                 }
@@ -199,6 +199,7 @@ impl IdentityManager {
 
             self.comms.pairs.get(&state.account_ty).fatal().inform(
                 ident.network_address.clone(),
+                state.account.clone(),
                 state.challenge.clone(),
                 room_id,
             );
@@ -207,25 +208,36 @@ impl IdentityManager {
         Ok(())
     }
     // TODO: handle multiple account_ids
-    fn request_account_state(&self, account: Account) {
+    fn request_account_state(&self, account: Account, account_ty: AccountType) {
         // Account state requests are always available, since such a request
         // cannot occur if it isn't.
 
-        // Find the identity based on the corresponding Matrix UserId.
-        let ident = self.idents.iter().find(|ident| {
-            if let Some(state) = ident.matrix.as_ref() {
-                state.account == account
-            } else {
-                false
+        let ident = self.idents.iter().find(|ident| match account_ty {
+            AccountType::Matrix => {
+                if let Some(state) = ident.matrix.as_ref() {
+                    state.account == account
+                } else {
+                    false
+                }
             }
+            _ => panic!("Unsupported"),
         });
 
         let comms = self.comms.pairs.get(&AccountType::ReservedEmitter).fatal();
 
         if let Some(ident) = ident {
             // Account state was checked in `find` combinator.
-            let state = ident.matrix.as_ref().fatal();
-            comms.inform(ident.network_address.clone(), state.challenge.clone(), None);
+            let state = match account_ty {
+                AccountType::Matrix => ident.matrix.as_ref().fatal(),
+                _ => panic!("Unsupported"),
+            };
+
+            comms.inform(
+                ident.network_address.clone(),
+                state.account.clone(),
+                state.challenge.clone(),
+                None,
+            );
         } else {
             comms.invalid_request();
         }

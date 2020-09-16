@@ -101,17 +101,14 @@ impl MatrixClient {
         }
     }
     async fn local(&self) -> Result<()> {
-        let (network_address, challenge, room_id) = self.comms.recv_inform().await;
-
-        let pub_key = network_address.pub_key();
-        let address = &network_address.address();
+        let (network_address, account, challenge, room_id) = self.comms.recv_inform().await;
 
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = room_id {
             room_id
         } else {
             // TODO: Handle this better.
-            let to_invite = [address.as_str().clone().try_into()?];
+            let to_invite = [account.as_str().clone().try_into()?];
 
             let mut request = Request::default();
             request.invite = &to_invite;
@@ -120,7 +117,7 @@ impl MatrixClient {
             let resp = self.client.create_room(request).await?;
 
             self.comms
-                .track_room_id(pub_key.clone(), resp.room_id.clone());
+                .track_room_id(network_address.address().clone(), resp.room_id.clone());
             resp.room_id
         };
 
