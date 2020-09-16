@@ -7,17 +7,6 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use base58::FromBase58;
-use failure::err_msg;
-use futures::join;
-use rand::{thread_rng, Rng};
-use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
-use schnorrkel::sign::Signature as SchnorrkelSignature;
-use serde::de::Error as SerdeError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::convert::TryFrom;
-use std::fmt::Debug;
-use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
 use adapters::MatrixClient;

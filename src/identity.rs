@@ -1,11 +1,11 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
-use crate::db::{Database, ScopedDatabase};
+use crate::db::{Database};
 use crate::primitives::{
     Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
-use matrix_sdk::identifiers::RoomId;
+
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
@@ -23,7 +23,7 @@ impl TestClient {
         let sk = schnorrkel::keys::SecretKey::generate();
         let pk = sk.to_public();
 
-        let mut ident = OnChainIdentity {
+        let ident = OnChainIdentity {
             network_address: NetworkAddress {
                 address: NetAccount::from("test"),
                 algo: Algorithm::Schnorr,
@@ -157,15 +157,15 @@ impl IdentityManager {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.register_request(ident)?;
                     }
-                    ValidAccount { network_address } => {}
-                    InvalidAccount { network_address } => {}
+                    ValidAccount { network_address: _ } => {}
+                    InvalidAccount { network_address: _ } => {}
                     TrackRoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(&pub_key.to_bytes(), room_id.as_bytes())?;
                     }
                     RequestAccountState {
                         account,
-                        account_ty,
+                        account_ty: _,
                     } => {
                         self.request_account_state(account);
                     }

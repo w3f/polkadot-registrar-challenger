@@ -1,13 +1,13 @@
-use crate::db::{Database, ScopedDatabase};
+
 use crate::identity::OnChainIdentity;
 use crate::primitives::{
     Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use failure::err_msg;
+
 use matrix_sdk::identifiers::RoomId;
-use std::collections::HashMap;
-use std::convert::TryInto;
+
+
 use tokio::time::{self, Duration};
 
 pub fn generate_comms(

@@ -1,7 +1,7 @@
-use crate::comms::{CommsMain, CommsMessage, CommsVerifier};
-use crate::primitives::{Account, AccountType, Result, Signature};
+use crate::comms::{CommsMessage, CommsVerifier};
+use crate::primitives::{Account, AccountType, Result};
 use crate::verifier::Verifier;
-use failure::err_msg;
+
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -12,10 +12,10 @@ use matrix_sdk::{
     identifiers::RoomId,
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
-use schnorrkel::sign::Signature as SchnorrkelSignature;
+
 use std::convert::TryInto;
 use std::result::Result as StdResult;
-use tokio::time::{self, Duration};
+
 use url::Url;
 
 #[derive(Debug, Fail)]

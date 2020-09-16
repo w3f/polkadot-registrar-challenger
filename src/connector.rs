@@ -1,6 +1,6 @@
-use crate::comms::{CommsMain, CommsMessage, CommsVerifier};
+use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
-use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, PubKey, Result};
+use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
 use std::convert::{TryFrom, TryInto};
 use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
