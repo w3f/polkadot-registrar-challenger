@@ -1,4 +1,4 @@
-use super::{Fatal, Account, AccountType, Challenge, PubKey, Result};
+use super::{Account, AccountType, Challenge, Fatal, PubKey, Result};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -77,6 +77,7 @@ pub enum CommsMessage {
     },
     // TODO: add AccountType option
     RequestAccountState(Account),
+    InvalidRequest,
 }
 
 pub struct AccountContext {
@@ -111,6 +112,9 @@ impl CommsMain {
                 room_id,
             })
             .fatal();
+    }
+    fn invalid_request(&self) {
+        self.sender.send(CommsMessage::InvalidRequest).fatal();
     }
 }
 
@@ -205,7 +209,6 @@ struct CommsTable {
     pairs: HashMap<AccountType, CommsMain>,
 }
 
-// let db_rooms = db.scope("pending_identities");
 impl IdentityManager {
     pub fn new(db: Database) -> Result<Self> {
         let mut idents = vec![];
@@ -255,10 +258,6 @@ impl IdentityManager {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.register_request(ident)?;
                     }
-                    CommsMessage::Inform { .. } => {
-                        // INVALID
-                        // TODO: log
-                    }
                     ValidAccount { context: _ } => {}
                     InvalidAccount { context: _ } => {}
                     TrackRoomId { pub_key, room_id } => {
@@ -268,6 +267,7 @@ impl IdentityManager {
                     RequestAccountState(account) => {
                         self.request_account_state(account);
                     }
+                    _ => panic!("Received unrecognized message type. Report as a bug"),
                 }
             } else {
                 interval.tick().await;
@@ -310,30 +310,28 @@ impl IdentityManager {
 
         Ok(())
     }
+    // TODO: handle multiple account_ids
     fn request_account_state(&self, account: Account) {
         // Account state requests are always available, since such a request
         // cannot occur if it isn't.
 
         // Find the identity based on the corresponding Matrix UserId.
-        let ident = self
-            .idents
-            .iter()
-            .find(|ident| {
-                if let Some(state) = ident.matrix.as_ref() {
-                    state.account == account
-                } else {
-                    false
-                }
-            })
-            .fatal();
+        let ident = self.idents.iter().find(|ident| {
+            if let Some(state) = ident.matrix.as_ref() {
+                state.account == account
+            } else {
+                false
+            }
+        });
 
-        let state = ident.matrix.as_ref().fatal();
+        let comms = self.comms.pairs.get(&AccountType::ReservedEmitter).fatal();
 
-        // TODO: Report back whether the identity was found.
-        self.comms
-            .pairs
-            .get(&AccountType::ReservedEmitter)
-            .fatal()
-            .inform(&ident.pub_key, &state.account, &state.challenge, None);
+        if let Some(ident) = ident {
+            // Account state was checked in `find` combinator.
+            let state = ident.matrix.as_ref().fatal();
+            comms.inform(&ident.pub_key, &state.account, &state.challenge, None);
+        } else {
+            comms.invalid_request();
+        }
     }
 }

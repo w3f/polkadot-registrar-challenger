@@ -61,7 +61,7 @@ pub async fn run(config: Config) -> Result<()> {
         //c_matrix_emitter,
         c_emitter,
     )
-    .await;
+    .await?;
 
     // TODO: move to a test suite
     TestClient::new(c_test).gen_data();
@@ -132,7 +132,7 @@ enum Algorithm {
     #[serde(rename = "edwards")]
     Edwards,
     #[serde(rename = "ecdsa")]
-    ECDSA
+    ECDSA,
 }
 
 impl NetworkAddress {
@@ -153,7 +153,8 @@ impl TryFrom<Account> for NetworkAddress {
     type Error = failure::Error;
 
     fn try_from(value: Account) -> Result<Self> {
-        let bytes = value.0
+        let bytes = value
+            .0
             .from_base58()
             .map_err(|_| err_msg("failed to decode address from base58"))?;
 

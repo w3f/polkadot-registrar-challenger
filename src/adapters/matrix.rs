@@ -1,6 +1,6 @@
-use crate::identity::CommsVerifier;
+use crate::identity::{CommsVerifier, CommsMessage};
 use crate::verifier::Verifier;
-use crate::{Account, Result, Signature};
+use crate::{Account, StdResult, Result, Signature};
 use failure::err_msg;
 use matrix_sdk::{
     self,
@@ -17,6 +17,24 @@ use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
 
+#[derive(Debug, Fail)]
+pub enum MatrixError {
+    #[fail(display = "")]
+    StateStore,
+    #[fail(display = "")]
+    ClientCreation,
+    #[fail(display = "")]
+    Login,
+    #[fail(display = "")]
+    Sync,
+    #[fail(display = "")]
+    RemoteUserIdNotFound,
+    #[fail(display = "")]
+    UnknownUser,
+    #[fail(display = "")]
+    SendMessage,
+}
+
 #[derive(Clone)]
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
@@ -30,22 +48,26 @@ impl MatrixClient {
         password: &str,
         comms: CommsVerifier,
         comms_emmiter: CommsVerifier,
-    ) -> MatrixClient {
+    ) -> Result<MatrixClient> {
         // Setup client
-        let store = JsonStore::open("/tmp/matrix_store").unwrap();
+        let store = JsonStore::open("/tmp/matrix_store").map_err(|_| MatrixError::StateStore)?;
         let client_config = ClientConfig::new().state_store(Box::new(store));
 
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
-        let mut client = Client::new_with_config(homeserver, client_config).unwrap();
+        let mut client = Client::new_with_config(homeserver, client_config)
+            .map_err(|_| MatrixError::ClientCreation)?;
 
         // Login with credentials
         client
             .login(username, password, None, Some("rust-sdk"))
             .await
-            .unwrap();
+            .map_err(|_| MatrixError::Login)?;
 
         // Sync up, avoid responding to old messages.
-        client.sync(SyncSettings::default()).await.unwrap();
+        client
+            .sync(SyncSettings::default())
+            .await
+            .map_err(|_| MatrixError::Sync)?;
 
         // Add event emitter (responder)
         client
@@ -61,10 +83,10 @@ impl MatrixClient {
                 .await;
         });
 
-        MatrixClient {
+        Ok(MatrixClient {
             client: client,
             comms: comms,
-        }
+        })
     }
     async fn send_msg(&self, msg: &str, room_id: &RoomId) -> Result<()> {
         send_msg(&self.client, msg, room_id).await
@@ -150,24 +172,34 @@ impl Responder {
         &self,
         room: SyncRoom,
         event: &SyncMessageEvent<MessageEventContent>,
-    ) -> Result<()> {
-        // Do not respond to its own messages. It's weird that the EventEmitter
-        // even processes its own messages anyway...
+    ) -> StdResult<(), MatrixError> {
+        // Do not respond to its own messages.
         if event.sender
             == self
                 .client
                 .user_id()
                 .await
-                .ok_or(err_msg("no user id found"))?
+                .ok_or(MatrixError::RemoteUserIdNotFound)?
         {
             return Ok(());
         }
 
         if let SyncRoom::Joined(room) = room {
-            let members = &room.read().await.joined_members;
-
+            // Request information about the
             self.comms
                 .request_account_state(&Account(event.sender.as_str().to_string()));
+
+            let (context, challenge) = match self.comms.recv().await {
+                CommsMessage::Inform { context, challenge, .. } => {
+                    (context, challenge)
+                }
+                CommsMessage::InvalidRequest => {
+                    // Reject user
+                    return Err(MatrixError::UnknownUser);
+                }
+                _ => panic!("Received unrecognized message type on Matrix client. Report as bug.")
+            };
+
             let (context, challenge, _) = self.comms.recv_inform().await;
 
             let verifier = Verifier::new(context, challenge);
@@ -186,8 +218,8 @@ impl Responder {
             let room_id = room.read().await.room_id.clone();
 
             match verifier.verify(&msg_body) {
-                Ok(msg) => self.send_msg(&msg, &room_id).await?,
-                Err(err) => self.send_msg(&err.to_string(), &room_id).await?,
+                Ok(msg) => self.send_msg(&msg, &room_id).await.map_err(|_| MatrixError::SendMessage)?,
+                Err(err) => self.send_msg(&err.to_string(), &room_id).await.map_err(|_| MatrixError::SendMessage)?,
             };
         }
 
