@@ -1,6 +1,6 @@
 use crate::identity::{CommsMessage, CommsVerifier};
 use crate::verifier::Verifier;
-use crate::{Account, Result, Signature, StdResult, AccountType};
+use crate::primitives::{Account, Result, Signature, AccountType};
 use failure::err_msg;
 use matrix_sdk::{
     self,
@@ -16,6 +16,7 @@ use schnorrkel::sign::Signature as SchnorrkelSignature;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 use url::Url;
+use std::result::Result as StdResult;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
@@ -124,7 +125,7 @@ impl MatrixClient {
 
         self.send_msg(
             include_str!("../../messages/instructions")
-                .replace("{:PAYLOAD}", &challenge.0)
+                .replace("{:PAYLOAD}", &challenge.as_str())
                 .as_str(),
             &room_id,
         )

@@ -1,4 +1,4 @@
-use super::{Account, NetAccount, AccountType, Challenge, Fatal, PubKey, Result, NetworkAddress};
+use crate::primitives::{Account, Algorithm, NetAccount, AccountType, Challenge, Fatal, PubKey, Result, NetworkAddress};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -6,6 +6,46 @@ use matrix_sdk::identifiers::RoomId;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
+
+
+// TODO: add cfg
+pub struct TestClient {
+    comms: CommsVerifier,
+}
+
+impl TestClient {
+    pub fn new(comms: CommsVerifier) -> Self {
+        TestClient { comms: comms }
+    }
+    pub fn gen_data(&self) {
+        let sk = schnorrkel::keys::SecretKey::generate();
+        let pk = sk.to_public();
+
+        let mut ident = OnChainIdentity {
+            network_address: NetworkAddress {
+                address: NetAccount::from("test"),
+                algo: Algorithm::Schnorr,
+                pub_key: PubKey::from(pk),
+            },
+            display_name: None,
+            legal_name: None,
+            email: None,
+            web: None,
+            twitter: None,
+            matrix: Some(AccountState::new(
+                Account::from("@fabio:web3.foundation"),
+                AccountType::Matrix,
+            )),
+        };
+
+        let random = &ident.matrix.as_ref().unwrap().challenge;
+
+        let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
+        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
+
+        self.comms.new_on_chain_identity(ident);
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -20,10 +60,10 @@ pub struct OnChainIdentity {
 
 impl OnChainIdentity {
     pub fn address(&self) -> &NetAccount {
-        &self.network_address.address
+        &self.network_address.address()
     }
     pub fn pub_key(&self) -> &PubKey {
-        &self.network_address.pub_key
+        &self.network_address.pub_key()
     }
     pub fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
@@ -38,7 +78,7 @@ pub struct AccountState {
     account: Account,
     account_ty: AccountType,
     account_validity: AccountValidity,
-    pub challenge: Challenge,
+    challenge: Challenge,
     confirmed: bool,
 }
 
@@ -251,7 +291,7 @@ impl IdentityManager {
                     InvalidAccount { network_address } => {}
                     TrackRoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
-                        db_rooms.put(pub_key.0, room_id.as_bytes())?;
+                        db_rooms.put(&pub_key.to_bytes(), room_id.as_bytes())?;
                     }
                     RequestAccountState {
                         account,

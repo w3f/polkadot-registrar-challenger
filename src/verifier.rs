@@ -1,4 +1,4 @@
-use crate::{Challenge, Signature, NetworkAddress};
+use crate::primitives::{Challenge, Signature, NetworkAddress};
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 
 #[derive(Debug, Fail)]
@@ -24,7 +24,7 @@ impl Verifier {
         }
     }
     pub fn verify(&self, response: &str) -> Result<String, VerifierError> {
-        let sig = Signature(
+        let sig = Signature::from(
             SchnorrkelSignature::from_bytes(
                 &hex::decode(response).map_err(|_| VerifierError::InvalidSignature)?,
             )
