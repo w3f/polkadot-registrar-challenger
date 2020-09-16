@@ -1,66 +1,79 @@
 #[macro_use]
-extern crate futures;
+extern crate async_trait;
 #[macro_use]
 extern crate serde;
+#[macro_use]
+extern crate failure;
 
-use rand::{thread_rng, Rng};
-use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
-use schnorrkel::sign::Signature as SchnorrkelSignature;
-use serde::de::Error as SerdeError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::result::Result as StdResult;
+use tokio::time::{self, Duration};
 
-pub mod adapters;
-pub mod db;
-pub mod identity;
+use adapters::MatrixClient;
+use connector::Connector;
+use db::Database;
+use identity::IdentityManager;
+use identity::TestClient;
+use primitives::{AccountType, Result};
 
-type Result<T> = StdResult<T, failure::Error>;
+mod adapters;
+mod comms;
+mod connector;
+mod db;
+mod identity;
+mod primitives;
+mod verifier;
 
-#[derive(Eq, PartialEq)]
-pub struct PubKey(SchnorrkelPubKey);
-pub struct Signature(SchnorrkelSignature);
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
-pub struct Address(String);
-
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
-pub enum AddressType {
-    Email,
-    Web,
-    Twitter,
-    Riot,
+pub struct Config {
+    pub db_path: String,
+    pub watcher_url: String,
+    pub matrix_homeserver: String,
+    pub matrix_username: String,
+    pub matrix_password: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Challenge(String);
+pub async fn run(config: Config) -> Result<()> {
+    // Setup database and identity manager
+    let db = Database::new(&config.db_path)?;
+    let mut manager = IdentityManager::new(db)?;
 
-impl Challenge {
-    fn gen_random() -> Challenge {
-        let random: [u8; 16] = thread_rng().gen();
-        Challenge(hex::encode(random))
-    }
-}
+    // Prepare communication channels between manager and tasks.
+    let c_connector = manager.register_comms(AccountType::ReservedConnector);
+    let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
+    let c_matrix = manager.register_comms(AccountType::Matrix);
+    // TODO: move to a test suite
+    let c_test = manager.register_comms(AccountType::Email);
 
-impl Serialize for PubKey {
-    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&hex::encode(self.0.to_bytes()))
-    }
-}
+    //let connector = Connector::new(&config.watcher_url, c_connector).await?;
 
-impl<'de> Deserialize<'de> for PubKey {
-    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
-        Ok(PubKey(
-            SchnorrkelPubKey::from_bytes(
-                &hex::decode(hex_str)
-                    .map_err(|_| SerdeError::custom("failed to decode public key from hex"))?,
-            )
-            .map_err(|_| SerdeError::custom("failed creating public key from bytes"))?,
-        ))
+    // Setup clients.
+    let matrix = MatrixClient::new(
+        &config.matrix_homeserver,
+        &config.matrix_username,
+        &config.matrix_password,
+        c_matrix,
+        //c_matrix_emitter,
+        c_emitter,
+    )
+    .await?;
+
+    // TODO: move to a test suite
+    TestClient::new(c_test).gen_data();
+
+    println!("Starting all...");
+    tokio::spawn(async move {
+        manager.start().await.unwrap();
+    });
+    /*
+    tokio::spawn(async move {
+        connector.start().await;
+    });
+    */
+    tokio::spawn(async move {
+        matrix.start().await;
+    });
+
+    // TODO: Adjust this
+    let mut interval = time::interval(Duration::from_secs(60));
+    loop {
+        interval.tick().await;
     }
 }

@@ -1,83 +1,100 @@
-use super::{Address, AddressType, Challenge, PubKey, Result, Signature};
-use crate::db::{Database, ScopedDatabase};
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
+use crate::db::Database;
+use crate::primitives::{
+    Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
+};
+use crossbeam::channel::{unbounded, Receiver, Sender};
+use failure::err_msg;
+use tokio::time::{self, Duration};
 
-#[derive(Serialize, Deserialize)]
+use std::collections::HashMap;
+use std::convert::TryInto;
+
+// TODO: add cfg
+pub struct TestClient {
+    comms: CommsVerifier,
+}
+
+impl TestClient {
+    pub fn new(comms: CommsVerifier) -> Self {
+        TestClient { comms: comms }
+    }
+    pub fn gen_data(&self) {
+        let sk = schnorrkel::keys::SecretKey::generate();
+        let pk = sk.to_public();
+
+        let ident = OnChainIdentity {
+            network_address: NetworkAddress {
+                address: NetAccount::from("test"),
+                algo: Algorithm::Schnorr,
+                pub_key: PubKey::from(pk),
+            },
+            display_name: None,
+            legal_name: None,
+            email: None,
+            web: None,
+            twitter: None,
+            matrix: Some(AccountState::new(
+                Account::from("@fabio:web3.foundation"),
+                AccountType::Matrix,
+            )),
+        };
+
+        let random = &ident.matrix.as_ref().unwrap().challenge;
+
+        let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
+        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
+
+        self.comms.new_on_chain_identity(ident);
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
-    pub pub_key: PubKey,
-    // TODO: Should this just be a String?
-    pub display_name: Option<AddressState>,
-    // TODO: Should this just be a String?
-    pub legal_name: Option<AddressState>,
-    pub email: Option<AddressState>,
-    pub web: Option<AddressState>,
-    pub twitter: Option<AddressState>,
-    pub riot: Option<AddressState>,
+    pub network_address: NetworkAddress,
+    pub display_name: Option<String>,
+    pub legal_name: Option<String>,
+    pub email: Option<AccountState>,
+    pub web: Option<AccountState>,
+    pub twitter: Option<AccountState>,
+    pub matrix: Option<AccountState>,
 }
 
 impl OnChainIdentity {
-    // Get the address state based on the address type (Email, Riot, etc.).
-    fn address_state(&self, addr_type: &AddressType) -> Option<&AddressState> {
-        use AddressType::*;
-
-        match addr_type {
-            Email => self.email.as_ref(),
-            Web => self.web.as_ref(),
-            Twitter => self.twitter.as_ref(),
-            Riot => self.riot.as_ref(),
-        }
+    pub fn pub_key(&self) -> &PubKey {
+        &self.network_address.pub_key()
     }
-    // Get the address state based on the addresses type. If the addresses
-    // themselves match (`me@email.com == me@email.com`), it returns the state
-    // wrapped in `Some(_)`, or `None` if the match is invalid.
-    fn address_state_match(
-        &self,
-        addr_type: &AddressType,
-        addr: &Address,
-    ) -> Option<&AddressState> {
-        if let Some(addr_state) = self.address_state(addr_type) {
-            if &addr_state.addr == addr {
-                return Some(addr_state);
-            }
-        }
-        None
-    }
-    fn from_json(val: &[u8]) -> Result<Self> {
+    pub fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
     }
-    fn to_json(&self) -> Result<Vec<u8>> {
+    pub fn to_json(&self) -> Result<Vec<u8>> {
         Ok(serde_json::to_vec(self)?)
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct AddressState {
-    addr: Address,
-    addr_type: AddressType,
-    addr_validity: AddressValidity,
-    pub challenge: Challenge,
-    pub attempt_contact: AtomicBool,
-    confirmed: AtomicBool,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AccountState {
+    account: Account,
+    account_ty: AccountType,
+    account_validity: AccountValidity,
+    challenge: Challenge,
+    confirmed: bool,
 }
 
-impl AddressState {
-    pub fn new(addr: Address, addr_type: AddressType) -> Self {
-        AddressState {
-            addr: addr,
-            addr_type: addr_type,
-            addr_validity: AddressValidity::Unknown,
+impl AccountState {
+    pub fn new(account: Account, account_ty: AccountType) -> Self {
+        AccountState {
+            account: account,
+            account_ty: account_ty,
+            account_validity: AccountValidity::Unknown,
             challenge: Challenge::gen_random(),
-            attempt_contact: AtomicBool::new(false),
-            confirmed: AtomicBool::new(false),
+            confirmed: false,
         }
     }
-    pub fn attempt_contact(&self) {
-        self.attempt_contact.store(true, Ordering::Relaxed);
-    }
 }
 
-#[derive(Eq, PartialEq, Serialize, Deserialize)]
-enum AddressValidity {
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+enum AccountValidity {
     #[serde(rename = "unknown")]
     Unknown,
     #[serde(rename = "valid")]
@@ -86,106 +103,138 @@ enum AddressValidity {
     Invalid,
 }
 
-pub struct IdentityScope<'a> {
-    pub identity: &'a OnChainIdentity,
-    pub addr_state: &'a AddressState,
-    db: &'a ScopedDatabase<'a>,
+pub struct IdentityManager {
+    idents: HashMap<NetAccount, OnChainIdentity>,
+    db: Database,
+    comms: CommsTable,
 }
 
-impl<'a> IdentityScope<'a> {
-    pub fn address(&self) -> &Address {
-        &self.addr_state.addr
-    }
-    pub fn verify_challenge(&self, sig: Signature) -> Result<bool> {
-        if let Ok(_) = self
-            .identity
-            .pub_key
-            .0
-            // TODO: Check context in substrate.
-            .verify_simple(b"", self.addr_state.challenge.0.as_bytes(), &sig.0)
-        {
-            self.addr_state.confirmed.store(true, Ordering::Relaxed);
-
-            // Keep track of the current progress on disk.
-            self.db
-                .put(self.identity.pub_key.0.to_bytes(), self.identity.to_json()?)?;
-
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
+struct CommsTable {
+    to_main: Sender<CommsMessage>,
+    listener: Receiver<CommsMessage>,
+    pairs: HashMap<AccountType, CommsMain>,
 }
 
-pub struct IdentityManager<'a> {
-    pub idents: Vec<OnChainIdentity>,
-    pub db: ScopedDatabase<'a>,
-}
-
-impl<'a> IdentityManager<'a> {
-    pub fn new(db: &'a Database) -> Result<Self> {
-        let db = db.scope("pending_identities");
-
-        let mut idents = vec![];
+impl IdentityManager {
+    pub fn new(db: Database) -> Result<Self> {
+        let mut idents = HashMap::new();
 
         // Read pending on-chain identities from storage. Ideally, there are none.
-        for (_, value) in db.all()? {
-            idents.push(OnChainIdentity::from_json(&*value)?);
-        };
+        let db_idents = db.scope("pending_identities");
+        for (_, value) in db_idents.all()? {
+            let ident = OnChainIdentity::from_json(&*value).fatal();
+            idents.insert(ident.network_address.address().clone(), ident);
+        }
+
+        let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {
             idents: idents,
             db: db,
+            comms: CommsTable {
+                to_main: tx1.clone(),
+                listener: recv1,
+                pairs: HashMap::new(),
+            },
         })
     }
-    pub fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
-        if !self.pub_key_exists(&ident.pub_key) {
-            // Save the pending on-chain identity to disk.
-            self.db.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
-            self.idents.push(ident);
+    pub fn register_comms(&mut self, account_ty: AccountType) -> CommsVerifier {
+        let (cm, cv) = generate_comms(self.comms.to_main.clone(), account_ty.clone());
+        self.comms.pairs.insert(account_ty, cm);
+        cv
+    }
+    pub async fn start(mut self) -> Result<()> {
+        use CommsMessage::*;
+        let mut interval = time::interval(Duration::from_millis(50));
+
+        loop {
+            if let Ok(msg) = self.comms.listener.try_recv() {
+                match msg {
+                    CommsMessage::NewOnChainIdentity(ident) => {
+                        self.handle_register_request(ident)?;
+                    }
+                    ValidAccount { network_address: _ } => {}
+                    InvalidAccount { network_address: _ } => {}
+                    TrackRoomId { address, room_id } => {
+                        let db_rooms = self.db.scope("matrix_rooms");
+                        db_rooms.put(address.as_str(), room_id.as_bytes())?;
+                    }
+                    RequestAccountState {
+                        account,
+                        account_ty,
+                    } => {
+                        self.handle_account_state_request(account, account_ty);
+                    }
+                    _ => panic!("Received unrecognized message type. Report as a bug"),
+                }
+            } else {
+                interval.tick().await;
+            }
         }
+    }
+    fn handle_register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
+        let db_idents = self.db.scope("pending_identities");
+        let db_rooms = self.db.scope("matrix_rooms");
+
+        // Save the pending on-chain identity to disk.
+        db_idents.put(ident.network_address.address().as_str(), ident.to_json()?)?;
+
+        // Save the pending on-chain identity to memory.
+        self.idents
+            .insert(ident.network_address.address().clone(), ident.clone());
+
+        // Only matrix supported for now.
+        ident.matrix.as_ref().map::<(), _>(|state| {
+            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key().to_bytes()).fatal() {
+                Some(std::str::from_utf8(&bytes).fatal().try_into().fatal())
+            } else {
+                None
+            };
+
+            self.comms.pairs.get(&state.account_ty).fatal().inform(
+                ident.network_address.clone(),
+                state.account.clone(),
+                state.challenge.clone(),
+                room_id,
+            );
+        });
 
         Ok(())
     }
-    fn pub_key_exists(&self, pub_key: &PubKey) -> bool {
-        self.idents
+    fn handle_account_state_request(&self, account: Account, account_ty: AccountType) {
+        let ident = self
+            .idents
             .iter()
-            .find(|ident| &ident.pub_key == pub_key)
-            .is_some()
-    }
-    pub fn get_identity_scope(
-        &'a self,
-        addr_type: &AddressType,
-        addr: &Address,
-    ) -> Option<IdentityScope<'a>> {
-        self.idents
-            .iter()
-            .find(|ident| ident.address_state_match(addr_type, addr).is_some())
-            .map(|ident| IdentityScope {
-                identity: &ident,
-                // Unwrapping is fine here, since `Some` is verified in the
-                // previous `find()` combinator.
-                addr_state: &ident.address_state(&addr_type).unwrap(),
-                db: &self.db,
-            })
-    }
-    pub fn get_uninitialized_channel(&'a self, addr_type: AddressType) -> Vec<IdentityScope<'a>> {
-        self.idents
-            .iter()
-            .filter(|ident| {
-                if let Some(addr_state) = ident.address_state(&addr_type) {
-                    addr_state.addr_validity == AddressValidity::Unknown && !addr_state.attempt_contact.load(Ordering::Relaxed)
-                } else {
-                    false
+            .find(|(_, ident)| match account_ty {
+                AccountType::Matrix => {
+                    if let Some(state) = ident.matrix.as_ref() {
+                        state.account == account
+                    } else {
+                        false
+                    }
                 }
+                _ => panic!("Unsupported"),
             })
-            .map(|ident| IdentityScope {
-                identity: &ident,
-                // Unwrapping is fine here, since `None` values are filtered out
-                // in the previous `filter` combinator.
-                addr_state: &ident.address_state(&addr_type).unwrap(),
-                db: &self.db,
-            })
-            .collect()
+            .map(|(_, ident)| ident);
+
+        let comms = self.comms.pairs.get(&AccountType::ReservedEmitter).fatal();
+
+        if let Some(ident) = ident {
+            // Account state was checked in `find` combinator.
+            let state = match account_ty {
+                AccountType::Matrix => ident.matrix.as_ref().fatal(),
+                _ => panic!("Unsupported"),
+            };
+
+            comms.inform(
+                ident.network_address.clone(),
+                state.account.clone(),
+                state.challenge.clone(),
+                None,
+            );
+        } else {
+            // There is no pending request for the user.
+            comms.invalid_request();
+        }
     }
 }

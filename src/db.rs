@@ -18,16 +18,12 @@ impl Database {
 
         Ok(Database {
             //db: DB::open(&opts, path)?,
-            db: DB::open_cf(&opts, path, &[
-                "pending_identities",
-                "matrix_rooms"
-            ])?,
+            db: DB::open_cf(&opts, path, &["pending_identities", "matrix_rooms"])?,
         })
     }
     pub fn scope<'a>(&'a self, cf_name: &str) -> ScopedDatabase<'a> {
         ScopedDatabase {
             db: &self.db,
-            parent: self,
             cf_name: cf_name.to_owned(),
         }
     }
@@ -35,7 +31,6 @@ impl Database {
 
 pub struct ScopedDatabase<'a> {
     db: &'a DB,
-    parent: &'a Database,
     // `ColumnFamily` cannot be shared between threads, so just save it as a String.
     cf_name: String,
 }
@@ -58,8 +53,5 @@ impl<'a> ScopedDatabase<'a> {
             .db
             .iterator_cf(self.cf()?, IteratorMode::Start)
             .collect())
-    }
-    pub fn scope(&self, cf_name: &str) -> ScopedDatabase<'a> {
-        self.parent.scope(cf_name)
     }
 }
