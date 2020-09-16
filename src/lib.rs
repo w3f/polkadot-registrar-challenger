@@ -146,20 +146,6 @@ impl TryFrom<String> for NetworkAddress {
     }
 }
 
-#[derive(Clone)]
-/// TODO: Just use Account
-pub struct RoomId(String);
-
-impl TryFrom<Vec<u8>> for RoomId {
-    type Error = failure::Error;
-
-    fn try_from(value: Vec<u8>) -> Result<Self> {
-        Ok(RoomId(
-            String::from_utf8(value).map_err(|_| err_msg("invalid room id"))?,
-        ))
-    }
-}
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum AccountType {
     #[serde(rename = "email")]

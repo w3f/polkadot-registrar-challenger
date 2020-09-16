@@ -1,7 +1,8 @@
-use super::{Account, AccountType, Challenge, PubKey, Result, RoomId};
+use super::{Account, AccountType, Challenge, PubKey, Result};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
+use matrix_sdk::identifiers::RoomId;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
@@ -275,7 +276,7 @@ impl IdentityManager {
                     InvalidAccount { context: _ } => {}
                     RoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
-                        db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
+                        db_rooms.put(pub_key.0, room_id.as_bytes())?;
                     }
                     RequestFromUserId(account) => {
                         // Find the identity based on the corresponding Matrix UserId.
@@ -329,11 +330,12 @@ impl IdentityManager {
             .ok_or(err_msg("last registered identity not found."))?;
 
         // TODO: Handle additional address types.
-        ident.matrix.as_ref().map(|state| {
-            let room_id = db_rooms
-                .get(&ident.pub_key.0)
-                .unwrap()
-                .map(|bytes| bytes.try_into().unwrap());
+        ident.matrix.as_ref().ok_or(err_msg("")).and_then(|state| {
+            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key.0)? {
+                Some(std::str::from_utf8(&bytes)?.try_into()?)
+            } else {
+                None
+            };
 
             self.comms.pairs.get(&state.account_ty).unwrap().inform(
                 &ident.pub_key,
@@ -341,6 +343,8 @@ impl IdentityManager {
                 &state.challenge,
                 room_id,
             );
+
+            Ok(())
         });
 
         Ok(())

@@ -1,6 +1,6 @@
 use crate::identity::CommsVerifier;
 use crate::verifier::Verifier;
-use crate::{Account, Result, RoomId, Signature};
+use crate::{Account, Result, Signature};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -8,6 +8,7 @@ use matrix_sdk::{
         room::message::{MessageEventContent, TextMessageEventContent},
         AnyMessageEventContent, SyncMessageEvent,
     },
+    identifiers::RoomId,
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
 use schnorrkel::sign::Signature as SchnorrkelSignature;
@@ -64,7 +65,7 @@ impl MatrixClient {
             comms: comms,
         }
     }
-    async fn send_msg(&self, msg: &str, room_id: &matrix_sdk::identifiers::RoomId) -> Result<()> {
+    async fn send_msg(&self, msg: &str, room_id: &RoomId) -> Result<()> {
         send_msg(&self.client, msg, room_id).await
     }
     pub async fn start(self) -> Result<()> {
@@ -76,7 +77,7 @@ impl MatrixClient {
 
             // If a room already exists, don't create a new one.
             let room_id = if let Some(room_id) = room_id {
-                room_id.0.try_into().unwrap()
+                room_id
             } else {
                 // TODO: Handle this better.
                 let to_invite = [address.0.clone().try_into().unwrap()];
@@ -87,8 +88,7 @@ impl MatrixClient {
 
                 let resp = self.client.create_room(request).await.unwrap();
 
-                self.comms
-                    .track_room_id(&pub_key, &RoomId(resp.room_id.as_str().to_string()));
+                self.comms.track_room_id(&pub_key, &resp.room_id);
                 resp.room_id
             };
 

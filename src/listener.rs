@@ -95,7 +95,7 @@ impl From<JudgementRequest> for OnChainIdentity {
         let accs = request.accounts;
 
         OnChainIdentity {
-            pub_key: PubKey::try_from(vec![]).unwrap(),
+            pub_key: PubKey::try_from(request.address.as_bytes().to_vec()).unwrap(),
             display_name: accs.display_name,
             legal_name: accs.legal_name,
             email: accs
