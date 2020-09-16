@@ -5,10 +5,10 @@ use crate::primitives::{
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
+use tokio::time::{self, Duration};
 
 use std::collections::HashMap;
 use std::convert::TryInto;
-use tokio::time::{self, Duration};
 
 // TODO: add cfg
 pub struct TestClient {
@@ -104,7 +104,7 @@ enum AccountValidity {
 }
 
 pub struct IdentityManager {
-    idents: Vec<OnChainIdentity>,
+    idents: HashMap<NetAccount, OnChainIdentity>,
     db: Database,
     comms: CommsTable,
 }
@@ -117,12 +117,13 @@ struct CommsTable {
 
 impl IdentityManager {
     pub fn new(db: Database) -> Result<Self> {
-        let mut idents = vec![];
+        let mut idents = HashMap::new();
 
         // Read pending on-chain identities from storage. Ideally, there are none.
         let db_idents = db.scope("pending_identities");
         for (_, value) in db_idents.all()? {
-            idents.push(OnChainIdentity::from_json(&*value)?);
+            let ident = OnChainIdentity::from_json(&*value).fatal();
+            idents.insert(ident.network_address.address().clone(), ident);
         }
 
         let (tx1, recv1) = unbounded();
@@ -139,9 +140,7 @@ impl IdentityManager {
     }
     pub fn register_comms(&mut self, account_ty: AccountType) -> CommsVerifier {
         let (cm, cv) = generate_comms(self.comms.to_main.clone(), account_ty.clone());
-
         self.comms.pairs.insert(account_ty, cm);
-
         cv
     }
     pub async fn start(mut self) -> Result<()> {
@@ -152,7 +151,7 @@ impl IdentityManager {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
                     CommsMessage::NewOnChainIdentity(ident) => {
-                        self.register_request(ident)?;
+                        self.handle_register_request(ident)?;
                     }
                     ValidAccount { network_address: _ } => {}
                     InvalidAccount { network_address: _ } => {}
@@ -164,7 +163,7 @@ impl IdentityManager {
                         account,
                         account_ty,
                     } => {
-                        self.request_account_state(account, account_ty);
+                        self.handle_account_state_request(account, account_ty);
                     }
                     _ => panic!("Received unrecognized message type. Report as a bug"),
                 }
@@ -173,21 +172,16 @@ impl IdentityManager {
             }
         }
     }
-    fn register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
-        // TODO: Handle updates
-
+    fn handle_register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         let db_idents = self.db.scope("pending_identities");
         let db_rooms = self.db.scope("matrix_rooms");
 
         // Save the pending on-chain identity to disk.
-        db_idents.put(ident.pub_key().to_bytes(), ident.to_json()?)?;
-        self.idents.push(ident);
+        db_idents.put(ident.network_address.address().as_str(), ident.to_json()?)?;
 
-        let ident = self
-            .idents
-            .last()
-            // TODO: necessary?
-            .ok_or(err_msg("last registered identity not found."))?;
+        // Save the pending on-chain identity to memory.
+        self.idents
+            .insert(ident.network_address.address().clone(), ident.clone());
 
         // Only matrix supported for now.
         ident.matrix.as_ref().map::<(), _>(|state| {
@@ -207,21 +201,21 @@ impl IdentityManager {
 
         Ok(())
     }
-    // TODO: handle multiple account_ids
-    fn request_account_state(&self, account: Account, account_ty: AccountType) {
-        // Account state requests are always available, since such a request
-        // cannot occur if it isn't.
-
-        let ident = self.idents.iter().find(|ident| match account_ty {
-            AccountType::Matrix => {
-                if let Some(state) = ident.matrix.as_ref() {
-                    state.account == account
-                } else {
-                    false
+    fn handle_account_state_request(&self, account: Account, account_ty: AccountType) {
+        let ident = self
+            .idents
+            .iter()
+            .find(|(_, ident)| match account_ty {
+                AccountType::Matrix => {
+                    if let Some(state) = ident.matrix.as_ref() {
+                        state.account == account
+                    } else {
+                        false
+                    }
                 }
-            }
-            _ => panic!("Unsupported"),
-        });
+                _ => panic!("Unsupported"),
+            })
+            .map(|(_, ident)| ident);
 
         let comms = self.comms.pairs.get(&AccountType::ReservedEmitter).fatal();
 
@@ -239,6 +233,7 @@ impl IdentityManager {
                 None,
             );
         } else {
+            // There is no pending request for the user.
             comms.invalid_request();
         }
     }
