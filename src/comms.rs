@@ -1,6 +1,6 @@
 use crate::identity::OnChainIdentity;
 use crate::primitives::{
-    Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress, PubKey,
+    Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 

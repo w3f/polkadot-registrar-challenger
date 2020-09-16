@@ -8,7 +8,7 @@ extern crate failure;
 use tokio::time::{self, Duration};
 
 use adapters::MatrixClient;
-use connector::Connector;
+
 use db::Database;
 use identity::IdentityManager;
 use identity::TestClient;
@@ -36,7 +36,7 @@ pub async fn run(config: Config) -> Result<()> {
     let mut manager = IdentityManager::new(db)?;
 
     // Prepare communication channels between manager and tasks.
-    let c_connector = manager.register_comms(AccountType::ReservedConnector);
+    let _c_connector = manager.register_comms(AccountType::ReservedConnector);
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
     // TODO: move to a test suite
