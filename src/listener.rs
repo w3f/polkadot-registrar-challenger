@@ -5,15 +5,38 @@ use std::convert::TryFrom;
 use websockets::WebSocket;
 
 #[derive(Serialize, Deserialize)]
-pub struct JudgementResponse {
-    pub address: String,
-    pub judgement: String,
+struct JudgementResponse {
+    address: String,
+    judgement: Judgement,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct JudgementRequest {
-    pub address: String,
-    pub accounts: Accounts,
+enum Judgement {
+    #[serde(rename = "reasonable")]
+    Reasonable,
+    #[serde(rename = "erroneous")]
+    Erroneous,
+}
+
+impl JudgementResponse {
+    fn reasonable(address: String) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(&JudgementResponse {
+            address: address,
+            judgement: Judgement::Reasonable,
+        })?)
+    }
+    fn erroneous(address: String) -> Result<Vec<u8>> {
+        Ok(serde_json::to_vec(&JudgementResponse {
+            address: address,
+            judgement: Judgement::Erroneous,
+        })?)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct JudgementRequest {
+    address: String,
+    accounts: Accounts,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,12 +61,30 @@ impl Listener {
             comms: comms,
         })
     }
-    pub async fn start(self) {
+    pub async fn start(mut self) {
         use CommsMessage::*;
 
         match self.comms.recv().await {
-            ValidAccount { context } => {}
-            InvalidAccount { context } => {}
+            ValidAccount { context } => {
+                self.client
+                    .send_binary(
+                        JudgementResponse::reasonable("TODO".to_string()).unwrap(),
+                        false,
+                        true,
+                    )
+                    .await
+                    .unwrap();
+            }
+            InvalidAccount { context } => {
+                self.client
+                    .send_binary(
+                        JudgementResponse::erroneous("TODO".to_string()).unwrap(),
+                        false,
+                        true,
+                    )
+                    .await
+                    .unwrap();
+            }
             _ => {}
         }
     }

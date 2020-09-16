@@ -31,7 +31,6 @@ pub struct AccountState {
     account: Account,
     account_ty: AccountType,
     account_validity: AccountValidity,
-    // TODO: remove pub
     pub challenge: Challenge,
     confirmed: bool,
 }
