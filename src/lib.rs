@@ -109,6 +109,44 @@ impl From<&str> for Account {
 }
 
 #[derive(Clone)]
+pub struct NetworkAddress {
+    network_address: String,
+    pub_key: PubKey,
+}
+
+impl NetworkAddress {
+    fn network_address(&self) -> &str {
+        self.network_address.as_str()
+    }
+    fn pub_key(&self) -> &PubKey {
+        &self.pub_key
+    }
+}
+
+use base58::FromBase58;
+
+impl TryFrom<String> for NetworkAddress {
+    type Error = failure::Error;
+
+    // TODO: Verify checksum?
+    fn try_from(value: String) -> Result<Self> {
+        let bytes = value
+            .from_base58()
+            .map_err(|_| err_msg("failed to decode address from base58"))?;
+
+        if bytes.len() < 33 {
+            return Err(err_msg("invalid address"));
+        }
+
+        Ok(NetworkAddress {
+            network_address: value,
+            // TODO: Should also work for slices
+            pub_key: PubKey::try_from(bytes[1..33].to_vec())?,
+        })
+    }
+}
+
+#[derive(Clone)]
 /// TODO: Just use Account
 pub struct RoomId(String);
 
