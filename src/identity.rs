@@ -19,6 +19,9 @@ pub struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
+    pub fn pub_key(&self) -> &PubKey {
+        &self.pub_key
+    }
     pub fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
     }
@@ -283,7 +286,7 @@ impl IdentityManager {
         let db_rooms = self.db.scope("matrix_rooms");
 
         // Save the pending on-chain identity to disk.
-        db_idents.put(ident.pub_key.0.to_bytes(), ident.to_json()?)?;
+        db_idents.put(ident.pub_key().to_bytes(), ident.to_json()?)?;
         self.idents.push(ident);
 
         let ident = self

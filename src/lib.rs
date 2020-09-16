@@ -221,6 +221,12 @@ impl Challenge {
             .verify_simple(b"substrate", self.0.as_bytes(), &sig.0)
             .is_ok()
     }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 trait Fatal<T> {
@@ -274,7 +280,7 @@ impl TestClient {
 
         let random = &ident.matrix.as_ref().unwrap().challenge;
 
-        let sig = sk.sign_simple(b"substrate", &random.0.as_bytes(), &pk);
+        let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
         println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
 
         self.comms.new_on_chain_identity(&ident);
@@ -286,7 +292,7 @@ impl Serialize for PubKey {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&hex::encode(self.0.to_bytes()))
+        serializer.serialize_str(&hex::encode(self.to_bytes()))
     }
 }
 

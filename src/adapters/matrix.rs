@@ -110,7 +110,7 @@ impl MatrixClient {
             room_id
         } else {
             // TODO: Handle this better.
-            let to_invite = [address.0.clone().try_into()?];
+            let to_invite = [address.as_str().clone().try_into()?];
 
             let mut request = Request::default();
             request.invite = &to_invite;
