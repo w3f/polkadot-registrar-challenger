@@ -145,8 +145,10 @@ impl IdentityManager {
     }
     pub async fn start(mut self) -> Result<()> {
         use CommsMessage::*;
-        let mut interval = time::interval(Duration::from_millis(50));
 
+        // No async support for `recv` (it blocks and chokes tokio), so we
+        // `try_recv` and just loop over it with a short pause.
+        let mut interval = time::interval(Duration::from_millis(10));
         loop {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {

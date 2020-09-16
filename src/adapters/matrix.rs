@@ -15,24 +15,30 @@ use matrix_sdk::{
 
 use std::convert::TryInto;
 use std::result::Result as StdResult;
-
+use tokio::time::{self, Duration};
 use url::Url;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
-    #[fail(display = "")]
+    #[fail(display = "failed to open state store")]
     StateStore,
-    #[fail(display = "")]
+    #[fail(display = "failed to create client with the given config")]
     ClientCreation,
-    #[fail(display = "")]
+    #[fail(display = "failed to login into the homeserver")]
     Login,
-    #[fail(display = "")]
+    #[fail(display = "failed to sync")]
     Sync,
-    #[fail(display = "")]
+    #[fail(display = "the specified UserId is invalid")]
+    InvalidUserId,
+    #[fail(display = "failed to join room")]
+    JoinRoom,
+    #[fail(display = "joining room timed out")]
+    JoinRoomTimeout,
+    #[fail(display = "the remote UserId was not found when trying to respond")]
     RemoteUserIdNotFound,
-    #[fail(display = "")]
+    #[fail(display = "the UserId is no known (no pending on-chain judgement request)")]
     UnknownUser,
-    #[fail(display = "")]
+    #[fail(display = "failed to send message")]
     SendMessage,
 }
 
@@ -100,25 +106,44 @@ impl MatrixClient {
             });
         }
     }
-    async fn local(&self) -> Result<()> {
+    async fn local(&self) -> StdResult<(), MatrixError> {
         let (network_address, account, challenge, room_id) = self.comms.recv_inform().await;
 
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = room_id {
             room_id
         } else {
-            // TODO: Handle this better.
-            let to_invite = [account.as_str().clone().try_into()?];
+            // When the UserId is invalid, even though it can be successfully
+            // converted, creating a room seems to block here forever. So we
+            // just set a timeout and abort if exceeded.
+            if let Ok(room_id) = time::timeout(Duration::from_secs(20), async {
+                let to_invite = [account
+                    .as_str()
+                    .clone()
+                    .try_into()
+                    .map_err(|_| MatrixError::InvalidUserId)?];
 
-            let mut request = Request::default();
-            request.invite = &to_invite;
-            request.name = Some("W3F Registrar Verification");
+                let mut request = Request::default();
+                request.invite = &to_invite;
+                request.name = Some("W3F Registrar Verification");
 
-            let resp = self.client.create_room(request).await?;
+                let resp = self
+                    .client
+                    .create_room(request)
+                    .await
+                    .map_err(|_| MatrixError::JoinRoom)?;
 
-            self.comms
-                .track_room_id(network_address.address().clone(), resp.room_id.clone());
-            resp.room_id
+                self.comms
+                    .track_room_id(network_address.address().clone(), resp.room_id.clone());
+
+                StdResult::<_, MatrixError>::Ok(resp.room_id)
+            })
+            .await
+            {
+                room_id?
+            } else {
+                return Err(MatrixError::JoinRoomTimeout)?;
+            }
         };
 
         self.send_msg(
@@ -127,7 +152,8 @@ impl MatrixClient {
                 .as_str(),
             &room_id,
         )
-        .await?;
+        .await
+        .map_err(|_| MatrixError::SendMessage)?;
 
         Ok(())
     }
