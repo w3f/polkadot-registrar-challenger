@@ -7,6 +7,7 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
+use base58::FromBase58;
 use failure::err_msg;
 use futures::join;
 use rand::{thread_rng, Rng};
@@ -18,21 +19,23 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
-use base58::FromBase58;
 
 use adapters::MatrixClient;
 use connector::Connector;
 use db::Database;
-use identity::{AccountState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
-use primitives::{Account, NetAccount, AccountType, Challenge, Fatal, PubKey, Result, NetworkAddress, Algorithm};
 use identity::TestClient;
+use identity::{AccountState, IdentityManager, OnChainIdentity};
+use primitives::{
+    Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
+};
 
 mod adapters;
+mod comms;
 mod connector;
 mod db;
 mod identity;
-mod verifier;
 mod primitives;
+mod verifier;
 
 pub struct Config {
     pub db_path: String,

@@ -1,4 +1,4 @@
-use crate::primitives::{Challenge, Signature, NetworkAddress};
+use crate::primitives::{Challenge, NetworkAddress, Signature};
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 
 #[derive(Debug, Fail)]
@@ -31,7 +31,10 @@ impl Verifier {
             .map_err(|_| VerifierError::InvalidSignature)?,
         );
 
-        if self.challenge.verify_challenge(&self.network_address.pub_key(), &sig) {
+        if self
+            .challenge
+            .verify_challenge(&self.network_address.pub_key(), &sig)
+        {
             Ok("The signature is VALID. This account is confirmed.".to_string())
         } else {
             Err(VerifierError::SignatureNok)

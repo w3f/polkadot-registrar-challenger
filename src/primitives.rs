@@ -1,3 +1,4 @@
+use base58::FromBase58;
 use failure::err_msg;
 use futures::join;
 use rand::{thread_rng, Rng};
@@ -9,7 +10,6 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
-use base58::FromBase58;
 
 pub type Result<T> = StdResult<T, failure::Error>;
 
@@ -157,7 +157,8 @@ impl TryFrom<NetAccount> for NetworkAddress {
     type Error = failure::Error;
 
     fn try_from(value: NetAccount) -> Result<Self> {
-        let bytes = value.as_str()
+        let bytes = value
+            .as_str()
             .from_base58()
             .map_err(|_| err_msg("failed to decode address from base58"))?;
 

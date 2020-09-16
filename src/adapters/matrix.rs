@@ -1,6 +1,6 @@
-use crate::identity::{CommsMessage, CommsVerifier};
+use crate::comms::{CommsMain, CommsMessage, CommsVerifier};
+use crate::primitives::{Account, AccountType, Result, Signature};
 use crate::verifier::Verifier;
-use crate::primitives::{Account, Result, Signature, AccountType};
 use failure::err_msg;
 use matrix_sdk::{
     self,
@@ -14,9 +14,9 @@ use matrix_sdk::{
 };
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use std::convert::TryInto;
+use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 use url::Url;
-use std::result::Result as StdResult;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
@@ -119,7 +119,8 @@ impl MatrixClient {
 
             let resp = self.client.create_room(request).await?;
 
-            self.comms.track_room_id(pub_key.clone(), resp.room_id.clone());
+            self.comms
+                .track_room_id(pub_key.clone(), resp.room_id.clone());
             resp.room_id
         };
 
@@ -187,12 +188,16 @@ impl Responder {
 
         if let SyncRoom::Joined(room) = room {
             // Request information about the
-            self.comms
-                .request_account_state(Account::from(event.sender.as_str().to_string()), AccountType::Matrix);
+            self.comms.request_account_state(
+                Account::from(event.sender.as_str().to_string()),
+                AccountType::Matrix,
+            );
 
             let (network_address, challenge) = match self.comms.recv().await {
                 CommsMessage::Inform {
-                    network_address, challenge, ..
+                    network_address,
+                    challenge,
+                    ..
                 } => (network_address, challenge),
                 CommsMessage::InvalidRequest => {
                     // Reject user

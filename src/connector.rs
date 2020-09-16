@@ -1,5 +1,6 @@
-use crate::identity::{AccountState, CommsMessage, CommsVerifier, OnChainIdentity};
-use crate::primitives::{Result, NetAccount, Account, AccountType, PubKey, NetworkAddress};
+use crate::comms::{CommsMain, CommsMessage, CommsVerifier};
+use crate::identity::{AccountState, OnChainIdentity};
+use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, PubKey, Result};
 use std::convert::{TryFrom, TryInto};
 use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
@@ -71,7 +72,8 @@ impl Connector {
                 Some(ValidAccount { network_address }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::reasonable(network_address.address().clone()).unwrap(),
+                            JudgementResponse::reasonable(network_address.address().clone())
+                                .unwrap(),
                             false,
                             true,
                         )
@@ -81,7 +83,8 @@ impl Connector {
                 Some(InvalidAccount { network_address }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::erroneous(network_address.address().clone()).unwrap(),
+                            JudgementResponse::erroneous(network_address.address().clone())
+                                .unwrap(),
                             false,
                             true,
                         )
