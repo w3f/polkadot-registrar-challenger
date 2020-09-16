@@ -139,14 +139,14 @@ impl From<&str> for Account {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkAddress {
-    network_address: String,
+    address: Account,
     algo: Algorithm,
     pub_key: PubKey,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum Algorithm {
     #[serde(rename = "schnorr")]
     Schnorr,
@@ -158,7 +158,7 @@ enum Algorithm {
 
 impl NetworkAddress {
     fn network_address(&self) -> &str {
-        self.network_address.as_str()
+        self.address.as_str()
     }
     fn algo(&self) -> &Algorithm {
         &self.algo
@@ -174,8 +174,7 @@ impl TryFrom<Account> for NetworkAddress {
     type Error = failure::Error;
 
     fn try_from(value: Account) -> Result<Self> {
-        let bytes = value
-            .0
+        let bytes = value.as_str()
             .from_base58()
             .map_err(|_| err_msg("failed to decode address from base58"))?;
 
@@ -184,7 +183,7 @@ impl TryFrom<Account> for NetworkAddress {
         }
 
         Ok(NetworkAddress {
-            network_address: value.0,
+            address: value,
             algo: Algorithm::Schnorr,
             pub_key: PubKey::try_from(bytes[1..33].to_vec())?,
         })
@@ -265,8 +264,11 @@ impl TestClient {
         let pk = sk.to_public();
 
         let mut ident = OnChainIdentity {
-            //pub_key: PubKey(SchnorrkelPubKey::default()),
-            pub_key: PubKey(pk),
+            network_address: NetworkAddress {
+                address: Account::from("test"),
+                algo: Algorithm::Schnorr,
+                pub_key: PubKey(pk),
+            },
             display_name: None,
             legal_name: None,
             email: None,

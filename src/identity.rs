@@ -1,4 +1,4 @@
-use super::{Account, AccountType, Challenge, Fatal, PubKey, Result};
+use super::{Account, AccountType, Challenge, Fatal, PubKey, Result, NetworkAddress};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -9,7 +9,7 @@ use tokio::time::{self, Duration};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
-    pub pub_key: PubKey,
+    pub network_address: NetworkAddress,
     pub display_name: Option<String>,
     pub legal_name: Option<String>,
     pub email: Option<AccountState>,
@@ -19,8 +19,11 @@ pub struct OnChainIdentity {
 }
 
 impl OnChainIdentity {
+    pub fn address(&self) -> &Account {
+        &self.network_address.address
+    }
     pub fn pub_key(&self) -> &PubKey {
-        &self.pub_key
+        &self.network_address.pub_key
     }
     pub fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
@@ -297,14 +300,14 @@ impl IdentityManager {
 
         // Only matrix supported for now.
         ident.matrix.as_ref().map::<(), _>(|state| {
-            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key.0).fatal() {
+            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key().to_bytes()).fatal() {
                 Some(std::str::from_utf8(&bytes).fatal().try_into().fatal())
             } else {
                 None
             };
 
             self.comms.pairs.get(&state.account_ty).fatal().inform(
-                &ident.pub_key,
+                &ident.pub_key(),
                 &state.account,
                 &state.challenge,
                 room_id,
@@ -332,7 +335,7 @@ impl IdentityManager {
         if let Some(ident) = ident {
             // Account state was checked in `find` combinator.
             let state = ident.matrix.as_ref().fatal();
-            comms.inform(&ident.pub_key, &state.account, &state.challenge, None);
+            comms.inform(&ident.pub_key(), &state.account, &state.challenge, None);
         } else {
             comms.invalid_request();
         }

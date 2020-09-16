@@ -1,13 +1,13 @@
 use super::Result;
 use crate::identity::{AccountState, CommsMessage, CommsVerifier, OnChainIdentity};
-use crate::{Account, AccountType, PubKey};
+use crate::{Account, AccountType, PubKey, NetworkAddress};
 use std::convert::{TryFrom, TryInto};
 use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
 
 #[derive(Serialize, Deserialize)]
 struct JudgementResponse {
-    address: String,
+    address: Account,
     judgement: Judgement,
 }
 
@@ -20,13 +20,13 @@ enum Judgement {
 }
 
 impl JudgementResponse {
-    fn reasonable(address: String) -> Result<String> {
+    fn reasonable(address: Account) -> Result<String> {
         Ok(serde_json::to_string(&JudgementResponse {
             address: address,
             judgement: Judgement::Reasonable,
         })?)
     }
-    fn erroneous(address: String) -> Result<String> {
+    fn erroneous(address: Account) -> Result<String> {
         Ok(serde_json::to_string(&JudgementResponse {
             address: address,
             judgement: Judgement::Erroneous,
@@ -36,7 +36,7 @@ impl JudgementResponse {
 
 #[derive(Serialize, Deserialize)]
 struct JudgementRequest {
-    address: String,
+    address: Account,
     accounts: Accounts,
 }
 
@@ -44,10 +44,10 @@ struct JudgementRequest {
 struct Accounts {
     display_name: Option<String>,
     legal_name: Option<String>,
-    email: Option<String>,
-    web: Option<String>,
-    twitter: Option<String>,
-    matrix: Option<String>,
+    email: Option<Account>,
+    web: Option<Account>,
+    twitter: Option<Account>,
+    matrix: Option<Account>,
 }
 
 pub struct Connector {
@@ -72,7 +72,7 @@ impl Connector {
                 Some(ValidAccount { context }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::reasonable("TODO".to_string()).unwrap(),
+                            JudgementResponse::reasonable(Account::from("TODO")).unwrap(),
                             false,
                             true,
                         )
@@ -82,7 +82,7 @@ impl Connector {
                 Some(InvalidAccount { context }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::erroneous("TODO".to_string()).unwrap(),
+                            JudgementResponse::erroneous(Account::from("TODO")).unwrap(),
                             false,
                             true,
                         )
@@ -118,7 +118,7 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
         let accs = request.accounts;
 
         Ok(OnChainIdentity {
-            pub_key: PubKey::try_from(request.address.as_bytes().to_vec())?,
+            network_address: NetworkAddress::try_from(request.address)?,
             display_name: accs.display_name,
             legal_name: accs.legal_name,
             email: accs
