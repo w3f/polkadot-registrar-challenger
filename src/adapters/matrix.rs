@@ -1,4 +1,5 @@
 use crate::identity::CommsVerifier;
+use crate::verifier::Verifier;
 use crate::{Account, Result, RoomId, Signature};
 use matrix_sdk::{
     self,
@@ -63,6 +64,9 @@ impl MatrixClient {
             comms: comms,
         }
     }
+    async fn send_msg(&self, msg: &str, room_id: &matrix_sdk::identifiers::RoomId) -> Result<()> {
+        send_msg(&self.client, msg, room_id).await
+    }
     pub async fn start(self) -> Result<()> {
         loop {
             let (context, challenge, room_id) = self.comms.recv_inform().await;
@@ -88,29 +92,37 @@ impl MatrixClient {
                 resp.room_id
             };
 
-            self.client
-                .room_send(
-                    &room_id,
-                    create_msg(
-                        include_str!("../../messages/instructions")
-                            .replace("{:PAYLOAD}", &challenge.0)
-                            .as_str(),
-                    ),
-                    None,
-                )
-                .await
-                .unwrap();
+            self.send_msg(
+                include_str!("../../messages/instructions")
+                    .replace("{:PAYLOAD}", &challenge.0)
+                    .as_str(),
+                &room_id,
+            )
+            .await
+            .unwrap();
         }
 
         Ok(())
     }
 }
 
-fn create_msg(content: &str) -> AnyMessageEventContent {
-    AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-        // TODO: Make a proper Message Creator for this
-        TextMessageEventContent::plain(content),
-    ))
+async fn send_msg(
+    client: &Client,
+    msg: &str,
+    room_id: &matrix_sdk::identifiers::RoomId,
+) -> Result<()> {
+    client
+        .room_send(
+            room_id,
+            AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+                // TODO: Make a proper Message Creator for this
+                TextMessageEventContent::plain(msg),
+            )),
+            None,
+        )
+        .await?;
+
+    Ok(())
 }
 
 struct Responder {
@@ -124,6 +136,9 @@ impl Responder {
             client: client,
             comms: comms,
         }
+    }
+    async fn send_msg(&self, msg: &str, room_id: &matrix_sdk::identifiers::RoomId) -> Result<()> {
+        send_msg(&self.client, msg, room_id).await
     }
 }
 
@@ -141,10 +156,11 @@ impl EventEmitter for Responder {
 
             if members.len() > 2 {}
 
-            //self.comms.
             self.comms
                 .request_address_sate(&Account(event.sender.as_str().to_string()));
             let (context, challenge, _) = self.comms.recv_inform().await;
+
+            let verifier = Verifier::new(context, challenge);
 
             let msg_body = if let SyncMessageEvent {
                 content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
@@ -158,31 +174,10 @@ impl EventEmitter for Responder {
 
             let room_id = room.read().await.room_id.clone();
 
-            println!("M Challenge: {}", challenge.0);
-
-            let sig = if let Ok(sig) =
-                SchnorrkelSignature::from_bytes(&hex::decode(msg_body).unwrap())
-            {
-                sig
-            } else {
-                self.client
-                    .room_send(&room_id, create_msg("This is not a valid signature output. Please refer to the guide as noted above."), None)
-                    .await
-                    .unwrap();
-
-                return;
+            match verifier.verify(&msg_body) {
+                Ok(msg) => self.send_msg(&msg, &room_id).await.unwrap(),
+                Err(err) => self.send_msg(&err.to_string(), &room_id).await.unwrap(),
             };
-
-            let resp = if challenge.verify_challenge(&context.pub_key, &Signature(sig)) {
-                "The signature is VALID. This address is confirmed.".to_string()
-            } else {
-                "The signature is INVALID. Please sign the challenge with the key which belongs to the on-chain identity address.".to_string()
-            };
-
-            self.client
-                .room_send(&room_id, create_msg(&resp), None)
-                .await
-                .unwrap();
         }
     }
 }

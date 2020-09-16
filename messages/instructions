@@ -7,13 +7,12 @@ information:
 // TODO...
 
 Please execute the following instructions in order to verify this address.
-If you did not issue such request, then simply ignore this or respond with
-a "reject" message.
+If you did not issue such request, then simply ignore this message.
 
-1.) Sign the following payload using the private key of the Polkadot account
+1.) Sign the following challenge using the private key of the Polkadot account
     the on-chain identity is based on.
 
-    Payload: {:PAYLOAD}
+    Challenge: {:PAYLOAD}
 
 2.) Responds to this message by copy-pasting the resulting signature and
     pressing send. No additional data must be included.

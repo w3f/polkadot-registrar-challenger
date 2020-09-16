@@ -4,6 +4,8 @@ extern crate futures;
 extern crate async_trait;
 #[macro_use]
 extern crate serde;
+#[macro_use]
+extern crate failure;
 
 use failure::err_msg;
 use futures::join;
