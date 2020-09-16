@@ -34,8 +34,17 @@ impl TestClient {
         TestClient { comms: comms }
     }
     fn gen_data(&self) {
+        let sk = schnorrkel::keys::SecretKey::generate();
+        let pk = sk.to_public();
+
+        let random = "TO-SIGN-THIS999".as_bytes();
+
+        let sig = sk.sign_simple(b"substrate", &random, &pk);
+        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
+
         self.comms.new_on_chain_identity(&OnChainIdentity {
-            pub_key: PubKey(SchnorrkelPubKey::default()),
+            //pub_key: PubKey(SchnorrkelPubKey::default()),
+            pub_key: PubKey(pk),
             display_name: None,
             legal_name: None,
             email: None,
@@ -105,7 +114,7 @@ pub struct Signature(SchnorrkelSignature);
 pub struct Address(String);
 
 #[derive(Clone)]
-///
+/// TODO: Just use Address
 pub struct RoomId(String);
 
 impl TryFrom<Vec<u8>> for RoomId {
@@ -135,8 +144,11 @@ pub struct Challenge(String);
 
 impl Challenge {
     fn gen_random() -> Challenge {
-        let random: [u8; 16] = thread_rng().gen();
-        Challenge(hex::encode(random))
+        // TODO:
+        //let random: [u8; 16] = thread_rng().gen();
+        //Challenge(hex::encode(random))
+        let random = "TO-SIGN-THIS999";
+        Challenge(random.to_string())
     }
     pub fn verify_challenge(&self, pub_key: &PubKey, sig: &Signature) -> bool {
         pub_key

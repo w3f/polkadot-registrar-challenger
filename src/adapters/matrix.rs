@@ -1,5 +1,6 @@
 use crate::identity::CommsVerifier;
-use crate::{Result, RoomId};
+use crate::{Result, RoomId, Address, Signature};
+use schnorrkel::sign::Signature as SchnorrkelSignature;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -140,12 +141,9 @@ impl EventEmitter for Responder {
 
             if members.len() > 2 {}
 
-            // TODO: Just get sender
-            let my_user_id = self.client.user_id().await.unwrap();
-            let target_user_id = members
-                .iter()
-                .map(|(user_id, _)| user_id)
-                .find(|user_id| user_id.as_str() != my_user_id.as_str());
+            //self.comms.
+            self.comms.request_address_sate(&Address(event.sender.as_str().to_string()));
+            let (context, challenge, _) = self.comms.recv_inform().await;
 
             let msg_body = if let SyncMessageEvent {
                 content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
@@ -158,8 +156,28 @@ impl EventEmitter for Responder {
             };
 
             let room_id = room.read().await.room_id.clone();
+
+            println!("M Challenge: {}", challenge.0);
+
+            let sig = if let Ok(sig) = SchnorrkelSignature::from_bytes(&hex::decode(msg_body).unwrap()) {
+                sig
+            } else {
+                self.client
+                    .room_send(&room_id, create_msg("Invalid signature"), None)
+                    .await
+                    .unwrap();
+
+                return;
+            };
+
+            let resp = if challenge.verify_challenge(&context.pub_key, &Signature(sig)) {
+                "VALID".to_string()
+            } else {
+                "INVALID".to_string()
+            };
+
             self.client
-                .room_send(&room_id, create_msg("Hi"), None)
+                .room_send(&room_id, create_msg(&resp), None)
                 .await
                 .unwrap();
         }

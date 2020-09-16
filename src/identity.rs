@@ -76,6 +76,7 @@ pub enum CommsMessage {
         pub_key: PubKey,
         room_id: RoomId,
     },
+    // TODO: add AddressType option
     RequestFromUserId(Address),
 }
 
@@ -147,6 +148,9 @@ impl CommsVerifier {
         } else {
             panic!("received invalid message type on Matrix client");
         }
+    }
+    pub fn request_address_sate(&self, address: &Address) {
+        self.tx.send(CommsMessage::RequestFromUserId(address.clone())).unwrap();
     }
     pub fn new_on_chain_identity(&self, ident: &OnChainIdentity) {
         self.tx
@@ -281,9 +285,15 @@ impl IdentityManager {
                             } else {
                                 false
                             }
-                        });
+                        }).unwrap();
+                        // TODO: Handle that unwrap.
+
+                        // Unwrapping is safe here, since it's guaranteed in the
+                        // `find` filter.
+                        let state = ident.matrix.as_ref().unwrap();
 
                         // TODO: Report back whether the identity was found.
+                        self.comms.to_emitter.inform(&ident.pub_key, &state.addr, &state.challenge, None);
                     }
                 }
             } else {
