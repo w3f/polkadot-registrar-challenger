@@ -30,20 +30,20 @@ impl OnChainIdentity {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AccountState {
-    addr: Account,
-    addr_type: AccountType,
-    addr_validity: AccountValidity,
+    account: Account,
+    account_ty: AccountType,
+    account_validity: AccountValidity,
     // TODO: remove pub
     pub challenge: Challenge,
     confirmed: bool,
 }
 
 impl AccountState {
-    pub fn new(addr: Account, addr_type: AccountType) -> Self {
+    pub fn new(account: Account, account_ty: AccountType) -> Self {
         AccountState {
-            addr: addr,
-            addr_type: addr_type,
-            addr_validity: AccountValidity::Unknown,
+            account: account,
+            account_ty: account_ty,
+            account_validity: AccountValidity::Unknown,
             challenge: Challenge::gen_random(),
             confirmed: false,
         }
@@ -160,23 +160,23 @@ impl CommsVerifier {
             .send(CommsMessage::NewOnChainIdentity(ident.clone()))
             .unwrap();
     }
-    pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Account) {
+    pub fn valid_feedback(&self, pub_key: &PubKey, account: &Account) {
         self.tx
             .send(CommsMessage::ValidAccount {
                 context: AccountContext {
                     pub_key: pub_key.clone(),
-                    address: addr.clone(),
+                    address: account.clone(),
                     address_ty: self.address_ty.clone(),
                 },
             })
             .unwrap();
     }
-    pub fn invalid_feedback(&self, pub_key: &PubKey, addr: &Account) {
+    pub fn invalid_feedback(&self, pub_key: &PubKey, account: &Account) {
         self.tx
             .send(CommsMessage::InvalidAccount {
                 context: AccountContext {
                     pub_key: pub_key.clone(),
-                    address: addr.clone(),
+                    address: account.clone(),
                     address_ty: self.address_ty.clone(),
                 },
             })
@@ -239,21 +239,21 @@ impl IdentityManager {
             },
         })
     }
-    pub fn register_comms(&mut self, addr_type: AccountType) -> CommsVerifier {
+    pub fn register_comms(&mut self, account_ty: AccountType) -> CommsVerifier {
         let (tx, recv) = unbounded();
 
         self.comms.pairs.insert(
-            addr_type.clone(),
+            account_ty.clone(),
             CommsMain {
                 sender: tx,
-                address_ty: addr_type.clone(),
+                address_ty: account_ty.clone(),
             },
         );
 
         CommsVerifier {
             tx: self.comms.to_main.clone(),
             recv: recv,
-            address_ty: addr_type,
+            address_ty: account_ty,
         }
     }
     // TODO: Maybe return this directly rather than cloning?
@@ -280,14 +280,14 @@ impl IdentityManager {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
                     }
-                    RequestFromUserId(addr) => {
+                    RequestFromUserId(account) => {
                         // Find the identity based on the corresponding Matrix UserId.
                         let ident = self
                             .idents
                             .iter()
                             .find(|ident| {
                                 if let Some(state) = ident.matrix.as_ref() {
-                                    state.addr == addr
+                                    state.account == account
                                 } else {
                                     false
                                 }
@@ -302,7 +302,7 @@ impl IdentityManager {
                         // TODO: Report back whether the identity was found.
                         self.comms.to_emitter.inform(
                             &ident.pub_key,
-                            &state.addr,
+                            &state.account,
                             &state.challenge,
                             None,
                         );
@@ -338,9 +338,9 @@ impl IdentityManager {
                 .unwrap()
                 .map(|bytes| bytes.try_into().unwrap());
 
-            self.comms.pairs.get(&state.addr_type).unwrap().inform(
+            self.comms.pairs.get(&state.account_ty).unwrap().inform(
                 &ident.pub_key,
-                &state.addr,
+                &state.account,
                 &state.challenge,
                 room_id,
             );
