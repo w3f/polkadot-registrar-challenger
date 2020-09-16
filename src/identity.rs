@@ -67,54 +67,43 @@ enum AccountValidity {
 pub enum CommsMessage {
     NewOnChainIdentity(OnChainIdentity),
     Inform {
-        context: AccountContext,
+        network_address: NetworkAddress,
         challenge: Challenge,
         room_id: Option<RoomId>,
     },
     ValidAccount {
-        context: AccountContext,
+        network_address: NetworkAddress,
     },
     InvalidAccount {
-        context: AccountContext,
+        network_address: NetworkAddress,
     },
     TrackRoomId {
         pub_key: PubKey,
         room_id: RoomId,
     },
-    // TODO: add AccountType option
-    RequestAccountState(Account),
+    RequestAccountState {
+        account: Account,
+        account_ty: AccountType,
+    },
     InvalidRequest,
-}
-
-pub struct AccountContext {
-    pub pub_key: PubKey,
-    pub address: Account,
-    pub address_ty: AccountType,
 }
 
 #[derive(Debug, Clone)]
 pub struct CommsMain {
     sender: Sender<CommsMessage>,
-    // TODO: This can be removed.
-    address_ty: AccountType,
 }
 
 impl CommsMain {
     fn inform(
         &self,
-        pub_key: &PubKey,
-        address: &Account,
-        challenge: &Challenge,
+        network_address: NetworkAddress,
+        challenge: Challenge,
         room_id: Option<RoomId>,
     ) {
         self.sender
             .send(CommsMessage::Inform {
-                context: AccountContext {
-                    pub_key: pub_key.clone(),
-                    address: address.clone(),
-                    address_ty: self.address_ty.clone(),
-                },
-                challenge: challenge.clone(),
+                network_address: network_address,
+                challenge: challenge,
                 room_id,
             })
             .fatal();
@@ -149,55 +138,50 @@ impl CommsVerifier {
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
     // TODO: Just use `recv` and match directly. Remove this method
-    pub async fn recv_inform(&self) -> (AccountContext, Challenge, Option<RoomId>) {
+    pub async fn recv_inform(&self) -> (NetworkAddress, Challenge, Option<RoomId>) {
         if let CommsMessage::Inform {
-            context,
+            network_address,
             challenge,
             room_id,
         } = self.recv().await
         {
-            (context, challenge, room_id)
+            (network_address, challenge, room_id)
         } else {
             panic!("received invalid message type on Matrix client");
         }
     }
-    pub fn request_account_state(&self, address: &Account) {
+    pub fn request_account_state(&self, account: Account, account_ty: AccountType) {
         self.tx
-            .send(CommsMessage::RequestAccountState(address.clone()))
+            .send(CommsMessage::RequestAccountState {
+                account: account,
+                account_ty: account_ty,
+            })
             .fatal();
     }
-    pub fn new_on_chain_identity(&self, ident: &OnChainIdentity) {
+    pub fn new_on_chain_identity(&self, ident: OnChainIdentity) {
         self.tx
-            .send(CommsMessage::NewOnChainIdentity(ident.clone()))
+            .send(CommsMessage::NewOnChainIdentity(ident))
             .fatal();
     }
-    pub fn valid_feedback(&self, pub_key: &PubKey, account: &Account) {
+    pub fn valid_feedback(&self, network_address: NetworkAddress) {
         self.tx
             .send(CommsMessage::ValidAccount {
-                context: AccountContext {
-                    pub_key: pub_key.clone(),
-                    address: account.clone(),
-                    address_ty: self.address_ty.clone(),
-                },
+                network_address: network_address
             })
             .fatal();
     }
-    pub fn invalid_feedback(&self, pub_key: &PubKey, account: &Account) {
+    pub fn invalid_feedback(&self, network_address: NetworkAddress) {
         self.tx
             .send(CommsMessage::InvalidAccount {
-                context: AccountContext {
-                    pub_key: pub_key.clone(),
-                    address: account.clone(),
-                    address_ty: self.address_ty.clone(),
-                },
+                network_address: network_address,
             })
             .fatal();
     }
-    pub fn track_room_id(&self, pub_key: &PubKey, room_id: &RoomId) {
+    pub fn track_room_id(&self, pub_key: PubKey, room_id: RoomId) {
         self.tx
             .send(CommsMessage::TrackRoomId {
-                pub_key: pub_key.clone(),
-                room_id: room_id.clone(),
+                pub_key: pub_key,
+                room_id: room_id,
             })
             .fatal();
     }
@@ -244,7 +228,6 @@ impl IdentityManager {
             account_ty.clone(),
             CommsMain {
                 sender: tx,
-                address_ty: account_ty.clone(),
             },
         );
 
@@ -264,13 +247,17 @@ impl IdentityManager {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.register_request(ident)?;
                     }
-                    ValidAccount { context: _ } => {}
-                    InvalidAccount { context: _ } => {}
+                    ValidAccount { network_address } => {}
+                    InvalidAccount { network_address } => {}
                     TrackRoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(pub_key.0, room_id.as_bytes())?;
                     }
-                    RequestAccountState(account) => {
+                    RequestAccountState {
+                        account,
+                        account_ty
+
+                        } => {
                         self.request_account_state(account);
                     }
                     _ => panic!("Received unrecognized message type. Report as a bug"),
@@ -307,9 +294,8 @@ impl IdentityManager {
             };
 
             self.comms.pairs.get(&state.account_ty).fatal().inform(
-                &ident.pub_key(),
-                &state.account,
-                &state.challenge,
+                ident.network_address.clone(),
+                state.challenge.clone(),
                 room_id,
             );
         });
@@ -335,7 +321,7 @@ impl IdentityManager {
         if let Some(ident) = ident {
             // Account state was checked in `find` combinator.
             let state = ident.matrix.as_ref().fatal();
-            comms.inform(&ident.pub_key(), &state.account, &state.challenge, None);
+            comms.inform(ident.network_address.clone(), state.challenge.clone(), None);
         } else {
             comms.invalid_request();
         }

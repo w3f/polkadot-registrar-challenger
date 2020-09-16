@@ -170,7 +170,7 @@ pub struct NetworkAddress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum Algorithm {
+pub enum Algorithm {
     #[serde(rename = "schnorr")]
     Schnorr,
     #[serde(rename = "edwards")]
@@ -180,13 +180,13 @@ enum Algorithm {
 }
 
 impl NetworkAddress {
-    fn network_address(&self) -> &str {
-        self.address.as_str()
+    pub fn address(&self) -> &NetAccount {
+        &self.address
     }
-    fn algo(&self) -> &Algorithm {
+    pub fn algo(&self) -> &Algorithm {
         &self.algo
     }
-    fn pub_key(&self) -> &PubKey {
+    pub fn pub_key(&self) -> &PubKey {
         &self.pub_key
     }
 }
@@ -306,7 +306,7 @@ impl TestClient {
         let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
         println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
 
-        self.comms.new_on_chain_identity(&ident);
+        self.comms.new_on_chain_identity(ident);
     }
 }
 

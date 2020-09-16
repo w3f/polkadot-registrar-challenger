@@ -1,6 +1,6 @@
 use crate::identity::{CommsMessage, CommsVerifier};
 use crate::verifier::Verifier;
-use crate::{Account, Result, Signature, StdResult};
+use crate::{Account, Result, Signature, StdResult, AccountType};
 use failure::err_msg;
 use matrix_sdk::{
     self,
@@ -100,10 +100,10 @@ impl MatrixClient {
         }
     }
     async fn local(&self) -> Result<()> {
-        let (context, challenge, room_id) = self.comms.recv_inform().await;
+        let (network_address, challenge, room_id) = self.comms.recv_inform().await;
 
-        let pub_key = context.pub_key;
-        let address = context.address;
+        let pub_key = network_address.pub_key();
+        let address = &network_address.address();
 
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = room_id {
@@ -118,7 +118,7 @@ impl MatrixClient {
 
             let resp = self.client.create_room(request).await?;
 
-            self.comms.track_room_id(&pub_key, &resp.room_id);
+            self.comms.track_room_id(pub_key.clone(), resp.room_id.clone());
             resp.room_id
         };
 
@@ -187,12 +187,12 @@ impl Responder {
         if let SyncRoom::Joined(room) = room {
             // Request information about the
             self.comms
-                .request_account_state(&Account(event.sender.as_str().to_string()));
+                .request_account_state(Account::from(event.sender.as_str().to_string()), AccountType::Matrix);
 
-            let (context, challenge) = match self.comms.recv().await {
+            let (network_address, challenge) = match self.comms.recv().await {
                 CommsMessage::Inform {
-                    context, challenge, ..
-                } => (context, challenge),
+                    network_address, challenge, ..
+                } => (network_address, challenge),
                 CommsMessage::InvalidRequest => {
                     // Reject user
                     return Err(MatrixError::UnknownUser);
@@ -200,9 +200,7 @@ impl Responder {
                 _ => panic!("Received unrecognized message type on Matrix client. Report as bug."),
             };
 
-            let (context, challenge, _) = self.comms.recv_inform().await;
-
-            let verifier = Verifier::new(context, challenge);
+            let verifier = Verifier::new(network_address, challenge);
 
             // TODO: Write a nicer function for this.
             let msg_body = if let SyncMessageEvent {

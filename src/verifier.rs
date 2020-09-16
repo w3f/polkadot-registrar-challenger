@@ -1,5 +1,4 @@
-use crate::identity::AccountContext;
-use crate::{Challenge, Signature};
+use crate::{Challenge, Signature, NetworkAddress};
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 
 #[derive(Debug, Fail)]
@@ -13,14 +12,14 @@ pub enum VerifierError {
 }
 
 pub struct Verifier {
-    context: AccountContext,
+    network_address: NetworkAddress,
     challenge: Challenge,
 }
 
 impl Verifier {
-    pub fn new(context: AccountContext, challenge: Challenge) -> Self {
+    pub fn new(network_address: NetworkAddress, challenge: Challenge) -> Self {
         Verifier {
-            context: context,
+            network_address: network_address,
             challenge: challenge,
         }
     }
@@ -32,7 +31,7 @@ impl Verifier {
             .map_err(|_| VerifierError::InvalidSignature)?,
         );
 
-        if self.challenge.verify_challenge(&self.context.pub_key, &sig) {
+        if self.challenge.verify_challenge(&self.network_address.pub_key(), &sig) {
             Ok("The signature is VALID. This account is confirmed.".to_string())
         } else {
             Err(VerifierError::SignatureNok)

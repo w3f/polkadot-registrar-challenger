@@ -69,20 +69,20 @@ impl Connector {
 
         loop {
             match self.comms.try_recv() {
-                Some(ValidAccount { context }) => {
+                Some(ValidAccount { network_address }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::reasonable(NetAccount::from("TODO")).unwrap(),
+                            JudgementResponse::reasonable(network_address.address().clone()).unwrap(),
                             false,
                             true,
                         )
                         .await
                         .unwrap();
                 }
-                Some(InvalidAccount { context }) => {
+                Some(InvalidAccount { network_address }) => {
                     self.client
                         .send_text(
-                            JudgementResponse::erroneous(NetAccount::from("TODO")).unwrap(),
+                            JudgementResponse::erroneous(network_address.address().clone()).unwrap(),
                             false,
                             true,
                         )
@@ -96,7 +96,7 @@ impl Connector {
                 match self.client.receive().await {
                     Ok(Frame::Text { payload, .. }) => {
                         self.comms.new_on_chain_identity(
-                            &serde_json::from_str::<JudgementRequest>(&payload)
+                            serde_json::from_str::<JudgementRequest>(&payload)
                                 .unwrap()
                                 .try_into()
                                 .unwrap(),
