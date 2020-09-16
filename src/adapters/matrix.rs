@@ -1,6 +1,6 @@
-use crate::identity::{CommsVerifier, CommsMessage};
+use crate::identity::{CommsMessage, CommsVerifier};
 use crate::verifier::Verifier;
-use crate::{Account, StdResult, Result, Signature};
+use crate::{Account, Result, Signature, StdResult};
 use failure::err_msg;
 use matrix_sdk::{
     self,
@@ -190,14 +190,14 @@ impl Responder {
                 .request_account_state(&Account(event.sender.as_str().to_string()));
 
             let (context, challenge) = match self.comms.recv().await {
-                CommsMessage::Inform { context, challenge, .. } => {
-                    (context, challenge)
-                }
+                CommsMessage::Inform {
+                    context, challenge, ..
+                } => (context, challenge),
                 CommsMessage::InvalidRequest => {
                     // Reject user
                     return Err(MatrixError::UnknownUser);
                 }
-                _ => panic!("Received unrecognized message type on Matrix client. Report as bug.")
+                _ => panic!("Received unrecognized message type on Matrix client. Report as bug."),
             };
 
             let (context, challenge, _) = self.comms.recv_inform().await;
@@ -218,8 +218,14 @@ impl Responder {
             let room_id = room.read().await.room_id.clone();
 
             match verifier.verify(&msg_body) {
-                Ok(msg) => self.send_msg(&msg, &room_id).await.map_err(|_| MatrixError::SendMessage)?,
-                Err(err) => self.send_msg(&err.to_string(), &room_id).await.map_err(|_| MatrixError::SendMessage)?,
+                Ok(msg) => self
+                    .send_msg(&msg, &room_id)
+                    .await
+                    .map_err(|_| MatrixError::SendMessage)?,
+                Err(err) => self
+                    .send_msg(&err.to_string(), &room_id)
+                    .await
+                    .map_err(|_| MatrixError::SendMessage)?,
             };
         }
 
