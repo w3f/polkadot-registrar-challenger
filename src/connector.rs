@@ -41,7 +41,7 @@ struct JudgementRequest {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Accounts {
+struct Accounts {
     display_name: Option<String>,
     legal_name: Option<String>,
     email: Option<String>,
@@ -50,14 +50,14 @@ pub struct Accounts {
     matrix: Option<String>,
 }
 
-pub struct Listener {
+pub struct Connector {
     client: WebSocket,
     comms: CommsVerifier,
 }
 
-impl Listener {
+impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
-        Ok(Listener {
+        Ok(Connector {
             client: WebSocket::connect(url).await?,
             comms: comms,
         })

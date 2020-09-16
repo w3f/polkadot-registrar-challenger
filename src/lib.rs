@@ -25,7 +25,7 @@ use identity::{AccountState, CommsMessage, CommsVerifier, IdentityManager, OnCha
 mod adapters;
 mod db;
 mod identity;
-mod listener;
+mod connector;
 mod verifier;
 
 pub struct Config {
