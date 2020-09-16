@@ -18,7 +18,7 @@ use tokio::time::{self, Duration};
 
 use adapters::MatrixClient;
 use db::Database;
-use identity::{AddressState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
+use identity::{AccountState, CommsMessage, CommsVerifier, IdentityManager, OnChainIdentity};
 
 mod adapters;
 mod db;
@@ -47,9 +47,9 @@ impl TestClient {
             email: None,
             web: None,
             twitter: None,
-            matrix: Some(AddressState::new(
-                Address("@fabio:web3.foundation".to_string()),
-                AddressType::Matrix,
+            matrix: Some(AccountState::new(
+                Account("@fabio:web3.foundation".to_string()),
+                AccountType::Matrix,
             )),
         };
 
@@ -75,9 +75,9 @@ pub async fn run(config: Config) -> Result<()> {
     let mut manager = IdentityManager::new(db)?;
 
     // Prepare communication channels between manager and clients.
-    let c_matrix = manager.register_comms(AddressType::Matrix);
+    let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_matrix_emitter = manager.emitter_comms();
-    let c_temp = manager.register_comms(AddressType::Email);
+    let c_temp = manager.register_comms(AccountType::Email);
 
     // Setup clients.
     let matrix = MatrixClient::new(
@@ -115,10 +115,10 @@ pub struct PubKey(SchnorrkelPubKey);
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct Signature(SchnorrkelSignature);
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct Address(String);
+pub struct Account(String);
 
 #[derive(Clone)]
-/// TODO: Just use Address
+/// TODO: Just use Account
 pub struct RoomId(String);
 
 impl TryFrom<Vec<u8>> for RoomId {
@@ -132,7 +132,7 @@ impl TryFrom<Vec<u8>> for RoomId {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub enum AddressType {
+pub enum AccountType {
     #[serde(rename = "email")]
     Email,
     #[serde(rename = "web")]

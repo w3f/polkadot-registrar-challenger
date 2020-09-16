@@ -1,5 +1,5 @@
 use crate::identity::CommsVerifier;
-use crate::{Address, Result, RoomId, Signature};
+use crate::{Account, Result, RoomId, Signature};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -143,7 +143,7 @@ impl EventEmitter for Responder {
 
             //self.comms.
             self.comms
-                .request_address_sate(&Address(event.sender.as_str().to_string()));
+                .request_address_sate(&Account(event.sender.as_str().to_string()));
             let (context, challenge, _) = self.comms.recv_inform().await;
 
             let msg_body = if let SyncMessageEvent {

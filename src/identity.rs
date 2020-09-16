@@ -1,4 +1,4 @@
-use super::{Address, AddressType, Challenge, PubKey, Result, RoomId};
+use super::{Account, AccountType, Challenge, PubKey, Result, RoomId};
 use crate::db::{Database, ScopedDatabase};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use failure::err_msg;
@@ -10,13 +10,13 @@ use tokio::time::{self, Duration};
 pub struct OnChainIdentity {
     pub pub_key: PubKey,
     // TODO: Should this just be a String?
-    pub display_name: Option<AddressState>,
+    pub display_name: Option<AccountState>,
     // TODO: Should this just be a String?
-    pub legal_name: Option<AddressState>,
-    pub email: Option<AddressState>,
-    pub web: Option<AddressState>,
-    pub twitter: Option<AddressState>,
-    pub matrix: Option<AddressState>,
+    pub legal_name: Option<AccountState>,
+    pub email: Option<AccountState>,
+    pub web: Option<AccountState>,
+    pub twitter: Option<AccountState>,
+    pub matrix: Option<AccountState>,
 }
 
 impl OnChainIdentity {
@@ -29,21 +29,21 @@ impl OnChainIdentity {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct AddressState {
-    addr: Address,
-    addr_type: AddressType,
-    addr_validity: AddressValidity,
+pub struct AccountState {
+    addr: Account,
+    addr_type: AccountType,
+    addr_validity: AccountValidity,
     // TODO: remove pub
     pub challenge: Challenge,
     confirmed: bool,
 }
 
-impl AddressState {
-    pub fn new(addr: Address, addr_type: AddressType) -> Self {
-        AddressState {
+impl AccountState {
+    pub fn new(addr: Account, addr_type: AccountType) -> Self {
+        AccountState {
             addr: addr,
             addr_type: addr_type,
-            addr_validity: AddressValidity::Unknown,
+            addr_validity: AccountValidity::Unknown,
             challenge: Challenge::gen_random(),
             confirmed: false,
         }
@@ -51,7 +51,7 @@ impl AddressState {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum AddressValidity {
+enum AccountValidity {
     #[serde(rename = "unknown")]
     Unknown,
     #[serde(rename = "valid")]
@@ -63,34 +63,34 @@ enum AddressValidity {
 pub enum CommsMessage {
     NewOnChainIdentity(OnChainIdentity),
     Inform {
-        context: AddressContext,
+        context: AccountContext,
         challenge: Challenge,
         room_id: Option<RoomId>,
     },
-    ValidAddress {
-        context: AddressContext,
+    ValidAccount {
+        context: AccountContext,
     },
-    InvalidAddress {
-        context: AddressContext,
+    InvalidAccount {
+        context: AccountContext,
     },
     RoomId {
         pub_key: PubKey,
         room_id: RoomId,
     },
-    // TODO: add AddressType option
-    RequestFromUserId(Address),
+    // TODO: add AccountType option
+    RequestFromUserId(Account),
 }
 
-pub struct AddressContext {
+pub struct AccountContext {
     pub pub_key: PubKey,
-    pub address: Address,
-    pub address_ty: AddressType,
+    pub address: Account,
+    pub address_ty: AccountType,
 }
 
 pub struct CommsMain {
     sender: Sender<CommsMessage>,
     // TODO: This can be removed.
-    address_ty: AddressType,
+    address_ty: AccountType,
 }
 
 // TODO: Avoid clones
@@ -98,13 +98,13 @@ impl CommsMain {
     fn inform(
         &self,
         pub_key: &PubKey,
-        address: &Address,
+        address: &Account,
         challenge: &Challenge,
         room_id: Option<RoomId>,
     ) {
         self.sender
             .send(CommsMessage::Inform {
-                context: AddressContext {
+                context: AccountContext {
                     pub_key: pub_key.clone(),
                     address: address.clone(),
                     address_ty: self.address_ty.clone(),
@@ -120,7 +120,7 @@ impl CommsMain {
 pub struct CommsVerifier {
     tx: Sender<CommsMessage>,
     recv: Receiver<CommsMessage>,
-    address_ty: AddressType,
+    address_ty: AccountType,
 }
 
 // TODO: Avoid clones
@@ -138,7 +138,7 @@ impl CommsVerifier {
     }
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
-    pub async fn recv_inform(&self) -> (AddressContext, Challenge, Option<RoomId>) {
+    pub async fn recv_inform(&self) -> (AccountContext, Challenge, Option<RoomId>) {
         if let CommsMessage::Inform {
             context,
             challenge,
@@ -150,7 +150,7 @@ impl CommsVerifier {
             panic!("received invalid message type on Matrix client");
         }
     }
-    pub fn request_address_sate(&self, address: &Address) {
+    pub fn request_address_sate(&self, address: &Account) {
         self.tx
             .send(CommsMessage::RequestFromUserId(address.clone()))
             .unwrap();
@@ -160,10 +160,10 @@ impl CommsVerifier {
             .send(CommsMessage::NewOnChainIdentity(ident.clone()))
             .unwrap();
     }
-    pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Address) {
+    pub fn valid_feedback(&self, pub_key: &PubKey, addr: &Account) {
         self.tx
-            .send(CommsMessage::ValidAddress {
-                context: AddressContext {
+            .send(CommsMessage::ValidAccount {
+                context: AccountContext {
                     pub_key: pub_key.clone(),
                     address: addr.clone(),
                     address_ty: self.address_ty.clone(),
@@ -171,10 +171,10 @@ impl CommsVerifier {
             })
             .unwrap();
     }
-    pub fn invalid_feedback(&self, pub_key: &PubKey, addr: &Address) {
+    pub fn invalid_feedback(&self, pub_key: &PubKey, addr: &Account) {
         self.tx
-            .send(CommsMessage::InvalidAddress {
-                context: AddressContext {
+            .send(CommsMessage::InvalidAccount {
+                context: AccountContext {
                     pub_key: pub_key.clone(),
                     address: addr.clone(),
                     address_ty: self.address_ty.clone(),
@@ -203,7 +203,7 @@ struct CommsTable {
     listener: Receiver<CommsMessage>,
     to_emitter: CommsMain,
     from_emitter: CommsVerifier,
-    pairs: HashMap<AddressType, CommsMain>,
+    pairs: HashMap<AccountType, CommsMain>,
 }
 
 // let db_rooms = db.scope("pending_identities");
@@ -228,18 +228,18 @@ impl IdentityManager {
                 listener: recv1,
                 to_emitter: CommsMain {
                     sender: tx2,
-                    address_ty: AddressType::Web,
+                    address_ty: AccountType::Web,
                 },
                 from_emitter: CommsVerifier {
                     tx: tx1,
                     recv: recv2,
-                    address_ty: AddressType::Web,
+                    address_ty: AccountType::Web,
                 },
                 pairs: HashMap::new(),
             },
         })
     }
-    pub fn register_comms(&mut self, addr_type: AddressType) -> CommsVerifier {
+    pub fn register_comms(&mut self, addr_type: AccountType) -> CommsVerifier {
         let (tx, recv) = unbounded();
 
         self.comms.pairs.insert(
@@ -274,8 +274,8 @@ impl IdentityManager {
                         // INVALID
                         // TODO: log
                     }
-                    ValidAddress { context: _ } => {}
-                    InvalidAddress { context: _ } => {}
+                    ValidAccount { context: _ } => {}
+                    InvalidAccount { context: _ } => {}
                     RoomId { pub_key, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(pub_key.0, room_id.0.as_bytes())?;
