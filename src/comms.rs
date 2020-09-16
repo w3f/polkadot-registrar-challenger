@@ -62,7 +62,6 @@ impl CommsMain {
         challenge: Challenge,
         room_id: Option<RoomId>,
     ) {
-        println!("INFORMING");
         self.sender
             .send(CommsMessage::Inform {
                 network_address: network_address,
@@ -101,7 +100,6 @@ impl CommsVerifier {
     }
     /// Receive a `Inform` message. This is only used by the Matrix client as
     /// any other message type will panic.
-    // TODO: Just use `recv` and match directly. Remove this method
     pub async fn recv_inform(&self) -> (NetworkAddress, Account, Challenge, Option<RoomId>) {
         if let CommsMessage::Inform {
             network_address,

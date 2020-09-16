@@ -184,7 +184,7 @@ impl Responder {
         }
 
         if let SyncRoom::Joined(room) = room {
-            // Request information about the
+            // Request information about the sender.
             self.comms.request_account_state(
                 Account::from(event.sender.as_str().to_string()),
                 AccountType::Matrix,

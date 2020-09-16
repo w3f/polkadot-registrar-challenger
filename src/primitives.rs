@@ -71,7 +71,7 @@ impl From<SchnorrkelSignature> for Signature {
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NetAccount(String);
 
 impl NetAccount {
@@ -207,7 +207,6 @@ impl<T: Debug, E: Debug> Fatal<T> for StdResult<T, E> {
     fn fatal(self) -> T {
         if self.is_err() {
             let err = self.unwrap_err();
-            // TODO: log
             panic!("Fatal error encountered. Report as a bug: {:?}", err);
         }
 
