@@ -149,7 +149,14 @@ impl Connector {
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         match self.client.receive().await {
             Ok(Frame::Text { payload, .. }) => {
-                let msg = serde_json::from_str::<Message>(&payload).unwrap();
+                let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload)
+                    .map_err(|_| ConnectorError::InvalidMessage)
+                {
+                    msg
+                } else {
+                    self.send_error().await?;
+                    return Ok(());
+                };
 
                 match msg.event {
                     NewJudgementRequest => {
