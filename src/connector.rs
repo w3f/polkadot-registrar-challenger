@@ -68,38 +68,6 @@ impl Connector {
         let mut interval = time::interval(Duration::from_millis(50));
 
         loop {
-            match self.comms.try_recv() {
-                Some(ValidAccount {
-                    network_address,
-                    account_ty,
-                }) => {
-                    self.client
-                        .send_text(
-                            JudgementResponse::reasonable(network_address.address().clone())
-                                .unwrap(),
-                            false,
-                            true,
-                        )
-                        .await
-                        .unwrap();
-                }
-                Some(InvalidAccount {
-                    network_address,
-                    account_ty,
-                }) => {
-                    self.client
-                        .send_text(
-                            JudgementResponse::erroneous(network_address.address().clone())
-                                .unwrap(),
-                            false,
-                            true,
-                        )
-                        .await
-                        .unwrap();
-                }
-                _ => {}
-            }
-
             if self.client.ready_to_receive().unwrap() {
                 match self.client.receive().await {
                     Ok(Frame::Text { payload, .. }) => {
