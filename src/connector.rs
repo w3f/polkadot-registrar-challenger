@@ -113,8 +113,6 @@ impl Connector {
                 println!("Got error: {:?}", err);
                 ()
             });
-
-            panic!();
         }
     }
     async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
