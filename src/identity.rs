@@ -60,7 +60,7 @@ impl OnChainIdentity {
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
-    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountValidity) {
+    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountStatus) {
         use AccountType::*;
 
         match account_ty {
@@ -92,7 +92,7 @@ impl OnChainIdentity {
 pub struct AccountState {
     account: Account,
     account_ty: AccountType,
-    account_validity: AccountValidity,
+    account_validity: AccountStatus,
     challenge: Challenge,
     challenge_status: ChallengeStatus,
 }
@@ -102,7 +102,7 @@ impl AccountState {
         AccountState {
             account: account,
             account_ty: account_ty,
-            account_validity: AccountValidity::Unknown,
+            account_validity: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
             challenge_status: ChallengeStatus::Unconfirmed,
         }
@@ -110,7 +110,7 @@ impl AccountState {
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub enum AccountValidity {
+pub enum AccountStatus {
     #[serde(rename = "unknown")]
     Unknown,
     #[serde(rename = "valid")]
@@ -175,7 +175,7 @@ impl IdentityManager {
                     CommsMessage::NewJudgementRequest(ident) => {
                         self.handle_register_request(ident)?;
                     }
-                    ChallengeConfirmation {
+                    UpdateChallengeStatus {
                         network_address,
                         account_ty,
                         status
@@ -186,7 +186,7 @@ impl IdentityManager {
                             status,
                         );
                     }
-                    AccountConfirmation {
+                    UpdateAccountConfirmation {
                         network_address,
                         account_ty,
                         account_validity
@@ -243,7 +243,7 @@ impl IdentityManager {
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
-        account_validity: AccountValidity,
+        account_validity: AccountStatus,
     ) {
         // Confirm the validity of the account type.
         let ident = self
@@ -288,7 +288,7 @@ impl IdentityManager {
                 None
             };
 
-            self.comms.pairs.get(&state.account_ty).fatal().inform_task(
+            self.comms.pairs.get(&state.account_ty).fatal().notify_account_verification(
                 ident.network_address.clone(),
                 state.account.clone(),
                 state.challenge.clone(),
@@ -323,7 +323,7 @@ impl IdentityManager {
                 _ => panic!("Unsupported"),
             };
 
-            comms.inform_task(
+            comms.notify_account_verification(
                 ident.network_address.clone(),
                 state.account.clone(),
                 state.challenge.clone(),

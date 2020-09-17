@@ -1,4 +1,4 @@
-use crate::identity::{OnChainIdentity, AccountValidity};
+use crate::identity::{OnChainIdentity, AccountStatus};
 use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use matrix_sdk::identifiers::RoomId;
@@ -22,16 +22,16 @@ pub fn generate_comms(
 
 pub enum CommsMessage {
     NewJudgementRequest(OnChainIdentity),
-    InformTask {
+    VerifyAccount {
         network_address: NetworkAddress,
         account: Account,
         challenge: Challenge,
         room_id: Option<RoomId>,
     },
-    AccountConfirmation {
+    UpdateAccountConfirmation {
         network_address: NetworkAddress,
         account_ty: AccountType,
-        account_validity: AccountValidity
+        account_validity: AccountStatus
     },
     TrackRoomId {
         address: NetAccount,
@@ -42,7 +42,7 @@ pub enum CommsMessage {
         account_ty: AccountType,
     },
     InvalidRequest,
-    ChallengeConfirmation {
+    UpdateChallengeStatus {
         network_address: NetworkAddress,
         account_ty: AccountType,
         status: ChallengeStatus,
@@ -55,7 +55,7 @@ pub struct CommsMain {
 }
 
 impl CommsMain {
-    pub fn inform_task(
+    pub fn notify_account_verification(
         &self,
         network_address: NetworkAddress,
         account: Account,
@@ -63,7 +63,7 @@ impl CommsMain {
         room_id: Option<RoomId>,
     ) {
         self.sender
-            .send(CommsMessage::InformTask {
+            .send(CommsMessage::VerifyAccount {
                 network_address: network_address,
                 account: account,
                 challenge: challenge,
@@ -99,10 +99,10 @@ impl CommsVerifier {
     pub fn try_recv(&self) -> Option<CommsMessage> {
         self.recv.try_recv().ok()
     }
-    /// Receive a `InformTask` message. This is only used by the Matrix client as
+    /// Receive a `VerifyAccount` message. This is only used by the Matrix client as
     /// any other message type will panic.
     pub async fn recv_inform(&self) -> (NetworkAddress, Account, Challenge, Option<RoomId>) {
-        if let CommsMessage::InformTask {
+        if let CommsMessage::VerifyAccount {
             network_address,
             account,
             challenge,
@@ -127,9 +127,9 @@ impl CommsVerifier {
             .send(CommsMessage::NewJudgementRequest(ident))
             .fatal();
     }
-    pub fn notify_account_status(&self, network_address: NetworkAddress, account_ty: AccountType, account_validity: AccountValidity) {
+    pub fn notify_account_status(&self, network_address: NetworkAddress, account_ty: AccountType, account_validity: AccountStatus) {
         self.tx
-            .send(CommsMessage::AccountConfirmation {
+            .send(CommsMessage::UpdateAccountConfirmation {
                 network_address: network_address,
                 account_ty: account_ty,
                 account_validity: account_validity,
@@ -146,7 +146,7 @@ impl CommsVerifier {
     }
     pub fn notify_challenge_status(&self, network_address: NetworkAddress, account_ty: AccountType, status: ChallengeStatus) {
         self.tx
-            .send(CommsMessage::ChallengeConfirmation {
+            .send(CommsMessage::UpdateChallengeStatus {
                 network_address: network_address,
                 account_ty: account_ty,
                 status,
