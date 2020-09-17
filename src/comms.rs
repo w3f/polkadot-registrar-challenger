@@ -1,9 +1,7 @@
 use crate::identity::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress};
 use crossbeam::channel::{unbounded, Receiver, Sender};
-
 use matrix_sdk::identifiers::RoomId;
-
 use tokio::time::{self, Duration};
 
 pub fn generate_comms(

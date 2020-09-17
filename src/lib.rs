@@ -12,7 +12,7 @@ use adapters::MatrixClient;
 use connector::Connector;
 use db::Database;
 use identity::IdentityManager;
-use identity::TestClient;
+
 use primitives::{AccountType, Result};
 
 mod adapters;

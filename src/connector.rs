@@ -1,10 +1,9 @@
-use crate::comms::{CommsMessage, CommsVerifier};
+use crate::comms::{CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
 use serde_json::Value;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryFrom};
 use std::result::Result as StdResult;
-use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -105,8 +104,6 @@ impl Connector {
         Ok(connector)
     }
     pub async fn start(mut self) {
-        use EventType::*;
-
         loop {
             let _ = self.local().await.map_err(|err| {
                 // TODO: Log
@@ -173,7 +170,7 @@ impl Connector {
                     NewJudgementRequest => {
                         println!("Received a new identity from Watcher!");
                         if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
-                            if let Ok(ident) = OnChainIdentity::try_from(request) {
+                            if let Ok(_ident) = OnChainIdentity::try_from(request) {
                                 self.send_ack(None).await?;
                             } else {
                                 self.send_error().await?;

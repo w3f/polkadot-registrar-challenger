@@ -4,9 +4,7 @@ use crate::primitives::{
     Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
-
 use tokio::time::{self, Duration};
-
 use std::collections::HashMap;
 use std::convert::TryInto;
 
