@@ -1,7 +1,7 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database;
 use crate::primitives::{
-    Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
+    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
@@ -104,13 +104,13 @@ impl AccountState {
             account_ty: account_ty,
             account_validity: AccountValidity::Unknown,
             challenge: Challenge::gen_random(),
-            challenge_status: ChallengeStatus::Init,
+            challenge_status: ChallengeStatus::Unconfirmed,
         }
     }
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum AccountValidity {
+pub enum AccountValidity {
     #[serde(rename = "unknown")]
     Unknown,
     #[serde(rename = "valid")]
@@ -119,16 +119,6 @@ enum AccountValidity {
     Invalid,
     #[serde(rename = "notified")]
     Notified,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum ChallengeStatus {
-    #[serde(rename = "init")]
-    Init,
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "rejected")]
-    Rejected,
 }
 
 pub struct IdentityManager {
@@ -185,44 +175,26 @@ impl IdentityManager {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.handle_register_request(ident)?;
                     }
-                    ChallengeAccepted {
+                    ChallengeConfirmation {
                         network_address,
                         account_ty,
+                        status
                     } => {
                         self.handle_challenge_feedback(
                             network_address,
                             account_ty,
-                            ChallengeStatus::Accepted,
+                            status,
                         );
                     }
-                    ChallengeRejected {
+                    AccountConfirmation {
                         network_address,
                         account_ty,
-                    } => {
-                        self.handle_challenge_feedback(
-                            network_address,
-                            account_ty,
-                            ChallengeStatus::Rejected,
-                        );
-                    }
-                    ValidAccount {
-                        network_address,
-                        account_ty,
+                        account_validity
                     } => {
                         self.handle_validity_feedback(
                             network_address,
                             account_ty,
-                            AccountValidity::Valid,
-                        );
-                    }
-                    InvalidAccount {
-                        network_address,
-                        account_ty,
-                    } => {
-                        self.handle_validity_feedback(
-                            network_address,
-                            account_ty,
-                            AccountValidity::Invalid,
+                            account_validity,
                         );
                     }
                     TrackRoomId { address, room_id } => {

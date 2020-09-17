@@ -178,6 +178,16 @@ pub enum AccountType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ChallengeStatus {
+    #[serde(rename = "unconfirmed")]
+    Unconfirmed,
+    #[serde(rename = "accepted")]
+    Accepted,
+    #[serde(rename = "rejected")]
+    Rejected,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Challenge(String);
 
 impl Challenge {

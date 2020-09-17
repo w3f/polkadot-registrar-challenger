@@ -1,5 +1,5 @@
-use crate::identity::OnChainIdentity;
-use crate::primitives::{Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress};
+use crate::identity::{OnChainIdentity, AccountValidity};
+use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use matrix_sdk::identifiers::RoomId;
 use tokio::time::{self, Duration};
@@ -28,13 +28,10 @@ pub enum CommsMessage {
         challenge: Challenge,
         room_id: Option<RoomId>,
     },
-    ValidAccount {
+    AccountConfirmation {
         network_address: NetworkAddress,
         account_ty: AccountType,
-    },
-    InvalidAccount {
-        network_address: NetworkAddress,
-        account_ty: AccountType,
+        account_validity: AccountValidity
     },
     TrackRoomId {
         address: NetAccount,
@@ -45,13 +42,10 @@ pub enum CommsMessage {
         account_ty: AccountType,
     },
     InvalidRequest,
-    ChallengeAccepted {
+    ChallengeConfirmation {
         network_address: NetworkAddress,
         account_ty: AccountType,
-    },
-    ChallengeRejected {
-        network_address: NetworkAddress,
-        account_ty: AccountType,
+        status: ChallengeStatus,
     },
 }
 
@@ -133,19 +127,12 @@ impl CommsVerifier {
             .send(CommsMessage::NewOnChainIdentity(ident))
             .fatal();
     }
-    pub fn valid_feedback(&self, network_address: NetworkAddress, account_ty: AccountType) {
+    pub fn valid_feedback(&self, network_address: NetworkAddress, account_ty: AccountType, account_validity: AccountValidity) {
         self.tx
-            .send(CommsMessage::ValidAccount {
+            .send(CommsMessage::AccountConfirmation {
                 network_address: network_address,
                 account_ty: account_ty,
-            })
-            .fatal();
-    }
-    pub fn invalid_feedback(&self, network_address: NetworkAddress, account_ty: AccountType) {
-        self.tx
-            .send(CommsMessage::InvalidAccount {
-                network_address: network_address,
-                account_ty: account_ty,
+                account_validity: account_validity,
             })
             .fatal();
     }
@@ -157,19 +144,12 @@ impl CommsVerifier {
             })
             .fatal();
     }
-    pub fn challenge_accepted(&self, network_address: NetworkAddress, account_ty: AccountType) {
+    pub fn notify_challenge_status(&self, network_address: NetworkAddress, account_ty: AccountType, status: ChallengeStatus) {
         self.tx
-            .send(CommsMessage::ChallengeAccepted {
+            .send(CommsMessage::ChallengeConfirmation {
                 network_address: network_address,
                 account_ty: account_ty,
-            })
-            .fatal()
-    }
-    pub fn challenge_rejected(&self, network_address: NetworkAddress, account_ty: AccountType) {
-        self.tx
-            .send(CommsMessage::ChallengeRejected {
-                network_address: network_address,
-                account_ty: account_ty,
+                status,
             })
             .fatal()
     }
