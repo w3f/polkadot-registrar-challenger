@@ -74,6 +74,16 @@ impl OnChainIdentity {
             _ => {}
         }
     }
+    fn set_challenge_status(&mut self, account_ty: AccountType, challenge_status: ChallengeStatus) {
+        use AccountType::*;
+
+        match account_ty {
+            Matririx => {
+                self.matrix.as_mut().fatal().challenge_status = challenge_status;
+            }
+            _ => {}
+        }
+    }
     fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
     }
@@ -88,7 +98,7 @@ pub struct AccountState {
     account_ty: AccountType,
     account_validity: AccountValidity,
     challenge: Challenge,
-    confirmed: bool,
+    challenge_status: ChallengeStatus,
 }
 
 impl AccountState {
@@ -98,7 +108,7 @@ impl AccountState {
             account_ty: account_ty,
             account_validity: AccountValidity::Unknown,
             challenge: Challenge::gen_random(),
-            confirmed: false,
+            challenge_status: ChallengeStatus::Init,
         }
     }
 }
@@ -111,6 +121,18 @@ enum AccountValidity {
     Valid,
     #[serde(rename = "invalid")]
     Invalid,
+    #[serde(rename = "notified")]
+    Notified,
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+enum ChallengeStatus {
+    #[serde(rename = "init")]
+    Init,
+    #[serde(rename = "accepted")]
+    Accepted,
+    #[serde(rename = "rejected")]
+    Rejected
 }
 
 pub struct IdentityManager {
@@ -164,6 +186,18 @@ impl IdentityManager {
                 match msg {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.handle_register_request(ident)?;
+                    }
+                    ChallengeAccepted {
+                        network_address,
+                        account_ty
+                    } => {
+
+                    }
+                    ChallengeRejected {
+                        network_address,
+                        account_ty
+                    } => {
+
                     }
                     ValidAccount {
                         network_address,
@@ -226,6 +260,8 @@ impl IdentityManager {
                 ident.to_json().fatal(),
             )
             .fatal();
+
+        // TODO: Notify existing channels about invalidity.
     }
     fn handle_register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         let db_idents = self.db.scope("pending_identities");

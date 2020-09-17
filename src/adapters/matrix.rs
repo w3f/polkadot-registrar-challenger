@@ -251,7 +251,7 @@ impl Responder {
                         .map_err(|_| MatrixError::SendMessage)?;
 
                     self.comms
-                        .valid_feedback(network_address, AccountType::Matrix);
+                        .challenge_accepted(network_address, AccountType::Matrix);
                 }
                 Err(err) => {
                     self.send_msg(&err.to_string(), &room_id)
@@ -259,7 +259,7 @@ impl Responder {
                         .map_err(|_| MatrixError::SendMessage)?;
 
                     self.comms
-                        .invalid_feedback(network_address, AccountType::Matrix);
+                        .challenge_rejected(network_address, AccountType::Matrix);
                 }
             };
         }

@@ -47,6 +47,14 @@ pub enum CommsMessage {
         account_ty: AccountType,
     },
     InvalidRequest,
+    ChallengeAccepted {
+        network_address: NetworkAddress,
+        account_ty: AccountType,
+    },
+    ChallengeRejected {
+        network_address: NetworkAddress,
+        account_ty: AccountType,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -150,5 +158,21 @@ impl CommsVerifier {
                 room_id: room_id,
             })
             .fatal();
+    }
+    pub fn challenge_accepted(&self, network_address: NetworkAddress, account_ty: AccountType) {
+        self.tx
+            .send(CommsMessage::ChallengeAccepted {
+                network_address: network_address,
+                account_ty: account_ty,
+            })
+            .fatal()
+    }
+    pub fn challenge_rejected(&self, network_address: NetworkAddress, account_ty: AccountType) {
+        self.tx
+            .send(CommsMessage::ChallengeRejected {
+                network_address: network_address,
+                account_ty: account_ty,
+            })
+            .fatal()
     }
 }
