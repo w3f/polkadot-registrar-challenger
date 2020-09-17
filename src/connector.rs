@@ -76,6 +76,7 @@ struct Accounts {
     email: Option<Account>,
     web: Option<Account>,
     twitter: Option<Account>,
+    #[serde(rename = "riot")]
     matrix: Option<Account>,
 }
 
@@ -170,11 +171,13 @@ impl Connector {
                     NewJudgementRequest => {
                         println!("Received a new identity from Watcher!");
                         if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
-                            if let Ok(_ident) = OnChainIdentity::try_from(request) {
+                            let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
                                 self.send_ack(None).await?;
+
+                                self.comms.new_on_chain_identity(ident);
                             } else {
                                 self.send_error().await?;
-                            }
+                            };
                         } else {
                             self.send_error().await?;
                         }
@@ -182,7 +185,9 @@ impl Connector {
                     _ => {}
                 }
             }
-            _ => {}
+            _ => {
+                println!("RECEIVED SOMETHING ELSE");
+            }
         }
 
         Ok(())
