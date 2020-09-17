@@ -69,7 +69,10 @@ impl Connector {
 
         loop {
             match self.comms.try_recv() {
-                Some(ValidAccount { network_address }) => {
+                Some(ValidAccount {
+                    network_address,
+                    account_ty,
+                }) => {
                     self.client
                         .send_text(
                             JudgementResponse::reasonable(network_address.address().clone())
@@ -80,7 +83,10 @@ impl Connector {
                         .await
                         .unwrap();
                 }
-                Some(InvalidAccount { network_address }) => {
+                Some(InvalidAccount {
+                    network_address,
+                    account_ty,
+                }) => {
                     self.client
                         .send_text(
                             JudgementResponse::erroneous(network_address.address().clone())

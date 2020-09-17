@@ -1,7 +1,5 @@
 use crate::identity::OnChainIdentity;
-use crate::primitives::{
-    Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress,
-};
+use crate::primitives::{Account, AccountType, Challenge, Fatal, NetAccount, NetworkAddress};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 
 use matrix_sdk::identifiers::RoomId;
@@ -34,9 +32,11 @@ pub enum CommsMessage {
     },
     ValidAccount {
         network_address: NetworkAddress,
+        account_ty: AccountType,
     },
     InvalidAccount {
         network_address: NetworkAddress,
+        account_ty: AccountType,
     },
     TrackRoomId {
         address: NetAccount,
@@ -127,17 +127,19 @@ impl CommsVerifier {
             .send(CommsMessage::NewOnChainIdentity(ident))
             .fatal();
     }
-    pub fn valid_feedback(&self, network_address: NetworkAddress) {
+    pub fn valid_feedback(&self, network_address: NetworkAddress, account_ty: AccountType) {
         self.tx
             .send(CommsMessage::ValidAccount {
                 network_address: network_address,
+                account_ty: account_ty,
             })
             .fatal();
     }
-    pub fn invalid_feedback(&self, network_address: NetworkAddress) {
+    pub fn invalid_feedback(&self, network_address: NetworkAddress, account_ty: AccountType) {
         self.tx
             .send(CommsMessage::InvalidAccount {
                 network_address: network_address,
+                account_ty: account_ty,
             })
             .fatal();
     }

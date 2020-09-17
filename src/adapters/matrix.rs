@@ -114,9 +114,9 @@ impl MatrixClient {
             room_id
         } else {
             // When the UserId is invalid, even though it can be successfully
-            // converted, creating a room seems to block here forever. So we
+            // converted, creating a room seems to block forever here. So we
             // just set a timeout and abort if exceeded.
-            if let Ok(room_id) = time::timeout(Duration::from_secs(20), async {
+            if let Ok(room_id) = time::timeout(Duration::from_secs(15), async {
                 let to_invite = [account
                     .as_str()
                     .clone()
@@ -229,7 +229,7 @@ impl Responder {
                 _ => panic!("Received unrecognized message type on Matrix client. Report as bug."),
             };
 
-            let verifier = Verifier::new(network_address, challenge);
+            let verifier = Verifier::new(network_address.clone(), challenge);
 
             // TODO: Write a nicer function for this.
             let msg_body = if let SyncMessageEvent {
@@ -245,14 +245,22 @@ impl Responder {
             let room_id = room.read().await.room_id.clone();
 
             match verifier.verify(&msg_body) {
-                Ok(msg) => self
-                    .send_msg(&msg, &room_id)
-                    .await
-                    .map_err(|_| MatrixError::SendMessage)?,
-                Err(err) => self
-                    .send_msg(&err.to_string(), &room_id)
-                    .await
-                    .map_err(|_| MatrixError::SendMessage)?,
+                Ok(msg) => {
+                    self.send_msg(&msg, &room_id)
+                        .await
+                        .map_err(|_| MatrixError::SendMessage)?;
+
+                    self.comms
+                        .valid_feedback(network_address, AccountType::Matrix);
+                }
+                Err(err) => {
+                    self.send_msg(&err.to_string(), &room_id)
+                        .await
+                        .map_err(|_| MatrixError::SendMessage)?;
+
+                    self.comms
+                        .invalid_feedback(network_address, AccountType::Matrix);
+                }
             };
         }
 

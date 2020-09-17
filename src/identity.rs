@@ -64,10 +64,20 @@ impl OnChainIdentity {
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
-    pub fn from_json(val: &[u8]) -> Result<Self> {
+    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountValidity) {
+        use AccountType::*;
+
+        match account_ty {
+            Matrix => {
+                self.matrix.as_mut().fatal().account_validity = account_validity;
+            }
+            _ => {}
+        }
+    }
+    fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
     }
-    pub fn to_json(&self) -> Result<Vec<u8>> {
+    fn to_json(&self) -> Result<Vec<u8>> {
         Ok(serde_json::to_vec(self)?)
     }
 }
@@ -155,8 +165,26 @@ impl IdentityManager {
                     CommsMessage::NewOnChainIdentity(ident) => {
                         self.handle_register_request(ident)?;
                     }
-                    ValidAccount { network_address: _ } => {}
-                    InvalidAccount { network_address: _ } => {}
+                    ValidAccount {
+                        network_address,
+                        account_ty,
+                    } => {
+                        self.handle_validity_feedback(
+                            network_address,
+                            account_ty,
+                            AccountValidity::Valid,
+                        );
+                    }
+                    InvalidAccount {
+                        network_address,
+                        account_ty,
+                    } => {
+                        self.handle_validity_feedback(
+                            network_address,
+                            account_ty,
+                            AccountValidity::Invalid,
+                        );
+                    }
                     TrackRoomId { address, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(address.as_str(), room_id.as_bytes())?;
@@ -173,6 +201,31 @@ impl IdentityManager {
                 interval.tick().await;
             }
         }
+    }
+    fn handle_validity_feedback(
+        &mut self,
+        network_address: NetworkAddress,
+        account_ty: AccountType,
+        account_validity: AccountValidity,
+    ) {
+        // Confirm the validity of the account type.
+        let ident = self
+            .idents
+            .get_mut(network_address.address())
+            .map(|ident| {
+                ident.set_validity(account_ty, account_validity);
+                ident
+            })
+            .fatal();
+
+        // Save that info to storage.
+        let db_idents = self.db.scope("pending_identities");
+        db_idents
+            .put(
+                ident.network_address.address().as_str(),
+                ident.to_json().fatal(),
+            )
+            .fatal();
     }
     fn handle_register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
         let db_idents = self.db.scope("pending_identities");
