@@ -132,7 +132,7 @@ enum ChallengeStatus {
     #[serde(rename = "accepted")]
     Accepted,
     #[serde(rename = "rejected")]
-    Rejected
+    Rejected,
 }
 
 pub struct IdentityManager {
@@ -189,15 +189,23 @@ impl IdentityManager {
                     }
                     ChallengeAccepted {
                         network_address,
-                        account_ty
+                        account_ty,
                     } => {
-
+                        self.handle_challenge_feedback(
+                            network_address,
+                            account_ty,
+                            ChallengeStatus::Accepted,
+                        );
                     }
                     ChallengeRejected {
                         network_address,
-                        account_ty
+                        account_ty,
                     } => {
-
+                        self.handle_challenge_feedback(
+                            network_address,
+                            account_ty,
+                            ChallengeStatus::Rejected,
+                        );
                     }
                     ValidAccount {
                         network_address,
@@ -235,6 +243,22 @@ impl IdentityManager {
                 interval.tick().await;
             }
         }
+    }
+    fn handle_challenge_feedback(
+        &mut self,
+        network_address: NetworkAddress,
+        account_ty: AccountType,
+        challenge_status: ChallengeStatus,
+    ) {
+        // Set the challenge status of the account type.
+        let ident = self
+            .idents
+            .get_mut(network_address.address())
+            .map(|ident| {
+                ident.set_challenge_status(account_ty, challenge_status);
+                ident
+            })
+            .fatal();
     }
     fn handle_validity_feedback(
         &mut self,
