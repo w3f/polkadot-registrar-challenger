@@ -21,8 +21,8 @@ pub fn generate_comms(
 }
 
 pub enum CommsMessage {
-    NewOnChainIdentity(OnChainIdentity),
-    Inform {
+    NewJudgementRequest(OnChainIdentity),
+    InformTask {
         network_address: NetworkAddress,
         account: Account,
         challenge: Challenge,
@@ -55,7 +55,7 @@ pub struct CommsMain {
 }
 
 impl CommsMain {
-    pub fn inform(
+    pub fn inform_task(
         &self,
         network_address: NetworkAddress,
         account: Account,
@@ -63,7 +63,7 @@ impl CommsMain {
         room_id: Option<RoomId>,
     ) {
         self.sender
-            .send(CommsMessage::Inform {
+            .send(CommsMessage::InformTask {
                 network_address: network_address,
                 account: account,
                 challenge: challenge,
@@ -99,10 +99,10 @@ impl CommsVerifier {
     pub fn try_recv(&self) -> Option<CommsMessage> {
         self.recv.try_recv().ok()
     }
-    /// Receive a `Inform` message. This is only used by the Matrix client as
+    /// Receive a `InformTask` message. This is only used by the Matrix client as
     /// any other message type will panic.
     pub async fn recv_inform(&self) -> (NetworkAddress, Account, Challenge, Option<RoomId>) {
-        if let CommsMessage::Inform {
+        if let CommsMessage::InformTask {
             network_address,
             account,
             challenge,
@@ -114,7 +114,7 @@ impl CommsVerifier {
             panic!("received invalid message type on Matrix client");
         }
     }
-    pub fn request_account_state(&self, account: Account, account_ty: AccountType) {
+    pub fn notify_account_state_request(&self, account: Account, account_ty: AccountType) {
         self.tx
             .send(CommsMessage::RequestAccountState {
                 account: account,
@@ -122,12 +122,12 @@ impl CommsVerifier {
             })
             .fatal();
     }
-    pub fn new_on_chain_identity(&self, ident: OnChainIdentity) {
+    pub fn notify_new_identity(&self, ident: OnChainIdentity) {
         self.tx
-            .send(CommsMessage::NewOnChainIdentity(ident))
+            .send(CommsMessage::NewJudgementRequest(ident))
             .fatal();
     }
-    pub fn valid_feedback(&self, network_address: NetworkAddress, account_ty: AccountType, account_validity: AccountValidity) {
+    pub fn notify_account_status(&self, network_address: NetworkAddress, account_ty: AccountType, account_validity: AccountValidity) {
         self.tx
             .send(CommsMessage::AccountConfirmation {
                 network_address: network_address,
@@ -136,7 +136,7 @@ impl CommsVerifier {
             })
             .fatal();
     }
-    pub fn track_room_id(&self, address: NetAccount, room_id: RoomId) {
+    pub fn notify_room_id(&self, address: NetAccount, room_id: RoomId) {
         self.tx
             .send(CommsMessage::TrackRoomId {
                 address: address,

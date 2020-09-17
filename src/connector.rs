@@ -174,7 +174,7 @@ impl Connector {
                             let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
                                 self.send_ack(None).await?;
 
-                                self.comms.new_on_chain_identity(ident);
+                                self.comms.notify_new_identity(ident);
                             } else {
                                 self.send_error().await?;
                             };

@@ -135,7 +135,7 @@ impl MatrixClient {
                     .map_err(|_| MatrixError::JoinRoom)?;
 
                 self.comms
-                    .track_room_id(network_address.address().clone(), resp.room_id.clone());
+                    .notify_room_id(network_address.address().clone(), resp.room_id.clone());
 
                 StdResult::<_, MatrixError>::Ok(resp.room_id)
             })
@@ -212,13 +212,13 @@ impl Responder {
 
         if let SyncRoom::Joined(room) = room {
             // Request information about the sender.
-            self.comms.request_account_state(
+            self.comms.notify_account_state_request(
                 Account::from(event.sender.as_str().to_string()),
                 AccountType::Matrix,
             );
 
             let (network_address, challenge) = match self.comms.recv().await {
-                CommsMessage::Inform {
+                CommsMessage::InformTask {
                     network_address,
                     challenge,
                     ..

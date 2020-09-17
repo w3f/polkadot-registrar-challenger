@@ -41,7 +41,7 @@ impl TestClient {
         let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
         println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
 
-        self.comms.new_on_chain_identity(ident);
+        self.comms.notify_new_identity(ident);
     }
 }
 
@@ -172,7 +172,7 @@ impl IdentityManager {
         loop {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
-                    CommsMessage::NewOnChainIdentity(ident) => {
+                    CommsMessage::NewJudgementRequest(ident) => {
                         self.handle_register_request(ident)?;
                     }
                     ChallengeConfirmation {
@@ -288,7 +288,7 @@ impl IdentityManager {
                 None
             };
 
-            self.comms.pairs.get(&state.account_ty).fatal().inform(
+            self.comms.pairs.get(&state.account_ty).fatal().inform_task(
                 ident.network_address.clone(),
                 state.account.clone(),
                 state.challenge.clone(),
@@ -323,7 +323,7 @@ impl IdentityManager {
                 _ => panic!("Unsupported"),
             };
 
-            comms.inform(
+            comms.inform_task(
                 ident.network_address.clone(),
                 state.account.clone(),
                 state.challenge.clone(),
