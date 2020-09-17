@@ -1,8 +1,8 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database;
 use crate::primitives::{
-    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress,
-    PubKey, Result,
+    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount,
+    NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
@@ -222,7 +222,7 @@ impl IdentityManager {
             .idents
             .get_mut(network_address.address())
             .map(|ident| {
-                ident.set_challenge_status(account_ty, challenge_status);
+                ident.set_challenge_status(account_ty, challenge_status.clone());
                 ident
             })
             .fatal();
@@ -235,6 +235,15 @@ impl IdentityManager {
                 ident.to_json().fatal(),
             )
             .fatal();
+
+        // TODO: Handle additional accounts.
+        if let ChallengeStatus::Accepted = challenge_status {
+            self.comms
+                .pairs
+                .get(&AccountType::ReservedConnector)
+                .fatal()
+                .judge_identity(network_address, Judgement::Reasonable);
+        }
     }
     fn handle_account_confirmation(
         &mut self,

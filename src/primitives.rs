@@ -209,6 +209,14 @@ impl Challenge {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Judgement {
+    #[serde(rename = "reasonable")]
+    Reasonable,
+    #[serde(rename = "erroneous")]
+    Erroneous,
+}
+
 pub trait Fatal<T> {
     fn fatal(self) -> T;
 }

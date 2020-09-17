@@ -1,6 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
-use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
+use crate::primitives::{Account, AccountType, Judgement, NetAccount, NetworkAddress, Result};
 use futures::select_biased;
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -39,14 +39,6 @@ struct ErrorResponse {
 struct JudgementResponse {
     address: NetAccount,
     judgement: Judgement,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum Judgement {
-    #[serde(rename = "reasonable")]
-    Reasonable,
-    #[serde(rename = "erroneous")]
-    Erroneous,
 }
 
 impl JudgementResponse {
@@ -157,14 +149,17 @@ impl Connector {
 
         if let Some(msg) = self.comms.try_recv() {
             match msg {
-                CommsMessage::JudgeIdentity { network_address } => {
+                CommsMessage::JudgeIdentity {
+                    network_address,
+                    judgement,
+                } => {
                     self.client
                         .send_text(
                             serde_json::to_string(&Message {
                                 event: EventType::JudgementResult,
                                 data: serde_json::to_value(&JudgementResponse {
                                     address: network_address.address().clone(),
-                                    judgement: Judgement::Reasonable,
+                                    judgement: judgement,
                                 })
                                 .map_err(|_| ConnectorError::Response)?,
                             })

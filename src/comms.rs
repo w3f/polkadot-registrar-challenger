@@ -1,6 +1,6 @@
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress,
+    Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount, NetworkAddress,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use matrix_sdk::identifiers::RoomId;
@@ -51,6 +51,7 @@ pub enum CommsMessage {
     },
     JudgeIdentity {
         network_address: NetworkAddress,
+        judgement: Judgement,
     },
 }
 
@@ -79,10 +80,11 @@ impl CommsMain {
     pub fn invalid_request(&self) {
         self.sender.send(CommsMessage::InvalidRequest).fatal();
     }
-    pub fn judge_identity(&self, network_address: NetworkAddress) {
+    pub fn judge_identity(&self, network_address: NetworkAddress, judgement: Judgement) {
         self.sender
             .send(CommsMessage::JudgeIdentity {
                 network_address: network_address,
+                judgement: judgement,
             })
             .fatal();
     }
