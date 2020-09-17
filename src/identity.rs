@@ -1,7 +1,8 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database;
 use crate::primitives::{
-    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress, PubKey, Result,
+    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress,
+    PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
@@ -178,20 +179,16 @@ impl IdentityManager {
                     UpdateChallengeStatus {
                         network_address,
                         account_ty,
-                        status
+                        status,
                     } => {
-                        self.handle_challenge_feedback(
-                            network_address,
-                            account_ty,
-                            status,
-                        );
+                        self.handle_challenge_update(network_address, account_ty, status);
                     }
-                    UpdateAccountConfirmation {
+                    UpdateAccountStatus {
                         network_address,
                         account_ty,
-                        account_validity
+                        account_validity,
                     } => {
-                        self.handle_validity_feedback(
+                        self.handle_account_confirmation(
                             network_address,
                             account_ty,
                             account_validity,
@@ -214,7 +211,7 @@ impl IdentityManager {
             }
         }
     }
-    fn handle_challenge_feedback(
+    fn handle_challenge_update(
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
@@ -239,7 +236,7 @@ impl IdentityManager {
             )
             .fatal();
     }
-    fn handle_validity_feedback(
+    fn handle_account_confirmation(
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
@@ -288,12 +285,16 @@ impl IdentityManager {
                 None
             };
 
-            self.comms.pairs.get(&state.account_ty).fatal().notify_account_verification(
-                ident.network_address.clone(),
-                state.account.clone(),
-                state.challenge.clone(),
-                room_id,
-            );
+            self.comms
+                .pairs
+                .get(&state.account_ty)
+                .fatal()
+                .notify_account_verification(
+                    ident.network_address.clone(),
+                    state.account.clone(),
+                    state.challenge.clone(),
+                    room_id,
+                );
         });
 
         Ok(())

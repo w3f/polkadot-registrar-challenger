@@ -1,5 +1,7 @@
-use crate::identity::{OnChainIdentity, AccountStatus};
-use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress};
+use crate::identity::{AccountStatus, OnChainIdentity};
+use crate::primitives::{
+    Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, NetworkAddress,
+};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use matrix_sdk::identifiers::RoomId;
 use tokio::time::{self, Duration};
@@ -28,10 +30,10 @@ pub enum CommsMessage {
         challenge: Challenge,
         room_id: Option<RoomId>,
     },
-    UpdateAccountConfirmation {
+    UpdateAccountStatus {
         network_address: NetworkAddress,
         account_ty: AccountType,
-        account_validity: AccountStatus
+        account_validity: AccountStatus,
     },
     TrackRoomId {
         address: NetAccount,
@@ -127,9 +129,14 @@ impl CommsVerifier {
             .send(CommsMessage::NewJudgementRequest(ident))
             .fatal();
     }
-    pub fn notify_account_status(&self, network_address: NetworkAddress, account_ty: AccountType, account_validity: AccountStatus) {
+    pub fn notify_account_status(
+        &self,
+        network_address: NetworkAddress,
+        account_ty: AccountType,
+        account_validity: AccountStatus,
+    ) {
         self.tx
-            .send(CommsMessage::UpdateAccountConfirmation {
+            .send(CommsMessage::UpdateAccountStatus {
                 network_address: network_address,
                 account_ty: account_ty,
                 account_validity: account_validity,
@@ -144,7 +151,12 @@ impl CommsVerifier {
             })
             .fatal();
     }
-    pub fn notify_challenge_status(&self, network_address: NetworkAddress, account_ty: AccountType, status: ChallengeStatus) {
+    pub fn notify_challenge_status(
+        &self,
+        network_address: NetworkAddress,
+        account_ty: AccountType,
+        status: ChallengeStatus,
+    ) {
         self.tx
             .send(CommsMessage::UpdateChallengeStatus {
                 network_address: network_address,

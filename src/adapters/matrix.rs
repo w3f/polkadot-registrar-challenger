@@ -1,5 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::primitives::{Account, AccountType, Result, ChallengeStatus};
+use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
 use crate::verifier::Verifier;
 
 use matrix_sdk::{
@@ -251,16 +251,22 @@ impl Responder {
                         .await
                         .map_err(|_| MatrixError::SendMessage)?;
 
-                    self.comms
-                        .notify_challenge_status(network_address, AccountType::Matrix, ChallengeStatus::Accepted);
+                    self.comms.notify_challenge_status(
+                        network_address,
+                        AccountType::Matrix,
+                        ChallengeStatus::Accepted,
+                    );
                 }
                 Err(err) => {
                     self.send_msg(&err.to_string(), &room_id)
                         .await
                         .map_err(|_| MatrixError::SendMessage)?;
 
-                    self.comms
-                        .notify_challenge_status(network_address, AccountType::Matrix, ChallengeStatus::Rejected);
+                    self.comms.notify_challenge_status(
+                        network_address,
+                        AccountType::Matrix,
+                        ChallengeStatus::Rejected,
+                    );
                 }
             };
         }
