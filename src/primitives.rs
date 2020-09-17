@@ -156,7 +156,7 @@ impl TryFrom<NetAccount> for NetworkAddress {
         Ok(NetworkAddress {
             address: value,
             algo: Algorithm::Schnorr,
-            pub_key: PubKey::try_from(bytes[1..33].to_vec())?,
+            pub_key: PubKey::try_from(bytes[1..34].to_vec())?,
         })
     }
 }

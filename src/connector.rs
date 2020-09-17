@@ -7,7 +7,7 @@ use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
     #[serde(rename = "ack")]
     Ack,
@@ -19,29 +19,29 @@ enum EventType {
     JudgementResult,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Message {
     event: EventType,
     data: Value,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct AckResponse {
     result: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ErrorResponse {
     error: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct JudgementResponse {
     address: NetAccount,
     judgement: Judgement,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 enum Judgement {
     #[serde(rename = "reasonable")]
     Reasonable,
@@ -64,13 +64,13 @@ impl JudgementResponse {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct JudgementRequest {
     address: NetAccount,
     accounts: Accounts,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Accounts {
     display_name: Option<String>,
     legal_name: Option<String>,
@@ -95,10 +95,14 @@ enum ConnectorError {
 
 impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
-        Ok(Connector {
+        let mut connector = Connector {
             client: WebSocket::connect(url).await?,
             comms: comms,
-        })
+        };
+
+        connector.send_ack(Some("Connection established")).await?;
+
+        Ok(connector)
     }
     pub async fn start(mut self) {
         use EventType::*;
@@ -106,17 +110,22 @@ impl Connector {
         loop {
             let _ = self.local().await.map_err(|err| {
                 // TODO: Log
+                println!("Got error: {:?}", err);
                 ()
             });
+
+            panic!();
         }
     }
-    async fn send_ack(&mut self) -> StdResult<(), ConnectorError> {
+    async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
         self.client
             .send_text(
                 serde_json::to_string(&Message {
                     event: EventType::Ack,
                     data: serde_json::to_value(&AckResponse {
-                        result: "TODO".to_string(),
+                        result: msg
+                            .map(|txt| txt.to_string())
+                            .unwrap_or("Message acknowledged".to_string()),
                     })
                     .map_err(|_| ConnectorError::Response)?,
                 })
@@ -134,7 +143,7 @@ impl Connector {
                 serde_json::to_string(&Message {
                     event: EventType::Error,
                     data: serde_json::to_value(&ErrorResponse {
-                        error: "TODO".to_string(),
+                        error: "Message is invalid. Rejected".to_string(),
                     })
                     .map_err(|_| ConnectorError::Response)?,
                 })
@@ -147,6 +156,8 @@ impl Connector {
             .map(|_| ())
     }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
+        use EventType::*;
+
         match self.client.receive().await {
             Ok(Frame::Text { payload, .. }) => {
                 let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload)
@@ -158,11 +169,14 @@ impl Connector {
                     return Ok(());
                 };
 
+                println!("DEBUG MSG: {:?}", msg);
+
                 match msg.event {
                     NewJudgementRequest => {
+                        println!("Received a new identity from Watcher!");
                         if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
                             if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                self.send_ack().await?;
+                                self.send_ack(None).await?;
                             } else {
                                 self.send_error().await?;
                             }

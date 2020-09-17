@@ -117,6 +117,7 @@ impl MatrixClient {
             // converted, creating a room seems to block forever here. So we
             // just set a timeout and abort if exceeded.
             if let Ok(room_id) = time::timeout(Duration::from_secs(15), async {
+                println!("Connecting to {}", account.as_str());
                 let to_invite = [account
                     .as_str()
                     .clone()
