@@ -49,6 +49,9 @@ pub enum CommsMessage {
         account_ty: AccountType,
         status: ChallengeStatus,
     },
+    JudgeIdentity {
+        network_address: NetworkAddress,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +78,13 @@ impl CommsMain {
     }
     pub fn invalid_request(&self) {
         self.sender.send(CommsMessage::InvalidRequest).fatal();
+    }
+    pub fn judge_identity(&self, network_address: NetworkAddress) {
+        self.sender
+            .send(CommsMessage::JudgeIdentity {
+                network_address: network_address,
+            })
+            .fatal();
     }
 }
 

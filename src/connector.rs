@@ -1,6 +1,7 @@
-use crate::comms::CommsVerifier;
+use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
+use futures::select_biased;
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
@@ -104,15 +105,6 @@ impl Connector {
 
         Ok(connector)
     }
-    pub async fn start(mut self) {
-        loop {
-            let _ = self.local().await.map_err(|err| {
-                // TODO: Log
-                println!("Got error: {:?}", err);
-                ()
-            });
-        }
-    }
     async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
         self.client
             .send_text(
@@ -151,8 +143,41 @@ impl Connector {
             .map_err(|_| ConnectorError::Response)
             .map(|_| ())
     }
+    pub async fn start(mut self) {
+        loop {
+            let _ = self.local().await.map_err(|err| {
+                // TODO: Log
+                println!("Got error: {:?}", err);
+                ()
+            });
+        }
+    }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         use EventType::*;
+
+        if let Some(msg) = self.comms.try_recv() {
+            match msg {
+                CommsMessage::JudgeIdentity { network_address } => {
+                    self.client
+                        .send_text(
+                            serde_json::to_string(&Message {
+                                event: EventType::JudgementResult,
+                                data: serde_json::to_value(&JudgementResponse {
+                                    address: network_address.address().clone(),
+                                    judgement: Judgement::Reasonable,
+                                })
+                                .map_err(|_| ConnectorError::Response)?,
+                            })
+                            .map_err(|_| ConnectorError::Response)?,
+                            false,
+                            true,
+                        )
+                        .await
+                        .map_err(|_| ConnectorError::Response)?;
+                }
+                _ => panic!("Received invalid message in Connector"),
+            }
+        }
 
         match self.client.receive().await {
             Ok(Frame::Text { payload, .. }) => {
