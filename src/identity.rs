@@ -311,7 +311,10 @@ impl IdentityManager {
 
         // Only matrix supported for now.
         ident.matrix.as_ref().map::<(), _>(|state| {
-            let room_id = if let Some(bytes) = db_rooms.get(ident.network_address.address().as_str()).fatal() {
+            let room_id = if let Some(bytes) = db_rooms
+                .get(ident.network_address.address().as_str())
+                .fatal()
+            {
                 Some(std::str::from_utf8(&bytes).fatal().try_into().fatal())
             } else {
                 None

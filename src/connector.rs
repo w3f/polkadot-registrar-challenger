@@ -1,9 +1,39 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
+use serde_json::Value;
 use std::convert::{TryFrom, TryInto};
+use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
+
+#[derive(Serialize, Deserialize)]
+enum EventType {
+    #[serde(rename = "ack")]
+    Ack,
+    #[serde(rename = "error")]
+    Error,
+    #[serde(rename = "newJudgementRequest")]
+    NewJudgementRequest,
+    #[serde(rename = "judgementResult")]
+    JudgementResult,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Message {
+    event: EventType,
+    data: Value,
+}
+
+#[derive(Serialize, Deserialize)]
+struct AckResponse {
+    result: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
 
 #[derive(Serialize, Deserialize)]
 struct JudgementResponse {
@@ -55,6 +85,14 @@ pub struct Connector {
     comms: CommsVerifier,
 }
 
+#[derive(Debug, Fail)]
+enum ConnectorError {
+    #[fail(display = "")]
+    InvalidMessage,
+    #[fail(display = "")]
+    Response,
+}
+
 impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
         Ok(Connector {
@@ -63,27 +101,75 @@ impl Connector {
         })
     }
     pub async fn start(mut self) {
-        use CommsMessage::*;
-
-        let mut interval = time::interval(Duration::from_millis(50));
+        use EventType::*;
 
         loop {
-            if self.client.ready_to_receive().unwrap() {
-                match self.client.receive().await {
-                    Ok(Frame::Text { payload, .. }) => {
-                        self.comms.new_on_chain_identity(
-                            serde_json::from_str::<JudgementRequest>(&payload)
-                                .unwrap()
-                                .try_into()
-                                .unwrap(),
-                        );
+            let _ = self.local().await.map_err(|err| {
+                // TODO: Log
+                ()
+            });
+        }
+    }
+    async fn send_ack(&mut self) -> StdResult<(), ConnectorError> {
+        self.client
+            .send_text(
+                serde_json::to_string(&Message {
+                    event: EventType::Ack,
+                    data: serde_json::to_value(&AckResponse {
+                        result: "TODO".to_string(),
+                    })
+                    .map_err(|_| ConnectorError::Response)?,
+                })
+                .map_err(|_| ConnectorError::Response)?,
+                false,
+                true,
+            )
+            .await
+            .map_err(|_| ConnectorError::Response)
+            .map(|_| ())
+    }
+    async fn send_error(&mut self) -> StdResult<(), ConnectorError> {
+        self.client
+            .send_text(
+                serde_json::to_string(&Message {
+                    event: EventType::Error,
+                    data: serde_json::to_value(&ErrorResponse {
+                        error: "TODO".to_string(),
+                    })
+                    .map_err(|_| ConnectorError::Response)?,
+                })
+                .map_err(|_| ConnectorError::Response)?,
+                false,
+                true,
+            )
+            .await
+            .map_err(|_| ConnectorError::Response)
+            .map(|_| ())
+    }
+    async fn local(&mut self) -> StdResult<(), ConnectorError> {
+        match self.client.receive().await {
+            Ok(Frame::Text { payload, .. }) => {
+                let msg = serde_json::from_str::<Message>(&payload).unwrap();
+
+                match msg.event {
+                    NewJudgementRequest => {
+                        if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
+                            if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                self.send_ack().await?;
+                            } else {
+                                self.send_error().await?;
+                            }
+                        } else {
+                            self.send_error().await?;
+                        }
                     }
                     _ => {}
                 }
             }
-
-            interval.tick().await;
+            _ => {}
         }
+
+        Ok(())
     }
 }
 
