@@ -158,6 +158,8 @@ impl IdentityManager {
             idents.insert(ident.network_address.address().clone(), ident);
         }
 
+        println!("PRELOADED: {:?}", idents);
+
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {
@@ -259,6 +261,15 @@ impl IdentityManager {
                 ident
             })
             .fatal();
+
+        // Save that info to storage.
+        let db_idents = self.db.scope("pending_identities");
+        db_idents
+            .put(
+                ident.network_address.address().as_str(),
+                ident.to_json().fatal(),
+            )
+            .fatal();
     }
     fn handle_validity_feedback(
         &mut self,
@@ -300,7 +311,7 @@ impl IdentityManager {
 
         // Only matrix supported for now.
         ident.matrix.as_ref().map::<(), _>(|state| {
-            let room_id = if let Some(bytes) = db_rooms.get(&ident.pub_key().to_bytes()).fatal() {
+            let room_id = if let Some(bytes) = db_rooms.get(ident.network_address.address().as_str()).fatal() {
                 Some(std::str::from_utf8(&bytes).fatal().try_into().fatal())
             } else {
                 None
