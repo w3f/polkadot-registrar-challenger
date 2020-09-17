@@ -26,7 +26,7 @@ impl Verifier {
     pub fn verify(&self, response: &str) -> Result<String, VerifierError> {
         let sig = Signature::from(
             SchnorrkelSignature::from_bytes(
-                &hex::decode(response).map_err(|_| VerifierError::InvalidSignature)?,
+                &hex::decode(response.replace("0x", "")).map_err(|_| VerifierError::InvalidSignature)?,
             )
             .map_err(|_| VerifierError::InvalidSignature)?,
         );

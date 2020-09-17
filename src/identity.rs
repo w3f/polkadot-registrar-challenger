@@ -22,11 +22,7 @@ impl TestClient {
         let pk = sk.to_public();
 
         let ident = OnChainIdentity {
-            network_address: NetworkAddress {
-                address: NetAccount::from("test"),
-                algo: Algorithm::Schnorr,
-                pub_key: PubKey::from(pk),
-            },
+            network_address: NetAccount::from("136nXcbVseRqQHvu6iDraV2Qi9p4YCMBgdeDpDLLgmRjEqVb").try_into().unwrap(),
             display_name: None,
             legal_name: None,
             email: None,
@@ -76,7 +72,7 @@ impl OnChainIdentity {
         use AccountType::*;
 
         match account_ty {
-            Matririx => {
+            Matrix => {
                 self.matrix.as_mut().fatal().challenge_status = challenge_status;
             }
             _ => {}
