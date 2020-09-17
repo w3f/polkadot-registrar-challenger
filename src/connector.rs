@@ -1,8 +1,8 @@
-use crate::comms::{CommsVerifier};
+use crate::comms::CommsVerifier;
 use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
 use serde_json::Value;
-use std::convert::{TryFrom};
+use std::convert::TryFrom;
 use std::result::Result as StdResult;
 use websockets::{Frame, WebSocket};
 

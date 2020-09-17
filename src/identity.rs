@@ -4,9 +4,9 @@ use crate::primitives::{
     Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use tokio::time::{self, Duration};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use tokio::time::{self, Duration};
 
 // TODO: add cfg
 pub struct TestClient {
@@ -22,7 +22,9 @@ impl TestClient {
         let pk = sk.to_public();
 
         let ident = OnChainIdentity {
-            network_address: NetAccount::from("136nXcbVseRqQHvu6iDraV2Qi9p4YCMBgdeDpDLLgmRjEqVb").try_into().unwrap(),
+            network_address: NetAccount::from("136nXcbVseRqQHvu6iDraV2Qi9p4YCMBgdeDpDLLgmRjEqVb")
+                .try_into()
+                .unwrap(),
             display_name: None,
             legal_name: None,
             email: None,
