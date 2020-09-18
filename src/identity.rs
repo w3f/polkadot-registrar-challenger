@@ -96,7 +96,7 @@ pub struct AccountState {
     account_validity: AccountStatus,
     challenge: Challenge,
     challenge_status: ChallengeStatus,
-    updated_since_last: bool,
+    skip_infom: bool,
 }
 
 impl AccountState {
@@ -107,7 +107,7 @@ impl AccountState {
             account_validity: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
             challenge_status: ChallengeStatus::Unconfirmed,
-            updated_since_last: false,
+            skip_infom: false,
         }
     }
 }
@@ -287,7 +287,7 @@ impl IdentityManager {
                     == ex_ident.matrix.as_ref().unwrap().account
                 {
                     ident.matrix = ex_ident.matrix.map(|mut state| {
-                        state.updated_since_last = true;
+                        state.skip_infom = true;
                         state
                     });
                 }
@@ -304,7 +304,7 @@ impl IdentityManager {
         // Only matrix supported for now.
         // TODO: support additional account types.
         ident.matrix.as_ref().map::<(), _>(|state| {
-            if state.updated_since_last {
+            if state.skip_infom {
                 return;
             }
 
