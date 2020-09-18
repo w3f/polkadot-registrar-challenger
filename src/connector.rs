@@ -1,11 +1,11 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, NetworkAddress, Result};
-use futures::select_biased;
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
 use websockets::{Frame, WebSocket};
+use futures::{select_biased, FutureExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -147,68 +147,72 @@ impl Connector {
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         use EventType::*;
 
-        if let Some(msg) = self.comms.try_recv() {
-            match msg {
-                CommsMessage::JudgeIdentity {
-                    network_address,
-                    judgement,
-                } => {
-                    self.client
-                        .send_text(
-                            serde_json::to_string(&Message {
-                                event: EventType::JudgementResult,
-                                data: serde_json::to_value(&JudgementResponse {
-                                    address: network_address.address().clone(),
-                                    judgement: judgement,
+        select_biased! {
+            msg = self.comms.recv().fuse() => {
+                match msg {
+                    CommsMessage::JudgeIdentity {
+                        network_address,
+                        judgement,
+                    } => {
+                        self.client
+                            .send_text(
+                                serde_json::to_string(&Message {
+                                    event: EventType::JudgementResult,
+                                    data: serde_json::to_value(&JudgementResponse {
+                                        address: network_address.address().clone(),
+                                        judgement: judgement,
+                                    })
+                                    .map_err(|_| ConnectorError::Response)?,
                                 })
                                 .map_err(|_| ConnectorError::Response)?,
-                            })
-                            .map_err(|_| ConnectorError::Response)?,
-                            false,
-                            true,
-                        )
-                        .await
-                        .map_err(|_| ConnectorError::Response)?;
+                                false,
+                                true,
+                            )
+                            .await
+                            .map_err(|_| ConnectorError::Response)?;
+                    }
+                    _ => panic!("Received invalid message in Connector"),
                 }
-                _ => panic!("Received invalid message in Connector"),
-            }
-        }
-
-        match self.client.receive().await {
-            Ok(Frame::Text { payload, .. }) => {
-                let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload)
-                    .map_err(|_| ConnectorError::InvalidMessage)
-                {
-                    msg
-                } else {
-                    self.send_error().await?;
-                    return Ok(());
-                };
-
-                println!("DEBUG MSG: {:?}", msg);
-
-                match msg.event {
-                    NewJudgementRequest => {
-                        println!("Received a new identity from Watcher!");
-                        if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
-                            let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                self.send_ack(None).await?;
-
-                                self.comms.notify_new_identity(ident);
-                            } else {
-                                self.send_error().await?;
-                            };
+            },
+            frame = self.client.receive().fuse() => {
+                match frame {
+                    Ok(Frame::Text { payload, .. }) => {
+                        let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload)
+                            .map_err(|_| ConnectorError::InvalidMessage)
+                        {
+                            msg
                         } else {
                             self.send_error().await?;
+                            return Ok(());
+                        };
+
+                        println!("DEBUG MSG: {:?}", msg);
+
+                        match msg.event {
+                            NewJudgementRequest => {
+                                println!("Received a new identity from Watcher!");
+                                if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
+                                    let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                        self.send_ack(None).await?;
+
+                                        self.comms.notify_new_identity(ident);
+                                    } else {
+                                        self.send_error().await?;
+                                    };
+                                } else {
+                                    self.send_error().await?;
+                                }
+                            }
+                            _ => {}
                         }
                     }
-                    _ => {}
+                    _ => {
+                        self.send_error().await?;
+                    }
                 }
-            }
-            _ => {
-                println!("RECEIVED SOMETHING ELSE");
-            }
-        }
+            },
+        };
+
 
         Ok(())
     }
