@@ -150,6 +150,7 @@ impl MatrixClient {
         self.send_msg(
             include_str!("../../messages/instructions")
                 .replace("{:PAYLOAD}", &challenge.as_str())
+                .replace("{:ADDRESS}", network_address.address().as_str())
                 .as_str(),
             &room_id,
         )

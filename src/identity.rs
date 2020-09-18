@@ -23,7 +23,7 @@ impl TestClient {
         let pk = sk.to_public();
 
         let ident = OnChainIdentity {
-            network_address: NetAccount::from("136nXcbVseRqQHvu6iDraV2Qi9p4YCMBgdeDpDLLgmRjEqVb")
+            network_address: NetAccount::from("5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty")
                 .try_into()
                 .unwrap(),
             display_name: None,

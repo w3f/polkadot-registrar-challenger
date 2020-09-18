@@ -43,7 +43,7 @@ pub async fn run(config: Config) -> Result<()> {
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
     // TODO: move to a test suite
-    // let c_test = manager.register_comms(AccountType::Email);
+    let c_test = manager.register_comms(AccountType::Email);
 
     let connector = Connector::new(&config.watcher_url, c_connector).await?;
 
@@ -59,7 +59,7 @@ pub async fn run(config: Config) -> Result<()> {
     .await?;
 
     // TODO: move to a test suite
-    //identity::TestClient::new(c_test).gen_data();
+    identity::TestClient::new(c_test).gen_data();
 
     println!("Starting all...");
     tokio::spawn(async move {
