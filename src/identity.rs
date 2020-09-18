@@ -96,7 +96,7 @@ pub struct AccountState {
     account_validity: AccountStatus,
     challenge: Challenge,
     challenge_status: ChallengeStatus,
-    skip_infom: bool,
+    skip_inform: bool,
 }
 
 impl AccountState {
@@ -107,7 +107,7 @@ impl AccountState {
             account_validity: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
             challenge_status: ChallengeStatus::Unconfirmed,
-            skip_infom: false,
+            skip_inform: false,
         }
     }
 }
@@ -286,10 +286,9 @@ impl IdentityManager {
                 if ident.matrix.as_ref().unwrap().account
                     == ex_ident.matrix.as_ref().unwrap().account
                 {
-                    ident.matrix = ex_ident.matrix.map(|mut state| {
-                        state.skip_infom = true;
-                        state
-                    });
+                    ident.matrix.as_mut().map(|state| state.skip_inform = true);
+                } else {
+                    ident.matrix = ex_ident.matrix;
                 }
             }
         }
@@ -304,7 +303,7 @@ impl IdentityManager {
         // Only matrix supported for now.
         // TODO: support additional account types.
         ident.matrix.as_ref().map::<(), _>(|state| {
-            if state.skip_infom {
+            if state.skip_inform {
                 return;
             }
 
