@@ -139,94 +139,97 @@ impl Connector {
             .map(|_| ())
     }
     pub async fn start(mut self) {
+        let mut receiver_error = false;
+
         loop {
             let _ = self.local().await.map_err(|err| {
-                // TODO: Log
-                println!("Got error: {:?}", err);
-                ()
+                match err {
+                    ConnectorError::Receiver => {
+                        // Prevent spamming log messages if the server is
+                        // disconnected.
+                        if !receiver_error {
+                            // TODO: Log
+                            receiver_error = true;
+                        }
+                    }
+                    _ => {
+                        receiver_error = false;
+
+                        // TODO: Log
+                        println!("Got error: {:?}", err);
+                    }
+                }
             });
         }
     }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         use EventType::*;
 
-        if let Some(msg) = self.comms.try_recv() {
-            match msg {
-                CommsMessage::JudgeIdentity {
-                    network_address,
-                    judgement,
-                } => {
-                    self.client
-                        .send_text(
-                            serde_json::to_string(&Message {
-                                event: EventType::JudgementResult,
-                                data: serde_json::to_value(&JudgementResponse {
-                                    address: network_address.address().clone(),
-                                    judgement: judgement,
+        select_biased! {
+            msg = self.comms.recv().fuse() => {
+                match msg {
+                    CommsMessage::JudgeIdentity {
+                        network_address,
+                        judgement,
+                    } => {
+                        self.client
+                            .send_text(
+                                serde_json::to_string(&Message {
+                                    event: EventType::JudgementResult,
+                                    data: serde_json::to_value(&JudgementResponse {
+                                        address: network_address.address().clone(),
+                                        judgement: judgement,
+                                    })
+                                    .map_err(|_| ConnectorError::Response)?,
                                 })
                                 .map_err(|_| ConnectorError::Response)?,
-                            })
-                            .map_err(|_| ConnectorError::Response)?,
-                            false,
-                            true,
-                        )
-                        .await
-                        .map_err(|_| ConnectorError::Response)?;
+                                false,
+                                true,
+                            )
+                            .await
+                            .map_err(|_| ConnectorError::Response)?;
+                    }
+                    _ => panic!("Received invalid message in Connector"),
                 }
-                _ => panic!("Received invalid message in Connector"),
-            }
-        }
+            },
+            frame = self.client.receive().fuse() => {
+                match frame.map_err(|_| ConnectorError::Receiver)? {
+                    Frame::Text { payload, .. } => {
+                        let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload) {
+                            msg
+                        } else {
+                            self.send_error().await?;
+                            return Err(ConnectorError::InvalidMessage);
+                        };
 
-        if self
-            .client
-            .ready_to_receive()
-            .map_err(|_| ConnectorError::Receiver)?
-        {
-            match self
-                .client
-                .receive()
-                .await
-                .map_err(|_| ConnectorError::Receiver)?
-            {
-                Frame::Text { payload, .. } => {
-                    let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload)
-                        .map_err(|_| ConnectorError::InvalidMessage)
-                    {
-                        msg
-                    } else {
-                        self.send_error().await?;
-                        return Ok(());
-                    };
+                        println!("DEBUG MSG: {:?}", msg);
 
-                    println!("DEBUG MSG: {:?}", msg);
+                        match msg.event {
+                            NewJudgementRequest => {
+                                println!("Received a new identity from Watcher!");
+                                if let Ok(request) =
+                                    serde_json::from_value::<JudgementRequest>(msg.data)
+                                {
+                                    let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                        self.send_ack(None).await?;
 
-                    match msg.event {
-                        NewJudgementRequest => {
-                            println!("Received a new identity from Watcher!");
-                            if let Ok(request) =
-                                serde_json::from_value::<JudgementRequest>(msg.data)
-                            {
-                                let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                    self.send_ack(None).await?;
-
-                                    self.comms.notify_new_identity(ident);
+                                        self.comms.notify_new_identity(ident);
+                                    } else {
+                                        self.send_error().await?;
+                                    };
                                 } else {
                                     self.send_error().await?;
-                                };
-                            } else {
-                                self.send_error().await?;
+                                }
                             }
+                            _ => {}
                         }
-                        _ => {}
+                    }
+                    _ => {
+                        self.send_error().await?;
                     }
                 }
-                _ => {
-                    self.send_error().await?;
-                }
             }
-        }
-
-        time::delay_for(Duration::from_millis(10)).await;
+        };
 
         Ok(())
     }
