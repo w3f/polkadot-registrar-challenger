@@ -24,7 +24,7 @@ pub fn generate_comms(
 
 pub enum CommsMessage {
     NewJudgementRequest(OnChainIdentity),
-    VerifyAccount {
+    AccountToVerify {
         network_address: NetworkAddress,
         account: Account,
         challenge: Challenge,
@@ -69,7 +69,7 @@ impl CommsMain {
         room_id: Option<RoomId>,
     ) {
         self.sender
-            .send(CommsMessage::VerifyAccount {
+            .send(CommsMessage::AccountToVerify {
                 network_address: network_address,
                 account: account,
                 challenge: challenge,
@@ -113,10 +113,10 @@ impl CommsVerifier {
     pub fn try_recv(&self) -> Option<CommsMessage> {
         self.recv.try_recv().ok()
     }
-    /// Receive a `VerifyAccount` message. This is only used by the Matrix client as
+    /// Receive a `AccountToVerify` message. This is only used by the Matrix client as
     /// any other message type will panic.
     pub async fn recv_inform(&self) -> (NetworkAddress, Account, Challenge, Option<RoomId>) {
-        if let CommsMessage::VerifyAccount {
+        if let CommsMessage::AccountToVerify {
             network_address,
             account,
             challenge,

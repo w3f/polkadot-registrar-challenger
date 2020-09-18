@@ -218,7 +218,7 @@ impl Responder {
             );
 
             let (network_address, challenge) = match self.comms.recv().await {
-                CommsMessage::VerifyAccount {
+                CommsMessage::AccountToVerify {
                     network_address,
                     challenge,
                     ..
