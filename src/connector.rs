@@ -1,11 +1,11 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, NetworkAddress, Result};
+use futures::{select_biased, FutureExt};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
 use websockets::{Frame, WebSocket};
-use futures::{select_biased, FutureExt};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -212,7 +212,6 @@ impl Connector {
                 }
             },
         };
-
 
         Ok(())
     }
