@@ -1,5 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::primitives::{Account, AccountType, Result};
+use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
 use crate::verifier::Verifier;
 
 use matrix_sdk::{
@@ -135,7 +135,7 @@ impl MatrixClient {
                     .map_err(|_| MatrixError::JoinRoom)?;
 
                 self.comms
-                    .track_room_id(network_address.address().clone(), resp.room_id.clone());
+                    .notify_room_id(network_address.address().clone(), resp.room_id.clone());
 
                 StdResult::<_, MatrixError>::Ok(resp.room_id)
             })
@@ -212,13 +212,13 @@ impl Responder {
 
         if let SyncRoom::Joined(room) = room {
             // Request information about the sender.
-            self.comms.request_account_state(
+            self.comms.notify_account_state_request(
                 Account::from(event.sender.as_str().to_string()),
                 AccountType::Matrix,
             );
 
             let (network_address, challenge) = match self.comms.recv().await {
-                CommsMessage::Inform {
+                CommsMessage::AccountToVerify {
                     network_address,
                     challenge,
                     ..
@@ -251,16 +251,22 @@ impl Responder {
                         .await
                         .map_err(|_| MatrixError::SendMessage)?;
 
-                    self.comms
-                        .challenge_accepted(network_address, AccountType::Matrix);
+                    self.comms.notify_challenge_status(
+                        network_address,
+                        AccountType::Matrix,
+                        ChallengeStatus::Accepted,
+                    );
                 }
                 Err(err) => {
                     self.send_msg(&err.to_string(), &room_id)
                         .await
                         .map_err(|_| MatrixError::SendMessage)?;
 
-                    self.comms
-                        .challenge_rejected(network_address, AccountType::Matrix);
+                    self.comms.notify_challenge_status(
+                        network_address,
+                        AccountType::Matrix,
+                        ChallengeStatus::Rejected,
+                    );
                 }
             };
         }

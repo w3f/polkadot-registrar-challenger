@@ -1,7 +1,8 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database;
 use crate::primitives::{
-    Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
+    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount,
+    NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
@@ -41,7 +42,7 @@ impl TestClient {
         let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
         println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
 
-        self.comms.new_on_chain_identity(ident);
+        self.comms.notify_new_identity(ident);
     }
 }
 
@@ -60,7 +61,7 @@ impl OnChainIdentity {
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
-    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountValidity) {
+    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountStatus) {
         use AccountType::*;
 
         match account_ty {
@@ -92,7 +93,7 @@ impl OnChainIdentity {
 pub struct AccountState {
     account: Account,
     account_ty: AccountType,
-    account_validity: AccountValidity,
+    account_validity: AccountStatus,
     challenge: Challenge,
     challenge_status: ChallengeStatus,
 }
@@ -102,15 +103,15 @@ impl AccountState {
         AccountState {
             account: account,
             account_ty: account_ty,
-            account_validity: AccountValidity::Unknown,
+            account_validity: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
-            challenge_status: ChallengeStatus::Init,
+            challenge_status: ChallengeStatus::Unconfirmed,
         }
     }
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum AccountValidity {
+pub enum AccountStatus {
     #[serde(rename = "unknown")]
     Unknown,
     #[serde(rename = "valid")]
@@ -119,16 +120,6 @@ enum AccountValidity {
     Invalid,
     #[serde(rename = "notified")]
     Notified,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum ChallengeStatus {
-    #[serde(rename = "init")]
-    Init,
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "rejected")]
-    Rejected,
 }
 
 pub struct IdentityManager {
@@ -182,47 +173,25 @@ impl IdentityManager {
         loop {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
-                    CommsMessage::NewOnChainIdentity(ident) => {
+                    CommsMessage::NewJudgementRequest(ident) => {
                         self.handle_register_request(ident)?;
                     }
-                    ChallengeAccepted {
+                    UpdateChallengeStatus {
                         network_address,
                         account_ty,
+                        status,
                     } => {
-                        self.handle_challenge_feedback(
-                            network_address,
-                            account_ty,
-                            ChallengeStatus::Accepted,
-                        );
+                        self.handle_challenge_update(network_address, account_ty, status);
                     }
-                    ChallengeRejected {
+                    UpdateAccountStatus {
                         network_address,
                         account_ty,
+                        account_validity,
                     } => {
-                        self.handle_challenge_feedback(
+                        self.handle_account_confirmation(
                             network_address,
                             account_ty,
-                            ChallengeStatus::Rejected,
-                        );
-                    }
-                    ValidAccount {
-                        network_address,
-                        account_ty,
-                    } => {
-                        self.handle_validity_feedback(
-                            network_address,
-                            account_ty,
-                            AccountValidity::Valid,
-                        );
-                    }
-                    InvalidAccount {
-                        network_address,
-                        account_ty,
-                    } => {
-                        self.handle_validity_feedback(
-                            network_address,
-                            account_ty,
-                            AccountValidity::Invalid,
+                            account_validity,
                         );
                     }
                     TrackRoomId { address, room_id } => {
@@ -242,7 +211,7 @@ impl IdentityManager {
             }
         }
     }
-    fn handle_challenge_feedback(
+    fn handle_challenge_update(
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
@@ -253,7 +222,7 @@ impl IdentityManager {
             .idents
             .get_mut(network_address.address())
             .map(|ident| {
-                ident.set_challenge_status(account_ty, challenge_status);
+                ident.set_challenge_status(account_ty, challenge_status.clone());
                 ident
             })
             .fatal();
@@ -266,12 +235,21 @@ impl IdentityManager {
                 ident.to_json().fatal(),
             )
             .fatal();
+
+        // TODO: Handle additional accounts.
+        if let ChallengeStatus::Accepted = challenge_status {
+            self.comms
+                .pairs
+                .get(&AccountType::ReservedConnector)
+                .fatal()
+                .judge_identity(network_address, Judgement::Reasonable);
+        }
     }
-    fn handle_validity_feedback(
+    fn handle_account_confirmation(
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
-        account_validity: AccountValidity,
+        account_validity: AccountStatus,
     ) {
         // Confirm the validity of the account type.
         let ident = self
@@ -316,12 +294,16 @@ impl IdentityManager {
                 None
             };
 
-            self.comms.pairs.get(&state.account_ty).fatal().inform(
-                ident.network_address.clone(),
-                state.account.clone(),
-                state.challenge.clone(),
-                room_id,
-            );
+            self.comms
+                .pairs
+                .get(&state.account_ty)
+                .fatal()
+                .notify_account_verification(
+                    ident.network_address.clone(),
+                    state.account.clone(),
+                    state.challenge.clone(),
+                    room_id,
+                );
         });
 
         Ok(())
@@ -351,7 +333,7 @@ impl IdentityManager {
                 _ => panic!("Unsupported"),
             };
 
-            comms.inform(
+            comms.notify_account_verification(
                 ident.network_address.clone(),
                 state.account.clone(),
                 state.challenge.clone(),

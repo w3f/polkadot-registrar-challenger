@@ -1,9 +1,11 @@
-use crate::comms::CommsVerifier;
+use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::{AccountState, OnChainIdentity};
-use crate::primitives::{Account, AccountType, NetAccount, NetworkAddress, Result};
+use crate::primitives::{Account, AccountType, Judgement, NetAccount, NetworkAddress, Result};
+use futures::{select_biased, FutureExt};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
+use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,14 +40,6 @@ struct ErrorResponse {
 struct JudgementResponse {
     address: NetAccount,
     judgement: Judgement,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum Judgement {
-    #[serde(rename = "reasonable")]
-    Reasonable,
-    #[serde(rename = "erroneous")]
-    Erroneous,
 }
 
 impl JudgementResponse {
@@ -87,10 +81,12 @@ pub struct Connector {
 
 #[derive(Debug, Fail)]
 enum ConnectorError {
-    #[fail(display = "")]
+    #[fail(display = "the received message is invalid")]
     InvalidMessage,
-    #[fail(display = "")]
+    #[fail(display = "failed to respond")]
     Response,
+    #[fail(display = "failed to fetch messages from the listener")]
+    Receiver,
 }
 
 impl Connector {
@@ -103,15 +99,6 @@ impl Connector {
         connector.send_ack(Some("Connection established")).await?;
 
         Ok(connector)
-    }
-    pub async fn start(mut self) {
-        loop {
-            let _ = self.local().await.map_err(|err| {
-                // TODO: Log
-                println!("Got error: {:?}", err);
-                ()
-            });
-        }
     }
     async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
         self.client
@@ -151,44 +138,98 @@ impl Connector {
             .map_err(|_| ConnectorError::Response)
             .map(|_| ())
     }
+    pub async fn start(mut self) {
+        let mut receiver_error = false;
+
+        loop {
+            let _ = self.local().await.map_err(|err| {
+                match err {
+                    ConnectorError::Receiver => {
+                        // Prevent spamming log messages if the server is
+                        // disconnected.
+                        if !receiver_error {
+                            // TODO: Log
+                            receiver_error = true;
+                        }
+                    }
+                    _ => {
+                        receiver_error = false;
+
+                        // TODO: Log
+                        println!("Got error: {:?}", err);
+                    }
+                }
+            });
+        }
+    }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         use EventType::*;
 
-        match self.client.receive().await {
-            Ok(Frame::Text { payload, .. }) => {
-                let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload)
-                    .map_err(|_| ConnectorError::InvalidMessage)
-                {
-                    msg
-                } else {
-                    self.send_error().await?;
-                    return Ok(());
-                };
-
-                println!("DEBUG MSG: {:?}", msg);
-
-                match msg.event {
-                    NewJudgementRequest => {
-                        println!("Received a new identity from Watcher!");
-                        if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
-                            let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                self.send_ack(None).await?;
-
-                                self.comms.new_on_chain_identity(ident);
-                            } else {
-                                self.send_error().await?;
-                            };
+        select_biased! {
+            msg = self.comms.recv().fuse() => {
+                match msg {
+                    CommsMessage::JudgeIdentity {
+                        network_address,
+                        judgement,
+                    } => {
+                        self.client
+                            .send_text(
+                                serde_json::to_string(&Message {
+                                    event: EventType::JudgementResult,
+                                    data: serde_json::to_value(&JudgementResponse {
+                                        address: network_address.address().clone(),
+                                        judgement: judgement,
+                                    })
+                                    .map_err(|_| ConnectorError::Response)?,
+                                })
+                                .map_err(|_| ConnectorError::Response)?,
+                                false,
+                                true,
+                            )
+                            .await
+                            .map_err(|_| ConnectorError::Response)?;
+                    }
+                    _ => panic!("Received invalid message in Connector"),
+                }
+            },
+            frame = self.client.receive().fuse() => {
+                match frame.map_err(|_| ConnectorError::Receiver)? {
+                    Frame::Text { payload, .. } => {
+                        let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload) {
+                            msg
                         } else {
                             self.send_error().await?;
+                            return Err(ConnectorError::InvalidMessage);
+                        };
+
+                        println!("DEBUG MSG: {:?}", msg);
+
+                        match msg.event {
+                            NewJudgementRequest => {
+                                println!("Received a new identity from Watcher!");
+                                if let Ok(request) =
+                                    serde_json::from_value::<JudgementRequest>(msg.data)
+                                {
+                                    let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                        self.send_ack(None).await?;
+
+                                        self.comms.notify_new_identity(ident);
+                                    } else {
+                                        self.send_error().await?;
+                                    };
+                                } else {
+                                    self.send_error().await?;
+                                }
+                            }
+                            _ => {}
                         }
                     }
-                    _ => {}
+                    _ => {
+                        self.send_error().await?;
+                    }
                 }
             }
-            _ => {
-                println!("RECEIVED SOMETHING ELSE");
-            }
-        }
+        };
 
         Ok(())
     }

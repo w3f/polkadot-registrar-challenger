@@ -178,6 +178,16 @@ pub enum AccountType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ChallengeStatus {
+    #[serde(rename = "unconfirmed")]
+    Unconfirmed,
+    #[serde(rename = "accepted")]
+    Accepted,
+    #[serde(rename = "rejected")]
+    Rejected,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Challenge(String);
 
 impl Challenge {
@@ -197,6 +207,14 @@ impl Challenge {
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Judgement {
+    #[serde(rename = "reasonable")]
+    Reasonable,
+    #[serde(rename = "erroneous")]
+    Erroneous,
 }
 
 pub trait Fatal<T> {
