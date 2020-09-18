@@ -96,6 +96,7 @@ pub struct AccountState {
     account_validity: AccountStatus,
     challenge: Challenge,
     challenge_status: ChallengeStatus,
+    updated_since_last: bool,
 }
 
 impl AccountState {
@@ -106,6 +107,7 @@ impl AccountState {
             account_validity: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
             challenge_status: ChallengeStatus::Unconfirmed,
+            updated_since_last: false,
         }
     }
 }
@@ -173,7 +175,7 @@ impl IdentityManager {
         loop {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
-                    CommsMessage::NewJudgementRequest(ident) => {
+                    NewJudgementRequest(ident) => {
                         self.handle_register_request(ident)?;
                     }
                     UpdateChallengeStatus {
@@ -276,6 +278,22 @@ impl IdentityManager {
         let db_idents = self.db.scope("pending_identities");
         let db_rooms = self.db.scope("matrix_rooms");
 
+        // Check changes
+        // TODO: Check additional account types.
+        let mut ident = ident;
+        if let Some(ex_ident) = self.idents.remove(&ident.network_address.address()) {
+            if ident.matrix.is_some() && ex_ident.matrix.is_some() {
+                if ident.matrix.as_ref().unwrap().account
+                    == ex_ident.matrix.as_ref().unwrap().account
+                {
+                    ident.matrix = ex_ident.matrix.map(|mut state| {
+                        state.updated_since_last = true;
+                        state
+                    });
+                }
+            }
+        }
+
         // Save the pending on-chain identity to disk.
         db_idents.put(ident.network_address.address().as_str(), ident.to_json()?)?;
 
@@ -284,7 +302,12 @@ impl IdentityManager {
             .insert(ident.network_address.address().clone(), ident.clone());
 
         // Only matrix supported for now.
+        // TODO: support additional account types.
         ident.matrix.as_ref().map::<(), _>(|state| {
+            if state.updated_since_last {
+                return;
+            }
+
             let room_id = if let Some(bytes) = db_rooms
                 .get(ident.network_address.address().as_str())
                 .fatal()
