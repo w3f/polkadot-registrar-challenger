@@ -1,6 +1,12 @@
 use oauth2::basic::BasicClient;
 use oauth2::{AuthUrl, ClientId, ClientSecret, TokenUrl};
 use std::result::Result as StdResult;
+use jwt::algorithm::openssl::PKeyWithDigest;
+use jwt::SignWithKey;
+use openssl::hash::MessageDigest;
+use openssl::pkey::PKey;
+use openssl::rsa::Rsa;
+use sha2::Sha256;
 
 #[derive(Debug, Fail)]
 enum GmailError {
@@ -72,6 +78,47 @@ pub struct Gmail {
     client: BasicClient,
 }
 
-impl Gmail {
+impl Gmail {}
 
+use jwt::claims::RegisteredClaims;
+
+pub struct JWTBuilder {
+    claims: RegisteredClaims,
+}
+
+struct JWT(String);
+
+impl JWTBuilder {
+    pub fn new() -> Self {
+        JWTBuilder {
+            claims: RegisteredClaims::default(),
+        }
+    }
+    pub fn issuer(mut self, iss: &str) -> Self {
+        self.claims.issuer = Some(iss.to_owned());
+        self
+    }
+    pub fn scope(mut self, scope: &str) -> Self {
+        self.claims.subject = Some(scope.to_owned());
+        self
+    }
+    pub fn audience(mut self, aud: &str) -> Self {
+        self.claims.audience = Some(aud.to_owned());
+        self
+    }
+    pub fn expiration(mut self, exp: u64) -> Self {
+        self.claims.expiration = Some(exp);
+        self
+    }
+    pub fn issued_at(mut self, iat: u64) -> Self {
+        self.claims.issued_at = Some(iat);
+        self
+    }
+    pub fn sign(self, secret: &str) -> JWT {
+        let pkey = PKeyWithDigest {
+            digest: MessageDigest::sha256(),
+            key: PKey::from_rsa(Rsa::private_key_from_pem(secret.as_bytes()).unwrap()).unwrap(),
+        };
+        JWT(self.claims.sign_with_key(&pkey).unwrap())
+    }
 }
