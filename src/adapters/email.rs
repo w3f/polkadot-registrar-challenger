@@ -65,37 +65,38 @@ pub struct Client {
 impl Client {}
 
 use jwt::claims::RegisteredClaims;
+use std::collections::BTreeMap;
 
-pub struct JWTBuilder {
-    claims: RegisteredClaims,
+pub struct JWTBuilder<'a> {
+    claims: BTreeMap<&'a str, &'a str>,
 }
 
 struct JWT(String);
 
-impl JWTBuilder {
-    pub fn new() -> Self {
+impl<'a> JWTBuilder<'a> {
+    pub fn new() -> JWTBuilder<'a> {
         JWTBuilder {
-            claims: RegisteredClaims::default(),
+            claims: BTreeMap::new(),
         }
     }
-    pub fn issuer(mut self, iss: &str) -> Self {
-        self.claims.issuer = Some(iss.to_owned());
+    pub fn issuer(mut self, iss: &'a str) -> Self {
+        self.claims.insert("iss", iss);
         self
     }
-    pub fn scope(mut self, scope: &str) -> Self {
-        self.claims.subject = Some(scope.to_owned());
+    pub fn scope(mut self, scope: &'a str) -> Self {
+        self.claims.insert("scope", scope);
         self
     }
-    pub fn audience(mut self, aud: &str) -> Self {
-        self.claims.audience = Some(aud.to_owned());
+    pub fn audience(mut self, aud: &'a str) -> Self {
+        self.claims.insert("aud", aud);
         self
     }
-    pub fn expiration(mut self, exp: u64) -> Self {
-        self.claims.expiration = Some(exp);
+    pub fn expiration(mut self, exp: &'a str) -> Self {
+        self.claims.insert("exp", exp);
         self
     }
-    pub fn issued_at(mut self, iat: u64) -> Self {
-        self.claims.issued_at = Some(iat);
+    pub fn issued_at(mut self, iat: &'a str) -> Self {
+        self.claims.insert("iat", iat);
         self
     }
     pub fn sign(self, secret: &str) -> JWT {
@@ -141,8 +142,8 @@ fn test_email_client() {
         .issuer(&iss)
         .scope("https://www.googleapis.com/auth/gmail.modifye")
         .audience("https://oauth2.googleapis.com/token")
-        .expiration(unix_time() + 3_000) // + 50 min
-        .issued_at(unix_time())
+        .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
+        .issued_at(&unix_time().to_string())
         .sign(&private_key);
 
     println!(">> {}", jwt.0);
