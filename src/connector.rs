@@ -81,12 +81,12 @@ pub struct Connector {
 
 #[derive(Debug, Fail)]
 enum ConnectorError {
-    #[fail(display = "the received message is invalid")]
-    InvalidMessage,
-    #[fail(display = "failed to respond")]
-    Response,
-    #[fail(display = "failed to fetch messages from the listener")]
-    Receiver,
+    #[fail(display = "the received message is invalid: {}", 0)]
+    InvalidMessage(failure::Error),
+    #[fail(display = "failed to respond: {}", 0)]
+    Response(failure::Error),
+    #[fail(display = "failed to fetch messages from the listener: {}", 0)]
+    Receiver(failure::Error),
 }
 
 impl Connector {
@@ -110,14 +110,14 @@ impl Connector {
                             .map(|txt| txt.to_string())
                             .unwrap_or("Message acknowledged".to_string()),
                     })
-                    .map_err(|_| ConnectorError::Response)?,
+                    .map_err(|err| ConnectorError::Response(err.into()))?,
                 })
-                .map_err(|_| ConnectorError::Response)?,
+                .map_err(|err| ConnectorError::Response(err.into()))?,
                 false,
                 true,
             )
             .await
-            .map_err(|_| ConnectorError::Response)
+            .map_err(|err| ConnectorError::Response(err.into()))
             .map(|_| ())
     }
     async fn send_error(&mut self) -> StdResult<(), ConnectorError> {
@@ -128,14 +128,14 @@ impl Connector {
                     data: serde_json::to_value(&ErrorResponse {
                         error: "Message is invalid. Rejected".to_string(),
                     })
-                    .map_err(|_| ConnectorError::Response)?,
+                    .map_err(|err| ConnectorError::Response(err.into()))?,
                 })
-                .map_err(|_| ConnectorError::Response)?,
+                .map_err(|err| ConnectorError::Response(err.into()))?,
                 false,
                 true,
             )
             .await
-            .map_err(|_| ConnectorError::Response)
+            .map_err(|err| ConnectorError::Response(err.into()))
             .map(|_| ())
     }
     pub async fn start(mut self) {
@@ -144,7 +144,7 @@ impl Connector {
         loop {
             let _ = self.local().await.map_err(|err| {
                 match err {
-                    ConnectorError::Receiver => {
+                    ConnectorError::Receiver(_) => {
                         // Prevent spamming log messages if the server is
                         // disconnected.
                         if !receiver_error {
@@ -180,26 +180,27 @@ impl Connector {
                                         address: network_address.address().clone(),
                                         judgement: judgement,
                                     })
-                                    .map_err(|_| ConnectorError::Response)?,
+                                    .map_err(|err| ConnectorError::Response(err.into()))?,
                                 })
-                                .map_err(|_| ConnectorError::Response)?,
+                                .map_err(|err| ConnectorError::Response(err.into()))?,
                                 false,
                                 true,
                             )
                             .await
-                            .map_err(|_| ConnectorError::Response)?;
+                            .map_err(|err| ConnectorError::Response(err.into()))?;
                     }
                     _ => panic!("Received invalid message in Connector"),
                 }
             },
             frame = self.client.receive().fuse() => {
-                match frame.map_err(|_| ConnectorError::Receiver)? {
+                match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
                     Frame::Text { payload, .. } => {
-                        let msg = if let Ok(msg) = serde_json::from_str::<Message>(&payload) {
+                        let try_msg = serde_json::from_str::<Message>(&payload);
+                        let msg = if let Ok(msg) = try_msg {
                             msg
                         } else {
                             self.send_error().await?;
-                            return Err(ConnectorError::InvalidMessage);
+                            return Err(ConnectorError::InvalidMessage(try_msg.unwrap_err().into()));
                         };
 
                         println!("DEBUG MSG: {:?}", msg);
