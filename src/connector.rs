@@ -144,19 +144,18 @@ impl Connector {
         loop {
             let _ = self.local().await.map_err(|err| {
                 match err {
-                    ConnectorError::Receiver(_) => {
+                    ConnectorError::Receiver(err) => {
                         // Prevent spamming log messages if the server is
                         // disconnected.
                         if !receiver_error {
-                            // TODO: Log
+                            error!("Disconnected from Listener: {}", err);
                             receiver_error = true;
                         }
                     }
                     _ => {
                         receiver_error = false;
 
-                        // TODO: Log
-                        println!("Got error: {:?}", err);
+                        error!("{}", err);
                     }
                 }
             });

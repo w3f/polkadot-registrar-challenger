@@ -1,6 +1,8 @@
 #![recursion_limit = "512"]
 
 #[macro_use]
+extern crate log;
+#[macro_use]
 extern crate async_trait;
 #[macro_use]
 extern crate serde;
@@ -34,11 +36,11 @@ pub struct Config {
 }
 
 pub async fn run(config: Config) -> Result<()> {
-    // Setup database and identity manager
+    info!("Setting up database and manager");
     let db = Database::new(&config.db_path)?;
     let mut manager = IdentityManager::new(db)?;
 
-    // Prepare communication channels between manager and tasks.
+    info!("Setting up communication channels");
     let c_connector = manager.register_comms(AccountType::ReservedConnector);
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
@@ -47,7 +49,7 @@ pub async fn run(config: Config) -> Result<()> {
 
     let connector = Connector::new(&config.watcher_url, c_connector).await?;
 
-    // Setup clients.
+    info!("Setting up Matrix client");
     let matrix = MatrixClient::new(
         &config.matrix_homeserver,
         &config.matrix_username,
@@ -61,7 +63,7 @@ pub async fn run(config: Config) -> Result<()> {
     // TODO: move to a test suite
     identity::TestClient::new(c_test).gen_data();
 
-    println!("Starting all...");
+    info!("Starting all tasks...");
     tokio::spawn(async move {
         manager.start().await.unwrap();
     });
@@ -71,6 +73,8 @@ pub async fn run(config: Config) -> Result<()> {
     tokio::spawn(async move {
         matrix.start().await;
     });
+
+    info!("All tasks executed");
 
     // TODO: Adjust this
     let mut interval = time::interval(Duration::from_secs(60));
