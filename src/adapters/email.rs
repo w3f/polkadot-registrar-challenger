@@ -97,10 +97,13 @@ impl JWTBuilder {
         self
     }
     pub fn sign(self, secret: &str) -> JWT {
+        let rsa = Rsa::private_key_from_pem(secret.replace("\\n", "\n").as_bytes()).unwrap();
+
         let pkey = PKeyWithDigest {
             digest: MessageDigest::sha256(),
-            key: PKey::from_rsa(Rsa::private_key_from_pem(secret.as_bytes()).unwrap()).unwrap(),
+            key: PKey::from_rsa(rsa).unwrap(),
         };
+
         JWT(self.claims.sign_with_key(&pkey).unwrap())
     }
 }
