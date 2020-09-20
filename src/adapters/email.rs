@@ -1,3 +1,4 @@
+use crate::primitives::Result;
 use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
 use jwt::header::{Header, HeaderType};
@@ -13,6 +14,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 enum ClientError {
     #[fail(display = "the builder was not used correctly")]
     IncompleteBuilder,
+    #[fail(display = "the access token was not requested for the client")]
+    MissingAccessToken,
 }
 
 pub struct ClientBuilder {
@@ -47,8 +50,9 @@ impl ClientBuilder {
             ..self
         }
     }
-    pub fn build(self) -> Result<Client, ClientError> {
+    pub fn build(self) -> Result<Client> {
         Ok(Client {
+            client: ReqClient::new(),
             client_id: self.client_id.ok_or(ClientError::IncompleteBuilder)?,
             jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
@@ -58,6 +62,7 @@ impl ClientBuilder {
 }
 
 pub struct Client {
+    client: ReqClient,
     client_id: String,
     jwt: JWT,
     token_url: String,
@@ -68,15 +73,16 @@ use reqwest::header::{self, HeaderName, HeaderValue};
 use reqwest::Client as ReqClient;
 
 impl Client {
-    pub async fn token_request(&mut self) {
+    pub async fn token_request(&mut self) -> Result<()> {
         #[derive(Deserialize)]
-        struct TokenId {
-            id_token: String,
+        struct TokenResponse {
+            access_token: String,
+            token_type: String,
+            expires_in: usize,
         }
 
-        let req_client = ReqClient::new();
         self.token_id = Some(
-            req_client
+            self.client
                 .post(&self.token_url)
                 .header(
                     self::header::CONTENT_TYPE,
@@ -87,13 +93,27 @@ impl Client {
                     "urn:ietf:params:oauth:grant-type:jwt-bearer", self.jwt.0
                 )))
                 .send()
-                .await
-                .unwrap()
-                .json::<TokenId>()
-                .await
-                .unwrap()
-                .id_token,
+                .await?
+                .json::<TokenResponse>()
+                .await?
+                .access_token,
         );
+
+        Ok(())
+    }
+    pub async fn get_request(&self, url: &str) -> Result<String> {
+        Ok(self
+            .client
+            .get(&url.replace("{userId}", "me"))
+            .bearer_auth(
+                self.token_id
+                    .as_ref()
+                    .ok_or(ClientError::MissingAccessToken)?,
+            )
+            .send()
+            .await?
+            .text()
+            .await?)
     }
 }
 
@@ -132,12 +152,12 @@ impl<'a> JWTBuilder<'a> {
         self.claims.insert("iat", iat);
         self
     }
-    pub fn sign(self, secret: &str) -> JWT {
-        let rsa = Rsa::private_key_from_pem(secret.replace("\\n", "\n").as_bytes()).unwrap();
+    pub fn sign(self, secret: &str) -> Result<JWT> {
+        let rsa = Rsa::private_key_from_pem(secret.replace("\\n", "\n").as_bytes())?;
 
         let pkey = PKeyWithDigest {
             digest: MessageDigest::sha256(),
-            key: PKey::from_rsa(rsa).unwrap(),
+            key: PKey::from_rsa(rsa)?,
         };
 
         let header = Header {
@@ -147,11 +167,10 @@ impl<'a> JWTBuilder<'a> {
             content_type: None,
         };
 
-        JWT(Token::new(header, self.claims)
-            .sign_with_key(&pkey)
-            .unwrap()
+        Ok(JWT(Token::new(header, self.claims)
+            .sign_with_key(&pkey)?
             .as_str()
-            .to_string())
+            .to_string()))
     }
 }
 
@@ -176,7 +195,7 @@ fn test_email_client() {
 
         let jwt = JWTBuilder::new()
             .issuer(&iss)
-            .scope("https://www.googleapis.com/auth/gmail.modifye")
+            .scope("https://mail.google.com https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.readonly")
             .audience("https://oauth2.googleapis.com/token")
             .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
             .issued_at(&unix_time().to_string())
@@ -192,5 +211,11 @@ fn test_email_client() {
         client.token_request().await;
 
         println!("TOKEN ID: {:?}", client.token_id);
+
+        let res = client
+            .get_request("https://gmail.googleapis.com/gmail/v1/users/{userId}/messages")
+            .await;
+
+        println!("RES: {}", res);
     });
 }
