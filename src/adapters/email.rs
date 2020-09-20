@@ -52,6 +52,7 @@ impl ClientBuilder {
             client_id: self.client_id.ok_or(ClientError::IncompleteBuilder)?,
             jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
+            token_id: None,
         })
     }
 }
@@ -60,9 +61,31 @@ pub struct Client {
     client_id: String,
     jwt: JWT,
     token_url: String,
+    token_id: Option<String>
 }
 
-impl Client {}
+use reqwest::header::{self, HeaderName, HeaderValue};
+use reqwest::Client as ReqClient;
+
+impl Client {
+    pub async fn token_request(&mut self) {
+        let req_client = ReqClient::new();
+        let resp = req_client
+            .post(&self.token_url)
+            .header(
+                self::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-www-form-urlencoded"),
+            )
+            .body(reqwest::Body::from(format!(
+                "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={}",
+                &self.jwt.0
+            )))
+            .send()
+            .await;
+
+        self.token_id = Some(resp.unwrap().text().await.unwrap())
+    }
+}
 
 use jwt::claims::RegisteredClaims;
 use std::collections::BTreeMap;
@@ -133,25 +156,31 @@ fn unix_time() -> u64 {
 #[test]
 fn test_email_client() {
     use std::env;
+    use tokio::runtime::Runtime;
 
-    let client_id = env::var("TEST_GOOG_CLIENT_ID").unwrap();
-    let private_key = env::var("TEST_GOOG_SEC_KEY").unwrap();
-    let iss = env::var("TEST_GOOG_ISSUER").unwrap();
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(async move {
+        let client_id = env::var("TEST_GOOG_CLIENT_ID").unwrap();
+        let private_key = env::var("TEST_GOOG_SEC_KEY").unwrap();
+        let iss = env::var("TEST_GOOG_ISSUER").unwrap();
 
-    let jwt = JWTBuilder::new()
-        .issuer(&iss)
-        .scope("https://www.googleapis.com/auth/gmail.modifye")
-        .audience("https://oauth2.googleapis.com/token")
-        .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
-        .issued_at(&unix_time().to_string())
-        .sign(&private_key);
+        let jwt = JWTBuilder::new()
+            .issuer(&iss)
+            .scope("https://www.googleapis.com/auth/gmail.modifye")
+            .audience("https://oauth2.googleapis.com/token")
+            .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
+            .issued_at(&unix_time().to_string())
+            .sign(&private_key);
 
-    println!(">> {}", jwt.0);
+        let mut client = ClientBuilder::new()
+            .client_id(&client_id)
+            .jwt(jwt)
+            .token_url("https://oauth2.googleapis.com/token")
+            .build()
+            .unwrap();
 
-    let client = ClientBuilder::new()
-        .client_id(&client_id)
-        .jwt(jwt)
-        .token_url("https://oauth2.googleapis.com/token")
-        .build()
-        .unwrap();
+        client.token_request().await;
+
+        println!("TOKEN ID: {:?}", client.token_id);
+    });
 }
