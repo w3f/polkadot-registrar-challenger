@@ -20,26 +20,26 @@ use url::Url;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
-    #[fail(display = "failed to open state store")]
-    StateStore,
-    #[fail(display = "failed to create client with the given config")]
-    ClientCreation,
-    #[fail(display = "failed to login into the homeserver")]
-    Login,
-    #[fail(display = "failed to sync")]
-    Sync,
-    #[fail(display = "the specified UserId is invalid")]
-    InvalidUserId,
-    #[fail(display = "failed to join room")]
-    JoinRoom,
+    #[fail(display = "failed to open state store: {}", 0)]
+    StateStore(failure::Error),
+    #[fail(display = "failed to create client with the given config: {}", 0)]
+    ClientCreation(failure::Error),
+    #[fail(display = "failed to login into the homeserver: {}", 0)]
+    Login(failure::Error),
+    #[fail(display = "failed to sync: {}", 0)]
+    Sync(failure::Error),
+    #[fail(display = "the specified UserId is invalid: {}", 0)]
+    InvalidUserId(failure::Error),
+    #[fail(display = "failed to join room: {}", 0)]
+    JoinRoom(failure::Error),
     #[fail(display = "joining room timed out")]
     JoinRoomTimeout,
     #[fail(display = "the remote UserId was not found when trying to respond")]
     RemoteUserIdNotFound,
-    #[fail(display = "the UserId is no known (no pending on-chain judgement request)")]
+    #[fail(display = "the UserId is unknown (no pending on-chain judgement request)")]
     UnknownUser,
-    #[fail(display = "failed to send message")]
-    SendMessage,
+    #[fail(display = "failed to send message: {}", 0)]
+    SendMessage(failure::Error),
 }
 
 #[derive(Clone)]
@@ -57,24 +57,25 @@ impl MatrixClient {
         comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
         // Setup client
-        let store = JsonStore::open("/tmp/matrix_store").map_err(|_| MatrixError::StateStore)?;
+        let store = JsonStore::open("/tmp/matrix_store")
+            .map_err(|err| MatrixError::StateStore(err.into()))?;
         let client_config = ClientConfig::new().state_store(Box::new(store));
 
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
         let mut client = Client::new_with_config(homeserver, client_config)
-            .map_err(|_| MatrixError::ClientCreation)?;
+            .map_err(|err| MatrixError::ClientCreation(err.into()))?;
 
         // Login with credentials
         client
             .login(username, password, None, Some("rust-sdk"))
             .await
-            .map_err(|_| MatrixError::Login)?;
+            .map_err(|err| MatrixError::Login(err.into()))?;
 
         // Sync up, avoid responding to old messages.
         client
             .sync(SyncSettings::default())
             .await
-            .map_err(|_| MatrixError::Sync)?;
+            .map_err(|err| MatrixError::Sync(err.into()))?;
 
         // Add event emitter (responder)
         client
@@ -106,7 +107,7 @@ impl MatrixClient {
             });
         }
     }
-    async fn local(&self) -> StdResult<(), MatrixError> {
+    async fn local(&self) -> Result<()> {
         let (network_address, account, challenge, room_id) = self.comms.recv_inform().await;
 
         // If a room already exists, don't create a new one.
@@ -122,7 +123,7 @@ impl MatrixClient {
                     .as_str()
                     .clone()
                     .try_into()
-                    .map_err(|_| MatrixError::InvalidUserId)?];
+                    .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?];
 
                 let mut request = Request::default();
                 request.invite = &to_invite;
@@ -132,7 +133,7 @@ impl MatrixClient {
                     .client
                     .create_room(request)
                     .await
-                    .map_err(|_| MatrixError::JoinRoom)?;
+                    .map_err(|err| MatrixError::JoinRoom(err.into()))?;
 
                 self.comms
                     .notify_room_id(network_address.address().clone(), resp.room_id.clone());
@@ -155,7 +156,7 @@ impl MatrixClient {
             &room_id,
         )
         .await
-        .map_err(|_| MatrixError::SendMessage)?;
+        .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
         Ok(())
     }
@@ -199,7 +200,7 @@ impl Responder {
         &self,
         room: SyncRoom,
         event: &SyncMessageEvent<MessageEventContent>,
-    ) -> StdResult<(), MatrixError> {
+    ) -> Result<()> {
         // Do not respond to its own messages.
         if event.sender
             == self
@@ -226,7 +227,7 @@ impl Responder {
                 } => (network_address, challenge),
                 CommsMessage::InvalidRequest => {
                     // Reject user
-                    return Err(MatrixError::UnknownUser);
+                    return Err(failure::Error::from(MatrixError::UnknownUser));
                 }
                 _ => panic!("Received unrecognized message type on Matrix client. Report as bug."),
             };
@@ -250,7 +251,7 @@ impl Responder {
                 Ok(msg) => {
                     self.send_msg(&msg, &room_id)
                         .await
-                        .map_err(|_| MatrixError::SendMessage)?;
+                        .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
                     self.comms.notify_challenge_status(
                         network_address,
@@ -261,7 +262,7 @@ impl Responder {
                 Err(err) => {
                     self.send_msg(&err.to_string(), &room_id)
                         .await
-                        .map_err(|_| MatrixError::SendMessage)?;
+                        .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
                     self.comms.notify_challenge_status(
                         network_address,
