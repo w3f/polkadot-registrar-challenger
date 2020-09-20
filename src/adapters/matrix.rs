@@ -42,6 +42,25 @@ pub enum MatrixError {
     SendMessage(failure::Error),
 }
 
+async fn send_msg(
+    client: &Client,
+    msg: &str,
+    room_id: &matrix_sdk::identifiers::RoomId,
+) -> Result<()> {
+    client
+        .room_send(
+            room_id,
+            AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
+                // TODO: Make a proper Message Creator for this
+                TextMessageEventContent::plain(msg),
+            )),
+            None,
+        )
+        .await?;
+
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
@@ -163,25 +182,6 @@ impl MatrixClient {
     }
 }
 
-async fn send_msg(
-    client: &Client,
-    msg: &str,
-    room_id: &matrix_sdk::identifiers::RoomId,
-) -> Result<()> {
-    client
-        .room_send(
-            room_id,
-            AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                // TODO: Make a proper Message Creator for this
-                TextMessageEventContent::plain(msg),
-            )),
-            None,
-        )
-        .await?;
-
-    Ok(())
-}
-
 struct Responder {
     client: Client,
     comms: CommsVerifier,
@@ -220,6 +220,8 @@ impl Responder {
                 AccountType::Matrix,
             );
 
+            let room_id = &room.read().await.room_id;
+
             let (network_address, challenge) = match self.comms.recv().await {
                 CommsMessage::AccountToVerify {
                     network_address,
@@ -235,22 +237,32 @@ impl Responder {
 
             let verifier = Verifier::new(network_address.clone(), challenge);
 
-            // TODO: Write a nicer function for this.
+            // Fetch the text message from the event.
             let msg_body = if let SyncMessageEvent {
                 content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
                 ..
             } = event
             {
-                msg_body.clone()
+                msg_body
             } else {
+                debug!(
+                    "Didn't receive a text message from {}",
+                    event.sender.as_str()
+                );
+
+                self.send_msg(
+                    "Please send the signature directly as a text message.",
+                    room_id,
+                )
+                .await
+                .map_err(|err| MatrixError::SendMessage(err.into()))?;
+
                 return Ok(());
             };
 
-            let room_id = room.read().await.room_id.clone();
-
             match verifier.verify(&msg_body) {
                 Ok(msg) => {
-                    self.send_msg(&msg, &room_id)
+                    self.send_msg(&msg, room_id)
                         .await
                         .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
@@ -261,7 +273,7 @@ impl Responder {
                     );
                 }
                 Err(err) => {
-                    self.send_msg(&err.to_string(), &room_id)
+                    self.send_msg(&err.to_string(), room_id)
                         .await
                         .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
@@ -282,8 +294,7 @@ impl Responder {
 impl EventEmitter for Responder {
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
         let _ = self.local(room, event).await.map_err(|err| {
-            // TODO: log...
-            err
+            error!("{}", err);
         });
     }
 }
