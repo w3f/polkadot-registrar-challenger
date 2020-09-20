@@ -61,7 +61,7 @@ pub struct Client {
     client_id: String,
     jwt: JWT,
     token_url: String,
-    token_id: Option<String>
+    token_id: Option<String>,
 }
 
 use reqwest::header::{self, HeaderName, HeaderValue};
@@ -69,21 +69,31 @@ use reqwest::Client as ReqClient;
 
 impl Client {
     pub async fn token_request(&mut self) {
-        let req_client = ReqClient::new();
-        let resp = req_client
-            .post(&self.token_url)
-            .header(
-                self::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-www-form-urlencoded"),
-            )
-            .body(reqwest::Body::from(format!(
-                "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion={}",
-                &self.jwt.0
-            )))
-            .send()
-            .await;
+        #[derive(Deserialize)]
+        struct TokenId {
+            id_token: String,
+        }
 
-        self.token_id = Some(resp.unwrap().text().await.unwrap())
+        let req_client = ReqClient::new();
+        self.token_id = Some(
+            req_client
+                .post(&self.token_url)
+                .header(
+                    self::header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/x-www-form-urlencoded"),
+                )
+                .body(reqwest::Body::from(format!(
+                    "grant_type={}&assertion={}",
+                    "urn:ietf:params:oauth:grant-type:jwt-bearer", self.jwt.0
+                )))
+                .send()
+                .await
+                .unwrap()
+                .json::<TokenId>()
+                .await
+                .unwrap()
+                .id_token,
+        );
     }
 }
 
