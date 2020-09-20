@@ -1,5 +1,7 @@
 use jwt::algorithm::openssl::PKeyWithDigest;
-use jwt::SignWithKey;
+use jwt::algorithm::AlgorithmType;
+use jwt::header::{Header, HeaderType};
+use jwt::{SignWithKey, Token};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -104,7 +106,18 @@ impl JWTBuilder {
             key: PKey::from_rsa(rsa).unwrap(),
         };
 
-        JWT(self.claims.sign_with_key(&pkey).unwrap())
+        let header = Header {
+            algorithm: AlgorithmType::Rs256,
+            key_id: None,
+            type_: Some(HeaderType::JsonWebToken),
+            content_type: None,
+        };
+
+        JWT(Token::new(header, self.claims)
+            .sign_with_key(&pkey)
+            .unwrap()
+            .as_str()
+            .to_string())
     }
 }
 
@@ -131,6 +144,8 @@ fn test_email_client() {
         .expiration(unix_time() + 3_000) // + 50 min
         .issued_at(unix_time())
         .sign(&private_key);
+
+    println!(">> {}", jwt.0);
 
     let client = ClientBuilder::new()
         .client_id(&client_id)
