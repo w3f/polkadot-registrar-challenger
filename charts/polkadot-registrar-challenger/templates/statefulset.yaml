@@ -22,10 +22,10 @@ spec:
       - name: {{ .Release.Name }}
         image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
         imagePullPolicy: IfNotPresent
-        readinessProbe:
-          httpGet:
-            path: /healthcheck
-            port: {{ .Values.port }}
+        # readinessProbe:
+        #   httpGet:
+        #     path: /healthcheck
+        #     port: {{ .Values.config.port }}
           initialDelaySeconds: 30
           timeoutSeconds: 3
         volumeMounts:
