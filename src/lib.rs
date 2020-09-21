@@ -10,13 +10,10 @@ extern crate serde;
 extern crate failure;
 
 use tokio::time::{self, Duration};
-
 use adapters::MatrixClient;
-
 use connector::Connector;
 use db::Database;
 use identity::IdentityManager;
-
 use primitives::{AccountType, Result};
 
 mod adapters;

@@ -1,7 +1,7 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database;
 use crate::primitives::{
-    Account, AccountType, Algorithm, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount,
+    Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount,
     NetworkAddress, PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};

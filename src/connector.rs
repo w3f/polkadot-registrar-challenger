@@ -5,7 +5,6 @@ use futures::{select_biased, FutureExt};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
-use tokio::time::{self, Duration};
 use websockets::{Frame, WebSocket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

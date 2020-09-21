@@ -6,8 +6,6 @@ use jwt::{SignWithKey, Token};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
-use sha2::Sha256;
-use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Fail)]
@@ -69,7 +67,7 @@ pub struct Client {
     token_id: Option<String>,
 }
 
-use reqwest::header::{self, HeaderName, HeaderValue};
+use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
 
 impl Client {
@@ -117,7 +115,7 @@ impl Client {
     }
 }
 
-use jwt::claims::RegisteredClaims;
+
 use std::collections::BTreeMap;
 
 pub struct JWTBuilder<'a> {

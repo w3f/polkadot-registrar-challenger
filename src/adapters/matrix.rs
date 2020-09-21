@@ -1,7 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
 use crate::verifier::Verifier;
-
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -12,7 +11,6 @@ use matrix_sdk::{
     identifiers::RoomId,
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
-
 use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
