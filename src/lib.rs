@@ -14,6 +14,7 @@ use connector::Connector;
 use db::Database;
 use identity::IdentityManager;
 use primitives::{AccountType, Result};
+use std::process::exit;
 use tokio::time::{self, Duration};
 
 // TODO: Make private
@@ -62,7 +63,8 @@ pub async fn run(config: Config) -> Result<()> {
         }
 
         if counter == 2 {
-            panic!("Failed connecting to Watcher")
+            error!("Failed connecting to Watcher, exiting...");
+            exit(1);
         }
 
         counter += 1;
