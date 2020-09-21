@@ -199,7 +199,7 @@ fn test_email_client() {
             .audience("https://oauth2.googleapis.com/token")
             .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
             .issued_at(&unix_time().to_string())
-            .sign(&private_key);
+            .sign(&private_key).unwrap();
 
         let mut client = ClientBuilder::new()
             .client_id(&client_id)
@@ -208,13 +208,14 @@ fn test_email_client() {
             .build()
             .unwrap();
 
-        client.token_request().await;
+        client.token_request().await.unwrap();
 
         println!("TOKEN ID: {:?}", client.token_id);
 
         let res = client
             .get_request("https://gmail.googleapis.com/gmail/v1/users/{userId}/messages")
-            .await;
+            .await
+            .unwrap();
 
         println!("RES: {}", res);
     });
