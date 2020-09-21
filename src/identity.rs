@@ -110,8 +110,6 @@ impl IdentityManager {
             idents.insert(ident.network_address.address().clone(), ident);
         }
 
-        println!("PRELOADED: {:?}", idents);
-
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {

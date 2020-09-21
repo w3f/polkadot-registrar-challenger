@@ -4,6 +4,8 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    env_logger::init();
+
     let config = Config {
         db_path: "/tmp/matrix_db".to_string(),
         watcher_url: "ws://test-registrar-watcher:3001".to_string(),
