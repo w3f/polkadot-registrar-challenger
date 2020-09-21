@@ -115,7 +115,6 @@ impl Client {
     }
 }
 
-
 use std::collections::BTreeMap;
 
 pub struct JWTBuilder<'a> {

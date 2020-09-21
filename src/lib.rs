@@ -9,12 +9,12 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use tokio::time::{self, Duration};
 use adapters::MatrixClient;
 use connector::Connector;
 use db::Database;
 use identity::IdentityManager;
 use primitives::{AccountType, Result};
+use tokio::time::{self, Duration};
 
 mod adapters;
 mod comms;

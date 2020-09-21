@@ -41,21 +41,6 @@ struct JudgementResponse {
     judgement: Judgement,
 }
 
-impl JudgementResponse {
-    fn reasonable(address: NetAccount) -> Result<String> {
-        Ok(serde_json::to_string(&JudgementResponse {
-            address: address,
-            judgement: Judgement::Reasonable,
-        })?)
-    }
-    fn erroneous(address: NetAccount) -> Result<String> {
-        Ok(serde_json::to_string(&JudgementResponse {
-            address: address,
-            judgement: Judgement::Erroneous,
-        })?)
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct JudgementRequest {
     address: NetAccount,

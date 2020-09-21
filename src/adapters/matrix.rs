@@ -1,4 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
+use crate::identity::AccountStatus;
 use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
 use crate::verifier::Verifier;
 use matrix_sdk::{
@@ -166,6 +167,14 @@ impl MatrixClient {
             }
         };
 
+        // Notify that the account is valid.
+        self.comms.notify_account_status(
+            network_address.clone(),
+            AccountType::Matrix,
+            AccountStatus::Valid,
+        );
+
+        // Send the instructions for verification to the user.
         self.send_msg(
             include_str!("../../messages/instructions")
                 .replace("{:PAYLOAD}", &challenge.as_str())
