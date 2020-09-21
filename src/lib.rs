@@ -30,6 +30,7 @@ mod verifier;
 pub struct Config {
     pub db_path: String,
     pub watcher_url: String,
+    pub enable_watcher: bool,
     pub matrix_homeserver: String,
     pub matrix_username: String,
     pub matrix_password: String,
@@ -64,14 +65,19 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Trying to connect to Watcher");
     let mut counter = 0;
     let mut interval = time::interval(Duration::from_secs(5));
-    let connector;
 
+    let mut connector = None;
     loop {
         interval.tick().await;
 
+        // Only connect to Watcher if the config specifies so.
+        if !config.enable_watcher {
+            break;
+        }
+
         if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
             info!("Connecting to Watcher succeeded");
-            connector = con;
+            connector = Some(con);
             break;
         } else {
             warn!("Connecting to Watcher failed, trying again...");
@@ -100,9 +106,11 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     tokio::spawn(async move {
         manager.start().await.unwrap();
     });
-    tokio::spawn(async move {
-        connector.start().await;
-    });
+    if config.enable_watcher {
+        tokio::spawn(async move {
+            connector.unwrap().start().await;
+        });
+    }
     tokio::spawn(async move {
         matrix.start().await;
     });
