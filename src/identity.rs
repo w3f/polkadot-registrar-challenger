@@ -1,49 +1,13 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database;
 use crate::primitives::{
-    Account, AccountType, Algorithm, Challenge, Fatal, NetAccount, NetworkAddress, PubKey, Result,
+    Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount, NetworkAddress,
+    PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
-
-// TODO: add cfg
-pub struct TestClient {
-    comms: CommsVerifier,
-}
-
-impl TestClient {
-    pub fn new(comms: CommsVerifier) -> Self {
-        TestClient { comms: comms }
-    }
-    pub fn gen_data(&self) {
-        let sk = schnorrkel::keys::SecretKey::generate();
-        let pk = sk.to_public();
-
-        let ident = OnChainIdentity {
-            network_address: NetAccount::from("136nXcbVseRqQHvu6iDraV2Qi9p4YCMBgdeDpDLLgmRjEqVb")
-                .try_into()
-                .unwrap(),
-            display_name: None,
-            legal_name: None,
-            email: None,
-            web: None,
-            twitter: None,
-            matrix: Some(AccountState::new(
-                Account::from("@fabio:web3.foundation"),
-                AccountType::Matrix,
-            )),
-        };
-
-        let random = &ident.matrix.as_ref().unwrap().challenge;
-
-        let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
-        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
-
-        self.comms.new_on_chain_identity(ident);
-    }
-}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -60,7 +24,7 @@ impl OnChainIdentity {
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
-    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountValidity) {
+    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountStatus) {
         use AccountType::*;
 
         match account_ty {
@@ -92,9 +56,10 @@ impl OnChainIdentity {
 pub struct AccountState {
     account: Account,
     account_ty: AccountType,
-    account_validity: AccountValidity,
+    account_validity: AccountStatus,
     challenge: Challenge,
     challenge_status: ChallengeStatus,
+    skip_inform: bool,
 }
 
 impl AccountState {
@@ -102,15 +67,16 @@ impl AccountState {
         AccountState {
             account: account,
             account_ty: account_ty,
-            account_validity: AccountValidity::Unknown,
+            account_validity: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
-            challenge_status: ChallengeStatus::Init,
+            challenge_status: ChallengeStatus::Unconfirmed,
+            skip_inform: false,
         }
     }
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum AccountValidity {
+pub enum AccountStatus {
     #[serde(rename = "unknown")]
     Unknown,
     #[serde(rename = "valid")]
@@ -119,16 +85,6 @@ enum AccountValidity {
     Invalid,
     #[serde(rename = "notified")]
     Notified,
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-enum ChallengeStatus {
-    #[serde(rename = "init")]
-    Init,
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "rejected")]
-    Rejected,
 }
 
 pub struct IdentityManager {
@@ -182,47 +138,25 @@ impl IdentityManager {
         loop {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
-                    CommsMessage::NewOnChainIdentity(ident) => {
+                    NewJudgementRequest(ident) => {
                         self.handle_register_request(ident)?;
                     }
-                    ChallengeAccepted {
+                    UpdateChallengeStatus {
                         network_address,
                         account_ty,
+                        status,
                     } => {
-                        self.handle_challenge_feedback(
-                            network_address,
-                            account_ty,
-                            ChallengeStatus::Accepted,
-                        );
+                        self.handle_challenge_update(network_address, account_ty, status);
                     }
-                    ChallengeRejected {
+                    UpdateAccountStatus {
                         network_address,
                         account_ty,
+                        account_validity,
                     } => {
-                        self.handle_challenge_feedback(
+                        self.handle_account_confirmation(
                             network_address,
                             account_ty,
-                            ChallengeStatus::Rejected,
-                        );
-                    }
-                    ValidAccount {
-                        network_address,
-                        account_ty,
-                    } => {
-                        self.handle_validity_feedback(
-                            network_address,
-                            account_ty,
-                            AccountValidity::Valid,
-                        );
-                    }
-                    InvalidAccount {
-                        network_address,
-                        account_ty,
-                    } => {
-                        self.handle_validity_feedback(
-                            network_address,
-                            account_ty,
-                            AccountValidity::Invalid,
+                            account_validity,
                         );
                     }
                     TrackRoomId { address, room_id } => {
@@ -242,7 +176,7 @@ impl IdentityManager {
             }
         }
     }
-    fn handle_challenge_feedback(
+    fn handle_challenge_update(
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
@@ -253,7 +187,7 @@ impl IdentityManager {
             .idents
             .get_mut(network_address.address())
             .map(|ident| {
-                ident.set_challenge_status(account_ty, challenge_status);
+                ident.set_challenge_status(account_ty, challenge_status.clone());
                 ident
             })
             .fatal();
@@ -266,12 +200,21 @@ impl IdentityManager {
                 ident.to_json().fatal(),
             )
             .fatal();
+
+        // TODO: Handle additional accounts.
+        if let ChallengeStatus::Accepted = challenge_status {
+            self.comms
+                .pairs
+                .get(&AccountType::ReservedConnector)
+                .fatal()
+                .judge_identity(network_address, Judgement::Reasonable);
+        }
     }
-    fn handle_validity_feedback(
+    fn handle_account_confirmation(
         &mut self,
         network_address: NetworkAddress,
         account_ty: AccountType,
-        account_validity: AccountValidity,
+        account_validity: AccountStatus,
     ) {
         // Confirm the validity of the account type.
         let ident = self
@@ -298,6 +241,21 @@ impl IdentityManager {
         let db_idents = self.db.scope("pending_identities");
         let db_rooms = self.db.scope("matrix_rooms");
 
+        // Check changes
+        // TODO: Check additional account types.
+        let mut ident = ident;
+        if let Some(ex_ident) = self.idents.remove(&ident.network_address.address()) {
+            if ident.matrix.is_some() && ex_ident.matrix.is_some() {
+                if ident.matrix.as_ref().unwrap().account
+                    == ex_ident.matrix.as_ref().unwrap().account
+                {
+                    ident.matrix.as_mut().map(|state| state.skip_inform = true);
+                } else {
+                    ident.matrix = ex_ident.matrix;
+                }
+            }
+        }
+
         // Save the pending on-chain identity to disk.
         db_idents.put(ident.network_address.address().as_str(), ident.to_json()?)?;
 
@@ -306,7 +264,12 @@ impl IdentityManager {
             .insert(ident.network_address.address().clone(), ident.clone());
 
         // Only matrix supported for now.
+        // TODO: support additional account types.
         ident.matrix.as_ref().map::<(), _>(|state| {
+            if state.skip_inform {
+                return;
+            }
+
             let room_id = if let Some(bytes) = db_rooms
                 .get(ident.network_address.address().as_str())
                 .fatal()
@@ -316,12 +279,16 @@ impl IdentityManager {
                 None
             };
 
-            self.comms.pairs.get(&state.account_ty).fatal().inform(
-                ident.network_address.clone(),
-                state.account.clone(),
-                state.challenge.clone(),
-                room_id,
-            );
+            self.comms
+                .pairs
+                .get(&state.account_ty)
+                .fatal()
+                .notify_account_verification(
+                    ident.network_address.clone(),
+                    state.account.clone(),
+                    state.challenge.clone(),
+                    room_id,
+                );
         });
 
         Ok(())
@@ -351,7 +318,7 @@ impl IdentityManager {
                 _ => panic!("Unsupported"),
             };
 
-            comms.inform(
+            comms.notify_account_verification(
                 ident.network_address.clone(),
                 state.account.clone(),
                 state.challenge.clone(),

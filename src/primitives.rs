@@ -171,10 +171,20 @@ pub enum AccountType {
     Twitter,
     #[serde(rename = "matrix")]
     Matrix,
-    #[serde(rename = "reserved_connector")]
+    // Reserved types for internal communication.
     ReservedConnector,
-    #[serde(rename = "reserved_emitter")]
     ReservedEmitter,
+    ReservedFeeder,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ChallengeStatus {
+    #[serde(rename = "unconfirmed")]
+    Unconfirmed,
+    #[serde(rename = "accepted")]
+    Accepted,
+    #[serde(rename = "rejected")]
+    Rejected,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -197,6 +207,14 @@ impl Challenge {
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Judgement {
+    #[serde(rename = "reasonable")]
+    Reasonable,
+    #[serde(rename = "erroneous")]
+    Erroneous,
 }
 
 pub trait Fatal<T> {
