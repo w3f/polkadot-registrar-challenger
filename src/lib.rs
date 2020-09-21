@@ -34,6 +34,13 @@ pub struct Config {
     pub matrix_password: String,
 }
 
+pub async fn block() {
+    let mut interval = time::interval(Duration::from_secs(60));
+    loop {
+        interval.tick().await;
+    }
+}
+
 pub async fn run_custom_connector(config: Config, connector: Connector) -> Result<()> {
     setup(config, Some(connector)).await
 }
@@ -110,9 +117,5 @@ pub async fn setup(config: Config, connector: Option<Connector>) -> Result<()> {
 
     info!("All tasks executed");
 
-    // TODO: Adjust this
-    let mut interval = time::interval(Duration::from_secs(60));
-    loop {
-        interval.tick().await;
-    }
+    Ok(())
 }

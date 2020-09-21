@@ -1,8 +1,9 @@
-use lib::{run, Config};
+use failure::Error;
+use lib::{block, run, Config};
 use std::env;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Error> {
     let config = Config {
         db_path: "/tmp/matrix_db".to_string(),
         watcher_url: "ws://localhost:3001".to_string(),
@@ -11,5 +12,8 @@ async fn main() {
         matrix_password: env::var("TEST_MATRIX_PASSWORD").unwrap(),
     };
 
-    run(config).await.unwrap();
+    run(config).await?;
+    block().await;
+
+    Ok(())
 }
