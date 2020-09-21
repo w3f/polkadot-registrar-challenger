@@ -45,7 +45,28 @@ pub async fn run(config: Config) -> Result<()> {
     // TODO: move to a test suite
     let c_test = manager.register_comms(AccountType::Email);
 
-    let connector = Connector::new(&config.watcher_url, c_connector).await?;
+    let mut interval = time::interval(Duration::from_secs(5));
+    let connector;
+    info!("Trying to connect to Watcher");
+
+    let mut counter = 0;
+    loop {
+        interval.tick().await;
+
+        if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
+            info!("Connecting to Watcher succeeded");
+            connector = con;
+            break;
+        } else {
+            warn!("Connecting to Watcher failed, trying again...");
+        }
+
+        if counter == 2 {
+            panic!("Failed connecting to Watcher")
+        }
+
+        counter += 1;
+    }
 
     info!("Setting up Matrix client");
     let matrix = MatrixClient::new(
