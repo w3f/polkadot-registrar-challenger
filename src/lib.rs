@@ -16,7 +16,8 @@ use identity::IdentityManager;
 use primitives::{AccountType, Result};
 use tokio::time::{self, Duration};
 
-mod adapters;
+// TODO: Make private
+pub mod adapters;
 mod comms;
 mod connector;
 mod db;

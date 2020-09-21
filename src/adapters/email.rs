@@ -6,7 +6,6 @@ use jwt::{SignWithKey, Token};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Fail)]
 enum ClientError {
@@ -17,7 +16,6 @@ enum ClientError {
 }
 
 pub struct ClientBuilder {
-    client_id: Option<String>,
     jwt: Option<JWT>,
     token_url: Option<String>,
 }
@@ -25,15 +23,8 @@ pub struct ClientBuilder {
 impl ClientBuilder {
     pub fn new() -> Self {
         ClientBuilder {
-            client_id: None,
             jwt: None,
             token_url: None,
-        }
-    }
-    pub fn client_id(self, client_id: &str) -> Self {
-        ClientBuilder {
-            client_id: Some(client_id.to_string()),
-            ..self
         }
     }
     pub fn jwt(self, jwt: JWT) -> Self {
@@ -51,7 +42,6 @@ impl ClientBuilder {
     pub fn build(self) -> Result<Client> {
         Ok(Client {
             client: ReqClient::new(),
-            client_id: self.client_id.ok_or(ClientError::IncompleteBuilder)?,
             jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
@@ -61,7 +51,6 @@ impl ClientBuilder {
 
 pub struct Client {
     client: ReqClient,
-    client_id: String,
     jwt: JWT,
     token_url: String,
     token_id: Option<String>,
@@ -75,7 +64,7 @@ impl Client {
         #[derive(Deserialize)]
         struct TokenResponse {
             access_token: String,
-            token_type: String,
+            #[allow(dead_code)]
             expires_in: usize,
         }
 
@@ -121,7 +110,7 @@ pub struct JWTBuilder<'a> {
     claims: BTreeMap<&'a str, &'a str>,
 }
 
-struct JWT(String);
+pub struct JWT(String);
 
 impl<'a> JWTBuilder<'a> {
     pub fn new() -> JWTBuilder<'a> {
@@ -171,22 +160,22 @@ impl<'a> JWTBuilder<'a> {
     }
 }
 
-fn unix_time() -> u64 {
-    let start = SystemTime::now();
-    start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs()
-}
-
 #[test]
 fn test_email_client() {
     use std::env;
+    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::runtime::Runtime;
+
+    fn unix_time() -> u64 {
+        let start = SystemTime::now();
+        start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs()
+    }
 
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async move {
-        let client_id = env::var("TEST_GOOG_CLIENT_ID").unwrap();
         let private_key = env::var("TEST_GOOG_SEC_KEY").unwrap();
         let iss = env::var("TEST_GOOG_ISSUER").unwrap();
 
@@ -199,7 +188,6 @@ fn test_email_client() {
             .sign(&private_key).unwrap();
 
         let mut client = ClientBuilder::new()
-            .client_id(&client_id)
             .jwt(jwt)
             .token_url("https://oauth2.googleapis.com/token")
             .build()
