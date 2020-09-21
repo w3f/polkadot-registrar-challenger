@@ -1,0 +1,106 @@
+version: 2
+
+jobs:
+
+  buildImage:
+    docker:
+      - image: web3f/ci-commons:v2.4.0
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          command: |
+            /scripts/build-image.sh web3f/polkadot-registrar-challenger .
+
+  publishImage:
+    docker:
+      - image: web3f/ci-commons:v2.4.0
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          command: |
+            /scripts/publish-image.sh web3f/polkadot-registrar-challenger
+
+  publishChart:
+    docker:
+      - image: web3f/ci-commons:v2.4.0
+    steps:
+      - checkout
+      - run:
+          command: |
+            /scripts/publish-chart.sh
+
+  integrationTests:
+    docker:
+      - image: web3f/ci-commons:v2.4.0
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          description: run integration tests
+          command: |
+            /scripts/integration-tests.sh     
+            
+  deploy:
+      docker:
+        - image: web3f/ci-commons:v2.4.0
+      steps:
+        - checkout
+        - run:
+            environment:
+              GCP_REGION: europe-west3
+              HELM_ENV: production
+            command: |
+              /scripts/deploy.sh -c engineering          
+
+workflows:
+  version: 2
+  test_and_deploy:
+    jobs:   
+      - buildImage:
+          context: dockerhub-bot
+          filters:
+            tags:
+              only: /.*/
+          requires:
+            - helmLint
+            - yarnLint
+      - integrationTests:
+          filters:
+            tags:
+              only: /.*/
+          requires:
+            - helmLint
+            - yarnLint        
+      - publishImage:
+          context: dockerhub-bot
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+          requires:
+            - buildImage
+            - integrationTests
+      - publishChart:
+          context: github-bot
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+          requires:
+            - buildImage
+            - integrationTests
+      - deploy:
+          context: 
+            - engineering-access
+          filters:
+            branches:
+              ignore: /.*/
+            tags:
+              only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
+          requires:
+            - publishImage
+            - publishChart      

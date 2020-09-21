@@ -1,0 +1,13 @@
+environment: production
+
+image:
+  repo: web3f/polkadot-registrar-challenger
+  tag: v0.1.0
+
+resources: 
+  requests:
+    cpu: "300m"
+    memory: "500Mi"
+  limits:
+    cpu: "500m"
+    memory: "700Mi" 
