@@ -46,9 +46,9 @@ pub async fn run(config: Config) -> Result<()> {
     // TODO: move to a test suite
     let c_test = manager.register_comms(AccountType::Email);
 
+    info!("Trying to connect to Watcher");
     let mut interval = time::interval(Duration::from_secs(5));
     let connector;
-    info!("Trying to connect to Watcher");
 
     let mut counter = 0;
     loop {
