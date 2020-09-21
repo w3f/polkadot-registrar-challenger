@@ -1,6 +1,7 @@
 use crate::primitives::Result;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
+use tokio::time::{self, Duration};
 
 pub struct Twitter {
     client: Client,
@@ -27,7 +28,10 @@ impl Twitter {
             .await?)
     }
     pub async fn start(self) {
+        let mut interval = time::interval(Duration::from_secs(3));
         loop {
+            interval.tick().await;
+
             let _ = self.local().await.map_err(|err| {
                 error!("{}", err);
             });
