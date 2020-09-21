@@ -104,7 +104,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
 
     info!("Starting all tasks...");
     tokio::spawn(async move {
-        manager.start().await.unwrap();
+        manager.start().await;
     });
     if config.enable_watcher {
         tokio::spawn(async move {

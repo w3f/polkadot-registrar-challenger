@@ -127,7 +127,7 @@ impl IdentityManager {
         self.comms.pairs.insert(account_ty, cm);
         cv
     }
-    pub async fn start(mut self) -> Result<()> {
+    pub async fn start(mut self) {
         use CommsMessage::*;
 
         // No async support for `recv` (it blocks and chokes tokio), so we
@@ -137,7 +137,7 @@ impl IdentityManager {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
                     NewJudgementRequest(ident) => {
-                        self.handle_register_request(ident)?;
+                        self.handle_register_request(ident);
                     }
                     UpdateChallengeStatus {
                         network_address,
@@ -159,7 +159,7 @@ impl IdentityManager {
                     }
                     TrackRoomId { address, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
-                        db_rooms.put(address.as_str(), room_id.as_bytes())?;
+                        db_rooms.put(address.as_str(), room_id.as_bytes()).fatal();
                     }
                     RequestAccountState {
                         account,
@@ -235,7 +235,7 @@ impl IdentityManager {
 
         // TODO: Notify existing channels about invalidity.
     }
-    fn handle_register_request(&mut self, ident: OnChainIdentity) -> Result<()> {
+    fn handle_register_request(&mut self, ident: OnChainIdentity) {
         let db_idents = self.db.scope("pending_identities");
         let db_rooms = self.db.scope("matrix_rooms");
 
@@ -255,7 +255,12 @@ impl IdentityManager {
         }
 
         // Save the pending on-chain identity to disk.
-        db_idents.put(ident.network_address.address().as_str(), ident.to_json()?)?;
+        db_idents
+            .put(
+                ident.network_address.address().as_str(),
+                ident.to_json().fatal(),
+            )
+            .fatal();
 
         // Save the pending on-chain identity to memory.
         self.idents
@@ -288,8 +293,6 @@ impl IdentityManager {
                     room_id,
                 );
         });
-
-        Ok(())
     }
     fn handle_account_state_request(&self, account: Account, account_ty: AccountType) {
         let ident = self

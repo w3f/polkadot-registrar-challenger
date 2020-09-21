@@ -61,53 +61,67 @@ use reqwest::Client as ReqClient;
 
 impl Client {
     pub async fn token_request(&mut self) -> Result<()> {
-        #[derive(Deserialize)]
+        #[derive(Debug, Deserialize)]
         struct TokenResponse {
             access_token: String,
             #[allow(dead_code)]
             expires_in: usize,
         }
 
-        self.token_id = Some(
-            self.client
-                .post(&self.token_url)
-                .header(
-                    self::header::CONTENT_TYPE,
-                    HeaderValue::from_static("application/x-www-form-urlencoded"),
-                )
-                .body(reqwest::Body::from(format!(
-                    "grant_type={}&assertion={}",
-                    "urn:ietf:params:oauth:grant-type:jwt-bearer", self.jwt.0
-                )))
-                .send()
-                .await?
-                .json::<TokenResponse>()
-                .await?
-                .access_token,
-        );
+        let request = self
+            .client
+            .post(&self.token_url)
+            .header(
+                self::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-www-form-urlencoded"),
+            )
+            .body(reqwest::Body::from(format!(
+                "grant_type={}&assertion={}",
+                "urn:ietf:params:oauth:grant-type:jwt-bearer", self.jwt.0
+            )))
+            .build()?;
+
+        println!("DEBUG token request: {:?}", request);
+
+        let response = self
+            .client
+            .execute(request)
+            .await?
+            .json::<TokenResponse>()
+            .await?;
+
+        println!("DEBUG token response: {:?}", response);
+
+        self.token_id = Some(response.access_token);
 
         Ok(())
     }
     pub async fn get_request(&self, url: &str) -> Result<String> {
-        Ok(self
+        let request = self
             .client
             .get(&url.replace(
                 "{userId}",
-                "w3f-registrar-bot@w3f-registrar-bot.iam.gserviceaccount.com",
+                //"w3f-registrar-bot@w3f-registrar-bot.iam.gserviceaccount.com",
+                "fabio@web3.foundation",
             ))
             .header(
                 self::header::CONTENT_TYPE,
                 HeaderValue::from_static("application/x-www-form-urlencoded"),
             )
-            .bearer_auth(
-                self.token_id
-                    .as_ref()
-                    .ok_or(ClientError::MissingAccessToken)?,
+            .header(
+                self::header::AUTHORIZATION,
+                HeaderValue::from_str(&format!(
+                    "Bearer {}",
+                    self.token_id
+                        .as_ref()
+                        .ok_or(ClientError::MissingAccessToken)?
+                ))?,
             )
-            .send()
-            .await?
-            .text()
-            .await?)
+            .build()?;
+
+        println!("DEBUG endpoint request: {:?}", request);
+
+        Ok(self.client.execute(request).await?.text().await?)
     }
 }
 
@@ -131,6 +145,10 @@ impl<'a> JWTBuilder<'a> {
     }
     pub fn scope(mut self, scope: &'a str) -> Self {
         self.claims.insert("scope", scope);
+        self.claims.insert(
+            "sub",
+            "w3f-registrar-bot@w3f-registrar-bot.iam.gserviceaccount.com",
+        );
         self
     }
     pub fn audience(mut self, aud: &'a str) -> Self {
@@ -160,10 +178,14 @@ impl<'a> JWTBuilder<'a> {
             content_type: None,
         };
 
-        Ok(JWT(Token::new(header, self.claims)
+        let jwt = JWT(Token::new(header, self.claims)
             .sign_with_key(&pkey)?
             .as_str()
-            .to_string()))
+            .to_string());
+
+        //println!("DEBUG jwt: {}", jwt.0);
+
+        Ok(jwt)
     }
 }
 
@@ -201,8 +223,6 @@ fn test_email_client() {
             .unwrap();
 
         client.token_request().await.unwrap();
-
-        println!("TOKEN ID: {:?}", client.token_id);
 
         let res = client
             .get_request("https://gmail.googleapis.com/gmail/v1/users/{userId}/messages")
