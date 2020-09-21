@@ -9,43 +9,6 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
 
-// TODO: add cfg
-pub struct TestClient {
-    comms: CommsVerifier,
-}
-
-impl TestClient {
-    pub fn new(comms: CommsVerifier) -> Self {
-        TestClient { comms: comms }
-    }
-    pub fn gen_data(&self) {
-        let sk = schnorrkel::keys::SecretKey::generate();
-        let pk = sk.to_public();
-
-        let ident = OnChainIdentity {
-            network_address: NetAccount::from("5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty")
-                .try_into()
-                .unwrap(),
-            display_name: None,
-            legal_name: None,
-            email: None,
-            web: None,
-            twitter: None,
-            matrix: Some(AccountState::new(
-                Account::from("@fabio:web3.foundation"),
-                AccountType::Matrix,
-            )),
-        };
-
-        let random = &ident.matrix.as_ref().unwrap().challenge;
-
-        let sig = sk.sign_simple(b"substrate", &random.as_bytes(), &pk);
-        println!("SIG: >> {}", hex::encode(&sig.to_bytes()));
-
-        self.comms.notify_new_identity(ident);
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
     pub network_address: NetworkAddress,

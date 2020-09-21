@@ -10,6 +10,7 @@ extern crate serde;
 extern crate failure;
 
 use adapters::MatrixClient;
+use comms::CommsVerifier;
 use connector::Connector;
 use db::Database;
 use identity::IdentityManager;
@@ -20,7 +21,7 @@ use tokio::time::{self, Duration};
 // TODO: Make private
 pub mod adapters;
 mod comms;
-mod connector;
+pub mod connector;
 mod db;
 mod identity;
 mod primitives;
@@ -41,15 +42,15 @@ pub async fn block() {
     }
 }
 
-pub async fn run_custom_connector(config: Config, connector: Connector) -> Result<()> {
-    setup(config, Some(connector)).await
-}
-
 pub async fn run(config: Config) -> Result<()> {
-    setup(config, None).await
+    setup(config).await.map(|_| ())
 }
 
-pub async fn setup(config: Config, connector: Option<Connector>) -> Result<()> {
+pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
+    setup(config).await
+}
+
+pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Setting up database and manager");
     let db = Database::new(&config.db_path)?;
     let mut manager = IdentityManager::new(db)?;
@@ -58,37 +59,31 @@ pub async fn setup(config: Config, connector: Option<Connector>) -> Result<()> {
     let c_connector = manager.register_comms(AccountType::ReservedConnector);
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
-    // TODO: move to a test suite
-    let c_test = manager.register_comms(AccountType::Email);
+    let c_feeder = manager.register_comms(AccountType::ReservedFeeder);
 
     info!("Trying to connect to Watcher");
     let mut counter = 0;
-    let connector = if let Some(con) = connector {
-        con
-    } else {
-        let mut interval = time::interval(Duration::from_secs(5));
-        let connector;
-        loop {
-            interval.tick().await;
+    let mut interval = time::interval(Duration::from_secs(5));
+    let connector;
 
-            if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
-                info!("Connecting to Watcher succeeded");
-                connector = con;
-                break;
-            } else {
-                warn!("Connecting to Watcher failed, trying again...");
-            }
+    loop {
+        interval.tick().await;
 
-            if counter == 2 {
-                error!("Failed connecting to Watcher, exiting...");
-                exit(1);
-            }
-
-            counter += 1;
+        if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
+            info!("Connecting to Watcher succeeded");
+            connector = con;
+            break;
+        } else {
+            warn!("Connecting to Watcher failed, trying again...");
         }
 
-        connector
-    };
+        if counter == 2 {
+            error!("Failed connecting to Watcher, exiting...");
+            exit(1);
+        }
+
+        counter += 1;
+    }
 
     info!("Setting up Matrix client");
     let matrix = MatrixClient::new(
@@ -100,9 +95,6 @@ pub async fn setup(config: Config, connector: Option<Connector>) -> Result<()> {
         c_emitter,
     )
     .await?;
-
-    // TODO: move to a test suite
-    identity::TestClient::new(c_test).gen_data();
 
     info!("Starting all tasks...");
     tokio::spawn(async move {
@@ -117,5 +109,5 @@ pub async fn setup(config: Config, connector: Option<Connector>) -> Result<()> {
 
     info!("All tasks executed");
 
-    Ok(())
+    Ok(c_feeder)
 }

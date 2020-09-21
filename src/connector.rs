@@ -42,7 +42,7 @@ struct JudgementResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct JudgementRequest {
+pub struct JudgementRequest {
     address: NetAccount,
     accounts: Accounts,
 }
@@ -214,6 +214,12 @@ impl Connector {
                 }
             }
         };
+
+        Ok(())
+    }
+    pub fn new_judgement_request(&self, request: JudgementRequest) -> Result<()> {
+        let ident = OnChainIdentity::try_from(request)?;
+        self.comms.notify_new_identity(ident);
 
         Ok(())
     }

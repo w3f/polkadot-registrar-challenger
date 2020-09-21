@@ -171,10 +171,10 @@ pub enum AccountType {
     Twitter,
     #[serde(rename = "matrix")]
     Matrix,
-    #[serde(rename = "reserved_connector")]
+    // Reserved types for internal communication.
     ReservedConnector,
-    #[serde(rename = "reserved_emitter")]
     ReservedEmitter,
+    ReservedFeeder,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

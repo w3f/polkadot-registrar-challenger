@@ -91,7 +91,14 @@ impl Client {
     pub async fn get_request(&self, url: &str) -> Result<String> {
         Ok(self
             .client
-            .get(&url.replace("{userId}", "me"))
+            .get(&url.replace(
+                "{userId}",
+                "w3f-registrar-bot@w3f-registrar-bot.iam.gserviceaccount.com",
+            ))
+            .header(
+                self::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-www-form-urlencoded"),
+            )
             .bearer_auth(
                 self.token_id
                     .as_ref()
