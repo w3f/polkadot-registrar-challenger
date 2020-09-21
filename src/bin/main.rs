@@ -6,7 +6,7 @@ use std::env;
 async fn main() -> Result<(), Error> {
     let config = Config {
         db_path: "/tmp/matrix_db".to_string(),
-        watcher_url: "ws://localhost:3001".to_string(),
+        watcher_url: "ws://test-registrar-watcher:3001".to_string(),
         enable_watcher: true,
         matrix_homeserver: env::var("TEST_MATRIX_HOMESERVER").unwrap(),
         matrix_username: env::var("TEST_MATRIX_USER").unwrap(),
