@@ -71,11 +71,13 @@ impl MatrixClient {
         homeserver: &str,
         username: &str,
         password: &str,
+        db_path: &str,
         comms: CommsVerifier,
         comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
+        info!("Setting up Matrix client");
         // Setup client
-        let store = JsonStore::open("/tmp/matrix_store")
+        let store = JsonStore::open(db_path)
             .map_err(|err| MatrixError::StateStore(err.into()))?;
         let client_config = ClientConfig::new().state_store(Box::new(store));
 
@@ -90,10 +92,32 @@ impl MatrixClient {
             .map_err(|err| MatrixError::Login(err.into()))?;
 
         // Sync up, avoid responding to old messages.
+        info!("Syncing Matrix client");
         client
             .sync(SyncSettings::default())
             .await
             .map_err(|err| MatrixError::Sync(err.into()))?;
+
+        // Request a list of open/pending room ids. Used to detect dead rooms.
+        comms.notify_request_all_room_ids();
+        let pending_room_ids = match comms.recv().await {
+            CommsMessage::AllRoomIds { room_ids } => room_ids,
+            _ => {
+                error!("Expected list of room ids, received unexpected message");
+                std::process::exit(1);
+            }
+        };
+
+        // Leave dead rooms.
+        info!("Detecting dead Matrix rooms");
+        let rooms = client.joined_rooms();
+        let rooms = rooms.read().await;
+        for (room_id, room) in rooms.iter() {
+            if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
+                warn!("Leaving room: {}", room_id.as_str());
+                let _ = client.leave_room(room_id).await?;
+            }
+        }
 
         // Add event emitter (responder)
         client
@@ -154,6 +178,8 @@ impl MatrixClient {
                     .await
                     .map_err(|err| MatrixError::JoinRoom(err.into()))?;
 
+                debug!("Connection to user established");
+
                 self.comms
                     .notify_room_id(network_address.address().clone(), resp.room_id.clone());
 
@@ -175,6 +201,7 @@ impl MatrixClient {
         );
 
         // Send the instructions for verification to the user.
+        debug!("Sending instructions to user");
         self.send_msg(
             include_str!("../../messages/instructions")
                 .replace("{:PAYLOAD}", &challenge.as_str())

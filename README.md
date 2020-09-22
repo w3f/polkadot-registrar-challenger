@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/w3f/polkadot-registrar-challenger.svg?style=svg)](https://circleci.com/gh/w3f/polkadot-registrar-challenger)
+
 # Polkadot Registrar Bot
 
 > [!!] WORK-IN-PROGRESS: this project is under active development and incomplete. Current progress is on the `develop` branch.

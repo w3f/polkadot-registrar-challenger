@@ -28,7 +28,8 @@ mod primitives;
 mod verifier;
 
 pub struct Config {
-    pub db_path: String,
+    pub registrar_db_path: String,
+    pub matrix_db_path: String,
     pub watcher_url: String,
     pub enable_watcher: bool,
     pub matrix_homeserver: String,
@@ -53,7 +54,7 @@ pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
 
 pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Setting up database and manager");
-    let db = Database::new(&config.db_path)?;
+    let db = Database::new(&config.registrar_db_path)?;
     let mut manager = IdentityManager::new(db)?;
 
     info!("Setting up communication channels");
@@ -96,6 +97,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         &config.matrix_homeserver,
         &config.matrix_username,
         &config.matrix_password,
+        &config.matrix_db_path,
         c_matrix,
         //c_matrix_emitter,
         c_emitter,

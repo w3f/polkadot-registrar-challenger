@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  serviceName: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ .Release.Name }}
+        image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: TEST_MATRIX_HOMESERVER
+          value: {{ .Values.env.matrix.homeServer }}
+        - name: TEST_MATRIX_USER
+          value: {{ .Values.env.matrix.user }}
+        - name: TEST_MATRIX_PASSWORD
+          value: {{ .Values.env.matrix.pass }} 
+        # readinessProbe:
+        #   httpGet:
+        #     path: /healthcheck
+        #     port: {{ .Values.config.port }}
+        #   initialDelaySeconds: 30
+        #   timeoutSeconds: 3
+        volumeMounts:
+        - name: matrix-db
+          mountPath: /tmp/matrix.db
+        - name: registrar-db
+          mountPath: /tmp/registrar.db
+      {{- if ne .Values.environment "ci" }}
+        resources:
+          limits:
+            cpu: 600m
+            memory: 1Gi
+          requests:
+            cpu: 300m
+            memory: 400Mi
+      {{- end }}
+      volumes:
+      {{ if eq .Values.environment "ci" }}
+      - name: matrix-db
+        emptyDir: {}
+      - name: registrar-db
+        emptyDir: {}  
+      {{ else }}
+  volumeClaimTemplates:
+  - metadata:
+      name: matrix-db
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 5Gi
+  - metadata:
+      name: registrar-db
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi        
+      {{ end }}
