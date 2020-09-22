@@ -37,9 +37,9 @@ spec:
         #   timeoutSeconds: 3
         volumeMounts:
         - name: matrix-db
-          mountPath: /tmp/matrix_db
+          mountPath: /tmp/matrix.db
         - name: registrar-db
-          mountPath: /tmp/registrar_db  
+          mountPath: /tmp/registrar.db
       {{- if ne .Values.environment "ci" }}
         resources:
           limits:
