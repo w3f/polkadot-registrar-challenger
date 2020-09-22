@@ -92,6 +92,11 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         counter += 1;
     }
 
+    info!("Starting manager task");
+    tokio::spawn(async move {
+        manager.start().await;
+    });
+
     info!("Setting up Matrix client");
     let matrix = MatrixClient::new(
         &config.matrix_homeserver,
@@ -99,25 +104,23 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         &config.matrix_password,
         &config.matrix_db_path,
         c_matrix,
-        //c_matrix_emitter,
         c_emitter,
     )
     .await?;
 
-    info!("Starting all tasks...");
-    tokio::spawn(async move {
-        manager.start().await;
-    });
-    if config.enable_watcher {
-        tokio::spawn(async move {
-            connector.unwrap().start().await;
-        });
-    }
+    info!("Starting Matrix task");
     tokio::spawn(async move {
         matrix.start().await;
     });
 
-    info!("All tasks executed");
+    if config.enable_watcher {
+        info!("Starting Watcher connector task, listening...");
+        tokio::spawn(async move {
+            connector.unwrap().start().await;
+        });
+    } else {
+        warn!("Watcher connector task is disabled. Cannot process any requests...");
+    }
 
     Ok(c_feeder)
 }

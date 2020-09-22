@@ -54,7 +54,6 @@ struct Accounts {
     email: Option<Account>,
     web: Option<Account>,
     twitter: Option<Account>,
-    #[serde(rename = "riot")]
     matrix: Option<Account>,
 }
 
@@ -178,6 +177,8 @@ impl Connector {
             frame = self.client.receive().fuse() => {
                 match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
                     Frame::Text { payload, .. } => {
+                        trace!("Received message from Watcher: {}", payload);
+
                         let try_msg = serde_json::from_str::<Message>(&payload);
                         let msg = if let Ok(msg) = try_msg {
                             msg
@@ -188,7 +189,7 @@ impl Connector {
 
                         match msg.event {
                             NewJudgementRequest => {
-                                info!("Received a new identity from Watcher");
+                                info!("Received a new judgement request from Watcher");
                                 if let Ok(request) =
                                     serde_json::from_value::<JudgementRequest>(msg.data)
                                 {

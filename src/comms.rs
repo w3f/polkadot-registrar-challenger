@@ -139,7 +139,7 @@ impl CommsVerifier {
         }
     }
     pub fn notify_request_all_room_ids(&self) {
-        self.tx.send(CommsMessage::RequestAllRoomIds).fatal()
+        self.tx.send(CommsMessage::RequestAllRoomIds).fatal();
     }
     pub fn notify_account_state_request(&self, account: Account, account_ty: AccountType) {
         self.tx

@@ -108,7 +108,11 @@ impl IdentityManager {
         let db_idents = db.scope("pending_identities");
         for (_, value) in db_idents.all()? {
             let ident = OnChainIdentity::from_json(&*value).fatal();
+            warn!("Found pending requests of address {} on disk", ident.network_address.address().as_str());
+            trace!("Identity status: {:?}", ident);
             idents.insert(ident.network_address.address().clone(), ident);
+
+            // TODO: Check status and notify tasks.
         }
 
         let (tx1, recv1) = unbounded();
@@ -251,6 +255,8 @@ impl IdentityManager {
     fn handle_register_request(&mut self, ident: OnChainIdentity) {
         let db_idents = self.db.scope("pending_identities");
         let db_rooms = self.db.scope("matrix_rooms");
+
+        trace!("Handling identity request: {:?}", ident);
 
         // Check changes
         // TODO: Check additional account types.

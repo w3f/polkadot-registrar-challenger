@@ -296,6 +296,7 @@ impl Responder {
 
             match verifier.verify(&msg_body) {
                 Ok(msg) => {
+                    debug!("Received valid challenge");
                     self.send_msg(&msg, room_id)
                         .await
                         .map_err(|err| MatrixError::SendMessage(err.into()))?;
@@ -307,6 +308,7 @@ impl Responder {
                     );
                 }
                 Err(err) => {
+                    debug!("Received invalid challenge");
                     self.send_msg(&err.to_string(), room_id)
                         .await
                         .map_err(|err| MatrixError::SendMessage(err.into()))?;
