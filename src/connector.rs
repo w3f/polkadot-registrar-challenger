@@ -186,8 +186,6 @@ impl Connector {
                             return Err(ConnectorError::InvalidMessage(try_msg.unwrap_err().into()));
                         };
 
-                        println!("DEBUG MSG: {:?}", msg);
-
                         match msg.event {
                             NewJudgementRequest => {
                                 println!("Received a new identity from Watcher!");

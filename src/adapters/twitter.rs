@@ -61,10 +61,18 @@ pub struct Twitter {
     version: f64,
 }
 
+use hmac::{Hmac, Mac, NewMac};
+use sha1::Sha1;
+
 fn sign(mut request: Request) {
-    let headers = request.headers_mut();
-    let mut h: Vec<(&HeaderName, &HeaderValue)> = headers.iter().collect();
-    h.sort_by(|(&a, _), (&b, _)| a.partial_cmp(b).unwrap());
+    let mut headers: Vec<(&HeaderName, &HeaderValue)> = request
+        .headers_mut()
+        .iter()
+        .collect::<Vec<(&HeaderName, &HeaderValue)>>();
+    headers.sort_by(|(a, _), (b, _)| a.as_str().cmp(b.as_str()));
+
+    let mut mac: Hmac<Sha1> = Hmac::new_varkey(b"").unwrap();
+    mac.update(b"");
 }
 
 impl Twitter {
