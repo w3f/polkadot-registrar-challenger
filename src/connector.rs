@@ -54,13 +54,13 @@ struct Accounts {
     email: Option<Account>,
     web: Option<Account>,
     twitter: Option<Account>,
-    #[serde(rename = "riot")]
     matrix: Option<Account>,
 }
 
 pub struct Connector {
     client: WebSocket,
     comms: CommsVerifier,
+    url: String,
 }
 
 #[derive(Debug, Fail)]
@@ -78,6 +78,7 @@ impl Connector {
         let mut connector = Connector {
             client: WebSocket::connect(url).await?,
             comms: comms,
+            url: url.to_owned(),
         };
 
         connector.send_ack(Some("Connection established")).await?;
@@ -126,7 +127,7 @@ impl Connector {
         let mut receiver_error = false;
 
         loop {
-            let _ = self.local().await.map_err(|err| {
+            if let Err(err) = self.local().await {
                 match err {
                     ConnectorError::Receiver(err) => {
                         // Prevent spamming log messages if the server is
@@ -135,6 +136,16 @@ impl Connector {
                             error!("Disconnected from Listener: {}", err);
                             receiver_error = true;
                         }
+
+                        // Try to silently reconnect
+                        WebSocket::connect(&self.url)
+                            .await
+                            .map(|client| {
+                                info!("Reconnected to Watcher");
+                                self.client = client;
+                                receiver_error = false;
+                            })
+                            .unwrap_or(());
                     }
                     _ => {
                         receiver_error = false;
@@ -142,7 +153,7 @@ impl Connector {
                         error!("{}", err);
                     }
                 }
-            });
+            };
         }
     }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
@@ -178,6 +189,8 @@ impl Connector {
             frame = self.client.receive().fuse() => {
                 match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
                     Frame::Text { payload, .. } => {
+                        trace!("Received message from Watcher: {}", payload);
+
                         let try_msg = serde_json::from_str::<Message>(&payload);
                         let msg = if let Ok(msg) = try_msg {
                             msg
@@ -188,7 +201,7 @@ impl Connector {
 
                         match msg.event {
                             NewJudgementRequest => {
-                                info!("Received a new identity from Watcher");
+                                info!("Received a new judgement request from Watcher");
                                 if let Ok(request) =
                                     serde_json::from_value::<JudgementRequest>(msg.data)
                                 {

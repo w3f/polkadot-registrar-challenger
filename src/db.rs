@@ -48,6 +48,9 @@ impl<'a> ScopedDatabase<'a> {
     pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>> {
         Ok(self.db.get_cf(self.cf()?, key)?)
     }
+    pub fn delete<K: AsRef<[u8]>>(&self, key: K) -> Result<()> {
+        Ok(self.db.delete_cf(self.cf()?, key)?)
+    }
     pub fn all(&self) -> Result<Vec<(Box<[u8]>, Box<[u8]>)>> {
         Ok(self
             .db

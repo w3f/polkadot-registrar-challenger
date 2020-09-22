@@ -18,7 +18,6 @@ use primitives::{AccountType, Result};
 use std::process::exit;
 use tokio::time::{self, Duration};
 
-// TODO: Make private
 pub mod adapters;
 mod comms;
 pub mod connector;
@@ -27,9 +26,11 @@ mod identity;
 mod primitives;
 mod verifier;
 
+#[derive(Deserialize)]
 pub struct Config {
     pub registrar_db_path: String,
     pub matrix_db_path: String,
+    pub log_level: log::LevelFilter,
     pub watcher_url: String,
     pub enable_watcher: bool,
     pub matrix_homeserver: String,
@@ -92,6 +93,11 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         counter += 1;
     }
 
+    info!("Starting manager task");
+    tokio::spawn(async move {
+        manager.start().await;
+    });
+
     info!("Setting up Matrix client");
     let matrix = MatrixClient::new(
         &config.matrix_homeserver,
@@ -99,25 +105,23 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         &config.matrix_password,
         &config.matrix_db_path,
         c_matrix,
-        //c_matrix_emitter,
         c_emitter,
     )
     .await?;
 
-    info!("Starting all tasks...");
-    tokio::spawn(async move {
-        manager.start().await;
-    });
-    if config.enable_watcher {
-        tokio::spawn(async move {
-            connector.unwrap().start().await;
-        });
-    }
+    info!("Starting Matrix task");
     tokio::spawn(async move {
         matrix.start().await;
     });
 
-    info!("All tasks executed");
+    if config.enable_watcher {
+        info!("Starting Watcher connector task, listening...");
+        tokio::spawn(async move {
+            connector.unwrap().start().await;
+        });
+    } else {
+        warn!("Watcher connector task is disabled. Cannot process any requests...");
+    }
 
     Ok(c_feeder)
 }

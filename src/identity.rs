@@ -8,7 +8,6 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
-use matrix_sdk::identifiers::RoomId;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -44,6 +43,12 @@ impl OnChainIdentity {
             }
             _ => {}
         }
+    }
+    fn is_fully_verified(&self) -> bool {
+        self.matrix
+            .as_ref()
+            .map(|state| state.challenge_status == ChallengeStatus::Accepted)
+            .unwrap_or(true)
     }
     fn from_json(val: &[u8]) -> Result<Self> {
         Ok(serde_json::from_slice(&val)?)
@@ -108,7 +113,14 @@ impl IdentityManager {
         let db_idents = db.scope("pending_identities");
         for (_, value) in db_idents.all()? {
             let ident = OnChainIdentity::from_json(&*value).fatal();
+            warn!(
+                "Found pending requests of address {} on disk",
+                ident.network_address.address().as_str()
+            );
+            trace!("Identity status: {:?}", ident);
             idents.insert(ident.network_address.address().clone(), ident);
+
+            // TODO: Check status and notify tasks.
         }
 
         let (tx1, recv1) = unbounded();
@@ -166,13 +178,20 @@ impl IdentityManager {
                     }
                     RequestAllRoomIds => {
                         let db_rooms = self.db.scope("matrix_rooms");
-                        let room_ids = db_rooms.all().fatal().iter()
-                        .map(|(_, val)| {
-                            String::from_utf8(val.to_vec()).fatal().try_into().fatal()
-                        })
-                        .collect();
+                        let room_ids = db_rooms
+                            .all()
+                            .fatal()
+                            .iter()
+                            .map(|(_, val)| {
+                                String::from_utf8(val.to_vec()).fatal().try_into().fatal()
+                            })
+                            .collect();
 
-                        self.comms.pairs.get(&AccountType::Matrix).fatal().all_room_ids(room_ids);
+                        self.comms
+                            .pairs
+                            .get(&AccountType::Matrix)
+                            .fatal()
+                            .all_room_ids(room_ids);
                     }
                     RequestAccountState {
                         account,
@@ -212,14 +231,39 @@ impl IdentityManager {
             )
             .fatal();
 
-        // TODO: Handle additional accounts.
-        if let ChallengeStatus::Accepted = challenge_status {
-            self.comms
-                .pairs
-                .get(&AccountType::ReservedConnector)
-                .fatal()
-                .judge_identity(network_address, Judgement::Reasonable);
+        // If all accounts have been verified, inform the Watcher.
+        if !ident.is_fully_verified() {
+            return;
         }
+
+        // TODO: Handle additional accounts.
+        debug!(
+            "Notifying Watcher about successful challenge by address {}",
+            network_address.address().as_str()
+        );
+        self.comms
+            .pairs
+            .get(&AccountType::ReservedConnector)
+            .fatal()
+            .judge_identity(network_address.clone(), Judgement::Reasonable);
+
+        // TODO: The Watcher should respond with an acknowledgement before cleaning up this identity.
+
+        // Leave matrix room.
+        let db_rooms = self.db.scope("matrix_rooms");
+        let room_id = db_rooms
+            .get(network_address.address().as_str())
+            .fatal()
+            .fatal();
+
+        // Delete from storage.
+        db_rooms.delete(&room_id).fatal();
+
+        self.comms
+            .pairs
+            .get(&AccountType::Matrix)
+            .fatal()
+            .leave_room(String::from_utf8(room_id).fatal().try_into().fatal());
     }
     fn handle_account_confirmation(
         &mut self,
@@ -251,6 +295,8 @@ impl IdentityManager {
     fn handle_register_request(&mut self, ident: OnChainIdentity) {
         let db_idents = self.db.scope("pending_identities");
         let db_rooms = self.db.scope("matrix_rooms");
+
+        trace!("Handling identity request: {:?}", ident);
 
         // Check changes
         // TODO: Check additional account types.

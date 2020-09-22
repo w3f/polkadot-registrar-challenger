@@ -191,17 +191,9 @@ impl<'a> JWTBuilder<'a> {
 
 #[test]
 fn test_email_client() {
+    use crate::primitives::unix_time;
     use std::env;
-    use std::time::{SystemTime, UNIX_EPOCH};
     use tokio::runtime::Runtime;
-
-    fn unix_time() -> u64 {
-        let start = SystemTime::now();
-        start
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs()
-    }
 
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async move {
