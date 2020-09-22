@@ -7,6 +7,12 @@ image:
 config:
   port: 3000  
 
+env:
+  matrix:
+    homeServer: 'https://matrix-client.matrix.org'
+    user: 'test-account'
+    pass: 'xxxxx'     
+
 resources: 
   requests:
     cpu: "300m"

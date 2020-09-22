@@ -22,6 +22,13 @@ spec:
       - name: {{ .Release.Name }}
         image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
         imagePullPolicy: IfNotPresent
+        env:
+        - name: TEST_MATRIX_HOMESERVER
+          value: {{ .Values.env.matrix.homeServer }}
+        - name: TEST_MATRIX_USER
+          value: {{ .Values.env.matrix.user }}
+        - name: TEST_MATRIX_PASSWORD
+          value: {{ .Values.env.matrix.pass }} 
         # readinessProbe:
         #   httpGet:
         #     path: /healthcheck
