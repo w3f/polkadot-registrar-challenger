@@ -71,11 +71,12 @@ impl MatrixClient {
         homeserver: &str,
         username: &str,
         password: &str,
+        db_path: &str,
         comms: CommsVerifier,
         comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
         // Setup client
-        let store = JsonStore::open("/tmp/matrix_store")
+        let store = JsonStore::open(db_path)
             .map_err(|err| MatrixError::StateStore(err.into()))?;
         let client_config = ClientConfig::new().state_store(Box::new(store));
 
