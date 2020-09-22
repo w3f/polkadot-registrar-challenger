@@ -5,6 +5,7 @@ jobs:
   buildImage:
     docker:
       - image: web3f/ci-commons:v2.4.0
+    resource_class: xlarge  
     steps:
       - checkout
       - setup_remote_docker
