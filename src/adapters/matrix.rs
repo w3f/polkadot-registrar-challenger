@@ -75,6 +75,7 @@ impl MatrixClient {
         comms: CommsVerifier,
         comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
+        info!("Setting up Matrix client");
         // Setup client
         let store = JsonStore::open(db_path)
             .map_err(|err| MatrixError::StateStore(err.into()))?;
@@ -91,11 +92,13 @@ impl MatrixClient {
             .map_err(|err| MatrixError::Login(err.into()))?;
 
         // Sync up, avoid responding to old messages.
+        info!("Syncing Matrix client");
         client
             .sync(SyncSettings::default())
             .await
             .map_err(|err| MatrixError::Sync(err.into()))?;
 
+        // Request a list of open/pending room ids. Used to detect dead rooms.
         comms.notify_request_all_room_ids();
         let pending_room_ids = match comms.recv().await {
             CommsMessage::AllRoomIds { room_ids } => room_ids,
@@ -105,11 +108,13 @@ impl MatrixClient {
             }
         };
 
-        // Delete dead rooms.
+        // Leave dead rooms.
+        info!("Detecting dead Matrix rooms");
         let rooms = client.joined_rooms();
         let rooms = rooms.read().await;
         for (room_id, room) in rooms.iter() {
             if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
+                warn!("Leaving room: {}", room_id.as_str());
                 let _ = client.leave_room(room_id).await?;
             }
         }
