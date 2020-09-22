@@ -188,7 +188,6 @@ impl Connector {
 
                         match msg.event {
                             NewJudgementRequest => {
-                                println!("Received a new identity from Watcher!");
                                 if let Ok(request) =
                                     serde_json::from_value::<JudgementRequest>(msg.data)
                                 {

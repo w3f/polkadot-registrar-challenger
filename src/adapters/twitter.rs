@@ -143,7 +143,7 @@ impl Twitter {
         method: HttpMethod,
         url: &str,
         request: &Request,
-        body: &[(&str, &str)],
+        body: Option<&[(&str, &str)]>,
     ) -> Result<String> {
         use urlencoding::encode;
 
@@ -151,7 +151,8 @@ impl Twitter {
             .headers()
             .iter()
             .map(|(k, v)| (k.as_str(), v.to_str().unwrap()))
-            .chain(body.iter().map(|&s| s))
+            .filter(|(k, _)| k.starts_with("oauth_"))
+            .chain(body.unwrap_or(&[]).iter().map(|&s| s))
             .collect();
 
         fields.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -180,13 +181,14 @@ impl Twitter {
         let sig = base64::encode(mac.finalize().into_bytes());
         Ok(sig)
     }
-    /*
     pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
+        let request = self.create_request(HttpMethod::GET, url)?;
+        let sig = self.create_sig(HttpMethod::GET, url, &request, None);
 
+        println!("REQUEST: {:?}", request);
         panic!()
         //Ok(self.client.execute(request).await?.json::<T>().await?)
     }
-    */
     pub async fn start(self) {
         let mut interval = time::interval(Duration::from_secs(3));
         loop {
@@ -203,4 +205,15 @@ impl Twitter {
 }
 
 #[test]
-fn test_twitter() {}
+fn test_twitter() {
+    use std::env;
+
+    let client = TwitterBuilder::new()
+        .consumer_key(env::var("").unwrap())
+        .consumer_secret(env::var("").unwrap())
+        .sig_method("")
+        .token("")
+        .token_secret("")
+        .version("")
+        .build();
+}
