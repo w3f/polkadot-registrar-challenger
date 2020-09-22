@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  serviceName: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ .Release.Name }}
+        image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: TEST_MATRIX_HOMESERVER
+          value: {{ .Values.env.matrix.homeServer }}
+        - name: TEST_MATRIX_USER
+          value: {{ .Values.env.matrix.user }}
+        - name: TEST_MATRIX_PASSWORD
+          value: {{ .Values.env.matrix.pass }} 
+        # readinessProbe:
+        #   httpGet:
+        #     path: /healthcheck
+        #     port: {{ .Values.config.port }}
+        #   initialDelaySeconds: 30
+        #   timeoutSeconds: 3
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      {{- if ne .Values.environment "ci" }}
+        resources:
+          limits:
+            cpu: 600m
+            memory: 1Gi
+          requests:
+            cpu: 300m
+            memory: 400Mi
+      {{- end }}
+      volumes:
+      {{ if eq .Values.environment "ci" }}
+      - name: data
+        emptyDir: {}
+      {{ else }}
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 2Gi
+      {{ end }}
