@@ -43,6 +43,9 @@ pub enum CommsMessage {
     AllRoomIds {
         room_ids: Vec<RoomId>,
     },
+    LeaveRoom {
+        room_id: RoomId,
+    },
     RequestAccountState {
         account: Account,
         account_ty: AccountType,
@@ -93,10 +96,14 @@ impl CommsMain {
             .fatal();
     }
     pub fn all_room_ids(&self, room_ids: Vec<RoomId>) {
-        self.sender.send(CommsMessage::AllRoomIds {
-            room_ids: room_ids,
-        })
-        .fatal()
+        self.sender
+            .send(CommsMessage::AllRoomIds { room_ids: room_ids })
+            .fatal()
+    }
+    pub fn leave_room(&self, room_id: RoomId) {
+        self.sender
+            .send(CommsMessage::LeaveRoom { room_id: room_id })
+            .fatal()
     }
 }
 

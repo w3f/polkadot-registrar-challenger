@@ -1,6 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::AccountStatus;
-use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
+use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result};
 use crate::verifier::Verifier;
 use matrix_sdk::{
     self,
@@ -77,8 +77,7 @@ impl MatrixClient {
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
-        let store = JsonStore::open(db_path)
-            .map_err(|err| MatrixError::StateStore(err.into()))?;
+        let store = JsonStore::open(db_path).map_err(|err| MatrixError::StateStore(err.into()))?;
         let client_config = ClientConfig::new().state_store(Box::new(store));
 
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
@@ -87,7 +86,7 @@ impl MatrixClient {
 
         // Login with credentials
         client
-            .login(username, password, None, Some("rust-sdk"))
+            .login(username, password, None, Some("w3f-registrar-bot"))
             .await
             .map_err(|err| MatrixError::Login(err.into()))?;
 
@@ -112,7 +111,7 @@ impl MatrixClient {
         info!("Detecting dead Matrix rooms");
         let rooms = client.joined_rooms();
         let rooms = rooms.read().await;
-        for (room_id, room) in rooms.iter() {
+        for (room_id, _) in rooms.iter() {
             if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
                 warn!("Leaving dead room: {}", room_id.as_str());
                 let _ = client.leave_room(room_id).await?;
@@ -150,8 +149,35 @@ impl MatrixClient {
         }
     }
     async fn local(&self) -> Result<()> {
-        let (network_address, account, challenge, room_id) = self.comms.recv_inform().await;
+        use CommsMessage::*;
 
+        match self.comms.recv().await {
+            AccountToVerify {
+                network_address,
+                account,
+                challenge,
+                room_id,
+            } => {
+                self.handle_account_verification(network_address, account, challenge, room_id)
+                    .await
+            }
+            LeaveRoom { room_id } => {
+                self.send_msg("Bye bye!", &room_id).await?;
+                warn!("Leaving room: {}", room_id.as_str());
+                let _ = self.client.leave_room(&room_id).await?;
+
+                Ok(())
+            }
+            _ => panic!(),
+        }
+    }
+    async fn handle_account_verification(
+        &self,
+        network_address: NetworkAddress,
+        account: Account,
+        challenge: Challenge,
+        room_id: Option<RoomId>,
+    ) -> Result<()> {
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = room_id {
             room_id

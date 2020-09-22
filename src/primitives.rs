@@ -186,7 +186,7 @@ pub enum AccountType {
     ReservedFeeder,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChallengeStatus {
     #[serde(rename = "unconfirmed")]
     Unconfirmed,
