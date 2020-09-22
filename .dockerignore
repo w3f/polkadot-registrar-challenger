@@ -1,6 +1,9 @@
-target/
-Dockerfile
-charts/
 .circleci
+charts/
+helmfile.d
+scripts/
+target/
+.gitignore
+Dockerfile
 LICENSE
 README.md

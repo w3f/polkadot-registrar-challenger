@@ -1,11 +1,16 @@
-FROM rust:1.45.0
+FROM rust:1.45.0 AS builder
+
+RUN apt-get update && apt-get install -y librocksdb-dev clang
 
 WORKDIR /app
 
 COPY . .
+RUN cargo build --release
 
-RUN  apt-get update && apt-get install -y librocksdb-dev clang
+FROM debian:buster-slim
 
-RUN cargo build --bin registrar-bot --release
+RUN apt-get update && apt-get install -y libssl-dev
 
-ENTRYPOINT [ "cargo run --bin registrar-bot --release" ]
+COPY --from=builder /app/target/release/registrar-bot /usr/local/bin
+
+CMD ["/usr/local/bin/registrar-bot"]
