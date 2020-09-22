@@ -1,21 +1,42 @@
 use failure::Error;
-use lib::{block, run, Config};
+use registrar::{block, run, Config};
 use std::env;
+use std::fs::File;
+use std::io::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    env_logger::init();
+    // Open config file.
+    let mut file = File::open("config.json")
+        .or_else(|_| File::open("/etc/registrar/config.json"))
+        .map_err(|_| {
+            eprintln!("Failed to open config at 'config.json' or '/etc/registrar/config.json'.");
+            std::process::exit(1);
+        })
+        .unwrap();
 
-    let config = Config {
-        registrar_db_path: "/tmp/registrar.db".to_string(),
-        matrix_db_path: "/tmp/matrix.db".to_string(),
-        //watcher_url: "ws://test-registrar-watcher:3001".to_string(),
-        watcher_url: "ws://localhost:3001".to_string(),
-        enable_watcher: true,
-        matrix_homeserver: env::var("TEST_MATRIX_HOMESERVER").unwrap(),
-        matrix_username: env::var("TEST_MATRIX_USER").unwrap(),
-        matrix_password: env::var("TEST_MATRIX_PASSWORD").unwrap(),
-    };
+    // Parse config file as JSON.
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    let config = serde_json::from_str::<Config>(&contents)
+        .map_err(|err| {
+            eprintln!("Failed to parse config: {}", err);
+            std::process::exit(1);
+        })
+        .unwrap();
+
+    // Env variables for log level overwrites config.
+    if let Ok(_) = env::var("RUST_LOG") {
+        println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
+        env_logger::init();
+    } else {
+        println!("Setting log level to '{}' from config.", config.log_level);
+        env_logger::builder()
+            .filter_module("registrar", config.log_level)
+            .init();
+    }
+
+    println!("Logger initiated");
 
     run(config).await?;
     block().await;

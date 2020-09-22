@@ -18,7 +18,6 @@ use primitives::{AccountType, Result};
 use std::process::exit;
 use tokio::time::{self, Duration};
 
-// TODO: Make private
 pub mod adapters;
 mod comms;
 pub mod connector;
@@ -27,9 +26,11 @@ mod identity;
 mod primitives;
 mod verifier;
 
+#[derive(Deserialize)]
 pub struct Config {
     pub registrar_db_path: String,
     pub matrix_db_path: String,
+    pub log_level: log::LevelFilter,
     pub watcher_url: String,
     pub enable_watcher: bool,
     pub matrix_homeserver: String,

@@ -163,7 +163,7 @@ impl MatrixClient {
             }
             LeaveRoom { room_id } => {
                 self.send_msg("Bye bye!", &room_id).await?;
-                warn!("Leaving room: {}", room_id.as_str());
+                debug!("Leaving room: {}", room_id.as_str());
                 let _ = self.client.leave_room(&room_id).await?;
 
                 Ok(())

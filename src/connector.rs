@@ -138,10 +138,14 @@ impl Connector {
                         }
 
                         // Try to silently reconnect
-                        WebSocket::connect(&self.url).await.map(|client| {
-                            info!("Reconnected to Watcher");
-                            self.client = client
-                        });
+                        WebSocket::connect(&self.url)
+                            .await
+                            .map(|client| {
+                                info!("Reconnected to Watcher");
+                                self.client = client;
+                                receiver_error = false;
+                            })
+                            .unwrap_or(());
                     }
                     _ => {
                         receiver_error = false;

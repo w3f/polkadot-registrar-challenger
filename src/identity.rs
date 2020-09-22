@@ -255,7 +255,9 @@ impl IdentityManager {
             .get(network_address.address().as_str())
             .fatal()
             .fatal();
-        db_rooms.delete(&room_id);
+
+        // Delete from storage.
+        db_rooms.delete(&room_id).fatal();
 
         self.comms
             .pairs

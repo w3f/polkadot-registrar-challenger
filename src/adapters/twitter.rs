@@ -83,7 +83,7 @@ use hmac::{Hmac, Mac, NewMac};
 use sha1::Sha1;
 
 enum HttpMethod {
-    POST,
+    //POST,
     GET,
 }
 
@@ -92,14 +92,14 @@ impl HttpMethod {
         use HttpMethod::*;
 
         match self {
-            POST => "POST",
+            //POST => "POST",
             GET => "GET",
         }
     }
 }
 
 impl Twitter {
-    fn create_request(&self, method: HttpMethod, url: &str) -> Result<Request> {
+    fn create_request(&self, _method: HttpMethod, url: &str) -> Result<Request> {
         Ok(self
             .client
             .get(url)
@@ -183,7 +183,7 @@ impl Twitter {
     }
     pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let request = self.create_request(HttpMethod::GET, url)?;
-        let sig = self.create_sig(HttpMethod::GET, url, &request, None);
+        let _sig = self.create_sig(HttpMethod::GET, url, &request, None);
 
         println!("REQUEST: {:?}", request);
         panic!()
