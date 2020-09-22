@@ -9,8 +9,17 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type Result<T> = StdResult<T, failure::Error>;
+
+pub fn unix_time() -> u64 {
+    let start = SystemTime::now();
+    start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs()
+}
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct PubKey(SchnorrkelPubKey);
