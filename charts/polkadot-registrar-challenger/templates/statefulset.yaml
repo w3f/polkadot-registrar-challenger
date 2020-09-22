@@ -36,8 +36,10 @@ spec:
         #   initialDelaySeconds: 30
         #   timeoutSeconds: 3
         volumeMounts:
-        - name: data
-          mountPath: /data
+        - name: matrix-db
+          mountPath: /tmp/matrix.db
+        - name: registrar-db
+          mountPath: /tmp/registrar.db
       {{- if ne .Values.environment "ci" }}
         resources:
           limits:
@@ -49,15 +51,24 @@ spec:
       {{- end }}
       volumes:
       {{ if eq .Values.environment "ci" }}
-      - name: data
+      - name: matrix-db
         emptyDir: {}
+      - name: registrar-db
+        emptyDir: {}  
       {{ else }}
   volumeClaimTemplates:
   - metadata:
-      name: data
+      name: matrix-db
     spec:
       accessModes: [ "ReadWriteOnce" ]
       resources:
         requests:
-          storage: 2Gi
+          storage: 5Gi
+  - metadata:
+      name: registrar-db
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi        
       {{ end }}
