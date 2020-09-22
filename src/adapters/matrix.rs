@@ -154,6 +154,8 @@ impl MatrixClient {
                     .await
                     .map_err(|err| MatrixError::JoinRoom(err.into()))?;
 
+                debug!("Connection to user established");
+
                 self.comms
                     .notify_room_id(network_address.address().clone(), resp.room_id.clone());
 
@@ -175,6 +177,7 @@ impl MatrixClient {
         );
 
         // Send the instructions for verification to the user.
+        debug!("Sending instructions to user").
         self.send_msg(
             include_str!("../../messages/instructions")
                 .replace("{:PAYLOAD}", &challenge.as_str())

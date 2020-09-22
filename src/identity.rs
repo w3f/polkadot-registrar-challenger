@@ -137,6 +137,7 @@ impl IdentityManager {
             if let Ok(msg) = self.comms.listener.try_recv() {
                 match msg {
                     NewJudgementRequest(ident) => {
+                        debug!("Manager received a new judgement request. Forwarding");
                         self.handle_register_request(ident);
                     }
                     UpdateChallengeStatus {
@@ -243,6 +244,7 @@ impl IdentityManager {
         // TODO: Check additional account types.
         let mut ident = ident;
         if let Some(ex_ident) = self.idents.remove(&ident.network_address.address()) {
+            debug!("A judgement request of the same address already exists. Updating");
             if ident.matrix.is_some() && ex_ident.matrix.is_some() {
                 if ident.matrix.as_ref().unwrap().account
                     == ex_ident.matrix.as_ref().unwrap().account
@@ -252,6 +254,8 @@ impl IdentityManager {
                     ident.matrix = ex_ident.matrix;
                 }
             }
+        } else {
+            debug!("A judgement request of the same address does not exist yet");
         }
 
         // Save the pending on-chain identity to disk.
@@ -269,6 +273,7 @@ impl IdentityManager {
         // Only matrix supported for now.
         // TODO: support additional account types.
         ident.matrix.as_ref().map::<(), _>(|state| {
+            debug!("Notify the Matrix adapter about the judgement request").
             if state.skip_inform {
                 return;
             }
