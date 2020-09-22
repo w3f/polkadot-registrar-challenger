@@ -60,6 +60,7 @@ struct Accounts {
 pub struct Connector {
     client: WebSocket,
     comms: CommsVerifier,
+    url: String,
 }
 
 #[derive(Debug, Fail)]
@@ -77,6 +78,7 @@ impl Connector {
         let mut connector = Connector {
             client: WebSocket::connect(url).await?,
             comms: comms,
+            url: url.to_owned(),
         };
 
         connector.send_ack(Some("Connection established")).await?;
@@ -125,7 +127,7 @@ impl Connector {
         let mut receiver_error = false;
 
         loop {
-            let _ = self.local().await.map_err(|err| {
+            if let Err(err) = self.local().await {
                 match err {
                     ConnectorError::Receiver(err) => {
                         // Prevent spamming log messages if the server is
@@ -134,6 +136,12 @@ impl Connector {
                             error!("Disconnected from Listener: {}", err);
                             receiver_error = true;
                         }
+
+                        // Try to silently reconnect
+                        WebSocket::connect(&self.url).await.map(|client| {
+                            info!("Reconnected to Watcher");
+                            self.client = client
+                        });
                     }
                     _ => {
                         receiver_error = false;
@@ -141,7 +149,7 @@ impl Connector {
                         error!("{}", err);
                     }
                 }
-            });
+            };
         }
     }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
