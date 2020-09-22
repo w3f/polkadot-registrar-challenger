@@ -1,0 +1,28 @@
+environment: {{ .Environment.Name }}
+
+{{ if eq .Environment.Name "ci" }}
+image:
+  tag: {{ env "CIRCLE_SHA1" | default "kind" }}
+{{ else if eq .Environment.Name "local" }}
+image:
+  repo: localhost:5000/polkadot-registrar-challenger
+  tag: latest
+{{ end }}
+
+{{- if eq .Environment.Name "production" }}
+
+env:
+  matrix:
+    homeServer: {{ env "TEST_MATRIX_HOMESERVER" }}
+    user: {{ env "TEST_MATRIX_USER" }}
+    pass: {{ env "TEST_MATRIX_PASSWORD" }}   
+
+resources:
+  requests:
+    cpu: "300m"
+    memory: "500Mi"
+  limits:
+    cpu: "500m"
+    memory: "700Mi"
+
+{{- end }}    
