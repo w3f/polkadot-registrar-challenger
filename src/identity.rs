@@ -8,6 +8,7 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
+use matrix_sdk::identifiers::RoomId;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -158,9 +159,20 @@ impl IdentityManager {
                             account_validity,
                         );
                     }
+                    // TODO: Remove room id after deleting identity.
                     TrackRoomId { address, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(address.as_str(), room_id.as_bytes()).fatal();
+                    }
+                    RequestAllRoomIds => {
+                        let db_rooms = self.db.scope("matrix_rooms");
+                        let room_ids = db_rooms.all().fatal().iter()
+                        .map(|(_, val)| {
+                            String::from_utf8(val.to_vec()).fatal().try_into().fatal()
+                        })
+                        .collect();
+
+                        self.comms.pairs.get(&AccountType::Matrix).fatal().all_room_ids(room_ids);
                     }
                     RequestAccountState {
                         account,
@@ -273,7 +285,7 @@ impl IdentityManager {
         // Only matrix supported for now.
         // TODO: support additional account types.
         ident.matrix.as_ref().map::<(), _>(|state| {
-            debug!("Notify the Matrix adapter about the judgement request").
+            debug!("Notify the Matrix adapter about the judgement request");
             if state.skip_inform {
                 return;
             }
