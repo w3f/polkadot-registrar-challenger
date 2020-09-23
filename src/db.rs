@@ -2,11 +2,11 @@ use super::Result;
 use crate::identity::OnChainIdentity;
 use crate::primitives::NetAccount;
 use failure::err_msg;
+use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use rusqlite::{named_params, Connection};
 use std::convert::AsRef;
 use std::sync::Arc;
-use matrix_sdk::identifiers::RoomId;
 
 #[derive(Debug, Fail)]
 pub enum DatabaseError {
@@ -102,15 +102,21 @@ impl Database2 {
     }
     pub fn insert_room_id(&self, account: NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.execute_named(
-            "INSERT INTO :table_into (address_id, room_id)
-                VALUES ((SELECT id FROM :table_from WHERE address = ':account'), ':room_id')
+            "INSERT INTO :table_into (
+                address_id,
+                room_id
+            ) VALUES (
+                    (SELECT id FROM :table_from WHERE address = ':account'),
+                    ':room_id'
+                )
             )",
             named_params! {
                 ":table_into": KNOWN_MATRIX_ROOMS,
                 ":table_from": PENDING_JUDGMENTS,
                 ":account": account.as_str(),
                 ":room_id": room_id.as_str(),
-            })?;
+            },
+        )?;
 
         Ok(())
     }
