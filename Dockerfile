@@ -19,10 +19,11 @@ RUN echo "fn main() {println!(\"if you see this, the build broke\")}" > src/bin/
 
 RUN cargo build --release 
 
-COPY . .
-COPY src src
+RUN find target/ -name *registrar-bot* -type f -delete
 
-RUN cargo build --release 
+COPY . .
+
+RUN cargo build --release
 
 # ------------------------------------------------------------------------------
 # Final Stage
