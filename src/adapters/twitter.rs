@@ -100,38 +100,7 @@ impl HttpMethod {
 
 impl Twitter {
     fn create_request(&self, _method: HttpMethod, url: &str) -> Result<Request> {
-        Ok(self
-            .client
-            .get(url)
-            .header(header::AUTHORIZATION, HeaderValue::from_str("OAuth")?)
-            .header(self::header::CONTENT_LENGTH, HeaderValue::from_static("0"))
-            .header(
-                HeaderName::from_static("oauth_consumer_key"),
-                HeaderValue::from_str(&self.consumer_key)?,
-            )
-            .header(
-                HeaderName::from_static("oauth_nonce"),
-                // The nonce can be anything random, so just re-use existing
-                // functionality here.
-                HeaderValue::from_str(Challenge::gen_random().as_str())?,
-            )
-            .header(
-                HeaderName::from_static("oauth_signature_method"),
-                HeaderValue::from_str(&self.sig_method)?,
-            )
-            .header(
-                HeaderName::from_static("oauth_timestamp"),
-                HeaderValue::from_str(&unix_time().to_string())?,
-            )
-            .header(
-                HeaderName::from_static("oauth_token"),
-                HeaderValue::from_str(&self.token)?,
-            )
-            .header(
-                HeaderName::from_static("oauth_version"),
-                HeaderValue::from_str(&format!("{:.1}", self.version))?,
-            )
-            .build()?)
+        Ok(self.client.get(url).build()?)
     }
     /// Creates a signature as documented here:
     /// https://developer.twitter.com/en/docs/authentication/oauth-1-0a/creating-a-signature
@@ -139,36 +108,40 @@ impl Twitter {
         &self,
         method: HttpMethod,
         url: &str,
-        request: &Request,
+        request: &mut Request,
         body: Option<&[(&str, &str)]>,
-    ) -> Result<String> {
+    ) -> Result<()> {
         use urlencoding::encode;
 
-        let mut fields: Vec<(&str, &str)> = request
-            .headers()
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.to_str().unwrap()))
-            .filter(|(k, _)| k.starts_with("oauth_"))
-            .chain(body.unwrap_or(&[]).iter().map(|&s| s))
-            .collect();
+        let challenge = Challenge::gen_random();
+        let timestamp = unix_time().to_string();
+        let version = format!("{:.1}", self.version);
+
+        let mut fields = vec![
+            ("oauth_consumer_key", self.consumer_key.as_str()),
+            ("oauth_nonce", challenge.as_str()),
+            ("oauth_signature_method", self.sig_method.as_str()),
+            ("oauth_timestamp", &timestamp),
+            ("oauth_token", self.token.as_str()),
+            ("oauth_version", &version),
+        ];
+
+        if let Some(body) = body {
+            fields.append(&mut body.to_vec());
+        }
 
         fields.sort_by(|(a, _), (b, _)| a.cmp(b));
 
-        for f in &fields {
-            println!("{} => {}", f.0, f.1);
-        }
-
         let mut params = String::new();
-        for (name, val) in fields {
+        for (name, val) in &fields {
             params.push_str(&format!("{}={}&", encode(name), encode(val)));
         }
 
-        // Remove the trailing '&'.
+        // Remove the trailing `&`.
         params.pop();
 
         let base = format!("{}&{}&{}", method.as_str(), encode(url), encode(&params));
         println!("BASE: {}", base);
-
 
         // Sign the base string.
         let sign_key = format!(
@@ -182,16 +155,31 @@ impl Twitter {
 
         // Create the resulting hash.
         let sig = base64::encode(mac.finalize().into_bytes());
-        Ok(sig)
+
+        fields.push(("oauth_signature", &sig));
+        fields.sort_by(|(a, _), (b, _)| a.cmp(b));
+
+        let mut oauth_header = String::new();
+        oauth_header.push_str("OAuth ");
+
+        for (name, val) in &fields {
+            oauth_header.push_str(&format!("{}={}, ", encode(name), encode(val)))
+        }
+
+        // Remove the trailing `, `.
+        oauth_header.pop();
+        oauth_header.pop();
+
+        request.headers_mut().insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_str(&oauth_header)?,
+        );
+
+        Ok(())
     }
     pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let mut request = self.create_request(HttpMethod::GET, url)?;
-        let sig = self.create_sig(HttpMethod::GET, url, &request, None)?;
-
-        request.headers_mut().insert(
-            HeaderName::from_static("auth_sig"),
-            HeaderValue::from_str(&sig)?,
-        );
+        self.create_sig(HttpMethod::GET, url, &mut request, None)?;
 
         println!("REQUEST: {:?}", request);
         let s = self.client.execute(request).await?.text().await.unwrap();
