@@ -171,17 +171,21 @@ impl Twitter {
         oauth_header.pop();
 
         // Inserth the authentication header into the request.
-        request.headers_mut().insert(
-            header::AUTHORIZATION,
-            HeaderValue::from_str(&oauth_header)?,
-        );
+        request
+            .headers_mut()
+            .insert(header::AUTHORIZATION, HeaderValue::from_str(&oauth_header)?);
 
         Ok(())
     }
     pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let mut request = self.create_request(HttpMethod::GET, url)?;
         self.authenticate_request(HttpMethod::GET, url, &mut request, None)?;
-        Ok(self.client.execute(request).await?.json::<T>().await?)
+        let resp = self.client.execute(request).await?;
+        let txt = resp.text().await?;
+
+        println!("RESP>> {}", txt);
+
+        Ok(serde_json::from_str(&txt)?)
     }
     pub async fn start(self) {
         let mut interval = time::interval(Duration::from_secs(3));
@@ -216,10 +220,31 @@ fn test_twitter() {
             .build()
             .unwrap();
 
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Root {
+            next_cursor: Option<String>,
+            events: Vec<Event>,
+        }
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Event {
+            id: Option<String>,
+            created_timestamp: Option<String>,
+            message_create: MessageCreate,
+        }
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct MessageCreate {
+            message_data: MessageData,
+        }
+
+        #[derive(Debug, Serialize, Deserialize)]
+        struct MessageData {
+            text: String,
+        }
+
         client
-            .get_request::<u32>(
-                "https://api.twitter.com/1.1/direct_messages/welcome_messages/list.json",
-            )
+            .get_request::<Root>("https://api.twitter.com/1.1/direct_messages/events/list.json")
             .await
             .unwrap();
     });

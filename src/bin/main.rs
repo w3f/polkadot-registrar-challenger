@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use failure::Error;
 use registrar::{block, init_env, run};
 
@@ -5,7 +8,11 @@ use registrar::{block, init_env, run};
 async fn main() -> Result<(), Error> {
     let config = init_env()?;
 
-    run(config).await?;
+    run(config).await.map_err(|err| {
+        error!("{}", err);
+        std::process::exit(1);
+    });
+
     block().await;
 
     Ok(())
