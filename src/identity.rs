@@ -171,7 +171,6 @@ impl IdentityManager {
                             account_validity,
                         );
                     }
-                    // TODO: Remove room id after deleting identity.
                     TrackRoomId { address, room_id } => {
                         let db_rooms = self.db.scope("matrix_rooms");
                         db_rooms.put(address.as_str(), room_id.as_bytes()).fatal();
@@ -250,7 +249,9 @@ impl IdentityManager {
         // TODO: The Watcher should respond with an acknowledgement before cleaning up this identity.
 
         // Delete the identity from disk.
-        db_idents.delete(ident.network_address.address().as_str());
+        db_idents
+            .delete(ident.network_address.address().as_str())
+            .fatal();
 
         // Leave matrix room, if one is open.
         let db_rooms = self.db.scope("matrix_rooms");
