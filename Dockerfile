@@ -20,6 +20,7 @@ RUN echo "fn main() {println!(\"if you see this, the build broke\")}" > src/bin/
 RUN cargo build --release 
 
 COPY . .
+COPY src src
 
 RUN cargo build --release 
 
