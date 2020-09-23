@@ -104,7 +104,7 @@ impl Twitter {
     }
     /// Creates a signature as documented here:
     /// https://developer.twitter.com/en/docs/authentication/oauth-1-0a/creating-a-signature
-    fn create_sig(
+    fn authenticate_request(
         &self,
         method: HttpMethod,
         url: &str,
@@ -141,7 +141,6 @@ impl Twitter {
         params.pop();
 
         let base = format!("{}&{}&{}", method.as_str(), encode(url), encode(&params));
-        println!("BASE: {}", base);
 
         // Sign the base string.
         let sign_key = format!(
@@ -156,6 +155,7 @@ impl Twitter {
         // Create the resulting hash.
         let sig = base64::encode(mac.finalize().into_bytes());
 
+        // Insert the signature;
         fields.push(("oauth_signature", &sig));
         fields.sort_by(|(a, _), (b, _)| a.cmp(b));
 
@@ -170,6 +170,7 @@ impl Twitter {
         oauth_header.pop();
         oauth_header.pop();
 
+        // Inserth the authentication header into the request.
         request.headers_mut().insert(
             header::AUTHORIZATION,
             HeaderValue::from_str(&oauth_header)?,
@@ -179,13 +180,8 @@ impl Twitter {
     }
     pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let mut request = self.create_request(HttpMethod::GET, url)?;
-        self.create_sig(HttpMethod::GET, url, &mut request, None)?;
-
-        println!("REQUEST: {:?}", request);
-        let s = self.client.execute(request).await?.text().await.unwrap();
-        println!("RESP: {}", s);
-
-        panic!()
+        self.authenticate_request(HttpMethod::GET, url, &mut request, None)?;
+        Ok(self.client.execute(request).await?.json::<T>().await?)
     }
     pub async fn start(self) {
         let mut interval = time::interval(Duration::from_secs(3));
