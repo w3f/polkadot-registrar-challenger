@@ -11,7 +11,7 @@ async fn main() -> Result<(), Error> {
     run(config).await.map_err(|err| {
         error!("{}", err);
         std::process::exit(1);
-    });
+    }).unwrap();
 
     block().await;
 

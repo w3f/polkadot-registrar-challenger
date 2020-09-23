@@ -1,5 +1,5 @@
 use crate::primitives::{unix_time, Challenge, Result};
-use reqwest::header::{self, HeaderName, HeaderValue};
+use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use serde::de::DeserializeOwned;
 use tokio::time::{self, Duration};
