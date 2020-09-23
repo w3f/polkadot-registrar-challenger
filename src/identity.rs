@@ -236,11 +236,11 @@ impl IdentityManager {
             return;
         }
 
-        // TODO: Handle additional accounts.
         debug!(
             "Notifying Watcher about successful challenge by address {}",
             network_address.address().as_str()
         );
+
         self.comms
             .pairs
             .get(&AccountType::ReservedConnector)
@@ -249,21 +249,22 @@ impl IdentityManager {
 
         // TODO: The Watcher should respond with an acknowledgement before cleaning up this identity.
 
-        // Leave matrix room.
+        // Delete the identity from disk.
+        db_idents.delete(ident.network_address.address().as_str());
+
+        // Leave matrix room, if one is open.
         let db_rooms = self.db.scope("matrix_rooms");
-        let room_id = db_rooms
-            .get(network_address.address().as_str())
-            .fatal()
-            .fatal();
+        if let Some(room_id) = db_rooms.get(network_address.address().as_str()).fatal() {
+            // Delete from storage.
+            db_rooms.delete(&room_id).fatal();
 
-        // Delete from storage.
-        db_rooms.delete(&room_id).fatal();
-
-        self.comms
-            .pairs
-            .get(&AccountType::Matrix)
-            .fatal()
-            .leave_room(String::from_utf8(room_id).fatal().try_into().fatal());
+            // Notify the Matrix task.
+            self.comms
+                .pairs
+                .get(&AccountType::Matrix)
+                .fatal()
+                .leave_room(String::from_utf8(room_id).fatal().try_into().fatal());
+        }
     }
     fn handle_account_confirmation(
         &mut self,

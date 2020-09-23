@@ -206,14 +206,14 @@ impl Twitter {
 
 #[test]
 fn test_twitter() {
-    use std::env;
+    let config = crate::open_config().unwrap();
 
     let client = TwitterBuilder::new()
-        .consumer_key(env::var("").unwrap())
-        .consumer_secret(env::var("").unwrap())
-        .sig_method("")
-        .token("")
-        .token_secret("")
-        .version("")
+        .consumer_key(config.twitter_api_key)
+        .consumer_secret(config.twitter_api_secret)
+        .sig_method("HMAC-SHA1".to_string())
+        .token(config.twitter_token)
+        .token_secret(config.twitter_token_secret)
+        .version(1.0)
         .build();
 }

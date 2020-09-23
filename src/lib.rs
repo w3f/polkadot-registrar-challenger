@@ -14,12 +14,12 @@ use comms::CommsVerifier;
 use connector::Connector;
 use db::Database;
 use identity::IdentityManager;
-use primitives::{AccountType, Result, Fatal};
-use std::process::exit;
-use tokio::time::{self, Duration};
+use primitives::{AccountType, Fatal, Result};
+use std::env;
 use std::fs::File;
 use std::io::prelude::*;
-use std::env;
+use std::process::exit;
+use tokio::time::{self, Duration};
 
 pub mod adapters;
 mod comms;
@@ -36,12 +36,18 @@ pub struct Config {
     pub log_level: log::LevelFilter,
     pub watcher_url: String,
     pub enable_watcher: bool,
+    //
     pub matrix_homeserver: String,
     pub matrix_username: String,
     pub matrix_password: String,
+    //
+    pub twitter_api_key: String,
+    pub twitter_api_secret: String,
+    pub twitter_token: String,
+    pub twitter_token_secret: String,
 }
 
-pub fn init_env() -> Result<Config> {
+fn open_config() -> Result<Config> {
     // Open config file.
     let mut file = File::open("config.json")
         .or_else(|_| File::open("/etc/registrar/config.json"))
@@ -60,6 +66,12 @@ pub fn init_env() -> Result<Config> {
             std::process::exit(1);
         })
         .fatal();
+
+    Ok(config)
+}
+
+pub fn init_env() -> Result<Config> {
+    let config = open_config()?;
 
     // Env variables for log level overwrites config.
     if let Ok(_) = env::var("RUST_LOG") {

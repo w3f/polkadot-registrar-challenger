@@ -1,5 +1,5 @@
 use failure::Error;
-use registrar::{block, run, init_env};
+use registrar::{block, init_env, run};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
