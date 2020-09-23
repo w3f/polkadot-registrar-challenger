@@ -310,8 +310,6 @@ impl IdentityManager {
                     == ex_ident.matrix.as_ref().unwrap().account
                 {
                     ident.matrix.as_mut().map(|state| state.skip_inform = true);
-                } else {
-                    ident.matrix = ex_ident.matrix;
                 }
             }
         } else {

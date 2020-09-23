@@ -45,6 +45,11 @@ pub struct Config {
     pub twitter_api_secret: String,
     pub twitter_token: String,
     pub twitter_token_secret: String,
+    //
+    pub google_private_key: String,
+    pub google_issuer: String,
+    pub google_scope: String,
+    pub google_email: String,
 }
 
 fn open_config() -> Result<Config> {

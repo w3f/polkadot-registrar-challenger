@@ -99,11 +99,7 @@ impl Client {
     pub async fn get_request(&self, url: &str) -> Result<String> {
         let request = self
             .client
-            .get(&url.replace(
-                "{userId}",
-                //"w3f-registrar-bot@w3f-registrar-bot.iam.gserviceaccount.com",
-                "fabio@web3.foundation",
-            ))
+            .get(url)
             .header(
                 self::header::CONTENT_TYPE,
                 HeaderValue::from_static("application/x-www-form-urlencoded"),
@@ -145,10 +141,10 @@ impl<'a> JWTBuilder<'a> {
     }
     pub fn scope(mut self, scope: &'a str) -> Self {
         self.claims.insert("scope", scope);
-        self.claims.insert(
-            "sub",
-            "w3f-registrar-bot@w3f-registrar-bot.iam.gserviceaccount.com",
-        );
+        self
+    }
+    pub fn sub(mut self, sub: &'a str) -> Self {
+        self.claims.insert("sub", sub);
         self
     }
     pub fn audience(mut self, aud: &'a str) -> Self {
@@ -197,16 +193,16 @@ fn test_email_client() {
 
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async move {
-        let private_key = env::var("TEST_GOOG_SEC_KEY").unwrap();
-        let iss = env::var("TEST_GOOG_ISSUER").unwrap();
+        let config = crate::open_config().unwrap();
 
         let jwt = JWTBuilder::new()
-            .issuer(&iss)
-            .scope("https://mail.google.com https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.readonly")
+            .issuer(&config.google_issuer)
+            .scope(&config.google_scope)
+            .sub(&config.google_email)
             .audience("https://oauth2.googleapis.com/token")
             .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
             .issued_at(&unix_time().to_string())
-            .sign(&private_key).unwrap();
+            .sign(&config.google_private_key).unwrap();
 
         let mut client = ClientBuilder::new()
             .jwt(jwt)
@@ -216,8 +212,9 @@ fn test_email_client() {
 
         client.token_request().await.unwrap();
 
+        let url = format!("https://gmail.googleapis.com/gmail/v1/users/{}/messages", config.google_email);
         let res = client
-            .get_request("https://gmail.googleapis.com/gmail/v1/users/{userId}/messages")
+            .get_request(&url)
             .await
             .unwrap();
 
