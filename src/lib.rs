@@ -24,7 +24,7 @@ use tokio::time::{self, Duration};
 pub mod adapters;
 mod comms;
 pub mod connector;
-mod db;
+pub mod db;
 mod identity;
 mod primitives;
 mod verifier;

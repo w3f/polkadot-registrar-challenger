@@ -1,10 +1,12 @@
 use super::Result;
 use crate::identity::OnChainIdentity;
+use crate::primitives::NetAccount;
 use failure::err_msg;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use rusqlite::{named_params, Connection};
 use std::convert::AsRef;
 use std::sync::Arc;
+use matrix_sdk::identifiers::RoomId;
 
 #[derive(Debug, Fail)]
 pub enum DatabaseError {
@@ -49,7 +51,7 @@ impl Database2 {
                 id  INTEGER PRIMARY KEY,
                 address_id INTEGER NULL,
                 room_id TEXT,
-                FOREIGN KEY (room_id)
+                FOREIGN KEY (address_id)
                     REFERENCES pending_judgments (id)
             )",
             named_params! {
@@ -73,13 +75,13 @@ impl Database2 {
                 twitter,
                 matrix
             ) VALUES (
-                :address,
-                :display_name,
-                :legal_name,
-                :email,
-                :web,
-                :twitter:
-                :matrix
+                ':address,'
+                ':display_name,'
+                ':legal_name,'
+                ':email,'
+                ':web,'
+                ':twitter:'
+                ':matrix'
             )",
         )?;
 
@@ -91,10 +93,24 @@ impl Database2 {
                 ":legal_name": ident.legal_name,
                 ":email": ident.email.as_ref().map(|s| s.account_str()),
                 ":web": ident.web.as_ref().map(|s| s.account_str()),
-               ":twitter": ident.twitter.as_ref().map(|s| s.account_str()),
+                ":twitter": ident.twitter.as_ref().map(|s| s.account_str()),
                 ":matrix": ident.matrix.as_ref().map(|s| s.account_str()),
-            });
+            })?;
         }
+
+        Ok(())
+    }
+    pub fn insert_room_id(&self, account: NetAccount, room_id: &RoomId) -> Result<()> {
+        self.con.execute_named(
+            "INSERT INTO :table_into (address_id, room_id)
+                VALUES ((SELECT id FROM :table_from WHERE address = ':account'), ':room_id')
+            )",
+            named_params! {
+                ":table_into": KNOWN_MATRIX_ROOMS,
+                ":table_from": PENDING_JUDGMENTS,
+                ":account": account.as_str(),
+                ":room_id": room_id.as_str(),
+            })?;
 
         Ok(())
     }
