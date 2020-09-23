@@ -2,6 +2,35 @@ use super::Result;
 use failure::err_msg;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use std::convert::AsRef;
+use std::sync::{Arc, RwLock};
+use rusqlite::Connection;
+
+#[derive(Debug, Fail)]
+pub enum DatabaseError {
+    #[fail(display = "failed to open SQLite database: {}", 0)]
+    Open(failure::Error),
+    #[fail(display = "SQLite database is not in auto-commit mode")]
+    NoAutocommit,
+}
+
+pub struct Database2 {
+    con: Connection
+}
+
+impl Database2 {
+    pub fn new(path: &str) -> Result<Self> {
+        let con = Connection::open(path).map_err(|err| DatabaseError::Open(err.into()))?;
+        if !con.is_autocommit() {
+            return Err(failure::Error::from(DatabaseError::NoAutocommit))
+        }
+
+        Ok(
+            Database2 {
+                con: con,
+            }
+        )
+    }
+}
 
 /// A simple abstraction layer over rocksdb. This is used primarily to have a
 /// single database object and to create `ScopedDatabase` types, in order to
