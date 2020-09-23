@@ -2,17 +2,19 @@ environment: production
 
 image:
   repo: web3f/polkadot-registrar-challenger
-  tag: v0.1.1
+  tag: v0.1.2
 
 config:
-  port: 3000  
-
-env:
-  matrix:
-    homeServer: 'https://matrix-client.matrix.org'
-    user: 'test-account'
-    pass: 'xxxxx'     
-
+  port: 3000
+  registrar_db_path: "/app/registrar.db"
+  matrix_db_path: "/app/matrix.db"
+  log_level: "DEBUG"
+  watcher_url: "ws://localhost:3001"
+  enable_watcher: true
+  matrix_homeserver: "https://matrix-client.matrix.org"
+  matrix_username: "test-account"
+  matrix_password: "XXXXXX" 
+   
 resources: 
   requests:
     cpu: "300m"
