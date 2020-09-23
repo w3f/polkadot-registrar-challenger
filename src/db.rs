@@ -1,9 +1,10 @@
 use super::Result;
+use crate::identity::OnChainIdentity;
 use failure::err_msg;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
+use rusqlite::{named_params, Connection};
 use std::convert::AsRef;
-use std::sync::{Arc, RwLock};
-use rusqlite::Connection;
+use std::sync::Arc;
 
 #[derive(Debug, Fail)]
 pub enum DatabaseError {
@@ -13,22 +14,89 @@ pub enum DatabaseError {
     NoAutocommit,
 }
 
+#[derive(Clone)]
 pub struct Database2 {
-    con: Connection
+    con: Arc<Connection>,
 }
+
+const PENDING_JUDGMENTS: &'static str = "pending_judgments";
+const KNOWN_MATRIX_ROOMS: &'static str = "known_matrix_rooms";
 
 impl Database2 {
     pub fn new(path: &str) -> Result<Self> {
         let con = Connection::open(path).map_err(|err| DatabaseError::Open(err.into()))?;
         if !con.is_autocommit() {
-            return Err(failure::Error::from(DatabaseError::NoAutocommit))
+            return Err(failure::Error::from(DatabaseError::NoAutocommit));
         }
 
-        Ok(
-            Database2 {
-                con: con,
-            }
-        )
+        con.execute_named(
+            "CREATE TABLE IF NOT EXISTS :table (
+                id INTEGER PRIMARY KEY,
+                address TEXT NOT NULL,
+                legal_name TEXT,
+                email TEXT,
+                web TEXT,
+                twitter TEXT,
+                matrix TEXT
+            )",
+            named_params! {
+                ":table": PENDING_JUDGMENTS,
+            },
+        )?;
+
+        con.execute_named(
+            "CREATE TABLE IF NOT EXISTS :table (
+                id  INTEGER PRIMARY KEY,
+                address_id INTEGER NULL,
+                room_id TEXT,
+                FOREIGN KEY (room_id)
+                    REFERENCES pending_judgments (id)
+            )",
+            named_params! {
+                ":table": KNOWN_MATRIX_ROOMS,
+            },
+        )?;
+
+        Ok(Database2 { con: Arc::new(con) })
+    }
+    pub fn insert_identity(&self, ident: &OnChainIdentity) -> Result<()> {
+        Ok(())
+    }
+    pub fn insert_identity_batch(&self, idents: &[OnChainIdentity]) -> Result<()> {
+        let mut stmt = self.con.prepare(
+            "INSERT INTO :table (
+                address,
+                display_name,
+                legal_name,
+                email,
+                web,
+                twitter,
+                matrix
+            ) VALUES (
+                :address,
+                :display_name,
+                :legal_name,
+                :email,
+                :web,
+                :twitter:
+                matrix
+            )",
+        )?;
+
+        for ident in idents {
+            stmt.execute_named(named_params! {
+                ":table": PENDING_JUDGMENTS,
+                ":address": ident.network_address.address().as_str(),
+                ":display_name": ident.display_name,
+                ":legal_name": ident.legal_name,
+                ":email": ident.email.as_ref().map(|s| s.account_str()),
+                ":web": ident.web.as_ref().map(|s| s.account_str()),
+               ":twitter": ident.twitter.as_ref().map(|s| s.account_str()),
+                ":matrix": ident.matrix.as_ref().map(|s| s.account_str()),
+            });
+        }
+
+        Ok(())
     }
 }
 

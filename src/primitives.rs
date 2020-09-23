@@ -7,10 +7,10 @@ use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
+use std::fmt;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::fmt;
 
 pub type Result<T> = StdResult<T, failure::Error>;
 

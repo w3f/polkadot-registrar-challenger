@@ -79,6 +79,9 @@ impl AccountState {
             skip_inform: false,
         }
     }
+    pub fn account_str(&self) -> &str {
+        self.account.as_str()
+    }
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
