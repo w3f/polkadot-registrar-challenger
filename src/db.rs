@@ -60,9 +60,9 @@ impl Database2 {
         Ok(Database2 { con: Arc::new(con) })
     }
     pub fn insert_identity(&self, ident: &OnChainIdentity) -> Result<()> {
-        Ok(())
+        self.insert_identity_batch(&[ident])
     }
-    pub fn insert_identity_batch(&self, idents: &[OnChainIdentity]) -> Result<()> {
+    pub fn insert_identity_batch(&self, idents: &[&OnChainIdentity]) -> Result<()> {
         let mut stmt = self.con.prepare(
             "INSERT INTO :table (
                 address,
@@ -79,7 +79,7 @@ impl Database2 {
                 :email,
                 :web,
                 :twitter:
-                matrix
+                :matrix
             )",
         )?;
 
