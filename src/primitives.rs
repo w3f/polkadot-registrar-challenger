@@ -10,6 +10,7 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::fmt;
 
 pub type Result<T> = StdResult<T, failure::Error>;
 
@@ -119,6 +120,12 @@ impl From<String> for Account {
 impl From<&str> for Account {
     fn from(value: &str) -> Self {
         Account(value.to_owned())
+    }
+}
+
+impl fmt::Display for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 

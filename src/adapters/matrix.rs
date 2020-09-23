@@ -32,7 +32,7 @@ pub enum MatrixError {
     #[fail(display = "failed to join room: {}", 0)]
     JoinRoom(failure::Error),
     #[fail(display = "timeout while trying to join room with: {}", 0)]
-    JoinRoomTimeout(String),
+    JoinRoomTimeout(Account),
     #[fail(display = "the remote UserId was not found when trying to respond")]
     RemoteUserIdNotFound,
     #[fail(display = "the UserId is unknown (no pending on-chain judgement request)")]
@@ -224,7 +224,7 @@ impl MatrixClient {
                     AccountStatus::Invalid,
                 );
 
-                return Err(MatrixError::JoinRoomTimeout(account.as_str().to_owned()))?;
+                return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
             }
         };
 
