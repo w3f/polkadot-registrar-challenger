@@ -11,11 +11,6 @@ image:
 
 {{- if eq .Environment.Name "production" }}
 
-config:
-  matrix_homeserver: {{ env "TEST_MATRIX_HOMESERVER" }}
-  matrix_username: {{ env "TEST_MATRIX_USER" }}
-  matrix_password: {{ env "TEST_MATRIX_PASSWORD" }} 
-
 resources:
   requests:
     cpu: "300m"
