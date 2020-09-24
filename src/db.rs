@@ -6,7 +6,7 @@ use crate::primitives::{
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
-use rusqlite::{named_params, params, Connection};
+use rusqlite::{named_params, params, Connection, OptionalExtension};
 use std::convert::{AsRef, TryFrom};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -224,13 +224,17 @@ impl Database2 {
             },
             |row| row.get::<_, String>(0),
         )
+        .optional()
         .map_err(|err| failure::Error::from(err))
         .and_then(|data| {
-            Ok(Some(
-                RoomId::try_from(data).map_err(|err| failure::Error::from(err))?,
-            ))
+            if let Some(data) = data {
+                Ok(Some(
+                    RoomId::try_from(data).map_err(|err| failure::Error::from(err))?,
+                ))
+            } else {
+                Ok(None)
+            }
         })
-        .or_else(|err| Ok(None))
     }
     pub async fn select_room_ids(&self) -> Result<Vec<RoomId>> {
         let con = self.con.lock().await;
