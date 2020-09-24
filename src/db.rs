@@ -1,10 +1,10 @@
 use super::Result;
 use crate::identity::OnChainIdentity;
-use crate::primitives::NetAccount;
+use crate::primitives::{AccountType, NetAccount};
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
-use rusqlite::{named_params, Connection};
+use rusqlite::{named_params, params, Connection};
 use std::convert::AsRef;
 use std::sync::Arc;
 
@@ -23,6 +23,9 @@ pub struct Database2 {
 
 const PENDING_JUDGMENTS: &'static str = "pending_judgments";
 const KNOWN_MATRIX_ROOMS: &'static str = "known_matrix_rooms";
+const VALIDITY: &'static str = "account_validity";
+const ACCOUNT_TYPES: &'static str = "account_types";
+const ACCOUNT_STATE: &'static str = "account_states";
 
 impl Database2 {
     pub fn new(path: &str) -> Result<Self> {
@@ -31,32 +34,92 @@ impl Database2 {
             return Err(failure::Error::from(DatabaseError::NoAutocommit));
         }
 
-        con.execute_named(
-            "CREATE TABLE IF NOT EXISTS :table (
-                id INTEGER PRIMARY KEY,
-                address TEXT NOT NULL,
-                legal_name TEXT,
-                email TEXT,
-                web TEXT,
-                twitter TEXT,
-                matrix TEXT
+        // Table for pending identities.
+        con.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                id          INTEGER PRIMARY KEY,
+                address     TEXT NOT NULL,
+                legal_name  TEXT,
+                email       TEXT,
+                web         TEXT,
+                twitter     TEXT,
+                matrix      TEXT
             )",
-            named_params! {
-                ":table": PENDING_JUDGMENTS,
-            },
+                table = PENDING_JUDGMENTS,
+            ),
+            params![],
         )?;
 
-        con.execute_named(
-            "CREATE TABLE IF NOT EXISTS :table (
-                id  INTEGER PRIMARY KEY,
+        // Table for account validity.
+        con.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    id       INTEGER PRIMARY KEY,
+                    validity TEXT NOT NULL
+            )",
+                table = VALIDITY
+            ),
+            params![],
+        )?;
+
+        // Table for account type.
+        con.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    id         INTEGER PRIMARY KEY,
+                    account_ty TEXT NOT NULL
+            )",
+                table = ACCOUNT_TYPES
+            ),
+            params![],
+        )?;
+
+        // Table for account state.
+        con.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {table_main} (
+                id                  INTEGER PRIMARY KEY,
+                address_id          INTEGER NOT NULL,
+                account             TEXT NOT NULL,
+                account_ty          INTEGER NOT NULL,
+                account_validity    INTEGER NOT NULL,
+                challenge           TEXT NOT NULL,
+                challenge_validity  INTEGER NOT NULL,
+
+                FOREIGN KEY (address_id)
+                    REFERENCES {table_judgments} (id),
+
+                FOREIGN KEY (account_ty)
+                    REFERENCES {table_account_ty} (id),
+
+                FOREIGN KEY (account_validity)
+                    REFERENCES {table_validity} (id),
+
+                FOREIGN KEY (challenge_validity)
+                    REFERENCES {table_validity} (id)
+            )",
+                table_main = ACCOUNT_STATE,
+                table_judgments = PENDING_JUDGMENTS,
+                table_account_ty = ACCOUNT_TYPES,
+                table_validity = VALIDITY,
+            ),
+            params![],
+        )?;
+
+        con.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                id         INTEGER PRIMARY KEY,
                 address_id INTEGER NULL,
-                room_id TEXT,
+                room_id    TEXT,
+
                 FOREIGN KEY (address_id)
                     REFERENCES pending_judgments (id)
             )",
-            named_params! {
-                ":table": KNOWN_MATRIX_ROOMS,
-            },
+                table = KNOWN_MATRIX_ROOMS,
+            ),
+            params![],
         )?;
 
         Ok(Database2 { con: Arc::new(con) })
@@ -100,7 +163,7 @@ impl Database2 {
 
         Ok(())
     }
-    pub fn insert_room_id(&self, account: NetAccount, room_id: &RoomId) -> Result<()> {
+    pub fn insert_room_id(&self, net_account: NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.execute_named(
             "INSERT INTO :table_into (
                 address_id,
@@ -113,10 +176,23 @@ impl Database2 {
             named_params! {
                 ":table_into": KNOWN_MATRIX_ROOMS,
                 ":table_from": PENDING_JUDGMENTS,
-                ":account": account.as_str(),
+                ":account": net_account.as_str(),
                 ":room_id": room_id.as_str(),
             },
         )?;
+
+        Ok(())
+    }
+    pub fn confirm_valid(&self, net_account: NetAccount, account: AccountType) -> Result<()> {
+        /*
+        self.con.execute_named(
+            "UPDATE :table
+            SET
+            ",
+        named_params! {
+
+        })?;
+        */
 
         Ok(())
     }
@@ -175,5 +251,15 @@ impl<'a> ScopedDatabase<'a> {
             .db
             .iterator_cf(self.cf()?, IteratorMode::Start)
             .collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn database_setup() {
+        let db = Database2::new("/tmp/sqlite").unwrap();
     }
 }
