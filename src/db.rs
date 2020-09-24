@@ -1,5 +1,5 @@
 use super::Result;
-use crate::identity::OnChainIdentity;
+use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{AccountType, NetAccount};
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
@@ -23,7 +23,8 @@ pub struct Database2 {
 
 const PENDING_JUDGMENTS: &'static str = "pending_judgments";
 const KNOWN_MATRIX_ROOMS: &'static str = "known_matrix_rooms";
-const VALIDITY: &'static str = "account_validity";
+const CHALLENGE_STATUS: &'static str = "challenge_status";
+const ACCOUNT_STATUS: &'static str = "account_status";
 const ACCOUNT_TYPES: &'static str = "account_types";
 const ACCOUNT_STATE: &'static str = "account_states";
 
@@ -51,14 +52,26 @@ impl Database2 {
             params![],
         )?;
 
-        // Table for account validity.
+        // Table for account status.
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
                     id        INTEGER PRIMARY KEY,
-                    validity  TEXT NOT NULL
+                    status  TEXT NOT NULL
             )",
-                table = VALIDITY
+                table = ACCOUNT_STATUS
+            ),
+            params![],
+        )?;
+
+        // Table for challenge status.
+        con.execute(
+            &format!(
+                "CREATE TABLE IF NOT EXISTS {table} (
+                    id        INTEGER PRIMARY KEY,
+                    status  TEXT NOT NULL
+            )",
+                table = CHALLENGE_STATUS
             ),
             params![],
         )?;
@@ -83,9 +96,9 @@ impl Database2 {
                 address_id          INTEGER NOT NULL,
                 account             TEXT NOT NULL,
                 account_ty          INTEGER NOT NULL,
-                account_validity    INTEGER NOT NULL,
+                account_status      INTEGER NOT NULL,
                 challenge           TEXT NOT NULL,
-                challenge_validity  INTEGER NOT NULL,
+                challenge_status    INTEGER NOT NULL,
 
                 FOREIGN KEY (address_id)
                     REFERENCES {table_judgments} (id),
@@ -93,16 +106,17 @@ impl Database2 {
                 FOREIGN KEY (account_ty)
                     REFERENCES {table_account_ty} (id),
 
-                FOREIGN KEY (account_validity)
-                    REFERENCES {table_validity} (id),
+                FOREIGN KEY (account_status)
+                    REFERENCES {table_account_status} (id),
 
-                FOREIGN KEY (challenge_validity)
-                    REFERENCES {table_validity} (id)
+                FOREIGN KEY (challenge_status)
+                    REFERENCES {table_challenge_status} (id)
             )",
                 table_main = ACCOUNT_STATE,
                 table_judgments = PENDING_JUDGMENTS,
                 table_account_ty = ACCOUNT_TYPES,
-                table_validity = VALIDITY,
+                table_account_status = ACCOUNT_STATUS,
+                table_challenge_status = CHALLENGE_STATUS,
             ),
             params![],
         )?;
@@ -167,13 +181,13 @@ impl Database2 {
         self.con.execute_named(
             &format!(
                 "INSERT INTO {table_into} (
-                address_id,
-                room_id
-            ) VALUES (
-                    (SELECT id FROM {table_from} WHERE address = ':account'),
-                    ':room_id'
-                )
-            )",
+                    address_id,
+                    room_id
+                ) VALUES (
+                        (SELECT id FROM {table_from} WHERE address = ':account'),
+                        ':room_id'
+                    )
+                )",
                 table_into = KNOWN_MATRIX_ROOMS,
                 table_from = PENDING_JUDGMENTS,
             ),
@@ -185,16 +199,38 @@ impl Database2 {
 
         Ok(())
     }
-    pub fn confirm_valid(&self, net_account: NetAccount, account: AccountType) -> Result<()> {
-        /*
+    pub fn set_account_status(
+        &self,
+        net_account: NetAccount,
+        account: AccountType,
+        status: AccountStatus,
+    ) -> Result<()> {
         self.con.execute_named(
-            "UPDATE :table
-            SET
-            ",
-        named_params! {
-
-        })?;
-        */
+            &format!(
+                "UPDATE {tbl_update}
+                SET account_validity =
+                    (SELECT id FROM {tbl_challenge_status}
+                        WHERE status = ':challenge_status')
+                WHERE
+                    address_id =
+                        (SELECT id FROM {tbl_identities}
+                            WHERE address = ':address')
+                AND
+                    account_ty =
+                        (SELECT id FROM {tbl_acc_types}
+                            WHERE account_ty = ':account_ty')
+            )",
+                tbl_update = ACCOUNT_STATE,
+                tbl_challenge_status = CHALLENGE_STATUS,
+                tbl_identities = PENDING_JUDGMENTS,
+                tbl_acc_types = ACCOUNT_TYPES,
+            ),
+            named_params! {
+                ":validity": "temp",
+                ":address": "temp",
+                ":account_ty": "temp",
+            },
+        )?;
 
         Ok(())
     }
