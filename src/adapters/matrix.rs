@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::{Database2, DatabaseError};
 use crate::identity::AccountStatus;
-use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result};
+use crate::primitives::{Account, NetAccount, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result};
 use crate::verifier::Verifier;
 use matrix_sdk::{
     self,
@@ -120,7 +120,7 @@ impl MatrixClient {
         // Add event emitter (responder)
         client
             .add_event_emitter(Box::new(
-                Responder::new(client.clone(), db.clone(), comms_emmiter).await,
+                Responder::new(client.clone(), db.clone(), comms_emmiter).await
             ))
             .await;
 
@@ -153,13 +153,10 @@ impl MatrixClient {
 
         match self.comms.recv().await {
             AccountToVerify {
-                network_address,
+                net_account,
                 account,
-                challenge,
-                room_id,
             } => {
-                self.handle_account_verification(network_address, account, challenge, room_id)
-                    .await
+                self.handle_account_verification(net_account, account).await
             }
             LeaveRoom { room_id } => {
                 self.send_msg("Bye bye!", &room_id).await?;
@@ -173,13 +170,11 @@ impl MatrixClient {
     }
     async fn handle_account_verification(
         &self,
-        network_address: NetworkAddress,
+        net_account: NetAccount,
         account: Account,
-        challenge: Challenge,
-        room_id: Option<RoomId>,
     ) -> Result<()> {
         // If a room already exists, don't create a new one.
-        let room_id = if let Some(room_id) = room_id {
+        let room_id = if let Some(room_id) = self.db.select_room_id(&net_account).await? {
             room_id
         } else {
             // When the UserId is invalid, even though it can be successfully
@@ -188,14 +183,16 @@ impl MatrixClient {
             if let Ok(room_id) = time::timeout(Duration::from_secs(15), async {
                 debug!("Connecting to {}", account.as_str());
 
-                let to_invite = [account
+                /*
+                let to_invite = account
                     .as_str()
                     .clone()
                     .try_into()
-                    .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?];
+                    .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?;
+                    */
 
                 let mut request = Request::default();
-                request.invite = &to_invite;
+                //request.invite = &to_invite;
                 request.name = Some("W3F Registrar Verification");
 
                 let resp = self
@@ -208,7 +205,7 @@ impl MatrixClient {
 
                 // Keep track of RoomId
                 self.db
-                    .insert_room_id(network_address.address(), &resp.room_id)
+                    .insert_room_id(&net_account, &resp.room_id)
                     .await
                     .map_err(|err| MatrixError::Database(err.into()))?;
 
@@ -223,7 +220,7 @@ impl MatrixClient {
                 // Notify that the account is invalid.
                 self.db
                     .set_account_status(
-                        network_address.address(),
+                        &net_account,
                         AccountType::Matrix,
                         AccountStatus::Invalid,
                     )
@@ -236,18 +233,20 @@ impl MatrixClient {
         // Notify that the account is valid.
         self.db
             .set_account_status(
-                network_address.address(),
+                &net_account,
                 AccountType::Matrix,
                 AccountStatus::Valid,
             )
             .await?;
+
+        let (_, _, challenge) = self.db.select_challenge_data(&account, AccountType::Matrix).await?;
 
         // Send the instructions for verification to the user.
         debug!("Sending instructions to user");
         self.send_msg(
             include_str!("../../messages/instructions")
                 .replace("{:PAYLOAD}", &challenge.as_str())
-                .replace("{:ADDRESS}", network_address.address().as_str())
+                .replace("{:ADDRESS}", net_account.as_str())
                 .as_str(),
             &room_id,
         )

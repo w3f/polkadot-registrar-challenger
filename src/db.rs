@@ -189,16 +189,16 @@ impl Database2 {
     pub async fn insert_room_id(&self, net_account: &NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.lock().await.execute_named(
             &format!(
-                "INSERT INTO {table_into} (
+                "INSERT INTO {tbl_room_id} (
                     net_account_id,
                     room_id
                 ) VALUES (
-                        (SELECT id FROM {table_from} WHERE net_account = ':account'),
+                        (SELECT id FROM {tbl_identities} WHERE net_account = ':account'),
                         ':room_id'
                     )
                 )",
-                table_into = KNOWN_MATRIX_ROOMS,
-                table_from = PENDING_JUDGMENTS,
+                tbl_room_id = KNOWN_MATRIX_ROOMS,
+                tbl_identities = PENDING_JUDGMENTS,
             ),
             named_params! {
                 ":account": net_account.as_str(),
@@ -207,6 +207,25 @@ impl Database2 {
         )?;
 
         Ok(())
+    }
+    pub async fn select_room_id(&self, net_account: &NetAccount) -> Result<Option<RoomId>> {
+        let con = self.con.lock().await;
+        /*
+        let _ = con.query_row(
+            &format!(
+                "SELECT room_id FROM {tbl_room_id} WHERE
+                    (SELECT from {tbl_identities} WHERE
+                        net_account = ':net_account')
+                ",
+                tbl_room_id = KNOWN_MATRIX_ROOMS,
+                tbl_identities = PENDING_JUDGMENTS,
+            )
+            , named_params! {
+                ":net_account": net_account,
+            }, |row| row.optional());
+            */
+
+        Err(failure::err_msg(""))
     }
     pub async fn select_room_ids(&self) -> Result<Vec<RoomId>> {
         let con = self.con.lock().await;
