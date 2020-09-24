@@ -210,8 +210,7 @@ impl Database2 {
     }
     pub async fn select_room_id(&self, net_account: &NetAccount) -> Result<Option<RoomId>> {
         let con = self.con.lock().await;
-        /*
-        let _ = con.query_row(
+        con.query_row_named(
             &format!(
                 "SELECT room_id FROM {tbl_room_id} WHERE
                     (SELECT from {tbl_identities} WHERE
@@ -219,13 +218,19 @@ impl Database2 {
                 ",
                 tbl_room_id = KNOWN_MATRIX_ROOMS,
                 tbl_identities = PENDING_JUDGMENTS,
-            )
-            , named_params! {
+            ),
+            named_params! {
                 ":net_account": net_account,
-            }, |row| row.optional());
-            */
-
-        Err(failure::err_msg(""))
+            },
+            |row| row.get::<_, String>(0),
+        )
+        .map_err(|err| failure::Error::from(err))
+        .and_then(|data| {
+            Ok(Some(
+                RoomId::try_from(data).map_err(|err| failure::Error::from(err))?,
+            ))
+        })
+        .or_else(|err| Ok(None))
     }
     pub async fn select_room_ids(&self) -> Result<Vec<RoomId>> {
         let con = self.con.lock().await;

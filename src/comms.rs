@@ -34,7 +34,7 @@ pub enum CommsMessage {
     AccountToVerify {
         net_account: NetAccount,
         account: Account,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -42,9 +42,7 @@ pub struct CommsMain {
     sender: Sender<CommsMessage>,
 }
 
-impl CommsMain {
-
-}
+impl CommsMain {}
 
 #[derive(Debug, Clone)]
 pub struct CommsVerifier {

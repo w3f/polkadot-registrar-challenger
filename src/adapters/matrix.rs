@@ -1,7 +1,9 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::{Database2, DatabaseError};
 use crate::identity::AccountStatus;
-use crate::primitives::{Account, NetAccount, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result};
+use crate::primitives::{
+    Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress, Result,
+};
 use crate::verifier::Verifier;
 use matrix_sdk::{
     self,
@@ -120,7 +122,7 @@ impl MatrixClient {
         // Add event emitter (responder)
         client
             .add_event_emitter(Box::new(
-                Responder::new(client.clone(), db.clone(), comms_emmiter).await
+                Responder::new(client.clone(), db.clone(), comms_emmiter).await,
             ))
             .await;
 
@@ -155,9 +157,7 @@ impl MatrixClient {
             AccountToVerify {
                 net_account,
                 account,
-            } => {
-                self.handle_account_verification(net_account, account).await
-            }
+            } => self.handle_account_verification(net_account, account).await,
             LeaveRoom { room_id } => {
                 self.send_msg("Bye bye!", &room_id).await?;
                 debug!("Leaving room: {}", room_id.as_str());
@@ -219,11 +219,7 @@ impl MatrixClient {
 
                 // Notify that the account is invalid.
                 self.db
-                    .set_account_status(
-                        &net_account,
-                        AccountType::Matrix,
-                        AccountStatus::Invalid,
-                    )
+                    .set_account_status(&net_account, AccountType::Matrix, AccountStatus::Invalid)
                     .await?;
 
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
@@ -232,14 +228,13 @@ impl MatrixClient {
 
         // Notify that the account is valid.
         self.db
-            .set_account_status(
-                &net_account,
-                AccountType::Matrix,
-                AccountStatus::Valid,
-            )
+            .set_account_status(&net_account, AccountType::Matrix, AccountStatus::Valid)
             .await?;
 
-        let (_, _, challenge) = self.db.select_challenge_data(&account, AccountType::Matrix).await?;
+        let (_, _, challenge) = self
+            .db
+            .select_challenge_data(&account, AccountType::Matrix)
+            .await?;
 
         // Send the instructions for verification to the user.
         debug!("Sending instructions to user");
