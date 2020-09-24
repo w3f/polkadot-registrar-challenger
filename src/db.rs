@@ -1,6 +1,6 @@
 use super::Result;
 use crate::identity::{AccountStatus, OnChainIdentity};
-use crate::primitives::{AccountType, NetAccount, ChallengeStatus, Fatal};
+use crate::primitives::{AccountType, ChallengeStatus, Fatal, NetAccount};
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
@@ -132,7 +132,9 @@ impl Database2 {
             params![],
         )?;
 
-        Ok(Database2 { con: Arc::new(RwLock::new(con)) })
+        Ok(Database2 {
+            con: Arc::new(RwLock::new(con)),
+        })
     }
     pub fn insert_identity(&mut self, ident: &OnChainIdentity) -> Result<()> {
         self.insert_identity_batch(&[ident])
@@ -141,39 +143,43 @@ impl Database2 {
         let mut con = self.con.write().fatal();
         let transaction = con.transaction()?;
 
-        let mut stmt = transaction.prepare(&format!(
-            "INSERT INTO {tbl_account_state} (
-                net_account_id,
-                account,
-                account_ty,
-                account_status,
-                challenge,
-                challenge_status
-            ) VALUES (
-                (SELECT id FROM {tbl_identities}
-                    WHERE net_account = ':net_account'),
-                ':account',
-                ':account_ty',
-                ':account_status',
-                ':challenge',
-                ':challenge_status'
-            )
-            ",
-            tbl_account_state = ACCOUNT_STATE,
-            tbl_identities = PENDING_JUDGMENTS,
-        ))?;
+        {
+            let mut stmt = transaction.prepare(&format!(
+                "INSERT INTO {tbl_account_state} (
+                    net_account_id,
+                    account,
+                    account_ty,
+                    account_status,
+                    challenge,
+                    challenge_status
+                ) VALUES (
+                    (SELECT id FROM {tbl_identities}
+                        WHERE net_account = ':net_account'),
+                    ':account',
+                    ':account_ty',
+                    ':account_status',
+                    ':challenge',
+                    ':challenge_status'
+                )
+                ",
+                tbl_account_state = ACCOUNT_STATE,
+                tbl_identities = PENDING_JUDGMENTS,
+            ))?;
 
-        // TODO -> Use a HashMap for OnChainIdentity regardinga accounts.
-        // TODO: Support more than just matrix.
-        for ident in idents {
-            stmt.execute_named(named_params! {
-                ":net_account": ident.network_address.address(),
-                ":account": ident.matrix.as_ref().map(|s| &s.account),
-                ":account_ty": ident.matrix.as_ref().map(|s| &s.account_ty),
-                ":challenge": ident.matrix.as_ref().map(|s| s.challenge.as_str()),
-                ":challenge_status": ident.matrix.as_ref().map(|s| &s.challenge_status),
-            })?;
+            // TODO -> Use a HashMap for OnChainIdentity regardinga accounts.
+            // TODO: Support more than just matrix.
+            for ident in idents {
+                stmt.execute_named(named_params! {
+                    ":net_account": ident.network_address.address(),
+                    ":account": ident.matrix.as_ref().map(|s| &s.account),
+                    ":account_ty": ident.matrix.as_ref().map(|s| &s.account_ty),
+                    ":challenge": ident.matrix.as_ref().map(|s| s.challenge.as_str()),
+                    ":challenge_status": ident.matrix.as_ref().map(|s| &s.challenge_status),
+                })?;
+            }
         }
+
+        transaction.commit()?;
 
         Ok(())
     }
