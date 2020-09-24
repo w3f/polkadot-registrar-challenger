@@ -207,14 +207,10 @@ impl Database2 {
     }
     pub fn select_room_ids(&self) -> Result<Vec<RoomId>> {
         let mut con = self.con.write().fatal();
-        let mut stmt = con
-            .prepare(
-                &format!(
-                "
-                SELECT room_id FROM {table}
-                ",
-                table = KNOWN_MATRIX_ROOMS
-            ))?;
+        let mut stmt = con.prepare(&format!(
+            "SELECT room_id FROM {table}",
+            table = KNOWN_MATRIX_ROOMS
+        ))?;
 
         let mut rows = stmt.query(params![])?;
 
