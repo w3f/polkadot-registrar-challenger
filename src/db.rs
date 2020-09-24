@@ -5,7 +5,7 @@ use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use rusqlite::{named_params, params, Connection};
-use std::convert::AsRef;
+use std::convert::{AsRef, TryFrom};
 use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Fail)]
@@ -40,7 +40,7 @@ impl Database2 {
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
                 id           INTEGER PRIMARY KEY,
-                net_account  TEXT NOT NULL,
+                net_account  TEXT NOT NULL UNIQUE,
             )",
                 table = PENDING_JUDGMENTS,
             ),
@@ -51,8 +51,8 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                    id        INTEGER PRIMARY KEY,
-                    status  TEXT NOT NULL
+                    id      INTEGER PRIMARY KEY,
+                    status  TEXT NOT NULL UNIQUE
             )",
                 table = ACCOUNT_STATUS
             ),
@@ -63,8 +63,8 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                    id        INTEGER PRIMARY KEY,
-                    status  TEXT NOT NULL
+                    id      INTEGER PRIMARY KEY,
+                    status  TEXT NOT NULL UNIQUE
             )",
                 table = CHALLENGE_STATUS
             ),
@@ -76,7 +76,7 @@ impl Database2 {
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
                     id          INTEGER PRIMARY KEY,
-                    account_ty  TEXT NOT NULL
+                    account_ty  TEXT NOT NULL UNIQUE
             )",
                 table = ACCOUNT_TYPES
             ),
@@ -87,13 +87,13 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table_main} (
-                id                 INTEGER PRIMARY KEY,
-                net_account_id     INTEGET NOT NULL,
-                account            TEXT NOT NULL,
-                account_ty         INTEGER NOT NULL,
-                account_status     INTEGER NOT NULL,
-                challenge          TEXT NOT NULL,
-                challenge_status   INTEGER NOT NULL,
+                id                INTEGER PRIMARY KEY,
+                net_account_id    INTEGET NOT NULL,
+                account           TEXT NOT NULL,
+                account_ty        INTEGER NOT NULL,
+                account_status    INTEGER NOT NULL,
+                challenge         TEXT NOT NULL,
+                challenge_status  INTEGER NOT NULL,
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES {table_identities} (id),
@@ -145,7 +145,7 @@ impl Database2 {
 
         {
             let mut stmt = transaction.prepare(&format!(
-                "INSERT INTO {tbl_account_state} (
+                "INSERT OR REPLACE INTO {tbl_account_state} (
                     net_account_id,
                     account,
                     account_ty,
@@ -204,6 +204,27 @@ impl Database2 {
         )?;
 
         Ok(())
+    }
+    pub fn select_room_ids(&self) -> Result<Vec<RoomId>> {
+        let mut con = self.con.write().fatal();
+        let mut stmt = con
+            .prepare(
+                &format!(
+                "
+                SELECT room_id FROM {table}
+                ",
+                table = KNOWN_MATRIX_ROOMS
+            ))?;
+
+        let mut rows = stmt.query(params![])?;
+
+        let mut room_ids = vec![];
+        // `Rows` does not implement `Iterator`.
+        while let Some(row) = rows.next()? {
+            room_ids.push(RoomId::try_from(row.get::<_, String>(0)?)?);
+        }
+
+        Ok(room_ids)
     }
     pub fn set_account_status(
         &self,
