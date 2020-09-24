@@ -1,6 +1,6 @@
 use super::Result;
 use crate::identity::{AccountStatus, OnChainIdentity};
-use crate::primitives::{AccountType, NetAccount, Fatal};
+use crate::primitives::{AccountType, NetAccount, ChallengeStatus, Fatal};
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
@@ -150,7 +150,8 @@ impl Database2 {
                 challenge,
                 challenge_status
             ) VALUES (
-                (SELECT id FROM {tbl_identities} WHERE net_account = ':net_account'),
+                (SELECT id FROM {tbl_identities}
+                    WHERE net_account = ':net_account'),
                 ':account',
                 ':account_ty',
                 ':account_status',
@@ -221,6 +222,41 @@ impl Database2 {
             )",
                 tbl_update = ACCOUNT_STATE,
                 tbl_account_status = ACCOUNT_STATUS,
+                tbl_identities = PENDING_JUDGMENTS,
+                tbl_acc_types = ACCOUNT_TYPES,
+            ),
+            named_params! {
+                ":account_status": status,
+                ":net_account": net_account,
+                ":account_ty": account_ty,
+            },
+        )?;
+
+        Ok(())
+    }
+    pub fn set_challenge_status(
+        &self,
+        net_account: NetAccount,
+        account_ty: AccountType,
+        status: ChallengeStatus,
+    ) -> Result<()> {
+        self.con.read().fatal().execute_named(
+            &format!(
+                "UPDATE {tbl_update}
+                SET challenge_status =
+                    (SELECT id FROM {tbl_challenge_status}
+                        WHERE status = ':challenge_status')
+                WHERE
+                    net_account_id =
+                        (SELECT id FROM {tbl_identities}
+                            WHERE address = ':net_account')
+                AND
+                    account_ty =
+                        (SELECT id FROM {tbl_acc_types}
+                            WHERE account_ty = ':account_ty')
+            )",
+                tbl_update = ACCOUNT_STATE,
+                tbl_challenge_status = CHALLENGE_STATUS,
                 tbl_identities = PENDING_JUDGMENTS,
                 tbl_acc_types = ACCOUNT_TYPES,
             ),
