@@ -11,6 +11,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
+use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 
 pub type Result<T> = StdResult<T, failure::Error>;
 
@@ -83,6 +84,15 @@ impl From<SchnorrkelSignature> for Signature {
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NetAccount(String);
+
+impl ToSql for NetAccount {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        Ok(Borrowed(Text(self.as_str().as_bytes())))
+    }
+}
 
 impl NetAccount {
     pub fn as_str(&self) -> &str {
@@ -193,6 +203,22 @@ pub enum AccountType {
     ReservedFeeder,
 }
 
+impl ToSql for AccountType {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use AccountType::*;
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        match self {
+            Email => Ok(Borrowed(Text(b"email"))),
+            Web => Ok(Borrowed(Text(b"web"))),
+            Twitter => Ok(Borrowed(Text(b"twitter"))),
+            Matrix => Ok(Borrowed(Text(b"matrix"))),
+            _ => Err(rusqlite::Error::InvalidQuery),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChallengeStatus {
     #[serde(rename = "unconfirmed")]
@@ -201,6 +227,20 @@ pub enum ChallengeStatus {
     Accepted,
     #[serde(rename = "rejected")]
     Rejected,
+}
+
+impl ToSql for ChallengeStatus {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use ChallengeStatus::*;
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        match self {
+            Unconfirmed => Ok(Borrowed(Text(b"unconfirmed"))),
+            Accepted => Ok(Borrowed(Text(b"accepted"))),
+            Rejected => Ok(Borrowed(Text(b"rejected"))),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

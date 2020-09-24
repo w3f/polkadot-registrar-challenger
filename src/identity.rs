@@ -8,6 +8,7 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
+use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -94,6 +95,21 @@ pub enum AccountStatus {
     Invalid,
     #[serde(rename = "notified")]
     Notified,
+}
+
+impl ToSql for AccountStatus {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use AccountStatus::*;
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        match self {
+            Unknown => Ok(Borrowed(Text(b"unknown"))),
+            Valid => Ok(Borrowed(Text(b"valid"))),
+            Invalid => Ok(Borrowed(Text(b"invalid"))),
+            Notified => Ok(Borrowed(Text(b"notified"))),
+        }
+    }
 }
 
 pub struct IdentityManager {

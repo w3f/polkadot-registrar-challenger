@@ -202,33 +202,33 @@ impl Database2 {
     pub fn set_account_status(
         &self,
         net_account: NetAccount,
-        account: AccountType,
+        account_ty: AccountType,
         status: AccountStatus,
     ) -> Result<()> {
         self.con.execute_named(
             &format!(
-                "UPDATE {tbl_update}
-                SET account_validity =
-                    (SELECT id FROM {tbl_challenge_status}
-                        WHERE status = ':challenge_status')
+            "UPDATE {tbl_update}
+                SET account_status =
+                    (SELECT id FROM {tbl_account_status}
+                        WHERE status = ':account_status')
                 WHERE
-                    address_id =
+                    net_account_id =
                         (SELECT id FROM {tbl_identities}
-                            WHERE address = ':address')
+                            WHERE address = ':net_account')
                 AND
                     account_ty =
                         (SELECT id FROM {tbl_acc_types}
                             WHERE account_ty = ':account_ty')
             )",
                 tbl_update = ACCOUNT_STATE,
-                tbl_challenge_status = CHALLENGE_STATUS,
+                tbl_account_status = ACCOUNT_STATUS,
                 tbl_identities = PENDING_JUDGMENTS,
                 tbl_acc_types = ACCOUNT_TYPES,
             ),
             named_params! {
-                ":validity": "temp",
-                ":address": "temp",
-                ":account_ty": "temp",
+                ":account_status": status,
+                ":net_account": net_account,
+                ":account_ty": account_ty,
             },
         )?;
 
