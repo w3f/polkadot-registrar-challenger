@@ -1,12 +1,12 @@
 use super::Result;
 use crate::identity::{AccountStatus, OnChainIdentity};
-use crate::primitives::{AccountType, NetAccount};
+use crate::primitives::{AccountType, NetAccount, Fatal};
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use rusqlite::{named_params, params, Connection};
 use std::convert::AsRef;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[derive(Debug, Fail)]
 pub enum DatabaseError {
@@ -18,7 +18,7 @@ pub enum DatabaseError {
 
 #[derive(Clone)]
 pub struct Database2 {
-    con: Arc<Connection>,
+    con: Arc<RwLock<Connection>>,
 }
 
 const PENDING_JUDGMENTS: &'static str = "pending_judgments";
@@ -39,13 +39,8 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                id          INTEGER PRIMARY KEY,
-                address     TEXT NOT NULL,
-                legal_name  TEXT,
-                email       TEXT,
-                web         TEXT,
-                twitter     TEXT,
-                matrix      TEXT
+                id           INTEGER PRIMARY KEY,
+                net_account  TEXT NOT NULL,
             )",
                 table = PENDING_JUDGMENTS,
             ),
@@ -92,16 +87,16 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table_main} (
-                id                  INTEGER PRIMARY KEY,
-                address_id          INTEGER NOT NULL,
-                account             TEXT NOT NULL,
-                account_ty          INTEGER NOT NULL,
-                account_status      INTEGER NOT NULL,
-                challenge           TEXT NOT NULL,
-                challenge_status    INTEGER NOT NULL,
+                id                 INTEGER PRIMARY KEY,
+                net_account_id     INTEGET NOT NULL,
+                account            TEXT NOT NULL,
+                account_ty         INTEGER NOT NULL,
+                account_status     INTEGER NOT NULL,
+                challenge          TEXT NOT NULL,
+                challenge_status   INTEGER NOT NULL,
 
-                FOREIGN KEY (address_id)
-                    REFERENCES {table_judgments} (id),
+                FOREIGN KEY (net_account_id)
+                    REFERENCES {table_identities} (id),
 
                 FOREIGN KEY (account_ty)
                     REFERENCES {table_account_ty} (id),
@@ -113,7 +108,7 @@ impl Database2 {
                     REFERENCES {table_challenge_status} (id)
             )",
                 table_main = ACCOUNT_STATE,
-                table_judgments = PENDING_JUDGMENTS,
+                table_identities = PENDING_JUDGMENTS,
                 table_account_ty = ACCOUNT_TYPES,
                 table_account_status = ACCOUNT_STATUS,
                 table_challenge_status = CHALLENGE_STATUS,
@@ -121,14 +116,15 @@ impl Database2 {
             params![],
         )?;
 
+        // Table for known matrix rooms.
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                id          INTEGER PRIMARY KEY,
-                address_id  INTEGER NULL,
-                room_id     TEXT,
+                id              INTEGER PRIMARY KEY,
+                net_account_id  INTEGER NULL,
+                room_id         TEXT,
 
-                FOREIGN KEY (address_id)
+                FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
             )",
                 table = KNOWN_MATRIX_ROOMS,
@@ -136,55 +132,58 @@ impl Database2 {
             params![],
         )?;
 
-        Ok(Database2 { con: Arc::new(con) })
+        Ok(Database2 { con: Arc::new(RwLock::new(con)) })
     }
-    pub fn insert_identity(&self, ident: &OnChainIdentity) -> Result<()> {
+    pub fn insert_identity(&mut self, ident: &OnChainIdentity) -> Result<()> {
         self.insert_identity_batch(&[ident])
     }
-    pub fn insert_identity_batch(&self, idents: &[&OnChainIdentity]) -> Result<()> {
-        let mut stmt = self.con.prepare(&format!(
-            "INSERT INTO {table} (
-                address,
-                display_name,
-                legal_name,
-                email,
-                web,
-                twitter,
-                matrix
+    pub fn insert_identity_batch(&mut self, idents: &[&OnChainIdentity]) -> Result<()> {
+        let mut con = self.con.write().fatal();
+        let transaction = con.transaction()?;
+
+        let mut stmt = transaction.prepare(&format!(
+            "INSERT INTO {tbl_account_state} (
+                net_account_id,
+                account,
+                account_ty,
+                account_status,
+                challenge,
+                challenge_status
             ) VALUES (
-                ':address,'
-                ':display_name,'
-                ':legal_name,'
-                ':email,'
-                ':web,'
-                ':twitter:'
-                ':matrix'
-            )",
-            table = PENDING_JUDGMENTS
+                (SELECT id FROM {tbl_identities} WHERE net_account = ':net_account'),
+                ':account',
+                ':account_ty',
+                ':account_status',
+                ':challenge',
+                ':challenge_status'
+            )
+            ",
+            tbl_account_state = ACCOUNT_STATE,
+            tbl_identities = PENDING_JUDGMENTS,
         ))?;
 
+        // TODO -> Use a HashMap for OnChainIdentity regardinga accounts.
+        // TODO: Support more than just matrix.
         for ident in idents {
             stmt.execute_named(named_params! {
-                ":address": ident.network_address.address().as_str(),
-                ":display_name": ident.display_name,
-                ":legal_name": ident.legal_name,
-                ":email": ident.email.as_ref().map(|s| s.account_str()),
-                ":web": ident.web.as_ref().map(|s| s.account_str()),
-                ":twitter": ident.twitter.as_ref().map(|s| s.account_str()),
-                ":matrix": ident.matrix.as_ref().map(|s| s.account_str()),
+                ":net_account": ident.network_address.address(),
+                ":account": ident.matrix.as_ref().map(|s| &s.account),
+                ":account_ty": ident.matrix.as_ref().map(|s| &s.account_ty),
+                ":challenge": ident.matrix.as_ref().map(|s| s.challenge.as_str()),
+                ":challenge_status": ident.matrix.as_ref().map(|s| &s.challenge_status),
             })?;
         }
 
         Ok(())
     }
     pub fn insert_room_id(&self, net_account: NetAccount, room_id: &RoomId) -> Result<()> {
-        self.con.execute_named(
+        self.con.read().fatal().execute_named(
             &format!(
                 "INSERT INTO {table_into} (
-                    address_id,
+                    net_account_id,
                     room_id
                 ) VALUES (
-                        (SELECT id FROM {table_from} WHERE address = ':account'),
+                        (SELECT id FROM {table_from} WHERE net_account = ':account'),
                         ':room_id'
                     )
                 )",
@@ -205,9 +204,9 @@ impl Database2 {
         account_ty: AccountType,
         status: AccountStatus,
     ) -> Result<()> {
-        self.con.execute_named(
+        self.con.read().fatal().execute_named(
             &format!(
-            "UPDATE {tbl_update}
+                "UPDATE {tbl_update}
                 SET account_status =
                     (SELECT id FROM {tbl_account_status}
                         WHERE status = ':account_status')

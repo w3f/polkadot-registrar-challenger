@@ -5,10 +5,10 @@ use crate::primitives::{
     PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
+use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use tokio::time::{self, Duration};
-use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -61,12 +61,12 @@ impl OnChainIdentity {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AccountState {
-    account: Account,
-    account_ty: AccountType,
-    account_validity: AccountStatus,
-    challenge: Challenge,
-    challenge_status: ChallengeStatus,
-    skip_inform: bool,
+    pub account: Account,
+    pub account_ty: AccountType,
+    pub account_validity: AccountStatus,
+    pub challenge: Challenge,
+    pub challenge_status: ChallengeStatus,
+    pub skip_inform: bool,
 }
 
 impl AccountState {

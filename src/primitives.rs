@@ -2,6 +2,7 @@ use base58::FromBase58;
 use failure::err_msg;
 
 use rand::{thread_rng, Rng};
+use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
@@ -11,7 +12,6 @@ use std::fmt;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
-use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 
 pub type Result<T> = StdResult<T, failure::Error>;
 
@@ -114,6 +114,15 @@ impl From<&str> for NetAccount {
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
+
+impl ToSql for Account {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        Ok(Borrowed(Text(self.as_str().as_bytes())))
+    }
+}
 
 impl Account {
     pub fn as_str(&self) -> &str {

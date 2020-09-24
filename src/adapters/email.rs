@@ -188,7 +188,6 @@ impl<'a> JWTBuilder<'a> {
 #[test]
 fn test_email_client() {
     use crate::primitives::unix_time;
-    use std::env;
     use tokio::runtime::Runtime;
 
     let mut rt = Runtime::new().unwrap();
