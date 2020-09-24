@@ -2,6 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::AccountStatus;
 use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result};
 use crate::verifier::Verifier;
+use crate::db::Database2;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -64,6 +65,7 @@ async fn send_msg(
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
     comms: CommsVerifier,
+    db: Database2,
 }
 
 impl MatrixClient {
@@ -72,6 +74,7 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
+        db: Database2,
         comms: CommsVerifier,
         comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
@@ -135,6 +138,7 @@ impl MatrixClient {
         Ok(MatrixClient {
             client: client,
             comms: comms,
+            db: db,
         })
     }
     async fn send_msg(&self, msg: &str, room_id: &RoomId) -> Result<()> {

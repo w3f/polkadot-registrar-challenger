@@ -6,7 +6,8 @@ use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use rusqlite::{named_params, params, Connection};
 use std::convert::{AsRef, TryFrom};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Fail)]
 pub enum DatabaseError {
@@ -18,7 +19,7 @@ pub enum DatabaseError {
 
 #[derive(Clone)]
 pub struct Database2 {
-    con: Arc<RwLock<Connection>>,
+    con: Arc<Mutex<Connection>>,
 }
 
 const PENDING_JUDGMENTS: &'static str = "pending_judgments";
@@ -133,14 +134,14 @@ impl Database2 {
         )?;
 
         Ok(Database2 {
-            con: Arc::new(RwLock::new(con)),
+            con: Arc::new(Mutex::new(con)),
         })
     }
-    pub fn insert_identity(&mut self, ident: &OnChainIdentity) -> Result<()> {
-        self.insert_identity_batch(&[ident])
+    pub async fn insert_identity(&mut self, ident: &OnChainIdentity) -> Result<()> {
+        self.insert_identity_batch(&[ident]).await
     }
-    pub fn insert_identity_batch(&mut self, idents: &[&OnChainIdentity]) -> Result<()> {
-        let mut con = self.con.write().fatal();
+    pub async fn insert_identity_batch(&mut self, idents: &[&OnChainIdentity]) -> Result<()> {
+        let mut con = self.con.lock().await;
         let transaction = con.transaction()?;
 
         {
@@ -183,8 +184,8 @@ impl Database2 {
 
         Ok(())
     }
-    pub fn insert_room_id(&self, net_account: NetAccount, room_id: &RoomId) -> Result<()> {
-        self.con.read().fatal().execute_named(
+    pub async fn insert_room_id(&self, net_account: NetAccount, room_id: &RoomId) -> Result<()> {
+        self.con.lock().await.execute_named(
             &format!(
                 "INSERT INTO {table_into} (
                     net_account_id,
@@ -205,8 +206,8 @@ impl Database2 {
 
         Ok(())
     }
-    pub fn select_room_ids(&self) -> Result<Vec<RoomId>> {
-        let mut con = self.con.write().fatal();
+    pub async fn select_room_ids(&self) -> Result<Vec<RoomId>> {
+        let mut con = self.con.lock().await;
         let mut stmt = con.prepare(&format!(
             "SELECT room_id FROM {table}",
             table = KNOWN_MATRIX_ROOMS
@@ -222,13 +223,13 @@ impl Database2 {
 
         Ok(room_ids)
     }
-    pub fn set_account_status(
+    pub async fn set_account_status(
         &self,
         net_account: NetAccount,
         account_ty: AccountType,
         status: AccountStatus,
     ) -> Result<()> {
-        self.con.read().fatal().execute_named(
+        self.con.lock().await.execute_named(
             &format!(
                 "UPDATE {tbl_update}
                 SET account_status =
@@ -257,13 +258,13 @@ impl Database2 {
 
         Ok(())
     }
-    pub fn set_challenge_status(
+    pub async fn set_challenge_status(
         &self,
         net_account: NetAccount,
         account_ty: AccountType,
         status: ChallengeStatus,
     ) -> Result<()> {
-        self.con.read().fatal().execute_named(
+        self.con.lock().await.execute_named(
             &format!(
                 "UPDATE {tbl_update}
                 SET challenge_status =
