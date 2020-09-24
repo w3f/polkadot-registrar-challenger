@@ -1,5 +1,5 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
-use crate::db::Database;
+use crate::db::{Database, Database2};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount, NetworkAddress,
     PubKey, Result,
@@ -115,6 +115,7 @@ impl ToSql for AccountStatus {
 pub struct IdentityManager {
     idents: HashMap<NetAccount, OnChainIdentity>,
     db: Database,
+    db2: Database2,
     comms: CommsTable,
 }
 
@@ -125,7 +126,7 @@ struct CommsTable {
 }
 
 impl IdentityManager {
-    pub fn new(db: Database) -> Result<Self> {
+    pub fn new(db: Database, db2: Database2) -> Result<Self> {
         let mut idents = HashMap::new();
 
         let (tx1, recv1) = unbounded();
@@ -133,6 +134,7 @@ impl IdentityManager {
         Ok(IdentityManager {
             idents: idents,
             db: db,
+            db2: db2,
             comms: CommsTable {
                 to_main: tx1.clone(),
                 listener: recv1,
@@ -146,22 +148,29 @@ impl IdentityManager {
         cv
     }
     pub async fn start(mut self) {
-        use CommsMessage::*;
-
         // No async support for `recv` (it blocks and chokes tokio), so we
         // `try_recv` and just loop over it with a short pause.
         let mut interval = time::interval(Duration::from_millis(10));
         loop {
-            if let Ok(msg) = self.comms.listener.try_recv() {
-                match msg {
-                    NewJudgementRequest(ident) => {
-                        debug!("Manager received a new judgement request. Forwarding");
-                    }
-                    _ => panic!("Received unrecognized message type. Report as a bug"),
+            interval.tick().await;
+            let _ = self.local().await.map_err(|err| {
+                error!("{}", err);
+            });
+        }
+    }
+    pub async fn local(&mut self) -> Result<()> {
+        use CommsMessage::*;
+
+        if let Ok(msg) = self.comms.listener.try_recv() {
+            match msg {
+                NewJudgementRequest(ident) => {
+                    debug!("Manager received a new judgement request. Forwarding");
+                    self.db2.insert_identity(&ident).await?;
                 }
-            } else {
-                interval.tick().await;
+                _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
+
+        Ok(())
     }
 }
