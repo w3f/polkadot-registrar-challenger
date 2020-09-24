@@ -55,8 +55,8 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                    id       INTEGER PRIMARY KEY,
-                    validity TEXT NOT NULL
+                    id        INTEGER PRIMARY KEY,
+                    validity  TEXT NOT NULL
             )",
                 table = VALIDITY
             ),
@@ -67,8 +67,8 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                    id         INTEGER PRIMARY KEY,
-                    account_ty TEXT NOT NULL
+                    id          INTEGER PRIMARY KEY,
+                    account_ty  TEXT NOT NULL
             )",
                 table = ACCOUNT_TYPES
             ),
@@ -110,9 +110,9 @@ impl Database2 {
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
-                id         INTEGER PRIMARY KEY,
-                address_id INTEGER NULL,
-                room_id    TEXT,
+                id          INTEGER PRIMARY KEY,
+                address_id  INTEGER NULL,
+                room_id     TEXT,
 
                 FOREIGN KEY (address_id)
                     REFERENCES pending_judgments (id)
@@ -128,8 +128,8 @@ impl Database2 {
         self.insert_identity_batch(&[ident])
     }
     pub fn insert_identity_batch(&self, idents: &[&OnChainIdentity]) -> Result<()> {
-        let mut stmt = self.con.prepare(
-            "INSERT INTO :table (
+        let mut stmt = self.con.prepare(&format!(
+            "INSERT INTO {table} (
                 address,
                 display_name,
                 legal_name,
@@ -146,11 +146,11 @@ impl Database2 {
                 ':twitter:'
                 ':matrix'
             )",
-        )?;
+            table = PENDING_JUDGMENTS
+        ))?;
 
         for ident in idents {
             stmt.execute_named(named_params! {
-                ":table": PENDING_JUDGMENTS,
                 ":address": ident.network_address.address().as_str(),
                 ":display_name": ident.display_name,
                 ":legal_name": ident.legal_name,
@@ -165,17 +165,19 @@ impl Database2 {
     }
     pub fn insert_room_id(&self, net_account: NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.execute_named(
-            "INSERT INTO :table_into (
+            &format!(
+                "INSERT INTO {table_into} (
                 address_id,
                 room_id
             ) VALUES (
-                    (SELECT id FROM :table_from WHERE address = ':account'),
+                    (SELECT id FROM {table_from} WHERE address = ':account'),
                     ':room_id'
                 )
             )",
+                table_into = KNOWN_MATRIX_ROOMS,
+                table_from = PENDING_JUDGMENTS,
+            ),
             named_params! {
-                ":table_into": KNOWN_MATRIX_ROOMS,
-                ":table_from": PENDING_JUDGMENTS,
                 ":account": net_account.as_str(),
                 ":room_id": room_id.as_str(),
             },
