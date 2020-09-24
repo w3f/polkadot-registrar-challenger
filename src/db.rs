@@ -1,6 +1,8 @@
 use super::Result;
 use crate::identity::{AccountStatus, OnChainIdentity};
-use crate::primitives::{AccountType, ChallengeStatus, Fatal, NetAccount};
+use crate::primitives::{
+    Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, PubKey,
+};
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
@@ -184,7 +186,7 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn insert_room_id(&self, net_account: NetAccount, room_id: &RoomId) -> Result<()> {
+    pub async fn insert_room_id(&self, net_account: &NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.lock().await.execute_named(
             &format!(
                 "INSERT INTO {table_into} (
@@ -207,7 +209,7 @@ impl Database2 {
         Ok(())
     }
     pub async fn select_room_ids(&self) -> Result<Vec<RoomId>> {
-        let mut con = self.con.lock().await;
+        let con = self.con.lock().await;
         let mut stmt = con.prepare(&format!(
             "SELECT room_id FROM {table}",
             table = KNOWN_MATRIX_ROOMS
@@ -225,7 +227,7 @@ impl Database2 {
     }
     pub async fn set_account_status(
         &self,
-        net_account: NetAccount,
+        net_account: &NetAccount,
         account_ty: AccountType,
         status: AccountStatus,
     ) -> Result<()> {
@@ -260,7 +262,7 @@ impl Database2 {
     }
     pub async fn set_challenge_status(
         &self,
-        net_account: NetAccount,
+        net_account: &NetAccount,
         account_ty: AccountType,
         status: ChallengeStatus,
     ) -> Result<()> {
@@ -292,6 +294,13 @@ impl Database2 {
         )?;
 
         Ok(())
+    }
+    pub async fn select_challenge_data(
+        &self,
+        account: &Account,
+        account_ty: AccountType,
+    ) -> Result<(NetAccount, PubKey, Challenge)> {
+        Err(failure::err_msg(""))
     }
 }
 
