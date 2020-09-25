@@ -177,7 +177,7 @@ impl Database2 {
             &format!(
                 "CREATE TABLE IF NOT EXISTS {tbl_matrix_rooms} (
                 id              INTEGER PRIMARY KEY,
-                net_account_id  INTEGER NULL,
+                net_account_id  INTEGER NULL UNIQUE,
                 room_id         TEXT,
 
                 FOREIGN KEY (net_account_id)
@@ -575,21 +575,82 @@ mod tests {
         rt.block_on(async {
             let mut db = Database2::new(PATH).unwrap();
 
-            let request = JudgementRequest {
-                address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
-                accounts: Accounts {
-                    display_name: Some("Alice".to_string()),
-                    legal_name: None,
-                    email: Some(Account::from("alice@email.com")),
-                    web: None,
-                    twitter: Some(Account::from("twitter.com/alice")),
-                    matrix: Some(Account::from("@alice:matrix.org")),
-                },
-            };
+            let requests = vec![
+                // Unique identity
+                JudgementRequest {
+                    address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
+                    accounts: Accounts {
+                        display_name: Some("Alice".to_string()),
+                        legal_name: None,
+                        email: Some(Account::from("alice@email.com")),
+                        web: None,
+                        twitter: Some(Account::from("twitter.com/alice")),
+                        matrix: Some(Account::from("@alice:matrix.org")),
+                    },
+                }
+                .try_into()
+                .unwrap(),
+                // Two identical identities. The second one will be the final.
+                JudgementRequest {
+                    address: NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"),
+                    accounts: Accounts {
+                        display_name: Some("Bob".to_string()),
+                        legal_name: None,
+                        email: Some(Account::from("bob@email.com")),
+                        web: None,
+                        twitter: Some(Account::from("twitter.com/bob")),
+                        matrix: Some(Account::from("@bob:matrix.org")),
+                    },
+                }
+                .try_into()
+                .unwrap(),
+                JudgementRequest {
+                    address: NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"),
+                    accounts: Accounts {
+                        display_name: Some("Bob".to_string()),
+                        legal_name: None,
+                        email: Some(Account::from("bob@email.com")),
+                        web: None,
+                        twitter: Some(Account::from("twitter.com/bob")),
+                        matrix: Some(Account::from("@bob_second:matrix.org")),
+                    },
+                }
+                .try_into()
+                .unwrap(),
+            ];
 
-            let _ = db
-                .insert_identity(&request.try_into().unwrap())
-                .await
+            let requests: Vec<&OnChainIdentity> = requests.iter().map(|ident| ident).collect();
+
+            let _ = db.insert_identity_batch(&requests).await.unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 2);
+            res.iter()
+                .find(|request| {
+                    request.address ==
+                        NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
+                })
+                .map(|request| {
+                    assert_eq!(
+                        request.accounts.matrix.as_ref().unwrap(),
+                        &Account::from("@alice:matrix.org")
+                    );
+                    Some(request)
+                })
+                .unwrap();
+
+            res.iter()
+                .find(|request| {
+                    request.address ==
+                        NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
+                })
+                .map(|request| {
+                    assert_eq!(
+                        request.accounts.matrix.as_ref().unwrap(),
+                        &Account::from("@bob_second:matrix.org")
+                    );
+                    Some(request)
+                })
                 .unwrap();
         });
     }
