@@ -363,6 +363,9 @@ impl Responder {
                         .await?;
                 }
             };
+
+            // Tell the manager to check
+            self.comms.notify_status_change(net_account);
         }
 
         Ok(())

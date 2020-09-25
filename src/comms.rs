@@ -35,6 +35,9 @@ pub enum CommsMessage {
         net_account: NetAccount,
         account: Account,
     },
+    NotifyStatusChange {
+        net_account: NetAccount,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -76,9 +79,17 @@ impl CommsVerifier {
     pub fn try_recv(&self) -> Option<CommsMessage> {
         self.recv.try_recv().ok()
     }
+    // TODO: Make pub to connector module
     pub fn notify_new_identity(&self, ident: OnChainIdentity) {
         self.sender
             .send(CommsMessage::NewJudgementRequest(ident))
             .fatal();
+    }
+    pub fn notify_status_change(&self, net_account: NetAccount) {
+        self.sender
+            .send(CommsMessage::NotifyStatusChange {
+                net_account: net_account,
+            })
+            .fatal()
     }
 }

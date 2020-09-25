@@ -170,7 +170,12 @@ impl IdentityManager {
                             .pairs
                             .get(&state.account_ty)
                             .ok_or(ManagerError::NoHandlerRegistered(state.account_ty.clone()))
-                            .map(|comms| comms.notify_account_verification(ident.net_account().clone() ,state.account.clone()))?;
+                            .map(|comms| {
+                                comms.notify_account_verification(
+                                    ident.net_account().clone(),
+                                    state.account.clone(),
+                                )
+                            })?;
                     }
                 }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
