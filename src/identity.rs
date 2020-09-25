@@ -23,7 +23,7 @@ impl OnChainIdentity {
             accounts: vec![],
         })
     }
-    pub fn push_account(&mut self, account: Account, account_ty: AccountType) -> Result<()> {
+    pub fn push_account(&mut self, account_ty: AccountType, account: Account) -> Result<()> {
         if self
             .accounts
             .iter()
@@ -43,6 +43,9 @@ impl OnChainIdentity {
     }
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
+    }
+    pub fn get_account_state(&self, account_ty: &AccountType) -> Option<&AccountState> {
+        self.accounts.iter().find(|state| &state.account_ty == account_ty)
     }
     pub fn account_states(&self) -> &Vec<AccountState> {
         &self.accounts

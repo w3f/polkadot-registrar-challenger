@@ -1,6 +1,6 @@
 use super::Result;
 #[cfg(test)]
-use crate::connector::{Accounts, JudgementRequest};
+use crate::connector::JudgementRequest;
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, PubKey,
@@ -261,7 +261,7 @@ impl Database2 {
         Ok(())
     }
     #[cfg(test)]
-    async fn select_identities(&self) -> Result<Vec<JudgementRequest>> {
+    async fn select_identities(&self) -> Result<Vec<OnChainIdentity>> {
         let con = self.con.lock().await;
         let mut stmt = con.prepare(
             "
@@ -274,29 +274,21 @@ impl Database2 {
         ",
         )?;
 
-        let mut idents: Vec<JudgementRequest> = vec![];
+        let mut idents: Vec<OnChainIdentity> = vec![];
 
         // TODO: Support more than just matrix.
         let mut rows = stmt.query(params![])?;
         while let Some(row) = rows.next()? {
-            let net_account = NetAccount::from(row.get::<_, String>(0)?);
+            let net_account = row.get::<_, NetAccount>(0)?;
+            let account_ty = row.get::<_, AccountType>(1)?;
 
-            // let account_ty = rows.get::<_, AccountType>(1)?;
-
-            if let Some(request) = idents.iter_mut().find(|req| req.address == net_account) {
-                request.accounts.matrix = Some(Account::from(row.get::<_, String>(2)?));
+            if let Some(ident) = idents.iter_mut().find(|ident| ident.net_account() == net_account) {
+                ident.push_account(account_ty, row.get::<_, Account>(2)?)
             } else {
-                idents.push(JudgementRequest {
-                    address: net_account,
-                    accounts: Accounts {
-                        display_name: None,
-                        legal_name: None,
-                        email: None,
-                        web: None,
-                        twitter: None,
-                        matrix: Some(Account::from(row.get::<_, String>(2)?)),
-                    },
-                });
+                let mut ident = OnChainIdentity::new(net_account)?;
+                ident.push_account(account_ty, row.get::<_, Account>(2)?)?;
+
+                idents.push(ident);
             }
         }
 
@@ -509,7 +501,7 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connector::{Accounts, JudgementRequest};
+    use crate::connector::JudgementRequest;
     use crate::primitives::{Challenge, NetAccount};
     use std::convert::TryInto;
     use tokio::runtime::Runtime;
@@ -534,57 +526,69 @@ mod tests {
         rt.block_on(async {
             let mut db = Database2::new(&db_path()).unwrap();
 
-            let mut request = JudgementRequest {
-                address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
-                accounts: Accounts {
-                    display_name: Some("Alice".to_string()),
-                    legal_name: None,
-                    email: Some(Account::from("alice@email.com")),
-                    web: None,
-                    twitter: Some(Account::from("twitter.com/alice")),
-                    matrix: Some(Account::from("@alice:matrix.org")),
-                },
-            };
+            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
+            ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
+            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
 
             // Insert and check return value.
             let _ = db
-                .insert_identity(&request.clone().try_into().unwrap())
+                .insert_identity(&ident)
                 .await
                 .unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
             assert_eq!(
-                res[0].accounts.matrix.as_ref().unwrap(),
+                res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
                 &Account::from("@alice:matrix.org")
             );
 
             // Repeated insert of same value.
             let _ = db
-                .insert_identity(&request.clone().try_into().unwrap())
+                .insert_identity(&ident)
                 .await
                 .unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
             assert_eq!(
-                res[0].accounts.matrix.as_ref().unwrap(),
+                res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
                 &Account::from("@alice:matrix.org")
             );
 
             // Change a field, insert and return value.
-            request.accounts.matrix = Some(Account::from("@bob:matrix.org"));
+            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
+            ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
+            ident.push_account(AccountType::Matrix, Account::from("@alice_second:matrix.org")).unwrap();
 
             let _ = db
-                .insert_identity(&request.try_into().unwrap())
+                .insert_identity(&ident)
                 .await
                 .unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
             assert_eq!(
-                res[0].accounts.matrix.as_ref().unwrap(),
-                &Account::from("@bob:matrix.org")
+                res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
+                &Account::from("@alice_second:matrix.org")
+            );
+
+            // Additional identity
+            let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
+            ident.push_account(AccountType::DisplayName, Account::from("Bob")).unwrap();
+            ident.push_account(AccountType::Matrix, Account::from("@bob:matrix.org")).unwrap();
+
+            let _ = db
+                .insert_identity(&ident)
+                .await
+                .unwrap();
+
+            // Select identities
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert_eq!(
+                res[0].get_account_state(&AccountType::Matrix).unwrap().account,
+                &Account::from("@alice_second:matrix.org")
             );
         });
     }
@@ -595,94 +599,66 @@ mod tests {
         rt.block_on(async {
             let mut db = Database2::new(&db_path()).unwrap();
 
-            let requests = vec![
+            let idents = vec![
                 // Two identical identities with the same values.
-                JudgementRequest {
-                    address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
-                    accounts: Accounts {
-                        display_name: Some("Alice".to_string()),
-                        legal_name: None,
-                        email: Some(Account::from("alice@email.com")),
-                        web: None,
-                        twitter: Some(Account::from("twitter.com/alice")),
-                        matrix: Some(Account::from("@alice:matrix.org")),
-                    },
-                }
-                .try_into()
-                .unwrap(),
-                JudgementRequest {
-                    address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
-                    accounts: Accounts {
-                        display_name: Some("Alice".to_string()),
-                        legal_name: None,
-                        email: Some(Account::from("alice@email.com")),
-                        web: None,
-                        twitter: Some(Account::from("twitter.com/alice")),
-                        matrix: Some(Account::from("@alice:matrix.org")),
-                    },
-                }
-                .try_into()
-                .unwrap(),
+                {
+                    let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
+                    ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
+                    ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+                    ident
+                },
+                {
+                    let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
+                    ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
+                    ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+                    ident
+                },
                 // Two identical identities with varying values (matrix).
-                JudgementRequest {
-                    address: NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"),
-                    accounts: Accounts {
-                        display_name: Some("Bob".to_string()),
-                        legal_name: None,
-                        email: Some(Account::from("bob@email.com")),
-                        web: None,
-                        twitter: Some(Account::from("twitter.com/bob")),
-                        matrix: Some(Account::from("@bob:matrix.org")),
-                    },
+                {
+                    let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
+                    ident.push_account(AccountType::DisplayName, Account::from("Bob")).unwrap();
+                    ident.push_account(AccountType::Matrix, Account::from("@bob:matrix.org")).unwrap();
+                    ident
+                },
+                {
+                    let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
+                    ident.push_account(AccountType::DisplayName, Account::from("Bob")).unwrap();
+                    ident.push_account(AccountType::Matrix, Account::from("@bob_second:matrix.org")).unwrap();
+                    ident
                 }
-                .try_into()
-                .unwrap(),
-                JudgementRequest {
-                    address: NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"),
-                    accounts: Accounts {
-                        display_name: Some("Bob".to_string()),
-                        legal_name: None,
-                        email: Some(Account::from("bob@email.com")),
-                        web: None,
-                        twitter: Some(Account::from("twitter.com/bob")),
-                        matrix: Some(Account::from("@bob_second:matrix.org")),
-                    },
-                }
-                .try_into()
-                .unwrap(),
             ];
 
-            let requests: Vec<&OnChainIdentity> = requests.iter().map(|ident| ident).collect();
+            let idents: Vec<&OnChainIdentity> = idents.iter().map(|ident| ident).collect();
 
-            let _ = db.insert_identity_batch(&requests).await.unwrap();
+            let _ = db.insert_identity_batch(&idents).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 2);
             res.iter()
-                .find(|request| {
-                    request.address
-                        == NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
+                .find(|ident| {
+                    ident.net_account()
+                        == &NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
                 })
-                .map(|request| {
+                .map(|ident| {
                     assert_eq!(
-                        request.accounts.matrix.as_ref().unwrap(),
+                        &ident.get_account_state(&AccountType::Matrix).account,
                         &Account::from("@alice:matrix.org")
                     );
-                    Some(request)
+                    Some(ident)
                 })
                 .unwrap();
 
             res.iter()
-                .find(|request| {
-                    request.address
-                        == NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
+                .find(|ident| {
+                    ident.net_account()
+                        == &NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
                 })
-                .map(|request| {
+                .map(|ident| {
                     assert_eq!(
-                        request.accounts.matrix.as_ref().unwrap(),
+                        &ident.get_account_state(&AccountType::Matrix).account,
                         &Account::from("@bob_second:matrix.org")
                     );
-                    Some(request)
+                    Some(ident)
                 })
                 .unwrap();
         });
@@ -694,30 +670,26 @@ mod tests {
         rt.block_on(async {
             let mut db = Database2::new(&db_path()).unwrap();
 
-            // Prepare identities.
+            // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
             let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
             let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
-            let mut request = JudgementRequest {
-                address: alice.clone(),
-                accounts: Accounts::default(),
-            };
+            // Create identity
+            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"))?;
 
             // Insert and check return value.
             let _ = db
-                .insert_identity(&request.clone().try_into().unwrap())
+                .insert_identity(&ident)
                 .await
                 .unwrap();
 
-            let mut request = JudgementRequest {
-                address: bob.clone(),
-                accounts: Accounts::default(),
-            };
+            // Create identity
+            let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"))?;
 
             // Insert and check return value.
             let _ = db
-                .insert_identity(&request.clone().try_into().unwrap())
+                .insert_identity(&ident)
                 .await
                 .unwrap();
 

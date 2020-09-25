@@ -228,7 +228,7 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
         let mut ident = OnChainIdentity::new(request.address)?;
 
         for (account_ty, account) in request.accounts {
-            ident.push_account(account, account_ty)?;
+            ident.push_account(account_ty, account)?;
         }
 
         Ok(ident)
