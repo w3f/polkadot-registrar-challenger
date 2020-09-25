@@ -162,25 +162,38 @@ impl IdentityManager {
         if let Ok(msg) = self.comms.listener.try_recv() {
             match msg {
                 NewJudgementRequest(ident) => {
-                    debug!("Manager received a new judgement request. Forwarding");
-                    self.db2.insert_identity(&ident).await?;
-
-                    for state in ident.account_states() {
-                        self.comms
-                            .pairs
-                            .get(&state.account_ty)
-                            .ok_or(ManagerError::NoHandlerRegistered(state.account_ty.clone()))
-                            .map(|comms| {
-                                comms.notify_account_verification(
-                                    ident.net_account().clone(),
-                                    state.account.clone(),
-                                )
-                            })?;
-                    }
+                    self.handle_new_judgment_request(ident).await?;
+                }
+                NotifyStatusChange { net_account } => {
+                    self.handle_status_change(net_account).await?;
                 }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
+
+        Ok(())
+    }
+    pub async fn handle_new_judgment_request(&mut self, ident: OnChainIdentity) -> Result<()> {
+        debug!("Handling new judgment request for account: {}", ident.net_account().as_str());
+        self.db2.insert_identity(&ident).await?;
+
+        for state in ident.account_states() {
+            self.comms
+                .pairs
+                .get(&state.account_ty)
+                .ok_or(ManagerError::NoHandlerRegistered(state.account_ty.clone()))
+                .map(|comms| {
+                    comms.notify_account_verification(
+                        ident.net_account().clone(),
+                        state.account.clone(),
+                    )
+                })?;
+        }
+
+        Ok(())
+    }
+    pub async fn handle_status_change(&mut self, net_account: NetAccount) -> Result<()> {
+        debug!("Handling status change for account: {}", net_account.as_str());
 
         Ok(())
     }

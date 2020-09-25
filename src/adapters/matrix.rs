@@ -364,7 +364,7 @@ impl Responder {
                 }
             };
 
-            // Tell the manager to check
+            // Tell the manager to check the user's account states.
             self.comms.notify_status_change(net_account);
         }
 
