@@ -269,10 +269,10 @@ impl Database2 {
             "
             SELECT net_account, account_ty, account
             FROM pending_judgments
-                LEFT JOIN account_states
-                    ON pending_judgments.id = account_states.net_account_id
-                LEFT JOIN account_types
-                    ON account_states.account_ty_id = account_types.id
+            LEFT JOIN account_states
+                ON pending_judgments.id = account_states.net_account_id
+            LEFT JOIN account_types
+                ON account_states.account_ty_id = account_types.id
         ",
         )?;
 
@@ -365,6 +365,25 @@ impl Database2 {
 
         Ok(room_ids)
     }
+    pub async fn select_net_account_from_room_id(&self, room_id: &RoomId) -> Result<Option<NetAccount>> {
+        let con = self.con.lock().await;
+
+        con.query_row_named(
+                "SELECT net_account,
+                FROM pending_judgments,
+                INNER JOIN known_matrix_rooms,
+                    ON known_matrix_rooms.net_account_id = pending_judgments.id,
+                WHERE
+                    known_matrix_rooms.room_id = :room_id
+                ",
+            named_params! {
+                ":room_id": room_id.as_str(),
+            },
+            |row| row.get::<_, NetAccount>(0),
+        )
+        .optional()
+        .map_err(|err| failure::Error::from(err))
+    }
     pub async fn set_account_status(
         &self,
         net_account: &NetAccount,
@@ -437,9 +456,10 @@ impl Database2 {
     }
     pub async fn select_challenge_data(
         &self,
+        net_account: &NetAccount,
         account: &Account,
         account_ty: AccountType,
-    ) -> Result<(NetAccount, PubKey, Challenge)> {
+    ) -> Result<(PubKey, Challenge)> {
         Err(failure::err_msg(""))
     }
 }
@@ -728,5 +748,10 @@ mod tests {
             assert!(res.contains(&alice_room_2));
             assert!(res.contains(&bob_room));
         });
+    }
+
+    #[test]
+    fn set_account_status() {
+
     }
 }
