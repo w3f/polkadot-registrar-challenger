@@ -145,6 +145,8 @@ impl Database2 {
                 challenge            TEXT NOT NULL,
                 challenge_status_id  INTEGER NOT NULL,
 
+                UNIQUE (net_account_id, account_ty_id)
+
                 FOREIGN KEY (net_account_id)
                     REFERENCES {table_identities} (id),
 
@@ -208,8 +210,8 @@ impl Database2 {
                 })?;
             }
 
-            let mut stmt = transaction.prepare(&format!(
-                "INSERT OR REPLACE INTO {tbl_account_state} (
+            let mut stmt = transaction.prepare(&format!("
+                INSERT OR REPLACE INTO {tbl_account_state} (
                     net_account_id,
                     account,
                     account_ty_id,
@@ -467,11 +469,45 @@ mod tests {
 
     #[test]
     fn database_setup() {
+        // Test repeated initialization.
+        let db = Database2::new(PATH).unwrap();
         let db = Database2::new(PATH).unwrap();
     }
 
     #[test]
     fn insert_identity() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(PATH).unwrap();
+
+            let mut request = JudgementRequest {
+                address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
+                accounts: Accounts {
+                    display_name: Some("Alice".to_string()),
+                    legal_name: None,
+                    email: Some(Account::from("alice@email.com")),
+                    web: None,
+                    twitter: Some(Account::from("twitter.com/alice")),
+                    matrix: Some(Account::from("@alice:matrix.org")),
+                },
+            };
+
+            let mut ident: OnChainIdentity = request.try_into().unwrap();
+
+            let _ = db
+                .insert_identity(&ident.clone())
+                .await
+                .unwrap();
+
+            let _ = db
+                .insert_identity(&ident)
+                .await
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn insert_identity_batch() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             let mut db = Database2::new(PATH).unwrap();
