@@ -177,7 +177,7 @@ impl Database2 {
             &format!(
                 "CREATE TABLE IF NOT EXISTS {tbl_matrix_rooms} (
                 id              INTEGER PRIMARY KEY,
-                net_account_id  INTEGER NULL UNIQUE,
+                net_account_id  INTEGER NOT NULL UNIQUE,
                 room_id         TEXT,
 
                 FOREIGN KEY (net_account_id)
@@ -245,6 +245,9 @@ impl Database2 {
             // TODO -> Use a HashMap for OnChainIdentity regarding accounts.
             // TODO: Support more than just matrix.
             for ident in idents {
+                if ident.matrix.is_none() {
+                    continue;
+                }
                 stmt.execute_named(named_params! {
                     ":net_account": ident.network_address.address(),
                     ":account": ident.matrix.as_ref().map(|s| &s.account),
@@ -305,19 +308,18 @@ impl Database2 {
     pub async fn insert_room_id(&self, net_account: &NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.lock().await.execute_named(
             &format!(
-                "INSERT INTO {tbl_room_id} (
+                "INSERT OR REPLACE INTO {tbl_room_id} (
                     net_account_id,
                     room_id
                 ) VALUES (
-                        (SELECT id FROM {tbl_identities} WHERE net_account = :account),
-                        :room_id
-                    )
+                    (SELECT id FROM {tbl_identities} WHERE net_account = :net_account),
+                    :room_id
                 )",
                 tbl_room_id = KNOWN_MATRIX_ROOMS,
                 tbl_identities = PENDING_JUDGMENTS,
             ),
             named_params! {
-                ":account": net_account.as_str(),
+                ":net_account": net_account,
                 ":room_id": room_id.as_str(),
             },
         )?;
@@ -328,8 +330,11 @@ impl Database2 {
         let con = self.con.lock().await;
         con.query_row_named(
             &format!(
-                "SELECT room_id FROM {tbl_room_id} WHERE
-                    (SELECT from {tbl_identities} WHERE
+                "SELECT room_id
+                FROM {tbl_room_id}
+                WHERE net_account_id =
+                    (SELECT id from {tbl_identities}
+                        WHERE
                         net_account = :net_account)
                 ",
                 tbl_room_id = KNOWN_MATRIX_ROOMS,
@@ -508,24 +513,29 @@ impl<'a> ScopedDatabase<'a> {
 mod tests {
     use super::*;
     use crate::connector::{Accounts, JudgementRequest};
-    use crate::primitives::NetAccount;
+    use crate::primitives::{NetAccount, Challenge};
     use std::convert::TryInto;
     use tokio::runtime::Runtime;
 
-    const PATH: &'static str = "/tmp/sqlite";
+    // Generate a random db path
+    fn db_path() -> String {
+        format!("/tmp/sqlite_{}", Challenge::gen_random().as_str())
+    }
 
     #[test]
     fn database_setup() {
+        let path = db_path();
+
         // Test repeated initialization.
-        let db = Database2::new(PATH).unwrap();
-        let db = Database2::new(PATH).unwrap();
+        let db = Database2::new(&path).unwrap();
+        let db = Database2::new(&path).unwrap();
     }
 
     #[test]
     fn insert_identity() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(PATH).unwrap();
+            let mut db = Database2::new(&db_path()).unwrap();
 
             let mut request = JudgementRequest {
                 address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
@@ -540,6 +550,19 @@ mod tests {
             };
 
             // Insert and check return value.
+            let _ = db
+                .insert_identity(&request.clone().try_into().unwrap())
+                .await
+                .unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(
+                res[0].accounts.matrix.as_ref().unwrap(),
+                &Account::from("@alice:matrix.org")
+            );
+
+            // Repeated insert of same value.
             let _ = db
                 .insert_identity(&request.clone().try_into().unwrap())
                 .await
@@ -573,10 +596,10 @@ mod tests {
     fn insert_identity_batch() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(PATH).unwrap();
+            let mut db = Database2::new(&db_path()).unwrap();
 
             let requests = vec![
-                // Unique identity
+                // Two identical identities with the same values.
                 JudgementRequest {
                     address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
                     accounts: Accounts {
@@ -590,7 +613,20 @@ mod tests {
                 }
                 .try_into()
                 .unwrap(),
-                // Two identical identities. The second one will be the final.
+                JudgementRequest {
+                    address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
+                    accounts: Accounts {
+                        display_name: Some("Alice".to_string()),
+                        legal_name: None,
+                        email: Some(Account::from("alice@email.com")),
+                        web: None,
+                        twitter: Some(Account::from("twitter.com/alice")),
+                        matrix: Some(Account::from("@alice:matrix.org")),
+                    },
+                }
+                .try_into()
+                .unwrap(),
+                // Two identical identities with varying values (matrix).
                 JudgementRequest {
                     address: NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"),
                     accounts: Accounts {
@@ -627,8 +663,8 @@ mod tests {
             assert_eq!(res.len(), 2);
             res.iter()
                 .find(|request| {
-                    request.address ==
-                        NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
+                    request.address
+                        == NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
                 })
                 .map(|request| {
                     assert_eq!(
@@ -641,8 +677,8 @@ mod tests {
 
             res.iter()
                 .find(|request| {
-                    request.address ==
-                        NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
+                    request.address
+                        == NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
                 })
                 .map(|request| {
                     assert_eq!(
@@ -652,6 +688,69 @@ mod tests {
                     Some(request)
                 })
                 .unwrap();
+        });
+    }
+
+    #[test]
+    fn insert_select_room_id() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            // Prepare identities.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+            let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
+
+            let mut request = JudgementRequest {
+                address: alice.clone(),
+                accounts: Accounts::default(),
+            };
+
+            // Insert and check return value.
+            let _ = db
+                .insert_identity(&request.clone().try_into().unwrap())
+                .await
+                .unwrap();
+
+            let mut request = JudgementRequest {
+                address: bob.clone(),
+                accounts: Accounts::default(),
+            };
+
+            // Insert and check return value.
+            let _ = db
+                .insert_identity(&request.clone().try_into().unwrap())
+                .await
+                .unwrap();
+
+            // Test RoomId functionality.
+            let alice_room_1 = RoomId::try_from("!ALICE1:matrix.org").unwrap();
+            let alice_room_2 = RoomId::try_from("!ALICE2:matrix.org").unwrap();
+            let bob_room = RoomId::try_from("!BOB:matrix.org").unwrap();
+
+            // Insert RoomIds
+            db.insert_room_id(&alice, &alice_room_1).await.unwrap();
+            db.insert_room_id(&bob, &bob_room).await.unwrap();
+
+            // Updated data with repeated inserts.
+            db.insert_room_id(&alice, &alice_room_2).await.unwrap();
+            db.insert_room_id(&alice, &alice_room_2).await.unwrap();
+
+            let res = db.select_room_id(&alice).await.unwrap().unwrap();
+            assert_eq!(res, alice_room_2);
+
+            let res = db.select_room_id(&bob).await.unwrap().unwrap();
+            assert_eq!(res, bob_room);
+
+            // Does not exists.
+            let res = db.select_room_id(&eve).await.unwrap();
+            assert!(res.is_none());
+
+            let res = db.select_room_ids().await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert!(res.contains(&alice_room_2));
+            assert!(res.contains(&bob_room));
         });
     }
 }

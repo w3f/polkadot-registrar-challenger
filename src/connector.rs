@@ -47,7 +47,7 @@ pub(crate) struct JudgementRequest {
     pub accounts: Accounts,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct Accounts {
     pub display_name: Option<String>,
     pub legal_name: Option<String>,
