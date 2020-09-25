@@ -16,6 +16,12 @@ pub struct OnChainIdentity {
     accounts: Vec<AccountState>,
 }
 
+#[derive(Debug, Fail)]
+enum ManagerError {
+    #[fail(display = "no handler registered for account type: {:?}", 0)]
+    NoHandlerRegistered(AccountType),
+}
+
 impl OnChainIdentity {
     pub fn new(net_account: NetAccount) -> Result<Self> {
         Ok(OnChainIdentity {
@@ -45,7 +51,9 @@ impl OnChainIdentity {
         &self.network_address.pub_key()
     }
     pub fn get_account_state(&self, account_ty: &AccountType) -> Option<&AccountState> {
-        self.accounts.iter().find(|state| &state.account_ty == account_ty)
+        self.accounts
+            .iter()
+            .find(|state| &state.account_ty == account_ty)
     }
     pub fn account_states(&self) -> &Vec<AccountState> {
         &self.accounts
@@ -73,11 +81,6 @@ impl AccountState {
             skip_inform: false,
         }
     }
-    /* TODO: Delete
-    pub fn account_str(&self) -> &str {
-        self.account.as_str()
-    }
-    */
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
@@ -161,6 +164,14 @@ impl IdentityManager {
                 NewJudgementRequest(ident) => {
                     debug!("Manager received a new judgement request. Forwarding");
                     self.db2.insert_identity(&ident).await?;
+
+                    for state in ident.account_states() {
+                        self.comms
+                            .pairs
+                            .get(&state.account_ty)
+                            .ok_or(ManagerError::NoHandlerRegistered(state.account_ty.clone()))
+                            .map(|comms| comms.notify_account_verification(ident.net_account().clone() ,state.account.clone()))?;
+                    }
                 }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }

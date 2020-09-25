@@ -2,7 +2,7 @@ use base58::FromBase58;
 use failure::err_msg;
 
 use rand::{thread_rng, Rng};
-use rusqlite::types::{ToSql, ToSqlOutput, FromSql, FromSqlResult, FromSqlError, ValueRef};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
@@ -97,8 +97,10 @@ impl ToSql for NetAccount {
 impl FromSql for NetAccount {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value {
-            ValueRef::Text(val) => Ok(NetAccount(String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?)),
-            _ => Err(FromSqlError::InvalidType)
+            ValueRef::Text(val) => Ok(NetAccount(
+                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
+            )),
+            _ => Err(FromSqlError::InvalidType),
         }
     }
 }
@@ -127,8 +129,10 @@ pub struct Account(String);
 impl FromSql for Account {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value {
-            ValueRef::Text(val) => Ok(Account(String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?)),
-            _ => Err(FromSqlError::InvalidType)
+            ValueRef::Text(val) => Ok(Account(
+                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
+            )),
+            _ => Err(FromSqlError::InvalidType),
         }
     }
 }
@@ -255,18 +259,16 @@ impl ToSql for AccountType {
 impl FromSql for AccountType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value {
-            ValueRef::Text(val) => {
-                match val {
-                    b"legal_name" => Ok(AccountType::LegalName),
-                    b"display_name" => Ok(AccountType::DisplayName),
-                    b"email" => Ok(AccountType::Email),
-                    b"web" => Ok(AccountType::Web),
-                    b"twitter" => Ok(AccountType::Twitter),
-                    b"matrix" => Ok(AccountType::Matrix),
-                    _ => Err(FromSqlError::InvalidType),
-                }
+            ValueRef::Text(val) => match val {
+                b"legal_name" => Ok(AccountType::LegalName),
+                b"display_name" => Ok(AccountType::DisplayName),
+                b"email" => Ok(AccountType::Email),
+                b"web" => Ok(AccountType::Web),
+                b"twitter" => Ok(AccountType::Twitter),
+                b"matrix" => Ok(AccountType::Matrix),
+                _ => Err(FromSqlError::InvalidType),
             },
-            _ => Err(FromSqlError::InvalidType)
+            _ => Err(FromSqlError::InvalidType),
         }
     }
 }

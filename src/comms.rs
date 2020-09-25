@@ -7,7 +7,7 @@ use matrix_sdk::identifiers::RoomId;
 use tokio::time::{self, Duration};
 
 pub fn generate_comms(
-    listener: Sender<CommsMessage>,
+    sender: Sender<CommsMessage>,
     account_ty: AccountType,
 ) -> (CommsMain, CommsVerifier) {
     let (tx, recv) = unbounded();
@@ -15,7 +15,7 @@ pub fn generate_comms(
     (
         CommsMain { sender: tx },
         CommsVerifier {
-            tx: listener,
+            sender: sender,
             recv: recv,
             address_ty: account_ty,
         },
@@ -42,11 +42,20 @@ pub struct CommsMain {
     sender: Sender<CommsMessage>,
 }
 
-impl CommsMain {}
+impl CommsMain {
+    pub fn notify_account_verification(&self, net_account: NetAccount, account: Account) {
+        self.sender
+            .send(CommsMessage::AccountToVerify {
+                net_account: net_account,
+                account: account,
+            })
+            .fatal();
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CommsVerifier {
-    tx: Sender<CommsMessage>,
+    sender: Sender<CommsMessage>,
     recv: Receiver<CommsMessage>,
     address_ty: AccountType,
 }
@@ -68,7 +77,7 @@ impl CommsVerifier {
         self.recv.try_recv().ok()
     }
     pub fn notify_new_identity(&self, ident: OnChainIdentity) {
-        self.tx
+        self.sender
             .send(CommsMessage::NewJudgementRequest(ident))
             .fatal();
     }

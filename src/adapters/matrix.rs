@@ -46,7 +46,7 @@ pub enum MatrixError {
     // TODO: Use `DatabaseError`
     Database(failure::Error),
     #[fail(display = "contacted by a user who's RoomId was not registered anywhere")]
-    RoomIdNotFound
+    RoomIdNotFound,
 }
 
 async fn send_msg(
@@ -289,15 +289,21 @@ impl Responder {
 
         if let SyncRoom::Joined(room) = room {
             let room_id = &room.read().await.room_id;
-            let net_account = if let Some(net_account) = self.db.select_net_account_from_room_id(&room_id).await? {
+            let net_account = if let Some(net_account) =
+                self.db.select_net_account_from_room_id(&room_id).await?
+            {
                 net_account
             } else {
-                return Err(MatrixError::RoomIdNotFound.into())
+                return Err(MatrixError::RoomIdNotFound.into());
             };
 
             let (pub_key, challenge) = self
                 .db
-                .select_challenge_data(&net_account, &Account::from(event.sender.as_str()), AccountType::Matrix)
+                .select_challenge_data(
+                    &net_account,
+                    &Account::from(event.sender.as_str()),
+                    AccountType::Matrix,
+                )
                 .await?;
 
             let verifier = Verifier::new(pub_key, challenge);

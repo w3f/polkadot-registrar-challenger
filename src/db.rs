@@ -284,7 +284,10 @@ impl Database2 {
             let net_account = row.get::<_, NetAccount>(0)?;
             let account_ty = row.get::<_, AccountType>(1)?;
 
-            if let Some(ident) = idents.iter_mut().find(|ident| ident.net_account() == &net_account) {
+            if let Some(ident) = idents
+                .iter_mut()
+                .find(|ident| ident.net_account() == &net_account)
+            {
                 ident.push_account(account_ty, row.get::<_, Account>(2)?)?;
             } else {
                 let mut ident = OnChainIdentity::new(net_account)?;
@@ -365,11 +368,14 @@ impl Database2 {
 
         Ok(room_ids)
     }
-    pub async fn select_net_account_from_room_id(&self, room_id: &RoomId) -> Result<Option<NetAccount>> {
+    pub async fn select_net_account_from_room_id(
+        &self,
+        room_id: &RoomId,
+    ) -> Result<Option<NetAccount>> {
         let con = self.con.lock().await;
 
         con.query_row_named(
-                "SELECT net_account
+            "SELECT net_account
                 FROM pending_judgments
                 INNER JOIN known_matrix_rooms
                     ON known_matrix_rooms.net_account_id = pending_judgments.id
@@ -548,72 +554,102 @@ mod tests {
         rt.block_on(async {
             let mut db = Database2::new(&db_path()).unwrap();
 
-            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
-            ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
-            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+            let mut ident = OnChainIdentity::new(NetAccount::from(
+                "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
+            ))
+            .unwrap();
+            ident
+                .push_account(AccountType::DisplayName, Account::from("Alice"))
+                .unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
 
             // Insert and check return value.
-            let _ = db
-                .insert_identity(&ident)
-                .await
-                .unwrap();
+            let _ = db.insert_identity(&ident).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
             assert_eq!(
-                res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .as_ref()
+                    .unwrap()
+                    .account,
                 Account::from("@alice:matrix.org")
             );
 
             // Repeated insert of same value.
-            let _ = db
-                .insert_identity(&ident)
-                .await
-                .unwrap();
+            let _ = db.insert_identity(&ident).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
             assert_eq!(
-                res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .as_ref()
+                    .unwrap()
+                    .account,
                 Account::from("@alice:matrix.org")
             );
 
             // Change a field, insert and return value.
-            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
-            ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
-            ident.push_account(AccountType::Matrix, Account::from("@alice_second:matrix.org")).unwrap();
-
-            let _ = db
-                .insert_identity(&ident)
-                .await
+            let mut ident = OnChainIdentity::new(NetAccount::from(
+                "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
+            ))
+            .unwrap();
+            ident
+                .push_account(AccountType::DisplayName, Account::from("Alice"))
                 .unwrap();
+            ident
+                .push_account(
+                    AccountType::Matrix,
+                    Account::from("@alice_second:matrix.org"),
+                )
+                .unwrap();
+
+            let _ = db.insert_identity(&ident).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
             assert_eq!(
-                res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .as_ref()
+                    .unwrap()
+                    .account,
                 Account::from("@alice_second:matrix.org")
             );
 
             // Additional identity
-            let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
-            ident.push_account(AccountType::DisplayName, Account::from("Bob")).unwrap();
-            ident.push_account(AccountType::Matrix, Account::from("@bob:matrix.org")).unwrap();
-
-            let _ = db
-                .insert_identity(&ident)
-                .await
+            let mut ident = OnChainIdentity::new(NetAccount::from(
+                "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+            ))
+            .unwrap();
+            ident
+                .push_account(AccountType::DisplayName, Account::from("Bob"))
                 .unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@bob:matrix.org"))
+                .unwrap();
+
+            let _ = db.insert_identity(&ident).await.unwrap();
 
             // Select identities
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 2);
             assert_eq!(
-                res[0].get_account_state(&AccountType::Matrix).unwrap().account,
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .unwrap()
+                    .account,
                 Account::from("@alice_second:matrix.org")
             );
             assert_eq!(
-                res[1].get_account_state(&AccountType::Matrix).unwrap().account,
+                res[1]
+                    .get_account_state(&AccountType::Matrix)
+                    .unwrap()
+                    .account,
                 Account::from("@bob:matrix.org")
             );
         });
@@ -628,30 +664,58 @@ mod tests {
             let idents = vec![
                 // Two identical identities with the same values.
                 {
-                    let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
-                    ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
-                    ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+                    let mut ident = OnChainIdentity::new(NetAccount::from(
+                        "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
+                    ))
+                    .unwrap();
+                    ident
+                        .push_account(AccountType::DisplayName, Account::from("Alice"))
+                        .unwrap();
+                    ident
+                        .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                        .unwrap();
                     ident
                 },
                 {
-                    let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
-                    ident.push_account(AccountType::DisplayName, Account::from("Alice")).unwrap();
-                    ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+                    let mut ident = OnChainIdentity::new(NetAccount::from(
+                        "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
+                    ))
+                    .unwrap();
+                    ident
+                        .push_account(AccountType::DisplayName, Account::from("Alice"))
+                        .unwrap();
+                    ident
+                        .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                        .unwrap();
                     ident
                 },
                 // Two identical identities with varying values (matrix).
                 {
-                    let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
-                    ident.push_account(AccountType::DisplayName, Account::from("Bob")).unwrap();
-                    ident.push_account(AccountType::Matrix, Account::from("@bob:matrix.org")).unwrap();
+                    let mut ident = OnChainIdentity::new(NetAccount::from(
+                        "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+                    ))
+                    .unwrap();
+                    ident
+                        .push_account(AccountType::DisplayName, Account::from("Bob"))
+                        .unwrap();
+                    ident
+                        .push_account(AccountType::Matrix, Account::from("@bob:matrix.org"))
+                        .unwrap();
                     ident
                 },
                 {
-                    let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
-                    ident.push_account(AccountType::DisplayName, Account::from("Bob")).unwrap();
-                    ident.push_account(AccountType::Matrix, Account::from("@bob_second:matrix.org")).unwrap();
+                    let mut ident = OnChainIdentity::new(NetAccount::from(
+                        "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+                    ))
+                    .unwrap();
                     ident
-                }
+                        .push_account(AccountType::DisplayName, Account::from("Bob"))
+                        .unwrap();
+                    ident
+                        .push_account(AccountType::Matrix, Account::from("@bob_second:matrix.org"))
+                        .unwrap();
+                    ident
+                },
             ];
 
             let idents: Vec<&OnChainIdentity> = idents.iter().map(|ident| ident).collect();
@@ -668,7 +732,10 @@ mod tests {
                 })
                 .map(|ident| {
                     assert_eq!(
-                        ident.get_account_state(&AccountType::Matrix).unwrap().account,
+                        ident
+                            .get_account_state(&AccountType::Matrix)
+                            .unwrap()
+                            .account,
                         Account::from("@alice:matrix.org")
                     );
                     Some(ident)
@@ -682,7 +749,10 @@ mod tests {
                 })
                 .map(|ident| {
                     assert_eq!(
-                        ident.get_account_state(&AccountType::Matrix).unwrap().account,
+                        ident
+                            .get_account_state(&AccountType::Matrix)
+                            .unwrap()
+                            .account,
                         Account::from("@bob_second:matrix.org")
                     );
                     Some(ident)
@@ -703,22 +773,22 @@ mod tests {
             let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create identity
-            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
+            let mut ident = OnChainIdentity::new(NetAccount::from(
+                "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
+            ))
+            .unwrap();
 
             // Insert and check return value.
-            let _ = db
-                .insert_identity(&ident)
-                .await
-                .unwrap();
+            let _ = db.insert_identity(&ident).await.unwrap();
 
             // Create identity
-            let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
+            let mut ident = OnChainIdentity::new(NetAccount::from(
+                "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+            ))
+            .unwrap();
 
             // Insert and check return value.
-            let _ = db
-                .insert_identity(&ident)
-                .await
-                .unwrap();
+            let _ = db.insert_identity(&ident).await.unwrap();
 
             // Test RoomId functionality.
             let alice_room_1 = RoomId::try_from("!ALICE1:matrix.org").unwrap();
@@ -750,7 +820,11 @@ mod tests {
             assert!(res.contains(&bob_room));
 
             // Get NetAccount based on RoomId.
-            let res = db.select_net_account_from_room_id(&bob_room).await.unwrap().unwrap();
+            let res = db
+                .select_net_account_from_room_id(&bob_room)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(res, bob);
 
             // Does not exist.
@@ -760,7 +834,5 @@ mod tests {
     }
 
     #[test]
-    fn set_account_status() {
-
-    }
+    fn set_account_status() {}
 }
