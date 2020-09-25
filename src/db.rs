@@ -282,8 +282,8 @@ impl Database2 {
             let net_account = row.get::<_, NetAccount>(0)?;
             let account_ty = row.get::<_, AccountType>(1)?;
 
-            if let Some(ident) = idents.iter_mut().find(|ident| ident.net_account() == net_account) {
-                ident.push_account(account_ty, row.get::<_, Account>(2)?)
+            if let Some(ident) = idents.iter_mut().find(|ident| ident.net_account() == &net_account) {
+                ident.push_account(account_ty, row.get::<_, Account>(2)?)?;
             } else {
                 let mut ident = OnChainIdentity::new(net_account)?;
                 ident.push_account(account_ty, row.get::<_, Account>(2)?)?;
@@ -540,7 +540,7 @@ mod tests {
             assert_eq!(res.len(), 1);
             assert_eq!(
                 res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
-                &Account::from("@alice:matrix.org")
+                Account::from("@alice:matrix.org")
             );
 
             // Repeated insert of same value.
@@ -553,7 +553,7 @@ mod tests {
             assert_eq!(res.len(), 1);
             assert_eq!(
                 res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
-                &Account::from("@alice:matrix.org")
+                Account::from("@alice:matrix.org")
             );
 
             // Change a field, insert and return value.
@@ -570,7 +570,7 @@ mod tests {
             assert_eq!(res.len(), 1);
             assert_eq!(
                 res[0].get_account_state(&AccountType::Matrix).as_ref().unwrap().account,
-                &Account::from("@alice_second:matrix.org")
+                Account::from("@alice_second:matrix.org")
             );
 
             // Additional identity
@@ -588,7 +588,7 @@ mod tests {
             assert_eq!(res.len(), 2);
             assert_eq!(
                 res[0].get_account_state(&AccountType::Matrix).unwrap().account,
-                &Account::from("@alice_second:matrix.org")
+                Account::from("@alice_second:matrix.org")
             );
         });
     }
@@ -641,8 +641,8 @@ mod tests {
                 })
                 .map(|ident| {
                     assert_eq!(
-                        &ident.get_account_state(&AccountType::Matrix).account,
-                        &Account::from("@alice:matrix.org")
+                        ident.get_account_state(&AccountType::Matrix).unwrap().account,
+                        Account::from("@alice:matrix.org")
                     );
                     Some(ident)
                 })
@@ -655,8 +655,8 @@ mod tests {
                 })
                 .map(|ident| {
                     assert_eq!(
-                        &ident.get_account_state(&AccountType::Matrix).account,
-                        &Account::from("@bob_second:matrix.org")
+                        ident.get_account_state(&AccountType::Matrix).unwrap().account,
+                        Account::from("@bob_second:matrix.org")
                     );
                     Some(ident)
                 })
@@ -676,7 +676,7 @@ mod tests {
             let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create identity
-            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"))?;
+            let mut ident = OnChainIdentity::new(NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")).unwrap();
 
             // Insert and check return value.
             let _ = db
@@ -685,7 +685,7 @@ mod tests {
                 .unwrap();
 
             // Create identity
-            let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C"))?;
+            let mut ident = OnChainIdentity::new(NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).unwrap();
 
             // Insert and check return value.
             let _ = db
