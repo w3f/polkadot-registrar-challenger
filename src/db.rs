@@ -127,6 +127,8 @@ impl Database2 {
                 "INSERT OR IGNORE INTO {tbl_account_ty}
                     (account_ty)
                 VALUES
+                    ('legal_name'),
+                    ('display_name'),
                     ('email'),
                     ('web'),
                     ('twitter'),
@@ -590,6 +592,10 @@ mod tests {
                 res[0].get_account_state(&AccountType::Matrix).unwrap().account,
                 Account::from("@alice_second:matrix.org")
             );
+            assert_eq!(
+                res[1].get_account_state(&AccountType::Matrix).unwrap().account,
+                Account::from("@bob:matrix.org")
+            );
         });
     }
 
@@ -630,6 +636,7 @@ mod tests {
 
             let idents: Vec<&OnChainIdentity> = idents.iter().map(|ident| ident).collect();
 
+            println!(">> {:?}", idents);
             let _ = db.insert_identity_batch(&idents).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
