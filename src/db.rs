@@ -1,4 +1,6 @@
 use super::Result;
+#[cfg(test)]
+use crate::connector::{Accounts, JudgementRequest};
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, PubKey,
@@ -17,6 +19,8 @@ pub enum DatabaseError {
     Open(failure::Error),
     #[fail(display = "SQLite database is not in auto-commit mode")]
     NoAutocommit,
+    #[fail(display = "failed to convert column field into native type")]
+    InvalidType,
 }
 
 #[derive(Clone)]
@@ -210,7 +214,8 @@ impl Database2 {
                 })?;
             }
 
-            let mut stmt = transaction.prepare(&format!("
+            let mut stmt = transaction.prepare(&format!(
+                "
                 INSERT OR REPLACE INTO {tbl_account_state} (
                     net_account_id,
                     account,
@@ -254,6 +259,48 @@ impl Database2 {
         transaction.commit()?;
 
         Ok(())
+    }
+    #[cfg(test)]
+    async fn select_identities(&self) -> Result<Vec<JudgementRequest>> {
+        let con = self.con.lock().await;
+        let mut stmt = con.prepare(
+            "
+            SELECT net_account, account_ty, account
+            FROM pending_judgments
+                LEFT JOIN account_states
+                    ON pending_judgments.id = account_states.net_account_id
+                LEFT JOIN account_types
+                    ON account_states.account_ty_id = account_types.id
+        ",
+        )?;
+
+        let mut idents: Vec<JudgementRequest> = vec![];
+
+        // TODO: Support more than just matrix.
+        let mut rows = stmt.query(params![])?;
+        while let Some(row) = rows.next()? {
+            let net_account = NetAccount::from(row.get::<_, String>(0)?);
+
+            // let account_ty = rows.get::<_, AccountType>(1)?;
+
+            if let Some(request) = idents.iter_mut().find(|req| req.address == net_account) {
+                request.accounts.matrix = Some(Account::from(row.get::<_, String>(2)?));
+            } else {
+                idents.push(JudgementRequest {
+                    address: net_account,
+                    accounts: Accounts {
+                        display_name: None,
+                        legal_name: None,
+                        email: None,
+                        web: None,
+                        twitter: None,
+                        matrix: Some(Account::from(row.get::<_, String>(2)?)),
+                    },
+                });
+            }
+        }
+
+        Ok(idents)
     }
     pub async fn insert_room_id(&self, net_account: &NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.lock().await.execute_named(
@@ -492,17 +539,33 @@ mod tests {
                 },
             };
 
-            let mut ident: OnChainIdentity = request.try_into().unwrap();
-
+            // Insert and check return value.
             let _ = db
-                .insert_identity(&ident.clone())
+                .insert_identity(&request.clone().try_into().unwrap())
                 .await
                 .unwrap();
 
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(
+                res[0].accounts.matrix.as_ref().unwrap(),
+                &Account::from("@alice:matrix.org")
+            );
+
+            // Change a field, insert and return value.
+            request.accounts.matrix = Some(Account::from("@bob:matrix.org"));
+
             let _ = db
-                .insert_identity(&ident)
+                .insert_identity(&request.try_into().unwrap())
                 .await
                 .unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(
+                res[0].accounts.matrix.as_ref().unwrap(),
+                &Account::from("@bob:matrix.org")
+            );
         });
     }
 
