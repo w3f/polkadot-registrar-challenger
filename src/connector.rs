@@ -42,19 +42,19 @@ struct JudgementResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct JudgementRequest {
-    address: NetAccount,
-    accounts: Accounts,
+pub(crate) struct JudgementRequest {
+    pub address: NetAccount,
+    pub accounts: Accounts,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Accounts {
-    display_name: Option<String>,
-    legal_name: Option<String>,
-    email: Option<Account>,
-    web: Option<Account>,
-    twitter: Option<Account>,
-    matrix: Option<Account>,
+pub(crate) struct Accounts {
+    pub display_name: Option<String>,
+    pub legal_name: Option<String>,
+    pub email: Option<Account>,
+    pub web: Option<Account>,
+    pub twitter: Option<Account>,
+    pub matrix: Option<Account>,
 }
 
 pub struct Connector {

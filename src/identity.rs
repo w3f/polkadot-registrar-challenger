@@ -25,12 +25,12 @@ impl OnChainIdentity {
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
-    fn set_validity(&mut self, account_ty: AccountType, account_validity: AccountStatus) {
+    fn set_validity(&mut self, account_ty: AccountType, account_status: AccountStatus) {
         use AccountType::*;
 
         match account_ty {
             Matrix => {
-                self.matrix.as_mut().fatal().account_validity = account_validity;
+                self.matrix.as_mut().fatal().account_status = account_status;
             }
             _ => {}
         }
@@ -63,7 +63,7 @@ impl OnChainIdentity {
 pub struct AccountState {
     pub account: Account,
     pub account_ty: AccountType,
-    pub account_validity: AccountStatus,
+    pub account_status: AccountStatus,
     pub challenge: Challenge,
     pub challenge_status: ChallengeStatus,
     pub skip_inform: bool,
@@ -74,7 +74,7 @@ impl AccountState {
         AccountState {
             account: account,
             account_ty: account_ty,
-            account_validity: AccountStatus::Unknown,
+            account_status: AccountStatus::Unknown,
             challenge: Challenge::gen_random(),
             challenge_status: ChallengeStatus::Unconfirmed,
             skip_inform: false,

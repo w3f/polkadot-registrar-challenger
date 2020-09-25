@@ -43,7 +43,7 @@ impl Database2 {
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table} (
                 id           INTEGER PRIMARY KEY,
-                net_account  TEXT NOT NULL UNIQUE,
+                net_account  TEXT NOT NULL UNIQUE
             )",
                 table = PENDING_JUDGMENTS,
             ),
@@ -100,7 +100,7 @@ impl Database2 {
                     ('accepted'),
                     ('rejected')
             ",
-                tbl_challenge_status = ACCOUNT_STATUS,
+                tbl_challenge_status = CHALLENGE_STATUS,
             ),
             params![],
         )?;
@@ -108,11 +108,11 @@ impl Database2 {
         // Table for account type.
         con.execute(
             &format!(
-                "CREATE TABLE IF NOT EXISTS {table} (
+                "CREATE TABLE IF NOT EXISTS {tbl_account_ty} (
                     id          INTEGER PRIMARY KEY,
                     account_ty  TEXT NOT NULL UNIQUE
             )",
-                table = ACCOUNT_TYPES
+                tbl_account_ty = ACCOUNT_TYPES
             ),
             params![],
         )?;
@@ -121,14 +121,14 @@ impl Database2 {
         con.execute(
             &format!(
                 "INSERT OR IGNORE INTO {tbl_account_ty}
-                    (status)
+                    (account_ty)
                 VALUES
                     ('email'),
                     ('web'),
                     ('twitter'),
                     ('matrix')
             ",
-                tbl_account_ty = ACCOUNT_STATUS,
+                tbl_account_ty = ACCOUNT_TYPES,
             ),
             params![],
         )?;
@@ -196,6 +196,19 @@ impl Database2 {
 
         {
             let mut stmt = transaction.prepare(&format!(
+                "INSERT OR IGNORE INTO {tbl_identities} (net_account)
+                VALUES (:net_account)
+                ",
+                tbl_identities = PENDING_JUDGMENTS,
+            ))?;
+
+            for ident in idents {
+                stmt.execute_named(named_params! {
+                    ":net_account": ident.network_address.address()
+                })?;
+            }
+
+            let mut stmt = transaction.prepare(&format!(
                 "INSERT OR REPLACE INTO {tbl_account_state} (
                     net_account_id,
                     account,
@@ -205,17 +218,16 @@ impl Database2 {
                     challenge_status_id
                 ) VALUES (
                     (SELECT id FROM {tbl_identities}
-                        WHERE net_account = ':net_account'),
-                    ':account',
+                        WHERE net_account = :net_account),
+                    :account,
                     (SELECT id FROM {tbl_account_ty}
-                        WHERE account_ty = ':account_ty'),
+                        WHERE account_ty = :account_ty),
                     (SELECT id FROM {tbl_account_status}
-                        WHERE status = ':account_status'),
-                    ':challenge',
+                        WHERE status = :account_status),
+                    :challenge,
                     (SELECT id FROM {tbl_challenge_status}
-                        WHERE status = ':challenge_status')
-                )
-                ",
+                        WHERE status = :challenge_status)
+                )",
                 tbl_account_state = ACCOUNT_STATE,
                 tbl_identities = PENDING_JUDGMENTS,
                 tbl_account_ty = ACCOUNT_TYPES,
@@ -223,13 +235,14 @@ impl Database2 {
                 tbl_challenge_status = CHALLENGE_STATUS,
             ))?;
 
-            // TODO -> Use a HashMap for OnChainIdentity regardinga accounts.
+            // TODO -> Use a HashMap for OnChainIdentity regarding accounts.
             // TODO: Support more than just matrix.
             for ident in idents {
                 stmt.execute_named(named_params! {
                     ":net_account": ident.network_address.address(),
                     ":account": ident.matrix.as_ref().map(|s| &s.account),
                     ":account_ty": ident.matrix.as_ref().map(|s| &s.account_ty),
+                    ":account_status": ident.matrix.as_ref().map(|s| &s.account_status),
                     ":challenge": ident.matrix.as_ref().map(|s| s.challenge.as_str()),
                     ":challenge_status": ident.matrix.as_ref().map(|s| &s.challenge_status),
                 })?;
@@ -247,8 +260,8 @@ impl Database2 {
                     net_account_id,
                     room_id
                 ) VALUES (
-                        (SELECT id FROM {tbl_identities} WHERE net_account = ':account'),
-                        ':room_id'
+                        (SELECT id FROM {tbl_identities} WHERE net_account = :account),
+                        :room_id
                     )
                 )",
                 tbl_room_id = KNOWN_MATRIX_ROOMS,
@@ -268,7 +281,7 @@ impl Database2 {
             &format!(
                 "SELECT room_id FROM {tbl_room_id} WHERE
                     (SELECT from {tbl_identities} WHERE
-                        net_account = ':net_account')
+                        net_account = :net_account)
                 ",
                 tbl_room_id = KNOWN_MATRIX_ROOMS,
                 tbl_identities = PENDING_JUDGMENTS,
@@ -318,15 +331,15 @@ impl Database2 {
                 "UPDATE {tbl_update}
                 SET account_status =
                     (SELECT id FROM {tbl_account_status}
-                        WHERE status = ':account_status')
+                        WHERE status = :account_status)
                 WHERE
                     net_account_id =
                         (SELECT id FROM {tbl_identities}
-                            WHERE address = ':net_account')
+                            WHERE address = :net_account)
                 AND
                     account_ty =
                         (SELECT id FROM {tbl_acc_types}
-                            WHERE account_ty = ':account_ty')
+                            WHERE account_ty = :account_ty)
             )",
                 tbl_update = ACCOUNT_STATE,
                 tbl_account_status = ACCOUNT_STATUS,
@@ -353,15 +366,15 @@ impl Database2 {
                 "UPDATE {tbl_update}
                 SET challenge_status =
                     (SELECT id FROM {tbl_challenge_status}
-                        WHERE status = ':challenge_status')
+                        WHERE status = :challenge_status)
                 WHERE
                     net_account_id =
                         (SELECT id FROM {tbl_identities}
-                            WHERE address = ':net_account')
+                            WHERE address = :net_account)
                 AND
                     account_ty =
                         (SELECT id FROM {tbl_acc_types}
-                            WHERE account_ty = ':account_ty')
+                            WHERE account_ty = :account_ty)
             )",
                 tbl_update = ACCOUNT_STATE,
                 tbl_challenge_status = CHALLENGE_STATUS,
@@ -445,9 +458,40 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connector::{Accounts, JudgementRequest};
+    use crate::primitives::NetAccount;
+    use std::convert::TryInto;
+    use tokio::runtime::Runtime;
+
+    const PATH: &'static str = "/tmp/sqlite";
 
     #[test]
     fn database_setup() {
-        let db = Database2::new("/tmp/sqlite").unwrap();
+        let db = Database2::new(PATH).unwrap();
+    }
+
+    #[test]
+    fn insert_identity() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(PATH).unwrap();
+
+            let request = JudgementRequest {
+                address: NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU"),
+                accounts: Accounts {
+                    display_name: Some("Alice".to_string()),
+                    legal_name: None,
+                    email: Some(Account::from("alice@email.com")),
+                    web: None,
+                    twitter: Some(Account::from("twitter.com/alice")),
+                    matrix: Some(Account::from("@alice:matrix.org")),
+                },
+            };
+
+            let _ = db
+                .insert_identity(&request.try_into().unwrap())
+                .await
+                .unwrap();
+        });
     }
 }
