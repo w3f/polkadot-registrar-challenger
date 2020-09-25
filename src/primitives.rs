@@ -198,6 +198,10 @@ impl TryFrom<NetAccount> for NetworkAddress {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum AccountType {
+    #[serde(rename = "legal_name")]
+    LegalName,
+    #[serde(rename = "display_name")]
+    DisplayName,
     #[serde(rename = "email")]
     Email,
     #[serde(rename = "web")]

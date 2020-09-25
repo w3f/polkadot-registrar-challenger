@@ -12,50 +12,40 @@ use tokio::time::{self, Duration};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainIdentity {
-    pub network_address: NetworkAddress,
-    pub display_name: Option<String>,
-    pub legal_name: Option<String>,
-    pub email: Option<AccountState>,
-    pub web: Option<AccountState>,
-    pub twitter: Option<AccountState>,
-    pub matrix: Option<AccountState>,
+    network_address: NetworkAddress,
+    accounts: Vec<AccountState>,
 }
 
 impl OnChainIdentity {
+    pub fn new(net_account: NetAccount) -> Result<Self> {
+        Ok(OnChainIdentity {
+            network_address: net_account.try_into()?,
+            accounts: vec![],
+        })
+    }
+    pub fn push_account(&mut self, account: Account, account_ty: AccountType) -> Result<()> {
+        if self
+            .accounts
+            .iter()
+            .find(|state| state.account_ty == account_ty)
+            .is_some()
+        {
+            return Err(failure::err_msg(
+                "cannot insert existing account types into identity",
+            ));
+        }
+
+        self.accounts.push(AccountState::new(account, account_ty));
+        Ok(())
+    }
+    pub fn net_account(&self) -> &NetAccount {
+        self.network_address.address()
+    }
     pub fn pub_key(&self) -> &PubKey {
         &self.network_address.pub_key()
     }
-    fn set_validity(&mut self, account_ty: AccountType, account_status: AccountStatus) {
-        use AccountType::*;
-
-        match account_ty {
-            Matrix => {
-                self.matrix.as_mut().fatal().account_status = account_status;
-            }
-            _ => {}
-        }
-    }
-    fn set_challenge_status(&mut self, account_ty: AccountType, challenge_status: ChallengeStatus) {
-        use AccountType::*;
-
-        match account_ty {
-            Matrix => {
-                self.matrix.as_mut().fatal().challenge_status = challenge_status;
-            }
-            _ => {}
-        }
-    }
-    fn is_fully_verified(&self) -> bool {
-        self.matrix
-            .as_ref()
-            .map(|state| state.challenge_status == ChallengeStatus::Accepted)
-            .unwrap_or(true)
-    }
-    fn from_json(val: &[u8]) -> Result<Self> {
-        Ok(serde_json::from_slice(&val)?)
-    }
-    fn to_json(&self) -> Result<Vec<u8>> {
-        Ok(serde_json::to_vec(self)?)
+    pub fn account_states(&self) -> &Vec<AccountState> {
+        &self.accounts
     }
 }
 
@@ -80,9 +70,11 @@ impl AccountState {
             skip_inform: false,
         }
     }
+    /* TODO: Delete
     pub fn account_str(&self) -> &str {
         self.account.as_str()
     }
+    */
 }
 
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]

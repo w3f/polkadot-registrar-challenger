@@ -210,7 +210,7 @@ impl Database2 {
 
             for ident in idents {
                 stmt.execute_named(named_params! {
-                    ":net_account": ident.network_address.address()
+                    ":net_account": ident.net_account()
                 })?;
             }
 
@@ -242,20 +242,17 @@ impl Database2 {
                 tbl_challenge_status = CHALLENGE_STATUS,
             ))?;
 
-            // TODO -> Use a HashMap for OnChainIdentity regarding accounts.
-            // TODO: Support more than just matrix.
             for ident in idents {
-                if ident.matrix.is_none() {
-                    continue;
+                for state in ident.account_states() {
+                    stmt.execute_named(named_params! {
+                        ":net_account": ident.net_account(),
+                        ":account": &state.account,
+                        ":account_ty": &state.account_ty,
+                        ":account_status": &state.account_status,
+                        ":challenge": &state.challenge.as_str(),
+                        ":challenge_status": &state.challenge_status,
+                    })?;
                 }
-                stmt.execute_named(named_params! {
-                    ":net_account": ident.network_address.address(),
-                    ":account": ident.matrix.as_ref().map(|s| &s.account),
-                    ":account_ty": ident.matrix.as_ref().map(|s| &s.account_ty),
-                    ":account_status": ident.matrix.as_ref().map(|s| &s.account_status),
-                    ":challenge": ident.matrix.as_ref().map(|s| s.challenge.as_str()),
-                    ":challenge_status": ident.matrix.as_ref().map(|s| &s.challenge_status),
-                })?;
             }
         }
 
@@ -513,7 +510,7 @@ impl<'a> ScopedDatabase<'a> {
 mod tests {
     use super::*;
     use crate::connector::{Accounts, JudgementRequest};
-    use crate::primitives::{NetAccount, Challenge};
+    use crate::primitives::{Challenge, NetAccount};
     use std::convert::TryInto;
     use tokio::runtime::Runtime;
 

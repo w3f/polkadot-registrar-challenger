@@ -3,6 +3,7 @@ use crate::identity::{AccountState, OnChainIdentity};
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, NetworkAddress, Result};
 use futures::{select_biased, FutureExt};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
 use websockets::{Frame, WebSocket};
@@ -44,17 +45,7 @@ struct JudgementResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct JudgementRequest {
     pub address: NetAccount,
-    pub accounts: Accounts,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(crate) struct Accounts {
-    pub display_name: Option<String>,
-    pub legal_name: Option<String>,
-    pub email: Option<Account>,
-    pub web: Option<Account>,
-    pub twitter: Option<Account>,
-    pub matrix: Option<Account>,
+    pub accounts: HashMap<AccountType, Account>,
 }
 
 pub struct Connector {
@@ -234,24 +225,12 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
     type Error = failure::Error;
 
     fn try_from(request: JudgementRequest) -> Result<Self> {
-        let accs = request.accounts;
+        let mut ident = OnChainIdentity::new(request.address)?;
 
-        Ok(OnChainIdentity {
-            network_address: NetworkAddress::try_from(request.address)?,
-            display_name: accs.display_name,
-            legal_name: accs.legal_name,
-            email: accs
-                .email
-                .map(|v| AccountState::new(Account::from(v), AccountType::Email)),
-            web: accs
-                .web
-                .map(|v| AccountState::new(Account::from(v), AccountType::Web)),
-            twitter: accs
-                .twitter
-                .map(|v| AccountState::new(Account::from(v), AccountType::Twitter)),
-            matrix: accs
-                .matrix
-                .map(|v| AccountState::new(Account::from(v), AccountType::Matrix)),
-        })
+        for (account_ty, account) in request.accounts {
+            ident.push_account(account, account_ty)?;
+        }
+
+        Ok(ident)
     }
 }
