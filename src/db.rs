@@ -53,11 +53,27 @@ impl Database2 {
         // Table for account status.
         con.execute(
             &format!(
-                "CREATE TABLE IF NOT EXISTS {table} (
+                "CREATE TABLE IF NOT EXISTS {tbl_account_status} (
                     id      INTEGER PRIMARY KEY,
                     status  TEXT NOT NULL UNIQUE
             )",
-                table = ACCOUNT_STATUS
+                tbl_account_status = ACCOUNT_STATUS
+            ),
+            params![],
+        )?;
+
+        // TODO: This should be improved -> what if the enum adds new types?
+        con.execute(
+            &format!(
+                "INSERT OR IGNORE INTO {tbl_account_status}
+                    (status)
+                VALUES
+                    ('unknown'),
+                    ('valid'),
+                    ('invalid'),
+                    ('notified')
+            ",
+                tbl_account_status = ACCOUNT_STATUS,
             ),
             params![],
         )?;
@@ -65,11 +81,26 @@ impl Database2 {
         // Table for challenge status.
         con.execute(
             &format!(
-                "CREATE TABLE IF NOT EXISTS {table} (
+                "CREATE TABLE IF NOT EXISTS {tbl_challenge_status} (
                     id      INTEGER PRIMARY KEY,
                     status  TEXT NOT NULL UNIQUE
             )",
-                table = CHALLENGE_STATUS
+                tbl_challenge_status = CHALLENGE_STATUS
+            ),
+            params![],
+        )?;
+
+        // TODO: This should be improved -> what if the enum adds new types?
+        con.execute(
+            &format!(
+                "INSERT OR IGNORE INTO {tbl_challenge_status}
+                    (status)
+                VALUES
+                    ('unconfirmed'),
+                    ('accepted'),
+                    ('rejected')
+            ",
+                tbl_challenge_status = ACCOUNT_STATUS,
             ),
             params![],
         )?;
@@ -86,28 +117,44 @@ impl Database2 {
             params![],
         )?;
 
+        // TODO: This should be improved -> what if the enum adds new types?
+        con.execute(
+            &format!(
+                "INSERT OR IGNORE INTO {tbl_account_ty}
+                    (status)
+                VALUES
+                    ('email'),
+                    ('web'),
+                    ('twitter'),
+                    ('matrix')
+            ",
+                tbl_account_ty = ACCOUNT_STATUS,
+            ),
+            params![],
+        )?;
+
         // Table for account state.
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {table_main} (
-                id                INTEGER PRIMARY KEY,
-                net_account_id    INTEGET NOT NULL,
-                account           TEXT NOT NULL,
-                account_ty        INTEGER NOT NULL,
-                account_status    INTEGER NOT NULL,
-                challenge         TEXT NOT NULL,
-                challenge_status  INTEGER NOT NULL,
+                id                   INTEGER PRIMARY KEY,
+                net_account_id       INTEGER NOT NULL,
+                account              TEXT NOT NULL,
+                account_ty_id        INTEGER NOT NULL,
+                account_status_id    INTEGER NOT NULL,
+                challenge            TEXT NOT NULL,
+                challenge_status_id  INTEGER NOT NULL,
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES {table_identities} (id),
 
-                FOREIGN KEY (account_ty)
+                FOREIGN KEY (account_ty_id)
                     REFERENCES {table_account_ty} (id),
 
-                FOREIGN KEY (account_status)
+                FOREIGN KEY (account_status_id)
                     REFERENCES {table_account_status} (id),
 
-                FOREIGN KEY (challenge_status)
+                FOREIGN KEY (challenge_status_id)
                     REFERENCES {table_challenge_status} (id)
             )",
                 table_main = ACCOUNT_STATE,
@@ -122,15 +169,16 @@ impl Database2 {
         // Table for known matrix rooms.
         con.execute(
             &format!(
-                "CREATE TABLE IF NOT EXISTS {table} (
+                "CREATE TABLE IF NOT EXISTS {tbl_matrix_rooms} (
                 id              INTEGER PRIMARY KEY,
                 net_account_id  INTEGER NULL,
                 room_id         TEXT,
 
                 FOREIGN KEY (net_account_id)
-                    REFERENCES pending_judgments (id)
+                    REFERENCES {tbl_identities} (id)
             )",
-                table = KNOWN_MATRIX_ROOMS,
+                tbl_matrix_rooms = KNOWN_MATRIX_ROOMS,
+                tbl_identities = PENDING_JUDGMENTS,
             ),
             params![],
         )?;
@@ -151,22 +199,28 @@ impl Database2 {
                 "INSERT OR REPLACE INTO {tbl_account_state} (
                     net_account_id,
                     account,
-                    account_ty,
-                    account_status,
+                    account_ty_id,
+                    account_status_id,
                     challenge,
-                    challenge_status
+                    challenge_status_id
                 ) VALUES (
                     (SELECT id FROM {tbl_identities}
                         WHERE net_account = ':net_account'),
                     ':account',
-                    ':account_ty',
-                    ':account_status',
+                    (SELECT id FROM {tbl_account_ty}
+                        WHERE account_ty = ':account_ty'),
+                    (SELECT id FROM {tbl_account_status}
+                        WHERE status = ':account_status'),
                     ':challenge',
-                    ':challenge_status'
+                    (SELECT id FROM {tbl_challenge_status}
+                        WHERE status = ':challenge_status')
                 )
                 ",
                 tbl_account_state = ACCOUNT_STATE,
                 tbl_identities = PENDING_JUDGMENTS,
+                tbl_account_ty = ACCOUNT_TYPES,
+                tbl_account_status = ACCOUNT_STATUS,
+                tbl_challenge_status = CHALLENGE_STATUS,
             ))?;
 
             // TODO -> Use a HashMap for OnChainIdentity regardinga accounts.
