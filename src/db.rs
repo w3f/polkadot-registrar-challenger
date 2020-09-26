@@ -205,9 +205,9 @@ impl Database2 {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
-                id              INTEGER PRIMARY KEY,
-                net_account_id  INTEGER NOT NULL UNIQUE,
-                twitter_id      TEXT
+                id          INTEGER PRIMARY KEY,
+                account     INTEGER NOT NULL UNIQUE,
+                twitter_id  TEXT
             )
         ",
             params![],
@@ -321,6 +321,7 @@ impl Database2 {
 
         Ok(idents)
     }
+    // TODO: Should be account instead of net_account.
     pub async fn insert_room_id(&self, net_account: &NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.lock().await.execute_named(
             &format!(
@@ -694,7 +695,22 @@ impl Database2 {
 
         Ok(account_set)
     }
-    pub async fn insert_twitter_id(&self, twitter_id: TwitterId) -> Result<()> {
+    pub async fn insert_twitter_id(&self, account: &Account, twitter_id: &TwitterId) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named("
+            INSERT OR REPLACE INTO known_twitter_ids (
+                account,
+                twitter_id
+            ) VALUES (
+                :account,
+                :twitter_id
+            )
+        ", named_params! {
+            ":account": account,
+            ":twitter_id": twitter_id
+        })?;
+
         Ok(())
     }
 }
