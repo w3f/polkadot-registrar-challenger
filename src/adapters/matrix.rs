@@ -287,7 +287,11 @@ impl Responder {
             return Ok(());
         }
 
+        debug!("Reacting to received message");
+
         if let SyncRoom::Joined(room) = room {
+            debug!("Search for address based on RoomId");
+
             let room_id = &room.read().await.room_id;
             let net_account = if let Some(net_account) =
                 self.db.select_net_account_from_room_id(&room_id).await?
@@ -297,7 +301,7 @@ impl Responder {
                 return Err(MatrixError::RoomIdNotFound.into());
             };
 
-            //let (pub_key, challenge) = self
+            debug!("Fetching challenge data");
             let challenge_data = self
                 .db
                 .select_challenge_data(
@@ -307,6 +311,7 @@ impl Responder {
                 .await?;
 
             for (network_address, challenge) in challenge_data {
+            debug!("Initializing verifier");
             let verifier = Verifier::new(network_address.pub_key().clone(), challenge);
 
             // Fetch the text message from the event.
@@ -368,6 +373,8 @@ impl Responder {
             // Tell the manager to check the user's account states.
             self.comms.notify_status_change(net_account.clone());
             }
+        } else {
+            warn!("Received an message from an un-joined room");
         }
 
         Ok(())
