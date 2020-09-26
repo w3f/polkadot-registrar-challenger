@@ -3,24 +3,35 @@ use super::Result;
 use crate::connector::JudgementRequest;
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, Fatal, NetAccount, PubKey,
+    Account, AccountType, NetworkAddress, Challenge, ChallengeStatus, Fatal, NetAccount, PubKey,
 };
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
 use rusqlite::{named_params, params, Connection, OptionalExtension};
 use std::convert::{AsRef, TryFrom};
+use std::result::Result as StdResult;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[derive(Debug, Fail)]
 pub enum DatabaseError {
-    #[fail(display = "failed to open SQLite database: {}", 0)]
+    #[fail(display = "Failed to open SQLite database: {}", 0)]
     Open(failure::Error),
+    #[fail(display = "Database backend error: {}", 0)]
+    BackendError(rusqlite::Error),
     #[fail(display = "SQLite database is not in auto-commit mode")]
     NoAutocommit,
-    #[fail(display = "failed to convert column field into native type")]
+    #[fail(display = "Failed to convert column field into native type")]
     InvalidType,
+    #[fail(display = "Attempt to change something which does not exist")]
+    NoChange,
+}
+
+impl From<rusqlite::Error> for DatabaseError {
+    fn from(val: rusqlite::Error) -> Self {
+        DatabaseError::BackendError(val)
+    }
 }
 
 #[derive(Clone)]
@@ -393,24 +404,26 @@ impl Database2 {
     pub async fn set_account_status(
         &self,
         net_account: &NetAccount,
-        account_ty: AccountType,
+        account_ty: &AccountType,
         status: AccountStatus,
-    ) -> Result<()> {
-        self.con.lock().await.execute_named(
+    ) -> StdResult<(), DatabaseError> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
             &format!(
                 "UPDATE {tbl_update}
-                SET account_status =
+                SET account_status_id =
                     (SELECT id FROM {tbl_account_status}
                         WHERE status = :account_status)
                 WHERE
                     net_account_id =
                         (SELECT id FROM {tbl_identities}
-                            WHERE address = :net_account)
+                            WHERE net_account = :net_account)
                 AND
-                    account_ty =
+                    account_ty_id =
                         (SELECT id FROM {tbl_acc_types}
                             WHERE account_ty = :account_ty)
-            )",
+            ",
                 tbl_update = ACCOUNT_STATE,
                 tbl_account_status = ACCOUNT_STATUS,
                 tbl_identities = PENDING_JUDGMENTS,
@@ -421,14 +434,22 @@ impl Database2 {
                 ":net_account": net_account,
                 ":account_ty": account_ty,
             },
-        )?;
+        )
+        .map_err(|err| err.into())
+        .and_then(|changes| {
+            if changes == 0 {
+                Err(DatabaseError::NoChange)
+            } else {
+                Ok(changes)
+            }
+        })?;
 
         Ok(())
     }
     pub async fn set_challenge_status(
         &self,
         net_account: &NetAccount,
-        account_ty: AccountType,
+        account_ty: &AccountType,
         status: ChallengeStatus,
     ) -> Result<()> {
         self.con.lock().await.execute_named(
@@ -462,11 +483,59 @@ impl Database2 {
     }
     pub async fn select_challenge_data(
         &self,
-        net_account: &NetAccount,
         account: &Account,
-        account_ty: AccountType,
-    ) -> Result<(PubKey, Challenge)> {
-        Err(failure::err_msg(""))
+        account_ty: &AccountType,
+    ) -> Result<Vec<(NetworkAddress, Challenge)>> {
+        let con = self.con.lock().await;
+
+        // TODO: Figure out why `IN` does not work here...
+        let mut stmt = con.prepare("
+            SELECT
+                net_account, challenge
+            FROM
+                pending_judgments
+            INNER JOIN
+                account_states
+            ON
+                pending_judgments.id = account_states.net_account_id
+            WHERE
+                account_states.account = :account
+            AND
+                account_states.challenge_status_id = (
+                    SELECT
+                        id
+                    FROM
+                        challenge_status
+                    WHERE
+                        status <> 'accepted'
+                )
+            AND
+                account_states.account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ")?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":account": account,
+            ":account_ty": account_ty
+        })?;
+
+        let mut challenge_set = vec![];
+        while let Some(row) = rows.next()? {
+            challenge_set.push(
+                (
+                NetworkAddress::try_from(row.get::<_, NetAccount>(0)?)?,
+                Challenge(row.get::<_, String>(1)?)
+                )
+            );
+        }
+
+        Ok(challenge_set)
     }
     // Check whether the identity is fully verified. Currently it only checks
     // the Matrix account.
@@ -1004,7 +1073,7 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an account.
-            db.set_challenge_status(&alice, AccountType::Web, ChallengeStatus::Accepted)
+            db.set_challenge_status(&alice, &AccountType::Web, ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1013,7 +1082,7 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an additional account.
-            db.set_challenge_status(&alice, AccountType::Matrix, ChallengeStatus::Accepted)
+            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1024,10 +1093,67 @@ mod tests {
     }
 
     #[test]
+    fn select_challenge_data() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            // Prepare addresses.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+
+            // Create identity
+            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
+            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+            ident.push_account(AccountType::Web, Account::from("alice.com")).unwrap();
+
+            // Insert and check return value.
+            let _ = db.insert_identity(&ident).await.unwrap();
+
+            // Create identity with the same Matrix account.
+            let mut ident = OnChainIdentity::new(bob.clone()).unwrap();
+            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+            ident.push_account(AccountType::Web, Account::from("bob.com")).unwrap();
+
+            // Insert and check return value.
+            let _ = db.insert_identity(&ident).await.unwrap();
+
+            let res= db.select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix).await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert_eq!(res[0].0, NetworkAddress::try_from(alice).unwrap());
+            assert_eq!(res[1].0, NetworkAddress::try_from(bob).unwrap());
+        });
+    }
+
+    #[test]
     fn set_account_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            // TODO...
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+
+            // Alice does not exists.
+            let res = db
+                .set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
+                .await;
+            assert!(res.is_err());
+
+            // Create and insert identity into storage.
+            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+            ident
+                .push_account(AccountType::Web, Account::from("alice.com"))
+                .unwrap();
+
+            db.insert_identity(&ident).await.unwrap();
+
+            // Set account status to valid
+            db.set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
+                .await
+                .unwrap();
         });
     }
 }

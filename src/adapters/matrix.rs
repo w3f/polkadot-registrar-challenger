@@ -219,7 +219,7 @@ impl MatrixClient {
 
                 // Mark the account as valid.
                 self.db
-                    .set_account_status(&net_account, AccountType::Matrix, AccountStatus::Invalid)
+                    .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Invalid)
                     .await?;
 
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
@@ -228,25 +228,27 @@ impl MatrixClient {
 
         // Mark the account as invalid.
         self.db
-            .set_account_status(&net_account, AccountType::Matrix, AccountStatus::Valid)
+            .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Valid)
             .await?;
 
-        let (_, challenge) = self
+        let challenge_data = self
             .db
-            .select_challenge_data(&net_account, &account, AccountType::Matrix)
+            .select_challenge_data(&account, &AccountType::Matrix)
             .await?;
 
-        // Send the instructions for verification to the user.
-        debug!("Sending instructions to user");
-        self.send_msg(
-            include_str!("../../messages/instructions")
-                .replace("{:PAYLOAD}", &challenge.as_str())
-                .replace("{:ADDRESS}", net_account.as_str())
-                .as_str(),
-            &room_id,
-        )
-        .await
-        .map_err(|err| MatrixError::SendMessage(err.into()))?;
+        for (network_address, challenge) in challenge_data {
+            // Send the instructions for verification to the user.
+            debug!("Sending instructions to user");
+            self.send_msg(
+                include_str!("../../messages/instructions")
+                    .replace("{:PAYLOAD}", &challenge.as_str())
+                    .replace("{:ADDRESS}", network_address.address().as_str())
+                    .as_str(),
+                &room_id,
+            )
+            .await
+            .map_err(|err| MatrixError::SendMessage(err.into()))?;
+        }
 
         Ok(())
     }
@@ -295,16 +297,17 @@ impl Responder {
                 return Err(MatrixError::RoomIdNotFound.into());
             };
 
-            let (pub_key, challenge) = self
+            //let (pub_key, challenge) = self
+            let challenge_data = self
                 .db
                 .select_challenge_data(
-                    &net_account,
                     &Account::from(event.sender.as_str()),
-                    AccountType::Matrix,
+                    &AccountType::Matrix,
                 )
                 .await?;
 
-            let verifier = Verifier::new(pub_key, challenge);
+            for (network_address, challenge) in challenge_data {
+            let verifier = Verifier::new(network_address.pub_key().clone(), challenge);
 
             // Fetch the text message from the event.
             let msg_body = if let SyncMessageEvent {
@@ -340,7 +343,7 @@ impl Responder {
                     self.db
                         .set_challenge_status(
                             &net_account,
-                            AccountType::Matrix,
+                            &AccountType::Matrix,
                             ChallengeStatus::Accepted,
                         )
                         .await?;
@@ -355,7 +358,7 @@ impl Responder {
                     self.db
                         .set_challenge_status(
                             &net_account,
-                            AccountType::Matrix,
+                            &AccountType::Matrix,
                             ChallengeStatus::Rejected,
                         )
                         .await?;
@@ -363,7 +366,8 @@ impl Responder {
             };
 
             // Tell the manager to check the user's account states.
-            self.comms.notify_status_change(net_account);
+            self.comms.notify_status_change(net_account.clone());
+            }
         }
 
         Ok(())

@@ -23,7 +23,7 @@ pub fn unix_time() -> u64 {
         .as_secs()
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PubKey(SchnorrkelPubKey);
 
 impl PubKey {
@@ -170,7 +170,7 @@ impl fmt::Display for Account {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 // TODO: Make fields private
 pub struct NetworkAddress {
     pub address: NetAccount,
@@ -178,7 +178,7 @@ pub struct NetworkAddress {
     pub pub_key: PubKey,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Algorithm {
     #[serde(rename = "schnorr")]
     Schnorr,
@@ -298,7 +298,8 @@ impl ToSql for ChallengeStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Challenge(String);
+// TODO: implement `ToSql` and `FromSql` for Challenge.
+pub struct Challenge(pub String);
 
 impl Challenge {
     pub fn gen_random() -> Challenge {
