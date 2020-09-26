@@ -5,6 +5,7 @@ use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Resul
 use crate::verifier::Verifier;
 use matrix_sdk::{
     self,
+    api::r0::room::Visibility,
     api::r0::room::create_room::Request,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
@@ -194,6 +195,7 @@ impl MatrixClient {
                 let mut request = Request::default();
                 request.invite = to_invite;
                 request.name = Some("W3F Registrar Verification");
+                request.visibility = Visibility::Private;
 
                 let resp = self
                     .client
