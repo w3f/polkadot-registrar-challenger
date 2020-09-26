@@ -1,6 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::identity::{AccountState, OnChainIdentity};
-use crate::primitives::{Account, AccountType, Judgement, NetAccount, NetworkAddress, Result};
+use crate::identity::OnChainIdentity;
+use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::{select_biased, FutureExt};
 use serde_json::Value;
 use std::collections::HashMap;

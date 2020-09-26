@@ -1,9 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::db::{Database2, DatabaseError};
+use crate::db::Database2;
 use crate::identity::AccountStatus;
-use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress, Result,
-};
+use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::verifier::Verifier;
 use matrix_sdk::{
     self,
@@ -12,7 +10,7 @@ use matrix_sdk::{
         room::message::{MessageEventContent, TextMessageEventContent},
         AnyMessageEventContent, SyncMessageEvent,
     },
-    identifiers::{RoomId, UserId},
+    identifiers::RoomId,
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
 use std::convert::TryInto;
@@ -304,74 +302,72 @@ impl Responder {
             debug!("Fetching challenge data");
             let challenge_data = self
                 .db
-                .select_challenge_data(
-                    &Account::from(event.sender.as_str()),
-                    &AccountType::Matrix,
-                )
+                .select_challenge_data(&Account::from(event.sender.as_str()), &AccountType::Matrix)
                 .await?;
 
             for (network_address, challenge) in challenge_data {
-            debug!("Initializing verifier");
-            let verifier = Verifier::new(network_address.pub_key().clone(), challenge);
+                debug!("Initializing verifier");
+                let verifier = Verifier::new(network_address.pub_key().clone(), challenge);
 
-            // Fetch the text message from the event.
-            let msg_body = if let SyncMessageEvent {
-                content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
-                ..
-            } = event
-            {
-                msg_body
-            } else {
-                debug!(
-                    "Didn't receive a text message from {}",
-                    event.sender.as_str()
-                );
+                // Fetch the text message from the event.
+                let msg_body = if let SyncMessageEvent {
+                    content:
+                        MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
+                    ..
+                } = event
+                {
+                    msg_body
+                } else {
+                    debug!(
+                        "Didn't receive a text message from {}",
+                        event.sender.as_str()
+                    );
 
-                self.send_msg(
-                    "Please send the signature directly as a text message.",
-                    room_id,
-                )
-                .await
-                .map_err(|err| MatrixError::SendMessage(err.into()))?;
+                    self.send_msg(
+                        "Please send the signature directly as a text message.",
+                        room_id,
+                    )
+                    .await
+                    .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
-                return Ok(());
-            };
+                    return Ok(());
+                };
 
-            match verifier.verify(&msg_body) {
-                Ok(msg) => {
-                    debug!("Received valid challenge");
+                match verifier.verify(&msg_body) {
+                    Ok(msg) => {
+                        debug!("Received valid challenge");
 
-                    self.send_msg(&msg, room_id)
-                        .await
-                        .map_err(|err| MatrixError::SendMessage(err.into()))?;
+                        self.send_msg(&msg, room_id)
+                            .await
+                            .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
-                    self.db
-                        .set_challenge_status(
-                            &net_account,
-                            &AccountType::Matrix,
-                            ChallengeStatus::Accepted,
-                        )
-                        .await?;
-                }
-                Err(err) => {
-                    debug!("Received invalid challenge");
+                        self.db
+                            .set_challenge_status(
+                                &net_account,
+                                &AccountType::Matrix,
+                                ChallengeStatus::Accepted,
+                            )
+                            .await?;
+                    }
+                    Err(err) => {
+                        debug!("Received invalid challenge");
 
-                    self.send_msg(&err.to_string(), room_id)
-                        .await
-                        .map_err(|err| MatrixError::SendMessage(err.into()))?;
+                        self.send_msg(&err.to_string(), room_id)
+                            .await
+                            .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
-                    self.db
-                        .set_challenge_status(
-                            &net_account,
-                            &AccountType::Matrix,
-                            ChallengeStatus::Rejected,
-                        )
-                        .await?;
-                }
-            };
+                        self.db
+                            .set_challenge_status(
+                                &net_account,
+                                &AccountType::Matrix,
+                                ChallengeStatus::Rejected,
+                            )
+                            .await?;
+                    }
+                };
 
-            // Tell the manager to check the user's account states.
-            self.comms.notify_status_change(net_account.clone());
+                // Tell the manager to check the user's account states.
+                self.comms.notify_status_change(net_account.clone());
             }
         } else {
             warn!("Received an message from an un-joined room");

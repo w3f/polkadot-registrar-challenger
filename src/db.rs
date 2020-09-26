@@ -1,9 +1,7 @@
 use super::Result;
-#[cfg(test)]
-use crate::connector::JudgementRequest;
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
-    Account, AccountType, NetworkAddress, Challenge, ChallengeStatus, Fatal, NetAccount, PubKey,
+    Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
@@ -489,7 +487,8 @@ impl Database2 {
         let con = self.con.lock().await;
 
         // TODO: Figure out why `IN` does not work here...
-        let mut stmt = con.prepare("
+        let mut stmt = con.prepare(
+            "
             SELECT
                 net_account, challenge
             FROM
@@ -518,7 +517,8 @@ impl Database2 {
                     WHERE
                         account_ty = :account_ty
                 )
-        ")?;
+        ",
+        )?;
 
         let mut rows = stmt.query_named(named_params! {
             ":account": account,
@@ -527,12 +527,10 @@ impl Database2 {
 
         let mut challenge_set = vec![];
         while let Some(row) = rows.next()? {
-            challenge_set.push(
-                (
+            challenge_set.push((
                 NetworkAddress::try_from(row.get::<_, NetAccount>(0)?)?,
-                Challenge(row.get::<_, String>(1)?)
-                )
-            );
+                Challenge(row.get::<_, String>(1)?),
+            ));
         }
 
         Ok(challenge_set)
@@ -744,9 +742,9 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connector::JudgementRequest;
+
     use crate::primitives::{Challenge, NetAccount};
-    use std::convert::TryInto;
+
     use tokio::runtime::Runtime;
 
     // Generate a random db path
@@ -759,8 +757,8 @@ mod tests {
         let path = db_path();
 
         // Test repeated initialization.
-        let db = Database2::new(&path).unwrap();
-        let db = Database2::new(&path).unwrap();
+        let _db = Database2::new(&path).unwrap();
+        let _db = Database2::new(&path).unwrap();
     }
 
     #[test]
@@ -988,13 +986,13 @@ mod tests {
             let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create identity
-            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
+            let ident = OnChainIdentity::new(alice.clone()).unwrap();
 
             // Insert and check return value.
             let _ = db.insert_identity(&ident).await.unwrap();
 
             // Create identity
-            let mut ident = OnChainIdentity::new(NetAccount::from(
+            let ident = OnChainIdentity::new(NetAccount::from(
                 "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
             ))
             .unwrap();
@@ -1104,21 +1102,32 @@ mod tests {
 
             // Create identity
             let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
-            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
-            ident.push_account(AccountType::Web, Account::from("alice.com")).unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+            ident
+                .push_account(AccountType::Web, Account::from("alice.com"))
+                .unwrap();
 
             // Insert and check return value.
             let _ = db.insert_identity(&ident).await.unwrap();
 
             // Create identity with the same Matrix account.
             let mut ident = OnChainIdentity::new(bob.clone()).unwrap();
-            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
-            ident.push_account(AccountType::Web, Account::from("bob.com")).unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+            ident
+                .push_account(AccountType::Web, Account::from("bob.com"))
+                .unwrap();
 
             // Insert and check return value.
             let _ = db.insert_identity(&ident).await.unwrap();
 
-            let res= db.select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix).await.unwrap();
+            let res = db
+                .select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
+                .await
+                .unwrap();
             assert_eq!(res.len(), 2);
             assert_eq!(res[0].0, NetworkAddress::try_from(alice).unwrap());
             assert_eq!(res[1].0, NetworkAddress::try_from(bob).unwrap());

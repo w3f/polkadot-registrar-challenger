@@ -1,7 +1,5 @@
-use crate::identity::{AccountStatus, OnChainIdentity};
-use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount, NetworkAddress,
-};
+use crate::identity::OnChainIdentity;
+use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use matrix_sdk::identifiers::RoomId;
 use tokio::time::{self, Duration};

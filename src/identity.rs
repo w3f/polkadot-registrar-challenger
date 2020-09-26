@@ -1,7 +1,7 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
-use crate::db::{Database, Database2};
+use crate::db::Database2;
 use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount, NetworkAddress,
+    Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress,
     PubKey, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
@@ -112,7 +112,6 @@ impl ToSql for AccountStatus {
 }
 
 pub struct IdentityManager {
-    idents: HashMap<NetAccount, OnChainIdentity>,
     db2: Database2,
     comms: CommsTable,
 }
@@ -125,12 +124,9 @@ struct CommsTable {
 
 impl IdentityManager {
     pub fn new(db2: Database2) -> Result<Self> {
-        let mut idents = HashMap::new();
-
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {
-            idents: idents,
             db2: db2,
             comms: CommsTable {
                 to_main: tx1.clone(),

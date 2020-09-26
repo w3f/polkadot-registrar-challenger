@@ -12,7 +12,7 @@ extern crate failure;
 use adapters::MatrixClient;
 use comms::CommsVerifier;
 use connector::Connector;
-use db::{Database, Database2};
+use db::Database2;
 use identity::IdentityManager;
 use primitives::{AccountType, Fatal, Result};
 use std::env;
