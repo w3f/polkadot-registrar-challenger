@@ -804,9 +804,7 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::primitives::{Challenge, NetAccount};
-
     use tokio::runtime::Runtime;
 
     // Generate a random db path

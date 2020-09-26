@@ -6,6 +6,7 @@ use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -40,10 +41,29 @@ impl FromSql for TwitterId {
 
 #[derive(Debug, Fail)]
 pub enum TwitterError {
-    #[fail(display = "the builder was not used correctly")]
+    #[fail(display = "The builder was not used correctly")]
     IncompleteBuilder,
-    #[fail(display = "incomplete data returned from Twitter API")]
+    #[fail(display = "Incomplete data returned from Twitter API")]
     IncompleteData,
+    #[fail(display = "Error from Twitter API: {:?}", 0)]
+    TwitterApi(TwitterApiError),
+    #[fail(display = "HTTP error: {}", 0)]
+    Http(failure::Error),
+    #[fail(display = "Failed to (de-)serialize JSON data: {}", 0)]
+    Serde(failure::Error),
+    #[fail(display = "Failed to build request: {}", 0)]
+    RequestBuilder(failure::Error),
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TwitterApiError {
+    errors: Vec<ApiErrorObject>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ApiErrorObject {
+    code: i64,
+    message: String,
 }
 
 pub struct TwitterBuilder {
@@ -222,7 +242,7 @@ impl Twitter {
         &self,
         url: &str,
         params: Option<&[(&str, &str)]>,
-    ) -> Result<T> {
+    ) -> StdResult<T, TwitterError> {
         let mut full_url = String::from(url);
 
         if let Some(params) = params {
@@ -235,32 +255,66 @@ impl Twitter {
             full_url.pop();
         }
 
-        let mut request = self.client.get(&full_url).build()?;
-        self.authenticate_request(&HttpMethod::GET, url, &mut request, params)?;
-        let resp = self.client.execute(request).await?;
-        let txt = resp.text().await?;
+        let mut request = self
+            .client
+            .get(&full_url)
+            .build()
+            .map_err(|err| TwitterError::RequestBuilder(err.into()))?;
+
+        self.authenticate_request(&HttpMethod::GET, url, &mut request, params)
+            .map_err(|err| TwitterError::RequestBuilder(err.into()))?;
+
+        let resp = self
+            .client
+            .execute(request)
+            .await
+            .map_err(|err| TwitterError::Http(err.into()))?;
+
+        let txt = resp
+            .text()
+            .await
+            .map_err(|_| TwitterError::IncompleteData)?;
 
         //println!("RESP>> {}", txt);
 
-        Ok(serde_json::from_str(&txt)?)
+        Ok(serde_json::from_str(&txt).map_err(|err| TwitterError::Serde(err.into()))?)
     }
     pub async fn post_request<T: DeserializeOwned, B: Serialize>(
         &self,
         url: &str,
         body: B,
-    ) -> Result<T> {
+    ) -> StdResult<T, TwitterError> {
         let mut request = self
             .client
             .post(url)
-            .body(serde_json::to_string(&body)?)
-            .build()?;
-        self.authenticate_request(&HttpMethod::POST, url, &mut request, None)?;
-        let resp = self.client.execute(request).await?;
-        let txt = resp.text().await?;
+            .body(
+                serde_json::to_string(&body)
+                    .map(|s| {
+                        println!("TO SEND: {}", s);
+                        s
+                    })
+                    .map_err(|err| TwitterError::Serde(err.into()))?,
+            )
+            .build()
+            .map_err(|err| TwitterError::RequestBuilder(err.into()))?;
+
+        self.authenticate_request(&HttpMethod::POST, url, &mut request, None)
+            .map_err(|err| TwitterError::RequestBuilder(err.into()))?;
+
+        let resp = self
+            .client
+            .execute(request)
+            .await
+            .map_err(|err| TwitterError::Http(err.into()))?;
+
+        let txt = resp
+            .text()
+            .await
+            .map_err(|err| TwitterError::IncompleteData)?;
 
         println!("RESP>> {}", txt);
 
-        Ok(serde_json::from_str(&txt)?)
+        Ok(serde_json::from_str(&txt).map_err(|err| TwitterError::Serde(err.into()))?)
     }
     pub async fn lookup_twitter_id(
         &self,
@@ -320,7 +374,57 @@ impl Twitter {
             .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
-    pub async fn send_message(&self, id: &TwitterId, msg: &str) -> Result<()> {
+    pub async fn send_message(&self, id: &TwitterId, msg: String) -> Result<()> {
+        #[derive(Serialize)]
+        struct Message {
+            event: EventObject,
+        }
+
+        #[derive(Serialize)]
+        struct EventObject {
+            #[serde(rename = "type")]
+            t_type: String,
+            message_create: MessageCreate,
+        }
+
+        #[derive(Serialize)]
+        struct MessageCreate {
+            target: Target,
+            message_data: MessageData,
+        }
+
+        #[derive(Serialize)]
+        struct Target {
+            recipient_id: String,
+        }
+
+        #[derive(Serialize)]
+        struct MessageData {
+            text: String,
+        }
+
+        impl Message {
+            fn new(recipient: &TwitterId, msg: String) -> Self {
+                Message {
+                    event: EventObject {
+                        t_type: "message_create".to_string(),
+                        message_create: MessageCreate {
+                            target: Target {
+                                recipient_id: recipient.as_u64().to_string(),
+                            },
+                            message_data: MessageData { text: msg },
+                        },
+                    },
+                }
+            }
+        }
+
+        self.post_request::<u32, _>(
+            "https://api.twitter.com/1.1/direct_messages/events/new.json",
+            Message::new(id, msg),
+        )
+        .await?;
+
         Ok(())
     }
     pub async fn start(self) {
@@ -369,13 +473,20 @@ impl Twitter {
 
 #[test]
 fn test_twitter() {
+    use crate::primitives::{Challenge, NetAccount};
+    use crate::Database2;
     use tokio::runtime::Runtime;
+
+    // Generate a random db path
+    fn db_path() -> String {
+        format!("/tmp/sqlite_{}", Challenge::gen_random().as_str())
+    }
 
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let config = crate::open_config().unwrap();
 
-        let client = TwitterBuilder::new(CommsVerifier::new())
+        let client = TwitterBuilder::new(Database2::new(&db_path()).unwrap(), CommsVerifier::new())
             .consumer_key(config.twitter_api_key)
             .consumer_secret(config.twitter_api_secret)
             .sig_method("HMAC-SHA1".to_string())
@@ -408,15 +519,25 @@ fn test_twitter() {
             text: String,
         }
 
+        /*
         let res = client
             .lookup_twitter_id(
                 Some(&[&TwitterId::from(102128843)]),
-                Some(&[&Account::from("@web3registrar")]),
+                Some(&[&Account::from("@JohnDop88908274")]),
             )
             .await
             .unwrap();
 
         println!("ACCOUNTS: {:?}", res);
+        */
+
+        let res = client
+            .send_message(
+                &TwitterId::from(1309954318712426496),
+                String::from("Hello there, this is a test"),
+            )
+            .await
+            .unwrap();
 
         /*
         client
