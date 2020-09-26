@@ -8,10 +8,13 @@ use registrar::{block, init_env, run};
 async fn main() -> Result<(), Error> {
     let config = init_env()?;
 
-    run(config).await.map_err(|err| {
-        error!("{}", err);
-        std::process::exit(1);
-    }).unwrap();
+    run(config)
+        .await
+        .map_err(|err| {
+            error!("{}", err);
+            std::process::exit(1);
+        })
+        .unwrap();
 
     block().await;
 

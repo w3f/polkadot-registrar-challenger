@@ -12,7 +12,7 @@ extern crate failure;
 use adapters::MatrixClient;
 use comms::CommsVerifier;
 use connector::Connector;
-use db::Database;
+use db::Database2;
 use identity::IdentityManager;
 use primitives::{AccountType, Fatal, Result};
 use std::env;
@@ -24,7 +24,7 @@ use tokio::time::{self, Duration};
 pub mod adapters;
 mod comms;
 pub mod connector;
-mod db;
+pub mod db;
 mod identity;
 mod primitives;
 mod verifier;
@@ -111,8 +111,8 @@ pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
 
 pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Setting up database and manager");
-    let db = Database::new(&config.registrar_db_path)?;
-    let mut manager = IdentityManager::new(db)?;
+    let db2 = Database2::new(&config.registrar_db_path)?;
+    let mut manager = IdentityManager::new(db2.clone())?;
 
     info!("Setting up communication channels");
     let c_connector = manager.register_comms(AccountType::ReservedConnector);
@@ -160,6 +160,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         &config.matrix_username,
         &config.matrix_password,
         &config.matrix_db_path,
+        db2.clone(),
         c_matrix,
         c_emitter,
     )

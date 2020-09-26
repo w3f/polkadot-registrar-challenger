@@ -188,7 +188,6 @@ impl<'a> JWTBuilder<'a> {
 #[test]
 fn test_email_client() {
     use crate::primitives::unix_time;
-    use std::env;
     use tokio::runtime::Runtime;
 
     let mut rt = Runtime::new().unwrap();
@@ -202,7 +201,8 @@ fn test_email_client() {
             .audience("https://oauth2.googleapis.com/token")
             .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
             .issued_at(&unix_time().to_string())
-            .sign(&config.google_private_key).unwrap();
+            .sign(&config.google_private_key)
+            .unwrap();
 
         let mut client = ClientBuilder::new()
             .jwt(jwt)
@@ -212,11 +212,11 @@ fn test_email_client() {
 
         client.token_request().await.unwrap();
 
-        let url = format!("https://gmail.googleapis.com/gmail/v1/users/{}/messages", config.google_email);
-        let res = client
-            .get_request(&url)
-            .await
-            .unwrap();
+        let url = format!(
+            "https://gmail.googleapis.com/gmail/v1/users/{}/messages",
+            config.google_email
+        );
+        let res = client.get_request(&url).await.unwrap();
 
         println!("RES: {}", res);
     });

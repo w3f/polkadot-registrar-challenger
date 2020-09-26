@@ -1,13 +1,11 @@
-use crate::identity::{AccountStatus, OnChainIdentity};
-use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, Fatal, Judgement, NetAccount, NetworkAddress,
-};
+use crate::identity::OnChainIdentity;
+use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use matrix_sdk::identifiers::RoomId;
 use tokio::time::{self, Duration};
 
 pub fn generate_comms(
-    listener: Sender<CommsMessage>,
+    sender: Sender<CommsMessage>,
     account_ty: AccountType,
 ) -> (CommsMain, CommsVerifier) {
     let (tx, recv) = unbounded();
@@ -15,7 +13,7 @@ pub fn generate_comms(
     (
         CommsMain { sender: tx },
         CommsVerifier {
-            tx: listener,
+            sender: sender,
             recv: recv,
             address_ty: account_ty,
         },
@@ -24,41 +22,19 @@ pub fn generate_comms(
 
 pub enum CommsMessage {
     NewJudgementRequest(OnChainIdentity),
-    AccountToVerify {
-        network_address: NetworkAddress,
-        account: Account,
-        challenge: Challenge,
-        room_id: Option<RoomId>,
-    },
-    UpdateAccountStatus {
-        network_address: NetworkAddress,
-        account_ty: AccountType,
-        account_validity: AccountStatus,
-    },
-    TrackRoomId {
-        address: NetAccount,
-        room_id: RoomId,
-    },
-    RequestAllRoomIds,
-    AllRoomIds {
-        room_ids: Vec<RoomId>,
+    JudgeIdentity {
+        net_account: NetAccount,
+        judgement: Judgement,
     },
     LeaveRoom {
         room_id: RoomId,
     },
-    RequestAccountState {
+    AccountToVerify {
+        net_account: NetAccount,
         account: Account,
-        account_ty: AccountType,
     },
-    InvalidRequest,
-    UpdateChallengeStatus {
-        network_address: NetworkAddress,
-        account_ty: AccountType,
-        status: ChallengeStatus,
-    },
-    JudgeIdentity {
-        network_address: NetworkAddress,
-        judgement: Judgement,
+    NotifyStatusChange {
+        net_account: NetAccount,
     },
 }
 
@@ -68,48 +44,27 @@ pub struct CommsMain {
 }
 
 impl CommsMain {
-    pub fn notify_account_verification(
-        &self,
-        network_address: NetworkAddress,
-        account: Account,
-        challenge: Challenge,
-        room_id: Option<RoomId>,
-    ) {
+    pub fn notify_account_verification(&self, net_account: NetAccount, account: Account) {
         self.sender
             .send(CommsMessage::AccountToVerify {
-                network_address: network_address,
+                net_account: net_account,
                 account: account,
-                challenge: challenge,
-                room_id,
             })
             .fatal();
     }
-    pub fn invalid_request(&self) {
-        self.sender.send(CommsMessage::InvalidRequest).fatal();
-    }
-    pub fn judge_identity(&self, network_address: NetworkAddress, judgement: Judgement) {
+    pub fn notify_identity_judgment(&self, net_account: NetAccount, judgment: Judgement) {
         self.sender
             .send(CommsMessage::JudgeIdentity {
-                network_address: network_address,
-                judgement: judgement,
+                net_account: net_account,
+                judgement: judgment,
             })
             .fatal();
-    }
-    pub fn all_room_ids(&self, room_ids: Vec<RoomId>) {
-        self.sender
-            .send(CommsMessage::AllRoomIds { room_ids: room_ids })
-            .fatal()
-    }
-    pub fn leave_room(&self, room_id: RoomId) {
-        self.sender
-            .send(CommsMessage::LeaveRoom { room_id: room_id })
-            .fatal()
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct CommsVerifier {
-    tx: Sender<CommsMessage>,
+    sender: Sender<CommsMessage>,
     recv: Receiver<CommsMessage>,
     address_ty: AccountType,
 }
@@ -130,70 +85,16 @@ impl CommsVerifier {
     pub fn try_recv(&self) -> Option<CommsMessage> {
         self.recv.try_recv().ok()
     }
-    /// Receive a `AccountToVerify` message. This is only used by the Matrix client as
-    /// any other message type will panic.
-    pub async fn recv_inform(&self) -> (NetworkAddress, Account, Challenge, Option<RoomId>) {
-        if let CommsMessage::AccountToVerify {
-            network_address,
-            account,
-            challenge,
-            room_id,
-        } = self.recv().await
-        {
-            (network_address, account, challenge, room_id)
-        } else {
-            panic!("received invalid message type on Matrix client");
-        }
-    }
-    pub fn notify_request_all_room_ids(&self) {
-        self.tx.send(CommsMessage::RequestAllRoomIds).fatal();
-    }
-    pub fn notify_account_state_request(&self, account: Account, account_ty: AccountType) {
-        self.tx
-            .send(CommsMessage::RequestAccountState {
-                account: account,
-                account_ty: account_ty,
-            })
-            .fatal();
-    }
+    // TODO: Make pub to connector module
     pub fn notify_new_identity(&self, ident: OnChainIdentity) {
-        self.tx
+        self.sender
             .send(CommsMessage::NewJudgementRequest(ident))
             .fatal();
     }
-    pub fn notify_account_status(
-        &self,
-        network_address: NetworkAddress,
-        account_ty: AccountType,
-        account_validity: AccountStatus,
-    ) {
-        self.tx
-            .send(CommsMessage::UpdateAccountStatus {
-                network_address: network_address,
-                account_ty: account_ty,
-                account_validity: account_validity,
-            })
-            .fatal();
-    }
-    pub fn notify_room_id(&self, address: NetAccount, room_id: RoomId) {
-        self.tx
-            .send(CommsMessage::TrackRoomId {
-                address: address,
-                room_id: room_id,
-            })
-            .fatal();
-    }
-    pub fn notify_challenge_status(
-        &self,
-        network_address: NetworkAddress,
-        account_ty: AccountType,
-        status: ChallengeStatus,
-    ) {
-        self.tx
-            .send(CommsMessage::UpdateChallengeStatus {
-                network_address: network_address,
-                account_ty: account_ty,
-                status,
+    pub fn notify_status_change(&self, net_account: NetAccount) {
+        self.sender
+            .send(CommsMessage::NotifyStatusChange {
+                net_account: net_account,
             })
             .fatal()
     }
