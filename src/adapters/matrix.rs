@@ -12,7 +12,7 @@ use matrix_sdk::{
         room::message::{MessageEventContent, TextMessageEventContent},
         AnyMessageEventContent, SyncMessageEvent,
     },
-    identifiers::RoomId,
+    identifiers::{RoomId, UserId},
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
 use std::convert::TryInto;
@@ -185,16 +185,14 @@ impl MatrixClient {
             if let Ok(room_id) = time::timeout(Duration::from_secs(15), async {
                 debug!("Connecting to {}", account.as_str());
 
-                /*
-                let to_invite = account
+                let to_invite = &[account
                     .as_str()
                     .clone()
                     .try_into()
-                    .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?;
-                    */
+                    .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?];
 
                 let mut request = Request::default();
-                //request.invite = &to_invite;
+                request.invite = to_invite;
                 request.name = Some("W3F Registrar Verification");
 
                 let resp = self
@@ -219,7 +217,7 @@ impl MatrixClient {
             } else {
                 debug!("Failed to connect to account: {}", account.as_str());
 
-                // Notify that the account is invalid.
+                // Mark the account as valid.
                 self.db
                     .set_account_status(&net_account, AccountType::Matrix, AccountStatus::Invalid)
                     .await?;
@@ -228,7 +226,7 @@ impl MatrixClient {
             }
         };
 
-        // Notify that the account is valid.
+        // Mark the account as invalid.
         self.db
             .set_account_status(&net_account, AccountType::Matrix, AccountStatus::Valid)
             .await?;
