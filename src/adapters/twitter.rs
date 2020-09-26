@@ -374,7 +374,7 @@ impl Twitter {
             .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
-    pub async fn send_message(&self, id: &TwitterId, msg: String) -> Result<()> {
+    pub async fn send_message(&self, id: &TwitterId, msg: String) -> StdResult<(), TwitterError> {
         #[derive(Serialize)]
         struct Message {
             event: EventObject,
@@ -419,13 +419,12 @@ impl Twitter {
             }
         }
 
-        self.post_request::<u32, _>(
+        self.post_request::<(), _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
             Message::new(id, msg),
         )
-        .await?;
-
-        Ok(())
+        .await
+        .map(|_| ())
     }
     pub async fn start(self) {
         let mut interval = time::interval(Duration::from_secs(3));
