@@ -541,14 +541,32 @@ impl Database2 {
 
         Ok(is_verified)
     }
+    // TODO: Test this
     pub async fn select_invalid_accounts(
         &self,
         net_account: &NetAccount,
     ) -> Result<Vec<(AccountType, Account)>> {
-        let con = self.con.lock().await;
+        let mut con = self.con.lock().await;
+        let transaction = con.transaction()?;
 
-        let mut stmt = con.prepare(
-            "
+        // Make sure the identity even exists.
+        transaction.query_row_named(
+            "SELECT
+                    id
+                FROM
+                    pending_judgments
+                WHERE
+                    net_account = :net_account
+                ",
+            named_params! {
+                ":net_account": net_account,
+            },
+            |row| row.get::<_, i32>(0),
+        )?;
+
+        let account_set = {
+            let mut stmt = transaction.prepare(
+                "
             SELECT
                 account_ty, account
             FROM
@@ -577,17 +595,22 @@ impl Database2 {
                         WHERE
                             status = 'invalid'
                     )
-        ",
-        )?;
+            ",
+            )?;
 
-        let mut rows = stmt.query_named(named_params! {
-            ":net_account": net_account
-        })?;
+            let mut rows = stmt.query_named(named_params! {
+                ":net_account": net_account
+            })?;
 
-        let mut account_set = vec![];
-        while let Some(row) = rows.next()? {
-            account_set.push((row.get::<_, AccountType>(0)?, row.get::<_, Account>(1)?))
-        }
+            let mut account_set = vec![];
+            while let Some(row) = rows.next()? {
+                account_set.push((row.get::<_, AccountType>(0)?, row.get::<_, Account>(1)?))
+            }
+
+            account_set
+        };
+
+        transaction.commit()?;
 
         Ok(account_set)
     }
@@ -997,6 +1020,14 @@ mod tests {
             // All essential accounts have been verified.
             let res = db.is_fully_verified(&alice).await.unwrap();
             assert_eq!(res, true);
+        });
+    }
+
+    #[test]
+    fn set_account_status() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            // TODO...
         });
     }
 }
