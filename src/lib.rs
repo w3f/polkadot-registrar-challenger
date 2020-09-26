@@ -111,9 +111,8 @@ pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
 
 pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Setting up database and manager");
-    let db = Database::new(&config.registrar_db_path)?;
     let db2 = Database2::new(&config.registrar_db_path)?;
-    let mut manager = IdentityManager::new(db, db2.clone())?;
+    let mut manager = IdentityManager::new(db2.clone())?;
 
     info!("Setting up communication channels");
     let c_connector = manager.register_comms(AccountType::ReservedConnector);

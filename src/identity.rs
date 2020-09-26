@@ -113,7 +113,6 @@ impl ToSql for AccountStatus {
 
 pub struct IdentityManager {
     idents: HashMap<NetAccount, OnChainIdentity>,
-    db: Database,
     db2: Database2,
     comms: CommsTable,
 }
@@ -125,14 +124,13 @@ struct CommsTable {
 }
 
 impl IdentityManager {
-    pub fn new(db: Database, db2: Database2) -> Result<Self> {
+    pub fn new(db2: Database2) -> Result<Self> {
         let mut idents = HashMap::new();
 
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {
             idents: idents,
-            db: db,
             db2: db2,
             comms: CommsTable {
                 to_main: tx1.clone(),
@@ -185,6 +183,7 @@ impl IdentityManager {
             "Handling new judgment request for account: {}",
             ident.net_account().as_str()
         );
+
         self.db2.insert_identity(&ident).await?;
 
         for state in ident.account_states() {
