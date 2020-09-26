@@ -541,6 +541,56 @@ impl Database2 {
 
         Ok(is_verified)
     }
+    pub async fn select_invalid_accounts(
+        &self,
+        net_account: &NetAccount,
+    ) -> Result<Vec<(AccountType, Account)>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                account_ty, account
+            FROM
+                account_states
+            INNER JOIN
+                account_status
+            ON
+                account_states.account_status_id =
+                    account_status.id
+            WHERE
+                account_states.net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            AND
+                account_status_id
+                    IN (
+                        SELECT
+                            id
+                        FROM
+                            account_status
+                        WHERE
+                            status = 'invalid'
+                    )
+        ",
+        )?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": net_account
+        })?;
+
+        let mut account_set = vec![];
+        while let Some(row) = rows.next()? {
+            account_set.push((row.get::<_, AccountType>(0)?, row.get::<_, Account>(1)?))
+        }
+
+        Ok(account_set)
+    }
 }
 
 /// A simple abstraction layer over rocksdb. This is used primarily to have a
