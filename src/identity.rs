@@ -174,7 +174,10 @@ impl IdentityManager {
         Ok(())
     }
     pub async fn handle_new_judgment_request(&mut self, ident: OnChainIdentity) -> Result<()> {
-        debug!("Handling new judgment request for account: {}", ident.net_account().as_str());
+        debug!(
+            "Handling new judgment request for account: {}",
+            ident.net_account().as_str()
+        );
         self.db2.insert_identity(&ident).await?;
 
         for state in ident.account_states() {
@@ -193,7 +196,10 @@ impl IdentityManager {
         Ok(())
     }
     pub async fn handle_status_change(&mut self, net_account: NetAccount) -> Result<()> {
-        debug!("Handling status change for account: {}", net_account.as_str());
+        debug!(
+            "Handling status change for account: {}",
+            net_account.as_str()
+        );
 
         Ok(())
     }

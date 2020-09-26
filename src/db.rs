@@ -482,16 +482,16 @@ impl Database2 {
                     pending_judgments
                 WHERE
                     net_account = :net_account
-                "
-            ,named_params! {
+                ",
+            named_params! {
                 ":net_account": net_account,
-            }, 
-            |row| row.get::<_, i32>(0)
+            },
+            |row| row.get::<_, i32>(0),
         )?;
 
         let is_verified = {
             let mut stmt = transaction.prepare(
-            "SELECT
+                "SELECT
                         id
                     FROM
                         account_states
@@ -846,8 +846,7 @@ mod tests {
             let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create identity
-            let mut ident = OnChainIdentity::new(alice.clone())
-            .unwrap();
+            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
 
             // Insert and check return value.
             let _ = db.insert_identity(&ident).await.unwrap();
@@ -918,8 +917,12 @@ mod tests {
 
             // Create and insert identity into storage.
             let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
-            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
-            ident.push_account(AccountType::Web, Account::from("alice.com")).unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+            ident
+                .push_account(AccountType::Web, Account::from("alice.com"))
+                .unwrap();
 
             db.insert_identity(&ident).await.unwrap();
 
@@ -928,14 +931,18 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an account.
-            db.set_challenge_status(&alice, AccountType::Web, ChallengeStatus::Accepted).await.unwrap();
+            db.set_challenge_status(&alice, AccountType::Web, ChallengeStatus::Accepted)
+                .await
+                .unwrap();
 
             // Not all essential accounts have been verified yet.
             let res = db.is_fully_verified(&alice).await.unwrap();
             assert_eq!(res, false);
 
             // Accept an additional account.
-            db.set_challenge_status(&alice, AccountType::Matrix, ChallengeStatus::Accepted).await.unwrap();
+            db.set_challenge_status(&alice, AccountType::Matrix, ChallengeStatus::Accepted)
+                .await
+                .unwrap();
 
             // All essential accounts have been verified.
             let res = db.is_fully_verified(&alice).await.unwrap();
