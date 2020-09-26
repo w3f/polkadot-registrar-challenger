@@ -70,6 +70,18 @@ pub struct CommsVerifier {
 }
 
 impl CommsVerifier {
+    #[cfg(test)]
+    /// Create a CommsVerifier without any useful functionality. Only used as a
+    /// filler for certain tests.
+    pub fn new() -> Self {
+        let (tx, recv) = unbounded();
+
+        CommsVerifier {
+            sender: tx,
+            recv: recv,
+            address_ty: AccountType::Matrix,
+        }
+    }
     pub async fn recv(&self) -> CommsMessage {
         // No async support for `recv` (it blocks and chokes tokio), so we
         // `try_recv` and just loop over it with a short pause.

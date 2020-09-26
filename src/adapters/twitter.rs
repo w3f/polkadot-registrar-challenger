@@ -6,7 +6,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, 
 use serde::de::DeserializeOwned;
 use tokio::time::{self, Duration};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TwitterId(u64);
 
 impl TwitterId {
@@ -245,22 +245,45 @@ impl Twitter {
 
         Ok(serde_json::from_str(&txt)?)
     }
-    pub async fn lookup_twitter_id(&self, twitter_ids: &[&TwitterId]) -> Result<Vec<Account>> {
-        let mut lookup = String::new();
+    pub async fn lookup_twitter_id(
+        &self,
+        twitter_ids: Option<&[&TwitterId]>,
+        accounts: Option<&[&Account]>,
+    ) -> Result<Vec<(Account, TwitterId)>> {
+        let mut params = vec![];
 
-        for twitter_id in twitter_ids {
-            lookup.push_str(&twitter_id.as_u64().to_string());
-            lookup.push(',');
+        // Lookups for UserIds
+        let mut lookup = String::new();
+        if let Some(twitter_ids) = twitter_ids {
+            for twitter_id in twitter_ids {
+                lookup.push_str(&twitter_id.as_u64().to_string());
+                lookup.push(',');
+            }
+
+            // Remove trailing `,`.
+            lookup.pop();
+
+            params.push(("user_id", lookup.as_str()))
         }
 
-        // Remove trailing `,`.
-        lookup.pop();
+        // Lookups for Accounts
+        let mut lookup = String::new();
+        if let Some(accounts) = accounts {
+            for account in accounts {
+                lookup.push_str(&account.as_str().replace("@", ""));
+                lookup.push(',');
+            }
 
-        let params = vec![("user_id", lookup.as_str())];
+            // Remove trailing `,`.
+            lookup.pop();
+
+            params.push(("screen_name", lookup.as_str()))
+        }
 
         #[derive(Deserialize)]
         // Only `screen_name` required.
         struct UserObject {
+            id: TwitterId,
             screen_name: String,
         }
 
@@ -272,8 +295,8 @@ impl Twitter {
             .await?;
 
         Ok(user_objects
-            .iter()
-            .map(|obj| Account::from(format!("@{}", obj.screen_name)))
+            .into_iter()
+            .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
     pub async fn send_message(&self, account: &Account, msg: &str) -> Result<()> {
@@ -322,7 +345,7 @@ fn test_twitter() {
     rt.block_on(async {
         let config = crate::open_config().unwrap();
 
-        let client = TwitterBuilder::new()
+        let client = TwitterBuilder::new(CommsVerifier::new())
             .consumer_key(config.twitter_api_key)
             .consumer_secret(config.twitter_api_secret)
             .sig_method("HMAC-SHA1".to_string())
@@ -356,7 +379,10 @@ fn test_twitter() {
         }
 
         let res = client
-            .lookup_twitter_id(&[&TwitterId::from(102128843)])
+            .lookup_twitter_id(
+                Some(&[&TwitterId::from(102128843)]),
+                Some(&[&Account::from("@web3registrar")]),
+            )
             .await
             .unwrap();
 
