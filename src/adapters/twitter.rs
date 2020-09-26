@@ -1,4 +1,4 @@
-use crate::primitives::{unix_time, Challenge, Result};
+use crate::primitives::{unix_time, Challenge, Result, Account};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -130,8 +130,21 @@ impl HttpMethod {
 }
 
 impl Twitter {
-    fn create_request(&self, _method: HttpMethod, url: &str) -> Result<Request> {
-        Ok(self.client.get(url).build()?)
+    fn create_request(&self, _method: HttpMethod, url: &str, params: Option<&[(&str, &str)]>) -> Result<Request> {
+        let mut full_url = String::from(url);
+
+        if let Some(params) = params {
+            full_url.push('?');
+
+            for (key, val) in params {
+                full_url.push_str(&format!("{}={}&", key, val));
+            }
+
+            // Remove trailing `&` or `?` in case "params" is empty.
+            full_url.pop();
+        }
+
+        Ok(self.client.get(&full_url).build()?)
     }
     /// Creates a signature as documented here:
     /// https://developer.twitter.com/en/docs/authentication/oauth-1-0a/creating-a-signature
@@ -140,7 +153,7 @@ impl Twitter {
         method: HttpMethod,
         url: &str,
         request: &mut Request,
-        body: Option<&[(&str, &str)]>,
+        params: Option<&[(&str, &str)]>,
     ) -> Result<()> {
         use urlencoding::encode;
 
@@ -157,8 +170,8 @@ impl Twitter {
             ("oauth_version", &version),
         ];
 
-        if let Some(body) = body {
-            fields.append(&mut body.to_vec());
+        if let Some(params) = params {
+            fields.append(&mut params.to_vec());
         }
 
         fields.sort_by(|(a, _), (b, _)| a.cmp(b));
@@ -208,15 +221,21 @@ impl Twitter {
 
         Ok(())
     }
-    pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
-        let mut request = self.create_request(HttpMethod::GET, url)?;
-        self.authenticate_request(HttpMethod::GET, url, &mut request, None)?;
+    pub async fn get_request<T: DeserializeOwned>(&self, url: &str, params: Option<&[(&str, &str)]>) -> Result<T> {
+        let mut request = self.create_request(HttpMethod::GET, url, params)?;
+        self.authenticate_request(HttpMethod::GET, url, &mut request, params)?;
         let resp = self.client.execute(request).await?;
         let txt = resp.text().await?;
 
         println!("RESP>> {}", txt);
 
         Ok(serde_json::from_str(&txt)?)
+    }
+    pub async fn lookup_users(&self, twitter_id: TwitterId) -> Result<Account> {
+        unimplemented!()
+    }
+    pub async fn send_message(&self, account: &Account, msg: &str) -> Result<()> {
+        Ok(())
     }
     pub async fn start(self) {
         let mut interval = time::interval(Duration::from_secs(3));
@@ -275,7 +294,7 @@ fn test_twitter() {
         }
 
         client
-            .get_request::<Root>("https://api.twitter.com/1.1/direct_messages/events/list.json")
+            .get_request::<Root>("https://api.twitter.com/1.1/direct_messages/events/list.json", None)
             .await
             .unwrap();
     });
