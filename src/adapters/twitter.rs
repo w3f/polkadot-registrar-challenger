@@ -1,4 +1,5 @@
-use crate::primitives::{unix_time, Account, Challenge, Result};
+use crate::comms::{CommsMessage, CommsVerifier};
+use crate::primitives::{unix_time, Account, Challenge, NetAccount, Result};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -48,10 +49,11 @@ pub struct TwitterBuilder {
     token: Option<String>,
     token_secret: Option<String>,
     version: Option<f64>,
+    comms: CommsVerifier,
 }
 
 impl TwitterBuilder {
-    pub fn new() -> Self {
+    pub fn new(comms: CommsVerifier) -> Self {
         TwitterBuilder {
             consumer_key: None,
             consumer_secret: None,
@@ -59,6 +61,7 @@ impl TwitterBuilder {
             token: None,
             token_secret: None,
             version: None,
+            comms: comms,
         }
     }
     pub fn consumer_key(mut self, key: String) -> Self {
@@ -96,6 +99,7 @@ impl TwitterBuilder {
             token: self.token.ok_or(TwitterError::IncompleteBuilder)?,
             token_secret: self.token_secret.ok_or(TwitterError::IncompleteBuilder)?,
             version: self.version.ok_or(TwitterError::IncompleteBuilder)?,
+            comms: self.comms,
         })
     }
 }
@@ -108,6 +112,7 @@ pub struct Twitter {
     token: String,
     token_secret: String,
     version: f64,
+    comms: CommsVerifier,
 }
 
 use hmac::{Hmac, Mac, NewMac};
@@ -285,6 +290,26 @@ impl Twitter {
         }
     }
     pub async fn local(&self) -> Result<()> {
+        use CommsMessage::*;
+
+        match self.comms.recv().await {
+            AccountToVerify {
+                net_account,
+                account,
+            } => {
+                self.handle_account_verification(net_account, account)
+                    .await?
+            }
+            _ => panic!(),
+        }
+
+        Ok(())
+    }
+    pub async fn handle_account_verification(
+        &self,
+        net_account: NetAccount,
+        account: Account,
+    ) -> Result<()> {
         Ok(())
     }
 }
