@@ -154,7 +154,7 @@ impl Connector {
             msg = self.comms.recv().fuse() => {
                 match msg {
                     CommsMessage::JudgeIdentity {
-                        network_address,
+                        net_account,
                         judgement,
                     } => {
                         self.client
@@ -162,7 +162,7 @@ impl Connector {
                                 serde_json::to_string(&Message {
                                     event: EventType::JudgementResult,
                                     data: serde_json::to_value(&JudgementResponse {
-                                        address: network_address.address().clone(),
+                                        address: net_account.clone(),
                                         judgement: judgement,
                                     })
                                     .map_err(|err| ConnectorError::Response(err.into()))?,

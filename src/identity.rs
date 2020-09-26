@@ -8,6 +8,7 @@ use crossbeam::channel::{unbounded, Receiver, Sender};
 use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -145,6 +146,12 @@ impl IdentityManager {
         self.comms.pairs.insert(account_ty, cm);
         cv
     }
+    fn get_comms(&self, account_ty: &AccountType) -> StdResult<&CommsMain, ManagerError> {
+        self.comms
+            .pairs
+            .get(account_ty)
+            .ok_or(ManagerError::NoHandlerRegistered(account_ty.clone()))
+    }
     pub async fn start(mut self) {
         // No async support for `recv` (it blocks and chokes tokio), so we
         // `try_recv` and just loop over it with a short pause.
@@ -181,16 +188,10 @@ impl IdentityManager {
         self.db2.insert_identity(&ident).await?;
 
         for state in ident.account_states() {
-            self.comms
-                .pairs
-                .get(&state.account_ty)
-                .ok_or(ManagerError::NoHandlerRegistered(state.account_ty.clone()))
-                .map(|comms| {
-                    comms.notify_account_verification(
-                        ident.net_account().clone(),
-                        state.account.clone(),
-                    )
-                })?;
+            self.get_comms(&state.account_ty).map(|comms| {
+                comms
+                    .notify_account_verification(ident.net_account().clone(), state.account.clone())
+            })?;
         }
 
         Ok(())
@@ -200,6 +201,15 @@ impl IdentityManager {
             "Handling status change for account: {}",
             net_account.as_str()
         );
+
+        if self.db2.is_fully_verified(&net_account).await? {
+            self.get_comms(&AccountType::ReservedConnector)
+                .map(|comms| {
+                    comms.notify_identity_judgment(net_account, Judgement::Reasonable);
+                })?;
+        } else {
+            // TODO
+        }
 
         Ok(())
     }

@@ -25,7 +25,7 @@ pub fn generate_comms(
 pub enum CommsMessage {
     NewJudgementRequest(OnChainIdentity),
     JudgeIdentity {
-        network_address: NetworkAddress,
+        net_account: NetAccount,
         judgement: Judgement,
     },
     LeaveRoom {
@@ -51,6 +51,14 @@ impl CommsMain {
             .send(CommsMessage::AccountToVerify {
                 net_account: net_account,
                 account: account,
+            })
+            .fatal();
+    }
+    pub fn notify_identity_judgment(&self, net_account: NetAccount, judgment: Judgement) {
+        self.sender
+            .send(CommsMessage::JudgeIdentity {
+                net_account: net_account,
+                judgement: judgment,
             })
             .fatal();
     }
