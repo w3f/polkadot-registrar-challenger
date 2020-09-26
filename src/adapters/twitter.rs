@@ -5,6 +5,7 @@ use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -126,7 +127,7 @@ use hmac::{Hmac, Mac, NewMac};
 use sha1::Sha1;
 
 enum HttpMethod {
-    //POST,
+    POST,
     GET,
 }
 
@@ -135,39 +136,18 @@ impl HttpMethod {
         use HttpMethod::*;
 
         match self {
-            //POST => "POST",
+            POST => "POST",
             GET => "GET",
         }
     }
 }
 
 impl Twitter {
-    fn create_request(
-        &self,
-        _method: HttpMethod,
-        url: &str,
-        params: Option<&[(&str, &str)]>,
-    ) -> Result<Request> {
-        let mut full_url = String::from(url);
-
-        if let Some(params) = params {
-            full_url.push('?');
-
-            for (key, val) in params {
-                full_url.push_str(&format!("{}={}&", key, val));
-            }
-
-            // Remove trailing `&` or `?` in case "params" is empty.
-            full_url.pop();
-        }
-
-        Ok(self.client.get(&full_url).build()?)
-    }
     /// Creates a signature as documented here:
     /// https://developer.twitter.com/en/docs/authentication/oauth-1-0a/creating-a-signature
     fn authenticate_request(
         &self,
-        method: HttpMethod,
+        method: &HttpMethod,
         url: &str,
         request: &mut Request,
         params: Option<&[(&str, &str)]>,
@@ -243,12 +223,42 @@ impl Twitter {
         url: &str,
         params: Option<&[(&str, &str)]>,
     ) -> Result<T> {
-        let mut request = self.create_request(HttpMethod::GET, url, params)?;
-        self.authenticate_request(HttpMethod::GET, url, &mut request, params)?;
+        let mut full_url = String::from(url);
+
+        if let Some(params) = params {
+            full_url.push('?');
+            for (key, val) in params {
+                full_url.push_str(&format!("{}={}&", key, val));
+            }
+
+            // Remove trailing `&` or `?` in case "params" is empty.
+            full_url.pop();
+        }
+
+        let mut request = self.client.get(&full_url).build()?;
+        self.authenticate_request(&HttpMethod::GET, url, &mut request, params)?;
         let resp = self.client.execute(request).await?;
         let txt = resp.text().await?;
 
         //println!("RESP>> {}", txt);
+
+        Ok(serde_json::from_str(&txt)?)
+    }
+    pub async fn post_request<T: DeserializeOwned, B: Serialize>(
+        &self,
+        url: &str,
+        body: B,
+    ) -> Result<T> {
+        let mut request = self
+            .client
+            .post(url)
+            .body(serde_json::to_string(&body)?)
+            .build()?;
+        self.authenticate_request(&HttpMethod::POST, url, &mut request, None)?;
+        let resp = self.client.execute(request).await?;
+        let txt = resp.text().await?;
+
+        println!("RESP>> {}", txt);
 
         Ok(serde_json::from_str(&txt)?)
     }
