@@ -3,6 +3,7 @@ use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };
+use crate::adapters::TwitterId;
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
@@ -183,7 +184,7 @@ impl Database2 {
             params![],
         )?;
 
-        // Table for known matrix rooms.
+        // Table for known Matrix rooms.
         con.execute(
             &format!(
                 "CREATE TABLE IF NOT EXISTS {tbl_matrix_rooms} (
@@ -197,6 +198,18 @@ impl Database2 {
                 tbl_matrix_rooms = KNOWN_MATRIX_ROOMS,
                 tbl_identities = PENDING_JUDGMENTS,
             ),
+            params![],
+        )?;
+
+        // Table for known Twitter IDs.
+        con.execute(
+            "
+            CREATE TABLE IF NOT EXISTS known_twitter_ids (
+                id              INTEGER PRIMARY KEY,
+                net_account_id  INTEGER NOT NULL UNIQUE,
+                twitter_id      TEXT
+            )
+        ",
             params![],
         )?;
 
@@ -680,6 +693,9 @@ impl Database2 {
         transaction.commit()?;
 
         Ok(account_set)
+    }
+    pub async fn insert_twitter_id(&self, twitter_id: TwitterId) -> Result<()> {
+        Ok(())
     }
 }
 

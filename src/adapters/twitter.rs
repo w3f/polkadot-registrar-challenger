@@ -1,8 +1,39 @@
 use crate::primitives::{unix_time, Challenge, Result};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
 use tokio::time::{self, Duration};
+
+#[derive(Debug, Clone)]
+pub struct TwitterId(u64);
+
+impl TwitterId {
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for TwitterId {
+    fn from(val: u64) -> Self {
+        TwitterId(val)
+    }
+}
+
+impl ToSql for TwitterId {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Integer(self.0 as i64)))
+    }
+}
+
+impl FromSql for TwitterId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Integer(val) => Ok(TwitterId(val as u64)),
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
 
 #[derive(Debug, Fail)]
 pub enum TwitterError {
