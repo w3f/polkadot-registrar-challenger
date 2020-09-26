@@ -1,9 +1,9 @@
 use super::Result;
+use crate::adapters::TwitterId;
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };
-use crate::adapters::TwitterId;
 use failure::err_msg;
 use matrix_sdk::identifiers::RoomId;
 use rocksdb::{ColumnFamily, IteratorMode, Options, DB};
@@ -698,7 +698,8 @@ impl Database2 {
     pub async fn insert_twitter_id(&self, account: &Account, twitter_id: &TwitterId) -> Result<()> {
         let con = self.con.lock().await;
 
-        con.execute_named("
+        con.execute_named(
+            "
             INSERT OR REPLACE INTO known_twitter_ids (
                 account,
                 twitter_id
@@ -706,10 +707,12 @@ impl Database2 {
                 :account,
                 :twitter_id
             )
-        ", named_params! {
-            ":account": account,
-            ":twitter_id": twitter_id
-        })?;
+        ",
+            named_params! {
+                ":account": account,
+                ":twitter_id": twitter_id
+            },
+        )?;
 
         Ok(())
     }

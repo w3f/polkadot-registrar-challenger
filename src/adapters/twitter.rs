@@ -1,4 +1,4 @@
-use crate::primitives::{unix_time, Challenge, Result, Account};
+use crate::primitives::{unix_time, Account, Challenge, Result};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -130,7 +130,12 @@ impl HttpMethod {
 }
 
 impl Twitter {
-    fn create_request(&self, _method: HttpMethod, url: &str, params: Option<&[(&str, &str)]>) -> Result<Request> {
+    fn create_request(
+        &self,
+        _method: HttpMethod,
+        url: &str,
+        params: Option<&[(&str, &str)]>,
+    ) -> Result<Request> {
         let mut full_url = String::from(url);
 
         if let Some(params) = params {
@@ -221,18 +226,50 @@ impl Twitter {
 
         Ok(())
     }
-    pub async fn get_request<T: DeserializeOwned>(&self, url: &str, params: Option<&[(&str, &str)]>) -> Result<T> {
+    pub async fn get_request<T: DeserializeOwned>(
+        &self,
+        url: &str,
+        params: Option<&[(&str, &str)]>,
+    ) -> Result<T> {
         let mut request = self.create_request(HttpMethod::GET, url, params)?;
         self.authenticate_request(HttpMethod::GET, url, &mut request, params)?;
         let resp = self.client.execute(request).await?;
         let txt = resp.text().await?;
 
-        println!("RESP>> {}", txt);
+        //println!("RESP>> {}", txt);
 
         Ok(serde_json::from_str(&txt)?)
     }
-    pub async fn lookup_users(&self, twitter_id: TwitterId) -> Result<Account> {
-        unimplemented!()
+    pub async fn lookup_twitter_id(&self, twitter_ids: &[&TwitterId]) -> Result<Vec<Account>> {
+        let mut lookup = String::new();
+
+        for twitter_id in twitter_ids {
+            lookup.push_str(&twitter_id.as_u64().to_string());
+            lookup.push(',');
+        }
+
+        // Remove trailing `,`.
+        lookup.pop();
+
+        let params = vec![("user_id", lookup.as_str())];
+
+        #[derive(Deserialize)]
+        // Only `screen_name` required.
+        struct UserObject {
+            screen_name: String,
+        }
+
+        let user_objects = self
+            .get_request::<Vec<UserObject>>(
+                "https://api.twitter.com/1.1/users/lookup.json",
+                Some(&params),
+            )
+            .await?;
+
+        Ok(user_objects
+            .iter()
+            .map(|obj| Account::from(format!("@{}", obj.screen_name)))
+            .collect())
     }
     pub async fn send_message(&self, account: &Account, msg: &str) -> Result<()> {
         Ok(())
@@ -293,9 +330,21 @@ fn test_twitter() {
             text: String,
         }
 
-        client
-            .get_request::<Root>("https://api.twitter.com/1.1/direct_messages/events/list.json", None)
+        let res = client
+            .lookup_twitter_id(&[&TwitterId::from(102128843)])
             .await
             .unwrap();
+
+        println!("ACCOUNTS: {:?}", res);
+
+        /*
+        client
+            .get_request::<Root>(
+                "https://api.twitter.com/1.1/direct_messages/events/list.json",
+                None,
+            )
+            .await
+            .unwrap();
+            */
     });
 }
