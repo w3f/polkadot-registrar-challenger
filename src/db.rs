@@ -468,6 +468,58 @@ impl Database2 {
     ) -> Result<(PubKey, Challenge)> {
         Err(failure::err_msg(""))
     }
+    // Check whether the identity is fully verified. Currently it only checks
+    // the Matrix account.
+    pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
+        let con = self.con.lock().await;
+
+        con.query_row_named(
+           "SELECT
+                    id
+                FROM
+                    account_states
+                WHERE
+                    net_account_id = (
+                        SELECT
+                            id
+                        FROM
+                            pending_judgments
+                        WHERE
+                            net_account = :net_account
+                    )
+                AND account_ty_id
+                    IN (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty IN (
+                                'matrix'
+                            )
+                    )
+                AND challenge_status_id
+                    IN (
+                        SELECT
+                            id
+                        FROM
+                            challenge_status
+                        WHERE
+                            status IN (
+                                'unconfirmed',
+                                'rejected'
+                            )
+                    )
+                ",
+            named_params! {
+                ":net_account": net_account,
+            },
+            |row| row.get::<_, NetAccount>(0),
+        )
+        .optional()
+        .map(|account| account.is_none())
+        .map_err(|err| failure::Error::from(err))
+    }
 }
 
 /// A simple abstraction layer over rocksdb. This is used primarily to have a
