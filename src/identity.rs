@@ -200,7 +200,10 @@ impl IdentityManager {
         if self.db2.is_fully_verified(&net_account).await? {
             self.get_comms(&AccountType::ReservedConnector)
                 .map(|comms| {
-                    info!("Address {} is fully verified. Notifying Watcher...", net_account.as_str());
+                    info!(
+                        "Address {} is fully verified. Notifying Watcher...",
+                        net_account.as_str()
+                    );
                     comms.notify_identity_judgment(net_account, Judgement::Reasonable);
                 })?;
         } else {

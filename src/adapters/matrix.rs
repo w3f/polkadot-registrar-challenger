@@ -5,8 +5,8 @@ use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Resul
 use crate::verifier::Verifier;
 use matrix_sdk::{
     self,
-    api::r0::room::Visibility,
     api::r0::room::create_room::Request,
+    api::r0::room::Visibility,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
         AnyMessageEventContent, SyncMessageEvent,
@@ -46,8 +46,11 @@ pub enum MatrixError {
     Database(failure::Error),
     #[fail(display = "contacted by a user who's RoomId was not registered anywhere")]
     RoomIdNotFound,
-    #[fail(display = "Failed to fetch challenge data from database for account: {:?}", 0)]
-    ChallengeDataNotFound(Account)
+    #[fail(
+        display = "Failed to fetch challenge data from database for account: {:?}",
+        0
+    )]
+    ChallengeDataNotFound(Account),
 }
 
 async fn send_msg(
@@ -312,7 +315,7 @@ impl Responder {
                 .await?;
 
             if challenge_data.is_empty() {
-                return Err(MatrixError::ChallengeDataNotFound(account.clone()).into())
+                return Err(MatrixError::ChallengeDataNotFound(account.clone()).into());
             }
 
             for (network_address, challenge) in challenge_data {
