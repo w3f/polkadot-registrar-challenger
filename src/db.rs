@@ -434,25 +434,25 @@ impl Database2 {
         self.con.lock().await.execute_named(
             &format!(
                 "UPDATE {tbl_update}
-                SET challenge_status =
+                SET challenge_status_id =
                     (SELECT id FROM {tbl_challenge_status}
                         WHERE status = :challenge_status)
                 WHERE
                     net_account_id =
                         (SELECT id FROM {tbl_identities}
-                            WHERE address = :net_account)
+                            WHERE net_account = :net_account)
                 AND
-                    account_ty =
+                    account_ty_id =
                         (SELECT id FROM {tbl_acc_types}
                             WHERE account_ty = :account_ty)
-            )",
+            ",
                 tbl_update = ACCOUNT_STATE,
                 tbl_challenge_status = CHALLENGE_STATUS,
                 tbl_identities = PENDING_JUDGMENTS,
                 tbl_acc_types = ACCOUNT_TYPES,
             ),
             named_params! {
-                ":account_status": status,
+                ":challenge_status": status,
                 ":net_account": net_account,
                 ":account_ty": account_ty,
             },
@@ -471,54 +471,75 @@ impl Database2 {
     // Check whether the identity is fully verified. Currently it only checks
     // the Matrix account.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
-        let con = self.con.lock().await;
+        let mut con = self.con.lock().await;
+        let transaction = con.transaction()?;
 
-        con.query_row_named(
-           "SELECT
+        // Make sure the identity even exists.
+        transaction.query_row_named(
+            "SELECT
                     id
                 FROM
-                    account_states
+                    pending_judgments
                 WHERE
-                    net_account_id = (
-                        SELECT
-                            id
-                        FROM
-                            pending_judgments
-                        WHERE
-                            net_account = :net_account
-                    )
-                AND account_ty_id
-                    IN (
-                        SELECT
-                            id
-                        FROM
-                            account_types
-                        WHERE
-                            account_ty IN (
-                                'matrix'
-                            )
-                    )
-                AND challenge_status_id
-                    IN (
-                        SELECT
-                            id
-                        FROM
-                            challenge_status
-                        WHERE
-                            status IN (
-                                'unconfirmed',
-                                'rejected'
-                            )
-                    )
-                ",
-            named_params! {
+                    net_account = :net_account
+                "
+            ,named_params! {
                 ":net_account": net_account,
-            },
-            |row| row.get::<_, NetAccount>(0),
-        )
-        .optional()
-        .map(|account| account.is_none())
-        .map_err(|err| failure::Error::from(err))
+            }, 
+            |row| row.get::<_, i32>(0)
+        )?;
+
+        let is_verified = {
+            let mut stmt = transaction.prepare(
+            "SELECT
+                        id
+                    FROM
+                        account_states
+                    WHERE
+                        net_account_id = (
+                            SELECT
+                                id
+                            FROM
+                                pending_judgments
+                            WHERE
+                                net_account = :net_account
+                        )
+                    AND account_ty_id
+                        IN (
+                            SELECT
+                                id
+                            FROM
+                                account_types
+                            WHERE
+                                account_ty IN (
+                                    'matrix'
+                                )
+                        )
+                    AND challenge_status_id
+                        IN (
+                            SELECT
+                                id
+                            FROM
+                                challenge_status
+                            WHERE
+                                status IN (
+                                    'unconfirmed',
+                                    'rejected'
+                                )
+                        )
+                    ",
+            )?;
+
+            let mut rows = stmt.query_named(named_params! {
+                ":net_account": net_account,
+            })?;
+
+            rows.next()?.is_none()
+        };
+
+        transaction.commit()?;
+
+        Ok(is_verified)
     }
 }
 
@@ -825,9 +846,7 @@ mod tests {
             let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create identity
-            let mut ident = OnChainIdentity::new(NetAccount::from(
-                "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
-            ))
+            let mut ident = OnChainIdentity::new(alice.clone())
             .unwrap();
 
             // Insert and check return value.
@@ -886,5 +905,41 @@ mod tests {
     }
 
     #[test]
-    fn set_account_status() {}
+    fn set_challenge_status() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+
+            // Alice does not exist.
+            let res = db.is_fully_verified(&alice).await;
+            assert!(res.is_err());
+
+            // Create and insert identity into storage.
+            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
+            ident.push_account(AccountType::Matrix, Account::from("@alice:matrix.org")).unwrap();
+            ident.push_account(AccountType::Web, Account::from("alice.com")).unwrap();
+
+            db.insert_identity(&ident).await.unwrap();
+
+            // Alice is not verified.
+            let res = db.is_fully_verified(&alice).await.unwrap();
+            assert_eq!(res, false);
+
+            // Accept an account.
+            db.set_challenge_status(&alice, AccountType::Web, ChallengeStatus::Accepted).await.unwrap();
+
+            // Not all essential accounts have been verified yet.
+            let res = db.is_fully_verified(&alice).await.unwrap();
+            assert_eq!(res, false);
+
+            // Accept an additional account.
+            db.set_challenge_status(&alice, AccountType::Matrix, ChallengeStatus::Accepted).await.unwrap();
+
+            // All essential accounts have been verified.
+            let res = db.is_fully_verified(&alice).await.unwrap();
+            assert_eq!(res, true);
+        });
+    }
 }
