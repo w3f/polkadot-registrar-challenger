@@ -45,6 +45,8 @@ pub enum MatrixError {
     Database(failure::Error),
     #[fail(display = "contacted by a user who's RoomId was not registered anywhere")]
     RoomIdNotFound,
+    #[fail(display = "Failed to fetch challenge data from database for account: {:?}", 0)]
+    ChallengeDataNotFound(Account)
 }
 
 async fn send_msg(
@@ -299,11 +301,17 @@ impl Responder {
                 return Err(MatrixError::RoomIdNotFound.into());
             };
 
+            let account = Account::from(event.sender.as_str());
+
             debug!("Fetching challenge data");
             let challenge_data = self
                 .db
-                .select_challenge_data(&Account::from(event.sender.as_str()), &AccountType::Matrix)
+                .select_challenge_data(&account, &AccountType::Matrix)
                 .await?;
+
+            if challenge_data.is_empty() {
+                return Err(MatrixError::ChallengeDataNotFound(account.clone()).into())
+            }
 
             for (network_address, challenge) in challenge_data {
                 debug!("Initializing verifier");

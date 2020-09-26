@@ -500,13 +500,13 @@ impl Database2 {
             WHERE
                 account_states.account = :account
             AND
-                account_states.challenge_status_id = (
+                account_states.challenge_status_id != (
                     SELECT
                         id
                     FROM
                         challenge_status
                     WHERE
-                        status <> 'accepted'
+                        status = 'accepted'
                 )
             AND
                 account_states.account_ty_id = (
