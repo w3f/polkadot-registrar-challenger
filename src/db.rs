@@ -696,25 +696,52 @@ impl Database2 {
         Ok(account_set)
     }
     pub async fn insert_twitter_id(&self, account: &Account, twitter_id: &TwitterId) -> Result<()> {
+        self.insert_twitter_ids(&[(account, twitter_id)]).await
+    }
+    pub async fn insert_twitter_ids(&self, pair: &[(&Account, &TwitterId)]) -> Result<()> {
         let con = self.con.lock().await;
-
-        con.execute_named(
+        let mut stmt = con.prepare(
             "
-            INSERT OR REPLACE INTO known_twitter_ids (
-                account,
-                twitter_id
-            ) VALUES (
+            INSERT OR REPLACE INTO
+                known_twitter_ids (
+                    account,
+                    twitter_id
+                )
+            VALUES (
                 :account,
                 :twitter_id
             )
         ",
-            named_params! {
-                ":account": account,
-                ":twitter_id": twitter_id
-            },
         )?;
 
+        for (account, twitter_id) in pair {
+            stmt.execute_named(named_params! {
+                    ":account": account,
+                    ":twitter_id": twitter_id,
+            })?;
+        }
+
         Ok(())
+    }
+    pub async fn select_twitter_id(&self, account: &Account) -> Result<Option<TwitterId>> {
+        let con = self.con.lock().await;
+        con.query_row_named(
+            "
+            SELECT
+                twitter_id
+            FROM
+                known_twitter_ids
+            WHERE
+                account = :account
+
+        ",
+            named_params! {
+                ":account": account,
+            },
+            |row| row.get::<_, TwitterId>(0),
+        )
+        .optional()
+        .map_err(|err| failure::Error::from(err))
     }
 }
 

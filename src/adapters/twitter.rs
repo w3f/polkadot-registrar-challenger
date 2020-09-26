@@ -1,4 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
+use crate::db::Database2;
 use crate::primitives::{unix_time, Account, Challenge, NetAccount, Result};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
@@ -40,6 +41,8 @@ impl FromSql for TwitterId {
 pub enum TwitterError {
     #[fail(display = "the builder was not used correctly")]
     IncompleteBuilder,
+    #[fail(display = "incomplete data returned from Twitter API")]
+    IncompleteData,
 }
 
 pub struct TwitterBuilder {
@@ -49,11 +52,12 @@ pub struct TwitterBuilder {
     token: Option<String>,
     token_secret: Option<String>,
     version: Option<f64>,
+    db: Database2,
     comms: CommsVerifier,
 }
 
 impl TwitterBuilder {
-    pub fn new(comms: CommsVerifier) -> Self {
+    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
         TwitterBuilder {
             consumer_key: None,
             consumer_secret: None,
@@ -61,6 +65,7 @@ impl TwitterBuilder {
             token: None,
             token_secret: None,
             version: None,
+            db: db,
             comms: comms,
         }
     }
@@ -99,6 +104,7 @@ impl TwitterBuilder {
             token: self.token.ok_or(TwitterError::IncompleteBuilder)?,
             token_secret: self.token_secret.ok_or(TwitterError::IncompleteBuilder)?,
             version: self.version.ok_or(TwitterError::IncompleteBuilder)?,
+            db: self.db,
             comms: self.comms,
         })
     }
@@ -112,6 +118,7 @@ pub struct Twitter {
     token: String,
     token_secret: String,
     version: f64,
+    db: Database2,
     comms: CommsVerifier,
 }
 
@@ -294,12 +301,16 @@ impl Twitter {
             )
             .await?;
 
+        if user_objects.is_empty() {
+            return Err(TwitterError::IncompleteData.into());
+        }
+
         Ok(user_objects
             .into_iter()
             .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
-    pub async fn send_message(&self, account: &Account, msg: &str) -> Result<()> {
+    pub async fn send_message(&self, id: &TwitterId, msg: &str) -> Result<()> {
         Ok(())
     }
     pub async fn start(self) {
@@ -333,6 +344,15 @@ impl Twitter {
         net_account: NetAccount,
         account: Account,
     ) -> Result<()> {
+        let twitter_id = if let Some(twitter_id) = self.db.select_twitter_id(&account).await? {
+            twitter_id
+        } else {
+            self.lookup_twitter_id(None, Some(&[&account]))
+                .await?
+                .remove(0)
+                .1
+        };
+
         Ok(())
     }
 }
