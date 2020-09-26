@@ -46,7 +46,7 @@ pub enum TwitterError {
     #[fail(display = "Incomplete data returned from Twitter API")]
     IncompleteData,
     #[fail(display = "Error from Twitter API: {:?}", 0)]
-    TwitterApi(TwitterApiError),
+    ApiCode(TwitterApiError),
     #[fail(display = "HTTP error: {}", 0)]
     Http(failure::Error),
     #[fail(display = "Failed to (de-)serialize JSON data: {}", 0)]
@@ -275,9 +275,15 @@ impl Twitter {
             .await
             .map_err(|_| TwitterError::IncompleteData)?;
 
-        //println!("RESP>> {}", txt);
+        println!("RESP>> {}", txt);
 
-        Ok(serde_json::from_str(&txt).map_err(|err| TwitterError::Serde(err.into()))?)
+        serde_json::from_str::<T>(&txt).map_err(|err| {
+            if let Ok(api_err) = serde_json::from_str::<TwitterApiError>(&txt) {
+                TwitterError::ApiCode(api_err)
+            } else {
+                TwitterError::Serde(err.into())
+            }
+        })
     }
     pub async fn post_request<T: DeserializeOwned, B: Serialize>(
         &self,
@@ -314,7 +320,13 @@ impl Twitter {
 
         println!("RESP>> {}", txt);
 
-        Ok(serde_json::from_str(&txt).map_err(|err| TwitterError::Serde(err.into()))?)
+        serde_json::from_str::<T>(&txt).map_err(|err| {
+            if let Ok(api_err) = serde_json::from_str::<TwitterApiError>(&txt) {
+                TwitterError::ApiCode(api_err)
+            } else {
+                TwitterError::Serde(err.into())
+            }
+        })
     }
     pub async fn lookup_twitter_id(
         &self,
