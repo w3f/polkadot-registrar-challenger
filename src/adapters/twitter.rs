@@ -1,6 +1,9 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{unix_time, Account, Challenge, NetAccount, Result};
+use crate::primitives::{
+    unix_time, Account, AccountType, Challenge, ChallengeStatus, NetAccount, Result,
+};
+use crate::verifier::{Verifier2, VerifierError};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -10,7 +13,7 @@ use std::convert::{TryFrom, TryInto};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct TwitterId(u64);
 
 impl TwitterId {
@@ -79,6 +82,7 @@ pub struct ApiErrorObject {
 }
 
 pub struct TwitterBuilder {
+    screen_name: Option<Account>,
     consumer_key: Option<String>,
     consumer_secret: Option<String>,
     sig_method: Option<String>,
@@ -92,6 +96,7 @@ pub struct TwitterBuilder {
 impl TwitterBuilder {
     pub fn new(db: Database2, comms: CommsVerifier) -> Self {
         TwitterBuilder {
+            screen_name: None,
             consumer_key: None,
             consumer_secret: None,
             sig_method: None,
@@ -101,6 +106,10 @@ impl TwitterBuilder {
             db: db,
             comms: comms,
         }
+    }
+    pub fn screen_name(mut self, account: Account) -> Self {
+        self.screen_name = Some(account);
+        self
     }
     pub fn consumer_key(mut self, key: String) -> Self {
         self.consumer_key = Some(key);
@@ -129,6 +138,7 @@ impl TwitterBuilder {
     pub fn build(self) -> Result<Twitter> {
         Ok(Twitter {
             client: Client::new(),
+            screen_name: self.screen_name.ok_or(TwitterError::IncompleteBuilder)?,
             consumer_key: self.consumer_key.ok_or(TwitterError::IncompleteBuilder)?,
             consumer_secret: self
                 .consumer_secret
@@ -145,6 +155,7 @@ impl TwitterBuilder {
 
 pub struct Twitter {
     client: Client,
+    screen_name: Account,
     consumer_key: String,
     consumer_secret: String,
     sig_method: String,
@@ -428,38 +439,79 @@ impl Twitter {
         }
     }
     pub async fn local(&self) -> Result<()> {
-        use CommsMessage::*;
-
-        match self.comms.recv().await {
-            AccountToVerify {
-                net_account,
-                account,
-            } => {
-                self.handle_account_verification(net_account, account)
-                    .await?
-            }
-            _ => panic!(),
-        }
-
-        Ok(())
-    }
-    pub async fn handle_account_verification(
-        &self,
-        net_account: NetAccount,
-        account: Account,
-    ) -> Result<()> {
-        let twitter_id = if let Some(twitter_id) = self.db.select_twitter_id(&account).await? {
-            twitter_id
+        let my_id = if let Some(my_id) = self.db.select_twitter_id(&self.screen_name).await? {
+            my_id
         } else {
-            self.lookup_twitter_id(None, Some(&[&account]))
-                .await?
-                .remove(0)
-                .1
+            let mut ids = self
+                .lookup_twitter_id(None, Some(&[&self.screen_name]))
+                .await?;
+
+            ids.remove(0).1
         };
 
         Ok(())
     }
-    pub async fn handle_incoming_messages(&self) -> Result<()> {
+    pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
+        let messages = self.request_messages(my_id).await?;
+
+        let accounts_ids = self
+            .lookup_twitter_id(
+                Some(
+                    &messages
+                        .iter()
+                        .map(|msg| &msg.sender)
+                        .collect::<Vec<&TwitterId>>(),
+                ),
+                None,
+            )
+            .await?;
+
+        for (account, twitter_id) in accounts_ids {
+            let challenge_data = self
+                .db
+                .select_challenge_data(&account, &AccountType::Twitter)
+                .await?;
+
+            // TODO: `select_challenge_data` should return an error.
+            if challenge_data.is_empty() {
+                // TODO
+            }
+
+            let mut verifier = Verifier2::new(&challenge_data);
+
+            // Verify each message received.
+            messages
+                .iter()
+                .filter(|msg| msg.sender == twitter_id)
+                .for_each(|msg| verifier.verify(&msg.message));
+
+            let valid_verifications = verifier.valid_verifications();
+            let invalid_verifications = verifier.invalid_verifications();
+
+            for network_address in valid_verifications {
+                self.db
+                    .set_challenge_status(
+                        network_address.address(),
+                        &AccountType::Twitter,
+                        ChallengeStatus::Accepted,
+                    )
+                    .await?;
+            }
+
+            for network_address in invalid_verifications {
+                self.db
+                    .set_challenge_status(
+                        network_address.address(),
+                        &AccountType::Twitter,
+                        ChallengeStatus::Accepted,
+                    )
+                    .await?;
+            }
+
+            self.send_message(&twitter_id, verifier.response_message_builder())
+                .await?;
+        }
+
         Ok(())
     }
 }
@@ -495,8 +547,8 @@ struct ApiMessageData {
 }
 
 struct ReceivedMessageContext {
-    recipient: TwitterId,
-    msg: String,
+    sender: TwitterId,
+    message: String,
 }
 
 impl ApiMessageEvent {
@@ -515,19 +567,23 @@ impl ApiMessageEvent {
             events: None,
         }
     }
-    fn get_messages(self, exclude_me: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
+    fn get_messages(self, my_id: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
         let mut msgs = vec![];
 
         if let Some(events) = self.events {
             for event in events {
-                msgs.push(ReceivedMessageContext {
-                    recipient: event
+                let msg = ReceivedMessageContext {
+                    sender: event
                         .message_create
                         .sender_id
                         .ok_or(TwitterError::UnrecognizedData)?
                         .try_into()?,
-                    msg: event.message_create.message_data.text,
-                });
+                    message: event.message_create.message_data.text,
+                };
+
+                if &msg.sender != my_id {
+                    msgs.push(msg);
+                }
             }
         }
 
@@ -551,6 +607,7 @@ fn test_twitter() {
         let config = crate::open_config().unwrap();
 
         let client = TwitterBuilder::new(Database2::new(&db_path()).unwrap(), CommsVerifier::new())
+            .screen_name(Account::from("web3registrar"))
             .consumer_key(config.twitter_api_key)
             .consumer_secret(config.twitter_api_secret)
             .sig_method("HMAC-SHA1".to_string())

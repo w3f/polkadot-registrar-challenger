@@ -300,7 +300,6 @@ impl Database2 {
 
         let mut idents: Vec<OnChainIdentity> = vec![];
 
-        // TODO: Support more than just matrix.
         let mut rows = stmt.query(params![])?;
         while let Some(row) = rows.next()? {
             let net_account = row.get::<_, NetAccount>(0)?;
