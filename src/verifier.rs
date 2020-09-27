@@ -43,7 +43,8 @@ impl Verifier {
 
 pub struct Verifier2<'a> {
     challenges: &'a [(NetworkAddress, Challenge)],
-    valid: Vec<&'a NetworkAddress>,
+    valid: Vec<(&'a NetworkAddress, &'a Challenge)>,
+    invalid: Vec<(&'a NetworkAddress, &'a Challenge)>,
 }
 
 impl<'a> Verifier2<'a> {
@@ -51,6 +52,7 @@ impl<'a> Verifier2<'a> {
         Verifier2 {
             challenges: challenges,
             valid: vec![],
+            invalid: vec![],
         }
     }
     fn create_signature(&self, input: &str) -> Result<Signature> {
@@ -71,35 +73,44 @@ impl<'a> Verifier2<'a> {
 
         for (network_address, challenge) in self.challenges {
             if challenge.verify_challenge(network_address.pub_key(), &sig) {
-                self.valid.push(network_address);
+                self.valid.push((network_address, challenge));
+            } else {
+                self.valid.push((network_address, challenge));
             }
         }
     }
-    pub fn valid_verifications(&self) -> &Vec<&'a NetworkAddress> {
-        &self.valid
+    pub fn valid_verifications(&self) -> Vec<&'a NetworkAddress> {
+        self.valid.iter().map(|(account_address, _)| *account_address).collect()
     }
     pub fn invalid_verifications(&self) -> Vec<&'a NetworkAddress> {
-        self.challenges
-            .iter()
-            .map(|(network_address, _)| network_address)
-            .filter(|network_address| !self.valid.contains(network_address))
-            .collect()
+        self.invalid.iter().map(|(account_address, _)| *account_address).collect()
     }
     pub fn init_message_builder(&self) -> String {
+        /*
+        include_str!("../../messages/instructions")
+            .replace("{:PAYLOAD}", &challenge.as_str())
+            .replace("{:ADDRESS}", network_address.address().as_str())
+            .as_str(),
+        */
+
         let message = String::new();
+
+
+
         message
     }
     pub fn response_message_builder(&self) -> String {
         let mut message = String::new();
 
         if self.valid.is_empty() {
-            message.push_str("The signature is invalid for every pending address.");
+            message.push_str("The signature is invalid.");
         } else {
             message.push_str("The following address(-es) has/have been verified:\n")
         }
 
-        for network_address in &self.valid {
+        for (network_address, challenge) in &self.valid {
             message.push_str(&format!("- {}", network_address.address().as_str()));
+            message.push_str(&format!("  - Challenge: {}", challenge.as_str()));
         }
 
         if !self.invalid_verifications().is_empty() {
@@ -107,8 +118,9 @@ impl<'a> Verifier2<'a> {
             message.push_str("Pending/Unconfirmed address(-es) for this account:\n");
         }
 
-        for network_address in self.invalid_verifications() {
+        for (network_address, challenge) in &self.invalid {
             message.push_str(&format!("- {}", network_address.address().as_str()));
+            message.push_str(&format!("  - Challenge: {}", challenge.as_str()));
         }
 
         message
