@@ -440,7 +440,13 @@ impl Twitter {
         }
     }
     pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
-        let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
+        let watermark = self
+            .db
+            .select_watermark(&AccountType::Twitter)
+            .await?
+            .or_else(|| Some(0))
+            .unwrap();
+
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
         if messages.is_empty() {

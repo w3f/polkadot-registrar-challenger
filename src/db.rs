@@ -781,7 +781,7 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn select_watermark(&self, account_ty: &AccountType) -> Result<u64> {
+    pub async fn select_watermark(&self, account_ty: &AccountType) -> Result<Option<u64>> {
         let con = self.con.lock().await;
         con.query_row_named(
             "SELECT
@@ -803,24 +803,28 @@ impl Database2 {
             },
             |row| row.get::<_, i64>(0),
         )
+        .optional()
         .map_err(|err| failure::Error::from(err))
-        .map(|v| v as u64)
+        .map(|v| v.map(|v| v as u64))
     }
     pub async fn update_watermark(&self, account_ty: &AccountType, value: u64) -> Result<()> {
         let con = self.con.lock().await;
         con.execute_named(
             "
-            UPDATE watermarks
-            SET watermark = :value
-            WHERE
-                account_ty_id = (
+            INSERT OR REPlACE INTO watermarks (
+                account_ty_id,
+                watermark
+            ) VALUES (
+                (
                     SELECT
                         id
                     FROM
-                        accounts_types
+                        account_types
                     WHERE
                         account_ty = :account_ty
-                )
+                ),
+                :value
+            )
         ",
             named_params! {
                 ":value": value as i64,
@@ -1310,6 +1314,26 @@ mod tests {
             db.set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
                 .await
                 .unwrap();
+        });
+    }
+
+    #[test]
+    fn select_confirm_watermark() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            let res = db.select_watermark(&AccountType::Twitter).await.unwrap();
+            assert!(res.is_none());
+
+            db.update_watermark(&AccountType::Email, 50).await.unwrap();
+            db.update_watermark(&AccountType::Twitter, 100).await.unwrap();
+
+            let res = db.select_watermark(&AccountType::Email).await.unwrap().unwrap();
+            assert_eq!(res, 50);
+
+            let res = db.select_watermark(&AccountType::Twitter).await.unwrap().unwrap();
+            assert_eq!(res, 100);
         });
     }
 }
