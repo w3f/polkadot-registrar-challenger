@@ -1,9 +1,7 @@
-use crate::comms::{CommsMessage, CommsVerifier};
+use crate::comms::CommsVerifier;
 use crate::db::Database2;
-use crate::primitives::{
-    unix_time, Account, AccountType, Challenge, ChallengeStatus, NetAccount, Result,
-};
-use crate::verifier::{Verifier2, VerifierError};
+use crate::primitives::{unix_time, Account, AccountType, Challenge, ChallengeStatus, Result};
+use crate::verifier::Verifier2;
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -34,7 +32,7 @@ impl TryFrom<String> for TwitterId {
     fn try_from(val: String) -> StdResult<Self, Self::Error> {
         Ok(TwitterId(
             val.parse::<u64>()
-                .map_err(|err| TwitterError::UnrecognizedData)?,
+                .map_err(|_| TwitterError::UnrecognizedData)?,
         ))
     }
 }
@@ -339,7 +337,7 @@ impl Twitter {
         let txt = resp
             .text()
             .await
-            .map_err(|err| TwitterError::UnrecognizedData)?;
+            .map_err(|_| TwitterError::UnrecognizedData)?;
 
         println!("RESP>> {}", txt);
 
@@ -430,17 +428,23 @@ impl Twitter {
         .map(|_| ())
     }
     pub async fn start(self) {
+        // TODO: Improve error case
+        let my_id = self
+            .lookup_twitter_id(None, Some(&[&self.screen_name]))
+            .await
+            .unwrap()
+            .remove(0)
+            .1;
+
         let mut interval = time::interval(Duration::from_secs(3));
+
         loop {
             interval.tick().await;
 
-            let _ = self.local().await.map_err(|err| {
+            let _ = self.handle_incoming_messages(&my_id).await.map_err(|err| {
                 error!("{}", err);
             });
         }
-    }
-    pub async fn local(&self) -> Result<()> {
-        Ok(())
     }
     pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
         let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
@@ -527,6 +531,9 @@ impl Twitter {
                     network_address.address().as_str()
                 );
 
+                self.comms
+                    .notify_status_change(network_address.address().clone());
+
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -546,7 +553,7 @@ impl Twitter {
                     .set_challenge_status(
                         network_address.address(),
                         &AccountType::Twitter,
-                        ChallengeStatus::Accepted,
+                        ChallengeStatus::Rejected,
                     )
                     .await?;
             }

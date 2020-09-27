@@ -86,7 +86,7 @@ impl<'a> Verifier2<'a> {
             .collect()
     }
     pub fn init_message_builder(&self) -> String {
-        let mut message = String::new();
+        let message = String::new();
         message
     }
     pub fn response_message_builder(&self) -> String {
@@ -113,9 +113,4 @@ impl<'a> Verifier2<'a> {
 
         message
     }
-}
-
-pub fn init_message_builder() -> String {
-    let mut message = String::new();
-    message
 }
