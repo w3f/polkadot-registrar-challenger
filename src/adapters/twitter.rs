@@ -296,7 +296,7 @@ impl Twitter {
             .await
             .map_err(|_| TwitterError::UnrecognizedData)?;
 
-        //println!("RESP>> {}", txt);
+        trace!("GET response: {}", txt);
 
         serde_json::from_str::<T>(&txt).map_err(|err| {
             if let Ok(api_err) = serde_json::from_str::<TwitterApiError>(&txt) {
@@ -332,7 +332,7 @@ impl Twitter {
             .await
             .map_err(|_| TwitterError::UnrecognizedData)?;
 
-        //println!("RESP>> {}", txt);
+        trace!("POST response: {}", txt);
 
         serde_json::from_str::<T>(&txt).map_err(|err| {
             if let Ok(api_err) = serde_json::from_str::<TwitterApiError>(&txt) {
@@ -354,6 +354,7 @@ impl Twitter {
         .await?
         .get_messages(exclude_me, watermark)
     }
+    // TODO: Should return error if empty list gets passed on.
     async fn lookup_twitter_id(
         &self,
         twitter_ids: Option<&[&TwitterId]>,
@@ -413,7 +414,7 @@ impl Twitter {
             .collect())
     }
     pub async fn send_message(&self, id: &TwitterId, msg: String) -> StdResult<(), TwitterError> {
-        self.post_request::<(), _>(
+        self.post_request::<ApiMessageEvent, _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
             ApiMessageEvent::new(id, msg),
         )
@@ -451,6 +452,7 @@ impl Twitter {
 
         if messages.is_empty() {
             trace!("No new messages received");
+            return Ok(())
         } else {
             debug!("Received {} new messasge(-s)", messages.len());
         }
@@ -492,22 +494,25 @@ impl Twitter {
             }
         }
 
-        debug!("Looking up TwitterIds");
-        let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
+        let lookup_results;
+        if !to_lookup.is_empty() {
+            debug!("Looking up TwitterIds");
+            lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
 
-        for (account, twitter_id) in &lookup_results {
-            idents.push((account.clone(), &twitter_id, false));
+            for (account, twitter_id) in &lookup_results {
+                idents.push((account.clone(), &twitter_id, false));
+            }
+
+            self.db
+                .insert_twitter_ids(
+                    lookup_results
+                        .iter()
+                        .map(|(account, twitter_id)| (account, twitter_id))
+                        .collect::<Vec<(&Account, &TwitterId)>>()
+                        .as_slice(),
+                )
+                .await?;
         }
-
-        self.db
-            .insert_twitter_ids(
-                lookup_results
-                    .iter()
-                    .map(|(account, twitter_id)| (account, twitter_id))
-                    .collect::<Vec<(&Account, &TwitterId)>>()
-                    .as_slice(),
-            )
-            .await?;
 
         for (account, twitter_id, init_msg) in &idents {
             debug!("Starting verification process for {}", account.as_str());

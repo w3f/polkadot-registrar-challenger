@@ -75,7 +75,7 @@ impl<'a> Verifier2<'a> {
             if challenge.verify_challenge(network_address.pub_key(), &sig) {
                 self.valid.push((network_address, challenge));
             } else {
-                self.valid.push((network_address, challenge));
+                self.invalid.push((network_address, challenge));
             }
         }
     }
@@ -101,14 +101,13 @@ impl<'a> Verifier2<'a> {
         }
 
         for (network_address, challenge) in self.challenges {
-            message.push_str(&format!(
-                "- Address: {}\n",
-                network_address.address().as_str()
-            ));
-            message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
+            message.push_str("\n- Address:\n");
+            message.push_str(network_address.address().as_str());
+            message.push_str("\n- Challenge:\n");
+            message.push_str(challenge.as_str());
         }
 
-        message.push_str("\nPolkadot Wiki guide: https://wiki.polkadot.network/");
+        message.push_str("\n\nRefer to the Polkadot Wiki guide https://wiki.polkadot.network/");
 
         message
     }
@@ -122,26 +121,24 @@ impl<'a> Verifier2<'a> {
         }
 
         for (network_address, challenge) in &self.valid {
-            message.push_str(&format!(
-                "- Address: {}\n",
-                network_address.address().as_str()
-            ));
-            message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
+            message.push_str("\n- Address:\n");
+            message.push_str(network_address.address().as_str());
+            message.push_str("\n- Challenge:\n");
+            message.push_str(challenge.as_str());
         }
 
         if !self.invalid_verifications().is_empty() {
-            message.push_str("\nPending/Unconfirmed address(-es) for this account:\n");
+            message.push_str("\n\nPending/Unconfirmed address(-es) for this account:\n");
         }
 
         for (network_address, challenge) in &self.invalid {
-            message.push_str(&format!(
-                "- Address: {}\n",
-                network_address.address().as_str()
-            ));
-            message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
+            message.push_str("\n- Address:\n");
+            message.push_str(network_address.address().as_str());
+            message.push_str("\n- Challenge:\n");
+            message.push_str(challenge.as_str());
         }
 
-        message.push_str("\nPolkadot Wiki guide: https://wiki.polkadot.network/");
+        message.push_str("\n\nRefer to the Polkadot Wiki guide");
 
         message
     }
