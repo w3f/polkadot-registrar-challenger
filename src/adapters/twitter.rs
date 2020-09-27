@@ -296,7 +296,7 @@ impl Twitter {
             .await
             .map_err(|_| TwitterError::UnrecognizedData)?;
 
-        println!("RESP>> {}", txt);
+        //println!("RESP>> {}", txt);
 
         serde_json::from_str::<T>(&txt).map_err(|err| {
             if let Ok(api_err) = serde_json::from_str::<TwitterApiError>(&txt) {
@@ -314,14 +314,7 @@ impl Twitter {
         let mut request = self
             .client
             .post(url)
-            .body(
-                serde_json::to_string(&body)
-                    .map(|s| {
-                        println!("TO SEND: {}", s);
-                        s
-                    })
-                    .map_err(|err| TwitterError::Serde(err.into()))?,
-            )
+            .body(serde_json::to_string(&body).map_err(|err| TwitterError::Serde(err.into()))?)
             .build()
             .map_err(|err| TwitterError::RequestBuilder(err.into()))?;
 
@@ -339,7 +332,7 @@ impl Twitter {
             .await
             .map_err(|_| TwitterError::UnrecognizedData)?;
 
-        println!("RESP>> {}", txt);
+        //println!("RESP>> {}", txt);
 
         serde_json::from_str::<T>(&txt).map_err(|err| {
             if let Ok(api_err) = serde_json::from_str::<TwitterApiError>(&txt) {
@@ -436,7 +429,7 @@ impl Twitter {
             .remove(0)
             .1;
 
-        let mut interval = time::interval(Duration::from_secs(3));
+        let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
             interval.tick().await;
@@ -450,7 +443,11 @@ impl Twitter {
         let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
-        debug!("Received {} messasge(-s)", messages.len());
+        if messages.is_empty() {
+            trace!("No new messages received");
+        } else {
+            debug!("Received {} new messasge(-s)", messages.len());
+        }
 
         let mut idents = vec![];
 

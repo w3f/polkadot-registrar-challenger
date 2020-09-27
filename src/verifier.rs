@@ -80,10 +80,16 @@ impl<'a> Verifier2<'a> {
         }
     }
     pub fn valid_verifications(&self) -> Vec<&'a NetworkAddress> {
-        self.valid.iter().map(|(account_address, _)| *account_address).collect()
+        self.valid
+            .iter()
+            .map(|(account_address, _)| *account_address)
+            .collect()
     }
     pub fn invalid_verifications(&self) -> Vec<&'a NetworkAddress> {
-        self.invalid.iter().map(|(account_address, _)| *account_address).collect()
+        self.invalid
+            .iter()
+            .map(|(account_address, _)| *account_address)
+            .collect()
     }
     pub fn init_message_builder(&self) -> String {
         let mut message = String::new();
@@ -95,7 +101,10 @@ impl<'a> Verifier2<'a> {
         }
 
         for (network_address, challenge) in self.challenges {
-            message.push_str(&format!("- Address: {}\n", network_address.address().as_str()));
+            message.push_str(&format!(
+                "- Address: {}\n",
+                network_address.address().as_str()
+            ));
             message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
         }
 
@@ -113,7 +122,10 @@ impl<'a> Verifier2<'a> {
         }
 
         for (network_address, challenge) in &self.valid {
-            message.push_str(&format!("- Address: {}\n", network_address.address().as_str()));
+            message.push_str(&format!(
+                "- Address: {}\n",
+                network_address.address().as_str()
+            ));
             message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
         }
 
@@ -122,7 +134,10 @@ impl<'a> Verifier2<'a> {
         }
 
         for (network_address, challenge) in &self.invalid {
-            message.push_str(&format!("- Address: {}\n", network_address.address().as_str()));
+            message.push_str(&format!(
+                "- Address: {}\n",
+                network_address.address().as_str()
+            ));
             message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
         }
 

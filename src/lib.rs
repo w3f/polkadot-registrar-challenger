@@ -9,12 +9,12 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::MatrixClient;
+use adapters::{MatrixClient, TwitterBuilder};
 use comms::CommsVerifier;
 use connector::Connector;
 use db::Database2;
 use identity::IdentityManager;
-use primitives::{AccountType, Fatal, Result};
+use primitives::{Account, AccountType, Fatal, Result};
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -41,6 +41,7 @@ pub struct Config {
     pub matrix_username: String,
     pub matrix_password: String,
     //
+    pub twitter_screen_name: String,
     pub twitter_api_key: String,
     pub twitter_api_secret: String,
     pub twitter_token: String,
@@ -118,6 +119,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     let c_connector = manager.register_comms(AccountType::ReservedConnector);
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
+    let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_feeder = manager.register_comms(AccountType::ReservedFeeder);
 
     info!("Trying to connect to Watcher");
@@ -166,9 +168,25 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     )
     .await?;
 
+    info!("Setting up Twitter client");
+    let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
+        .screen_name(Account::from(config.twitter_screen_name))
+        .consumer_key(config.twitter_api_key)
+        .consumer_secret(config.twitter_api_secret)
+        .sig_method("HMAC-SHA1".to_string())
+        .token(config.twitter_token)
+        .token_secret(config.twitter_token_secret)
+        .version(1.0)
+        .build()?;
+
     info!("Starting Matrix task");
     tokio::spawn(async move {
         matrix.start().await;
+    });
+
+    info!("Starting Twitter task");
+    tokio::spawn(async move {
+        twitter.start().await;
     });
 
     if config.enable_watcher {

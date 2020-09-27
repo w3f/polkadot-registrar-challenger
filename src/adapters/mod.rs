@@ -3,4 +3,4 @@ pub mod matrix;
 pub mod twitter;
 
 pub use matrix::MatrixClient;
-pub use twitter::TwitterId;
+pub use twitter::{Twitter, TwitterBuilder, TwitterId};
