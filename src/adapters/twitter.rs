@@ -467,10 +467,19 @@ impl Twitter {
             .await?;
 
         for (account, twitter_id) in accounts_ids {
-            let challenge_data = self
+            let challenge_data = if let Ok(challenge_data) = self
                 .db
                 .select_challenge_data(&account, &AccountType::Twitter)
-                .await?;
+                .await
+            {
+                challenge_data
+            } else {
+                warn!(
+                    "Received message from unknown user: {}. Ignoring.",
+                    account.as_str()
+                );
+                continue;
+            };
 
             // TODO: `select_challenge_data` should return an error.
             if challenge_data.is_empty() {
@@ -485,10 +494,7 @@ impl Twitter {
                 .filter(|msg| msg.sender == twitter_id)
                 .for_each(|msg| verifier.verify(&msg.message));
 
-            let valid_verifications = verifier.valid_verifications();
-            let invalid_verifications = verifier.invalid_verifications();
-
-            for network_address in valid_verifications {
+            for network_address in verifier.valid_verifications() {
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -498,7 +504,7 @@ impl Twitter {
                     .await?;
             }
 
-            for network_address in invalid_verifications {
+            for network_address in verifier.invalid_verifications() {
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -526,6 +532,7 @@ struct ApiMessageEvent {
 struct ApiEvent {
     #[serde(rename = "type")]
     t_type: String,
+    created_timestamp: Option<String>,
     message_create: ApiMessageCreate,
 }
 
@@ -549,6 +556,7 @@ struct ApiMessageData {
 struct ReceivedMessageContext {
     sender: TwitterId,
     message: String,
+    created: u64,
 }
 
 impl ApiMessageEvent {
@@ -556,6 +564,7 @@ impl ApiMessageEvent {
         ApiMessageEvent {
             event: Some(ApiEvent {
                 t_type: "message_create".to_string(),
+                created_timestamp: None,
                 message_create: ApiMessageCreate {
                     target: ApiTarget {
                         recipient_id: recipient.as_u64().to_string(),
@@ -579,6 +588,11 @@ impl ApiMessageEvent {
                         .ok_or(TwitterError::UnrecognizedData)?
                         .try_into()?,
                     message: event.message_create.message_data.text,
+                    created: event
+                        .created_timestamp
+                        .ok_or(TwitterError::UnrecognizedData)?
+                        .parse::<u64>()
+                        .map_err(|_| TwitterError::UnrecognizedData)?,
                 };
 
                 if &msg.sender != my_id {
@@ -641,13 +655,16 @@ fn test_twitter() {
             text: String,
         }
 
-        let res = client.request_messages().await.unwrap();
+        let res = client
+            .request_messages(&TwitterId::from(1308347585367867393))
+            .await
+            .unwrap();
 
         /*
         let res = client
             .lookup_twitter_id(
                 Some(&[&TwitterId::from(102128843)]),
-                Some(&[&Account::from("@JohnDop88908274")]),
+                Some(&[&Account::from("@web3registrar")]),
             )
             .await
             .unwrap();

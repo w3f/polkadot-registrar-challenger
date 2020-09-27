@@ -207,7 +207,8 @@ impl Database2 {
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
                 id          INTEGER PRIMARY KEY,
                 account     INTEGER NOT NULL UNIQUE,
-                twitter_id  TEXT
+                twitter_id  TEXT,
+                init_msg    INTEGER NOT NULL
             )
         ",
             params![],
