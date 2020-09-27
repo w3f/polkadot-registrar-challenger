@@ -214,6 +214,21 @@ impl Database2 {
             params![],
         )?;
 
+        // Table for watermark.
+        con.execute(
+            "
+            CREATE TABLE IF NOT EXISTS watermarks (
+                id             INTEGER PRIMARY KEY,
+                account_ty_id  INTEGER NOT NULL UNIQUE,
+                watermark      INTEGER NOT NULL,
+
+                FOREIGN KEY (accout_ty_id)
+                    REFERENCES account_types (id)
+            )
+        ",
+            params![],
+        )?;
+
         Ok(Database2 {
             con: Arc::new(Mutex::new(con)),
         })
@@ -742,6 +757,55 @@ impl Database2 {
         )
         .optional()
         .map_err(|err| failure::Error::from(err))
+    }
+    pub async fn select_watermark(&self, account_ty: &AccountType) -> Result<u64> {
+        let con = self.con.lock().await;
+        con.query_row_named(
+            "SELECT
+                watermark
+            FROM
+                watermarks
+            WHERE
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+            ",
+            named_params! {
+                ":account_ty": account_ty,
+            },
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|err| failure::Error::from(err))
+        .map(|v| v as u64)
+    }
+    pub async fn update_watermark(&self, account_ty: &AccountType, value: u64) -> Result<()> {
+        let con = self.con.lock().await;
+        con.execute_named(
+            "
+            UPDATE watermarks
+            SET watermark = :value
+            WHERE
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        accounts_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ",
+            named_params! {
+                ":value": value as i64,
+                ":account_ty": account_ty,
+            },
+        )?;
+
+        Ok(())
     }
 }
 

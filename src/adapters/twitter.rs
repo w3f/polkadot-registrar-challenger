@@ -354,13 +354,14 @@ impl Twitter {
     async fn request_messages(
         &self,
         exclude_me: &TwitterId,
-    ) -> Result<Vec<ReceivedMessageContext>> {
+        watermark: u64,
+    ) -> Result<(Vec<ReceivedMessageContext>, u64)> {
         self.get_request::<ApiMessageEvent>(
             "https://api.twitter.com/1.1/direct_messages/events/list.json",
             None,
         )
         .await?
-        .get_messages(exclude_me)
+        .get_messages(exclude_me, watermark)
     }
     async fn lookup_twitter_id(
         &self,
@@ -452,7 +453,8 @@ impl Twitter {
         Ok(())
     }
     pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
-        let messages = self.request_messages(my_id).await?;
+        let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
+        let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
         let accounts_ids = self
             .lookup_twitter_id(
@@ -513,6 +515,10 @@ impl Twitter {
                 .await?;
         }
 
+        self.db
+            .update_watermark(&AccountType::Twitter, watermark)
+            .await?;
+
         Ok(())
     }
 }
@@ -571,9 +577,14 @@ impl ApiMessageEvent {
             events: None,
         }
     }
-    fn get_messages(self, my_id: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
+    fn get_messages(
+        self,
+        my_id: &TwitterId,
+        watermark: u64,
+    ) -> Result<(Vec<ReceivedMessageContext>, u64)> {
         let mut msgs = vec![];
 
+        let mut new_watermark = watermark;
         if let Some(events) = self.events {
             for event in events {
                 let msg = ReceivedMessageContext {
@@ -590,13 +601,17 @@ impl ApiMessageEvent {
                         .map_err(|_| TwitterError::UnrecognizedData)?,
                 };
 
-                if &msg.sender != my_id {
+                if &msg.sender != my_id && msg.created > watermark {
+                    if msg.created > new_watermark {
+                        new_watermark = msg.created;
+                    }
+
                     msgs.push(msg);
                 }
             }
         }
 
-        Ok(msgs)
+        Ok((msgs, new_watermark))
     }
 }
 
