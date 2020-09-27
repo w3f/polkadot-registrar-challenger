@@ -450,12 +450,21 @@ impl Twitter {
         let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
-        debug!("Received {} messages", messages.len());
+        debug!("Received {} messasge(-s)", messages.len());
 
         let mut idents = vec![];
 
         let mut to_lookup = vec![];
         for message in &messages {
+            // Avoid duplicates.
+            if let Some(_) = idents
+                .iter()
+                .find(|(_, twitter_id, _)| *twitter_id == &message.sender)
+            {
+                continue;
+            }
+
+            // Lookup TwitterId in database.
             if let Some((account, init_msg)) = self
                 .db
                 .select_account_from_twitter_id(&message.sender)
@@ -466,12 +475,16 @@ impl Twitter {
                     message.sender.as_u64(),
                     account.as_str()
                 );
+
+                // Add items to the identity list, no need to look those up.
                 idents.push((account, &message.sender, init_msg));
             } else {
                 debug!(
                     "Requiring to lookup screen name for {}",
                     message.sender.as_u64()
                 );
+
+                // TwitterIds need to be looked up via the Twitter API.
                 to_lookup.push(&message.sender);
             }
         }
@@ -665,7 +678,7 @@ impl ApiMessageEvent {
 
 #[test]
 fn test_twitter() {
-    use crate::primitives::{Challenge, NetAccount};
+    use crate::primitives::Challenge;
     use crate::Database2;
     use tokio::runtime::Runtime;
 
@@ -713,8 +726,8 @@ fn test_twitter() {
             text: String,
         }
 
-        let res = client
-            .request_messages(&TwitterId::from(1308347585367867393))
+        let _res = client
+            .request_messages(&TwitterId::from(1308347585367867393), 0)
             .await
             .unwrap();
 
