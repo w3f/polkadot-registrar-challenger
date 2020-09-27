@@ -467,23 +467,18 @@ impl Twitter {
             .await?;
 
         for (account, twitter_id) in accounts_ids {
-            let challenge_data = if let Ok(challenge_data) = self
+            let challenge_data = self
                 .db
                 .select_challenge_data(&account, &AccountType::Twitter)
-                .await
-            {
-                challenge_data
-            } else {
-                warn!(
-                    "Received message from unknown user: {}. Ignoring.",
-                    account.as_str()
-                );
-                continue;
-            };
+                .await?;
 
             // TODO: `select_challenge_data` should return an error.
             if challenge_data.is_empty() {
-                // TODO
+                warn!(
+                    "Received message from unknown account: {}. Ignoring.",
+                    account.as_str()
+                );
+                continue;
             }
 
             let mut verifier = Verifier2::new(&challenge_data);
