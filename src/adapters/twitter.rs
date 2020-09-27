@@ -446,6 +446,8 @@ impl Twitter {
         let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
+        debug!("Received {} messages", messages.len());
+
         let mut idents = vec![];
 
         let mut to_lookup = vec![];
@@ -455,29 +457,41 @@ impl Twitter {
                 .select_account_from_twitter_id(&message.sender)
                 .await?
             {
+                debug!(
+                    "Found associated match for {}: {}",
+                    message.sender.as_u64(),
+                    account.as_str()
+                );
                 idents.push((account, &message.sender, init_msg));
             } else {
+                debug!(
+                    "Requiring to lookup screen name for {}",
+                    message.sender.as_u64()
+                );
                 to_lookup.push(&message.sender);
             }
         }
 
-        let lookup_results = self
-            .lookup_twitter_id(
-                Some(
-                    &messages
-                        .iter()
-                        .map(|msg| &msg.sender)
-                        .collect::<Vec<&TwitterId>>(),
-                ),
-                None,
-            )
-            .await?;
+        debug!("Looking up TwitterIds");
+        let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
 
         for (account, twitter_id) in &lookup_results {
             idents.push((account.clone(), &twitter_id, false));
         }
 
+        self.db
+            .insert_twitter_ids(
+                lookup_results
+                    .iter()
+                    .map(|(account, twitter_id)| (account, twitter_id))
+                    .collect::<Vec<(&Account, &TwitterId)>>()
+                    .as_slice(),
+            )
+            .await?;
+
         for (account, twitter_id, init_msg) in &idents {
+            debug!("Starting verification process for {}", account.as_str());
+
             let challenge_data = self
                 .db
                 .select_challenge_data(&account, &AccountType::Twitter)
@@ -486,13 +500,20 @@ impl Twitter {
             // TODO: `select_challenge_data` should return an error.
             if challenge_data.is_empty() {
                 warn!(
-                    "Received message from unknown account: {}. Ignoring.",
+                    "No challenge data found for account {}. Ignoring.",
                     account.as_str()
                 );
                 continue;
             }
 
             let mut verifier = Verifier2::new(&challenge_data);
+
+            if *init_msg {
+                self.send_message(&twitter_id, verifier.init_message_builder())
+                    .await?;
+                self.db.confirm_init_message(&account).await?;
+                continue;
+            }
 
             // Verify each message received.
             messages
@@ -501,6 +522,11 @@ impl Twitter {
                 .for_each(|msg| verifier.verify(&msg.message));
 
             for network_address in verifier.valid_verifications() {
+                debug!(
+                    "Valid verification for address: {}",
+                    network_address.address().as_str()
+                );
+
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -511,6 +537,11 @@ impl Twitter {
             }
 
             for network_address in verifier.invalid_verifications() {
+                debug!(
+                    "Invalid verification for address: {}",
+                    network_address.address().as_str()
+                );
+
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -520,6 +551,7 @@ impl Twitter {
                     .await?;
             }
 
+            debug!("Notifying user about verification result");
             self.send_message(&twitter_id, verifier.response_message_builder())
                 .await?;
         }

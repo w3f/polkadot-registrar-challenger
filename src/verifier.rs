@@ -85,6 +85,10 @@ impl<'a> Verifier2<'a> {
             .filter(|network_address| !self.valid.contains(network_address))
             .collect()
     }
+    pub fn init_message_builder(&self) -> String {
+        let mut message = String::new();
+        message
+    }
     pub fn response_message_builder(&self) -> String {
         let mut message = String::new();
 

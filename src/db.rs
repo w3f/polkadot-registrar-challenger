@@ -205,10 +205,10 @@ impl Database2 {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
-                id          INTEGER PRIMARY KEY,
-                account     INTEGER NOT NULL UNIQUE,
-                twitter_id  TEXT,
-                init_msg    INTEGER NOT NULL
+                id              INTEGER PRIMARY KEY,
+                account         INTEGER NOT NULL UNIQUE,
+                twitter_id      TEXT NOT NULL,
+                init_msg        INTEGER NOT NULL
             )
         ",
             params![],
@@ -222,7 +222,7 @@ impl Database2 {
                 account_ty_id  INTEGER NOT NULL UNIQUE,
                 watermark      INTEGER NOT NULL,
 
-                FOREIGN KEY (accout_ty_id)
+                FOREIGN KEY (account_ty_id)
                     REFERENCES account_types (id)
             )
         ",
@@ -720,11 +720,13 @@ impl Database2 {
             INSERT OR REPLACE INTO
                 known_twitter_ids (
                     account,
-                    twitter_id
+                    twitter_id,
+                    init_msg 
                 )
             VALUES (
                 :account,
-                :twitter_id
+                :twitter_id,
+                '0'
             )
         ",
         )?;
@@ -760,6 +762,24 @@ impl Database2 {
         )
         .optional()
         .map_err(|err| failure::Error::from(err))
+    }
+    pub async fn confirm_init_message(&self, account: &Account) -> Result<()> {
+        let con = self.con.lock().await;
+        con.execute_named(
+            "
+            UPDATE
+                known_twitter_ids
+            SET
+                init_msg = 1
+            WHERE
+                account = :account
+        ",
+            named_params! {
+                ":account": account,
+            },
+        )?;
+
+        Ok(())
     }
     pub async fn select_watermark(&self, account_ty: &AccountType) -> Result<u64> {
         let con = self.con.lock().await;
