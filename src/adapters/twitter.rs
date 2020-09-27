@@ -440,23 +440,28 @@ impl Twitter {
         }
     }
     pub async fn local(&self) -> Result<()> {
-        let my_id = if let Some(my_id) = self.db.select_twitter_id(&self.screen_name).await? {
-            my_id
-        } else {
-            let mut ids = self
-                .lookup_twitter_id(None, Some(&[&self.screen_name]))
-                .await?;
-
-            ids.remove(0).1
-        };
-
         Ok(())
     }
     pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
         let watermark = self.db.select_watermark(&AccountType::Twitter).await?;
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
-        let accounts_ids = self
+        let mut idents = vec![];
+
+        let mut to_lookup = vec![];
+        for message in &messages {
+            if let Some((account, init_msg)) = self
+                .db
+                .select_account_from_twitter_id(&message.sender)
+                .await?
+            {
+                idents.push((account, &message.sender, init_msg));
+            } else {
+                to_lookup.push(&message.sender);
+            }
+        }
+
+        let lookup_results = self
             .lookup_twitter_id(
                 Some(
                     &messages
@@ -468,7 +473,11 @@ impl Twitter {
             )
             .await?;
 
-        for (account, twitter_id) in accounts_ids {
+        for (account, twitter_id) in &lookup_results {
+            idents.push((account.clone(), &twitter_id, false));
+        }
+
+        for (account, twitter_id, init_msg) in &idents {
             let challenge_data = self
                 .db
                 .select_challenge_data(&account, &AccountType::Twitter)
@@ -488,7 +497,7 @@ impl Twitter {
             // Verify each message received.
             messages
                 .iter()
-                .filter(|msg| msg.sender == twitter_id)
+                .filter(|msg| &msg.sender == *twitter_id)
                 .for_each(|msg| verifier.verify(&msg.message));
 
             for network_address in verifier.valid_verifications() {

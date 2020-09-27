@@ -738,22 +738,25 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn select_twitter_id(&self, account: &Account) -> Result<Option<TwitterId>> {
+    pub async fn select_account_from_twitter_id(
+        &self,
+        twitter_id: &TwitterId,
+    ) -> Result<Option<(Account, bool)>> {
         let con = self.con.lock().await;
         con.query_row_named(
             "
             SELECT
-                twitter_id
+                account, init_msg
             FROM
                 known_twitter_ids
             WHERE
-                account = :account
+                twitter_id = :twitter_id
 
         ",
             named_params! {
-                ":account": account,
+                ":twitter_id": twitter_id,
             },
-            |row| row.get::<_, TwitterId>(0),
+            |row| Ok((row.get::<_, Account>(0)?, row.get::<_, bool>(1)?)),
         )
         .optional()
         .map_err(|err| failure::Error::from(err))
