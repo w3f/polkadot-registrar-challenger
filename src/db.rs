@@ -895,8 +895,8 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::{Challenge, NetAccount};
     use crate::adapters::TwitterId;
+    use crate::primitives::{Challenge, NetAccount};
     use tokio::runtime::Runtime;
 
     // Generate a random db path
@@ -1328,12 +1328,22 @@ mod tests {
             assert!(res.is_none());
 
             db.update_watermark(&AccountType::Email, 50).await.unwrap();
-            db.update_watermark(&AccountType::Twitter, 100).await.unwrap();
+            db.update_watermark(&AccountType::Twitter, 100)
+                .await
+                .unwrap();
 
-            let res = db.select_watermark(&AccountType::Email).await.unwrap().unwrap();
+            let res = db
+                .select_watermark(&AccountType::Email)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(res, 50);
 
-            let res = db.select_watermark(&AccountType::Twitter).await.unwrap().unwrap();
+            let res = db
+                .select_watermark(&AccountType::Twitter)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(res, 100);
         });
     }
@@ -1359,21 +1369,41 @@ mod tests {
             db.insert_twitter_id(&alice, &alice_id).await.unwrap();
             db.insert_twitter_id(&bob, &bob_id).await.unwrap();
 
-            let (account, init_msg) = db.select_account_from_twitter_id(&alice_id).await.unwrap().unwrap();
+            let (account, init_msg) = db
+                .select_account_from_twitter_id(&alice_id)
+                .await
+                .unwrap()
+                .unwrap();
+
             assert_eq!(account, alice);
             assert_eq!(init_msg, false);
 
-            let (account, init_msg) = db.select_account_from_twitter_id(&bob_id).await.unwrap().unwrap();
+            let (account, init_msg) = db
+                .select_account_from_twitter_id(&bob_id)
+                .await
+                .unwrap()
+                .unwrap();
+
             assert_eq!(account, bob);
             assert_eq!(init_msg, false);
 
             db.confirm_init_message(&alice).await.unwrap();
 
-            let (account, init_msg) = db.select_account_from_twitter_id(&alice_id).await.unwrap().unwrap();
+            let (account, init_msg) = db
+                .select_account_from_twitter_id(&alice_id)
+                .await
+                .unwrap()
+                .unwrap();
+
             assert_eq!(account, alice);
             assert_eq!(init_msg, true);
 
-            let (account, init_msg) = db.select_account_from_twitter_id(&bob_id).await.unwrap().unwrap();
+            let (account, init_msg) = db
+                .select_account_from_twitter_id(&bob_id)
+                .await
+                .unwrap()
+                .unwrap();
+
             assert_eq!(account, bob);
             assert_eq!(init_msg, false);
         });
