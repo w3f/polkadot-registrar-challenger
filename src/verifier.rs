@@ -116,8 +116,10 @@ impl<'a> Verifier2<'a> {
 
         if self.valid.is_empty() {
             message.push_str("The signature is invalid.");
+        } else if self.valid.len() == 1 {
+            message.push_str("The following address has been verified:\n")
         } else {
-            message.push_str("The following address(-es) has/have been verified:\n")
+            message.push_str("The following addresses have been verified:\n")
         }
 
         for (network_address, challenge) in &self.valid {
@@ -138,7 +140,9 @@ impl<'a> Verifier2<'a> {
             message.push_str(challenge.as_str());
         }
 
-        message.push_str("\n\nRefer to the Polkadot Wiki guide");
+        if !self.invalid_verifications().is_empty() {
+            message.push_str("\n\nRefer to the Polkadot Wiki guide");
+        }
 
         message
     }
