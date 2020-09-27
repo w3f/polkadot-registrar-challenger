@@ -86,16 +86,20 @@ impl<'a> Verifier2<'a> {
         self.invalid.iter().map(|(account_address, _)| *account_address).collect()
     }
     pub fn init_message_builder(&self) -> String {
-        /*
-        include_str!("../../messages/instructions")
-            .replace("{:PAYLOAD}", &challenge.as_str())
-            .replace("{:ADDRESS}", network_address.address().as_str())
-            .as_str(),
-        */
+        let mut message = String::new();
 
-        let message = String::new();
+        if self.challenges.len() > 1 {
+            message.push_str("Please sign each challenge with the corresponding address:\n");
+        } else {
+            message.push_str("Please sign the challenge with the corresponding address:\n");
+        }
 
+        for (network_address, challenge) in self.challenges {
+            message.push_str(&format!("- Address: {}\n", network_address.address().as_str()));
+            message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
+        }
 
+        message.push_str("\nPolkadot Wiki guide: https://wiki.polkadot.network/");
 
         message
     }
@@ -109,19 +113,20 @@ impl<'a> Verifier2<'a> {
         }
 
         for (network_address, challenge) in &self.valid {
-            message.push_str(&format!("- {}", network_address.address().as_str()));
-            message.push_str(&format!("  - Challenge: {}", challenge.as_str()));
+            message.push_str(&format!("- Address: {}\n", network_address.address().as_str()));
+            message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
         }
 
         if !self.invalid_verifications().is_empty() {
-            message.push_str("\n");
-            message.push_str("Pending/Unconfirmed address(-es) for this account:\n");
+            message.push_str("\nPending/Unconfirmed address(-es) for this account:\n");
         }
 
         for (network_address, challenge) in &self.invalid {
-            message.push_str(&format!("- {}", network_address.address().as_str()));
-            message.push_str(&format!("  - Challenge: {}", challenge.as_str()));
+            message.push_str(&format!("- Address: {}\n", network_address.address().as_str()));
+            message.push_str(&format!("  - Challenge: {}\n", challenge.as_str()));
         }
+
+        message.push_str("\nPolkadot Wiki guide: https://wiki.polkadot.network/");
 
         message
     }
