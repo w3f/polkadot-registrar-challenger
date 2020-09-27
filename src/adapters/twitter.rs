@@ -6,6 +6,7 @@ use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::convert::{TryFrom, TryInto};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
@@ -21,6 +22,17 @@ impl TwitterId {
 impl From<u64> for TwitterId {
     fn from(val: u64) -> Self {
         TwitterId(val)
+    }
+}
+
+impl TryFrom<String> for TwitterId {
+    type Error = TwitterError;
+
+    fn try_from(val: String) -> StdResult<Self, Self::Error> {
+        Ok(TwitterId(
+            val.parse::<u64>()
+                .map_err(|err| TwitterError::UnrecognizedData)?,
+        ))
     }
 }
 
@@ -43,8 +55,8 @@ impl FromSql for TwitterId {
 pub enum TwitterError {
     #[fail(display = "The builder was not used correctly")]
     IncompleteBuilder,
-    #[fail(display = "Incomplete data returned from Twitter API")]
-    IncompleteData,
+    #[fail(display = "Unrecognized data returned from the Twitter API")]
+    UnrecognizedData,
     #[fail(display = "Error from Twitter API: {:?}", 0)]
     ApiCode(TwitterApiError),
     #[fail(display = "HTTP error: {}", 0)]
@@ -273,7 +285,7 @@ impl Twitter {
         let txt = resp
             .text()
             .await
-            .map_err(|_| TwitterError::IncompleteData)?;
+            .map_err(|_| TwitterError::UnrecognizedData)?;
 
         println!("RESP>> {}", txt);
 
@@ -316,7 +328,7 @@ impl Twitter {
         let txt = resp
             .text()
             .await
-            .map_err(|err| TwitterError::IncompleteData)?;
+            .map_err(|err| TwitterError::UnrecognizedData)?;
 
         println!("RESP>> {}", txt);
 
@@ -328,7 +340,18 @@ impl Twitter {
             }
         })
     }
-    pub async fn lookup_twitter_id(
+    async fn request_messages(
+        &self,
+        exclude_me: &TwitterId,
+    ) -> Result<Vec<ReceivedMessageContext>> {
+        self.get_request::<ApiMessageEvent>(
+            "https://api.twitter.com/1.1/direct_messages/events/list.json",
+            None,
+        )
+        .await?
+        .get_messages(exclude_me)
+    }
+    async fn lookup_twitter_id(
         &self,
         twitter_ids: Option<&[&TwitterId]>,
         accounts: Option<&[&Account]>,
@@ -378,7 +401,7 @@ impl Twitter {
             .await?;
 
         if user_objects.is_empty() {
-            return Err(TwitterError::IncompleteData.into());
+            return Err(TwitterError::UnrecognizedData.into());
         }
 
         Ok(user_objects
@@ -387,53 +410,9 @@ impl Twitter {
             .collect())
     }
     pub async fn send_message(&self, id: &TwitterId, msg: String) -> StdResult<(), TwitterError> {
-        #[derive(Serialize)]
-        struct Message {
-            event: EventObject,
-        }
-
-        #[derive(Serialize)]
-        struct EventObject {
-            #[serde(rename = "type")]
-            t_type: String,
-            message_create: MessageCreate,
-        }
-
-        #[derive(Serialize)]
-        struct MessageCreate {
-            target: Target,
-            message_data: MessageData,
-        }
-
-        #[derive(Serialize)]
-        struct Target {
-            recipient_id: String,
-        }
-
-        #[derive(Serialize)]
-        struct MessageData {
-            text: String,
-        }
-
-        impl Message {
-            fn new(recipient: &TwitterId, msg: String) -> Self {
-                Message {
-                    event: EventObject {
-                        t_type: "message_create".to_string(),
-                        message_create: MessageCreate {
-                            target: Target {
-                                recipient_id: recipient.as_u64().to_string(),
-                            },
-                            message_data: MessageData { text: msg },
-                        },
-                    },
-                }
-            }
-        }
-
         self.post_request::<(), _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
-            Message::new(id, msg),
+            ApiMessageEvent::new(id, msg),
         )
         .await
         .map(|_| ())
@@ -480,6 +459,80 @@ impl Twitter {
 
         Ok(())
     }
+    pub async fn handle_incoming_messages(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+struct ApiMessageEvent {
+    event: Option<ApiEvent>,
+    events: Option<Vec<ApiEvent>>,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ApiEvent {
+    #[serde(rename = "type")]
+    t_type: String,
+    message_create: ApiMessageCreate,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ApiMessageCreate {
+    target: ApiTarget,
+    sender_id: Option<String>,
+    message_data: ApiMessageData,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ApiTarget {
+    recipient_id: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ApiMessageData {
+    text: String,
+}
+
+struct ReceivedMessageContext {
+    recipient: TwitterId,
+    msg: String,
+}
+
+impl ApiMessageEvent {
+    fn new(recipient: &TwitterId, msg: String) -> Self {
+        ApiMessageEvent {
+            event: Some(ApiEvent {
+                t_type: "message_create".to_string(),
+                message_create: ApiMessageCreate {
+                    target: ApiTarget {
+                        recipient_id: recipient.as_u64().to_string(),
+                    },
+                    sender_id: None,
+                    message_data: ApiMessageData { text: msg },
+                },
+            }),
+            events: None,
+        }
+    }
+    fn get_messages(self, exclude_me: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
+        let mut msgs = vec![];
+
+        if let Some(events) = self.events {
+            for event in events {
+                msgs.push(ReceivedMessageContext {
+                    recipient: event
+                        .message_create
+                        .sender_id
+                        .ok_or(TwitterError::UnrecognizedData)?
+                        .try_into()?,
+                    msg: event.message_create.message_data.text,
+                });
+            }
+        }
+
+        Ok(msgs)
+    }
 }
 
 #[test]
@@ -510,25 +563,28 @@ fn test_twitter() {
         #[derive(Debug, Serialize, Deserialize)]
         struct Root {
             next_cursor: Option<String>,
-            events: Vec<Event>,
+            events: Vec<ApiEvent>,
         }
 
         #[derive(Debug, Serialize, Deserialize)]
-        struct Event {
+        struct ApiEvent {
             id: Option<String>,
             created_timestamp: Option<String>,
-            message_create: MessageCreate,
+            message_create: ApiMessageCreate,
         }
 
         #[derive(Debug, Serialize, Deserialize)]
-        struct MessageCreate {
-            message_data: MessageData,
+        struct ApiMessageCreate {
+            sender_id: String,
+            message_data: ApiMessageData,
         }
 
         #[derive(Debug, Serialize, Deserialize)]
-        struct MessageData {
+        struct ApiMessageData {
             text: String,
         }
+
+        let res = client.request_messages().await.unwrap();
 
         /*
         let res = client
@@ -540,7 +596,6 @@ fn test_twitter() {
             .unwrap();
 
         println!("ACCOUNTS: {:?}", res);
-        */
 
         let res = client
             .send_message(
@@ -550,7 +605,6 @@ fn test_twitter() {
             .await
             .unwrap();
 
-        /*
         client
             .get_request::<Root>(
                 "https://api.twitter.com/1.1/direct_messages/events/list.json",
