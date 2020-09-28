@@ -1,3 +1,4 @@
+use crate::db::Database2;
 use crate::primitives::Result;
 use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
@@ -9,7 +10,9 @@ use openssl::rsa::Rsa;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
+use std::convert::{TryFrom, TryInto};
 use std::result::Result as StdResult;
+use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EmailId(String);
@@ -49,6 +52,40 @@ impl FromSql for EmailId {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Sender(String);
+
+impl TryFrom<String> for Sender {
+    type Error = ClientError;
+
+    fn try_from(val: String) -> StdResult<Self, ClientError> {
+        if val.contains("\u{003c}") {
+            let parts = val.split("\u{003c}");
+            if let Some(email) = parts.into_iter().nth(1) {
+                Ok(Sender(email.replace("\u{003e}", "")))
+            } else {
+                Err(ClientError::UnrecognizedData)
+            }
+        } else {
+            Ok(Sender(val))
+        }
+    }
+}
+
+impl TryFrom<&str> for Sender {
+    type Error = ClientError;
+
+    fn try_from(val: &str) -> StdResult<Self, ClientError> {
+        <Sender as TryFrom<String>>::try_from(val.to_string())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ReceivedMessageContext {
+    sender: Sender,
+    body: String,
+}
+
 #[derive(Debug, Fail)]
 pub enum ClientError {
     #[fail(display = "the builder was not used correctly")]
@@ -60,14 +97,16 @@ pub enum ClientError {
 }
 
 pub struct ClientBuilder {
+    db: Database2,
     jwt: Option<JWT>,
     token_url: Option<String>,
     user_id: Option<String>,
 }
 
 impl ClientBuilder {
-    pub fn new() -> Self {
+    pub fn new(db: Database2) -> Self {
         ClientBuilder {
+            db: db,
             jwt: None,
             token_url: None,
             user_id: None,
@@ -94,6 +133,7 @@ impl ClientBuilder {
     pub fn build(self) -> Result<Client> {
         Ok(Client {
             client: ReqClient::new(),
+            db: self.db,
             jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
@@ -104,6 +144,7 @@ impl ClientBuilder {
 
 pub struct Client {
     client: ReqClient,
+    db: Database2,
     jwt: JWT,
     token_url: String,
     token_id: Option<String>,
@@ -114,7 +155,7 @@ use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
 
 impl Client {
-    pub async fn token_request(&mut self) -> Result<()> {
+    async fn token_request(&mut self) -> Result<()> {
         #[derive(Debug, Deserialize)]
         struct TokenResponse {
             access_token: String,
@@ -150,7 +191,7 @@ impl Client {
 
         Ok(())
     }
-    pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
+    async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let request = self
             .client
             .get(url)
@@ -173,7 +214,7 @@ impl Client {
 
         Ok(self.client.execute(request).await?.json::<T>().await?)
     }
-    pub async fn request_inbox(&self) -> Result<Vec<EmailId>> {
+    async fn request_inbox(&self) -> Result<Vec<EmailId>> {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiInbox {
@@ -200,7 +241,7 @@ impl Client {
             .map(|entry| entry.id)
             .collect())
     }
-    pub async fn request_message(&self, email_id: &EmailId) -> Result<()> {
+    async fn request_message(&self, email_id: &EmailId) -> Result<Vec<ReceivedMessageContext>> {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiMessage {
@@ -212,13 +253,13 @@ impl Client {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiPayload {
-            headers: Vec<Header>,
+            headers: Vec<ApiHeader>,
             parts: Vec<ApiPart>,
         }
 
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
-        pub struct Header {
+        pub struct ApiHeader {
             name: String,
             value: String,
         }
@@ -236,16 +277,61 @@ impl Client {
         #[serde(rename_all = "camelCase")]
         pub struct ApiBody {
             size: i64,
-            data: Option<String>,
+            data: String,
         }
 
-        let message = self
+        let response = self
             .get_request::<ApiMessage>(&format!(
                 "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
                 userId = self.user_id,
                 id = email_id.as_str(),
             ))
             .await?;
+
+        let mut messages = vec![];
+        let sender: Sender = response
+            .payload
+            .headers
+            .iter()
+            .find(|header| header.name == "From")
+            .ok_or(ClientError::IncompleteBuilder)?
+            .value
+            .clone()
+            .try_into()?;
+
+        for part in response.payload.parts {
+            messages.push(ReceivedMessageContext {
+                sender: sender.clone(),
+                body: String::from_utf8_lossy(
+                    &base64::decode_config(part.body.data, base64::URL_SAFE)
+                        .map_err(|_| ClientError::UnrecognizedData)?,
+                )
+                .lines()
+                .nth(0)
+                .ok_or(ClientError::UnrecognizedData)?
+                .to_string(),
+            });
+        }
+
+        Ok(messages)
+    }
+    pub async fn start(self) {
+        let mut interval = time::interval(Duration::from_secs(5));
+
+        loop {
+            interval.tick().await;
+        }
+    }
+    async fn handle_incoming_messages(&self) -> Result<()> {
+        let messages = self.request_inbox().await?;
+        let unknown_email_ids = self.db.find_untracked_emails(&messages).await?;
+
+        let mut interval = time::interval(Duration::from_secs(1));
+        for email_id in unknown_email_ids {
+            interval.tick().await;
+
+            let res = self.request_message(email_id).await?;
+        }
 
         Ok(())
     }
@@ -317,8 +403,14 @@ impl<'a> JWTBuilder<'a> {
 
 #[test]
 fn test_email_client() {
-    use crate::primitives::unix_time;
+    use crate::primitives::{unix_time, Challenge};
+    use crate::Database2;
     use tokio::runtime::Runtime;
+
+    // Generate a random db path
+    fn db_path() -> String {
+        format!("/tmp/sqlite_{}", Challenge::gen_random().as_str())
+    }
 
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async move {
@@ -334,7 +426,7 @@ fn test_email_client() {
             .sign(&config.google_private_key)
             .unwrap();
 
-        let mut client = ClientBuilder::new()
+        let mut client = ClientBuilder::new(Database2::new(&db_path()).unwrap())
             .jwt(jwt)
             .user_id(config.google_email)
             .token_url("https://oauth2.googleapis.com/token".to_string())
@@ -358,9 +450,13 @@ fn test_email_client() {
         let res = client.get_request(&url).await.unwrap();
         */
 
+        //let res = client.request_inbox().await.unwrap();
+
         let res = client
             .request_message(&EmailId::from("174d4b1765d632b1"))
             .await
             .unwrap();
+
+        println!("RES: {:?}", res);
     });
 }

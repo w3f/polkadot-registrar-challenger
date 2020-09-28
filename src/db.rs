@@ -234,7 +234,7 @@ impl Database2 {
             "
             CREATE TABLE IF NOT EXISTS email_processed_ids (
                 id          INTEGER PRIMARY KEY,
-                email_id    INTEGER NOT NULL UNIQUE,
+                email_id    INTEGER NOT NULL UNIQUE
             )
         ",
             params![],
@@ -863,7 +863,7 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn find_untracked_emails<'a>(&self, ids: &[&'a EmailId]) -> Result<Vec<&'a EmailId>> {
+    pub async fn find_untracked_emails<'a>(&self, ids: &'a [EmailId]) -> Result<Vec<&'a EmailId>> {
         let con = self.con.lock().await;
         let mut stmt = con.prepare(
             "
@@ -877,7 +877,7 @@ impl Database2 {
         )?;
 
         let mut untracked_email_ids = vec![];
-        for &email_id in ids {
+        for email_id in ids {
             stmt.query_row_named(
                 named_params! {
                     ":email_id": email_id
