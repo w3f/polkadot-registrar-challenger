@@ -347,20 +347,21 @@ impl Client {
         Ok(())
     }
     pub async fn start(mut self) {
-        self.token_request();
+        self.token_request()
+            .await
+            .map_err(|err| {
+                error!("{}", err);
+                std::process::exit(1);
+            })
+            .unwrap();
+
         self.start_responder().await;
 
-        let mut interval = time::interval(Duration::from_secs(5));
-
         loop {
-            interval.tick().await;
-
-            loop {
-                let _ = self.local().await.map_err(|err| {
-                    error!("{}", err);
-                    err
-                });
-            }
+            let _ = self.local().await.map_err(|err| {
+                error!("{}", err);
+                err
+            });
         }
     }
     async fn local(&self) -> Result<()> {
@@ -383,8 +384,12 @@ impl Client {
         let c_self = self.clone();
 
         tokio::spawn(async move {
+            let mut interval = time::interval(Duration::from_secs(3));
+
             loop {
-                let _ = c_self.local().await.map_err(|err| {
+                interval.tick().await;
+
+                let _ = c_self.handle_incoming_messages().await.map_err(|err| {
                     error!("{}", err);
                     err
                 });
@@ -394,8 +399,18 @@ impl Client {
     async fn handle_account_verification(
         &self,
         _net_account: NetAccount,
-        _account: Account,
+        account: Account,
     ) -> Result<()> {
+        let challenge_data = self
+            .db
+            .select_challenge_data(&account, &AccountType::Email)
+            .await?;
+
+        // Only require the verifier to send the initial message
+        let verifier = Verifier2::new(&challenge_data);
+        self.send_message(&account, verifier.init_message_builder())
+            .await?;
+
         Ok(())
     }
     async fn handle_incoming_messages(&self) -> Result<()> {
