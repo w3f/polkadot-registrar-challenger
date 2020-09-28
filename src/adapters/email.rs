@@ -7,45 +7,43 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
-use std::convert::TryFrom;
+use serde::de::DeserializeOwned;
+use std::collections::HashMap;
 use std::result::Result as StdResult;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
-pub struct EmailId(u64);
+pub struct EmailId(String);
 
 impl EmailId {
-    pub fn as_u64(&self) -> u64 {
-        self.0
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
-impl From<u64> for EmailId {
-    fn from(val: u64) -> Self {
+impl From<String> for EmailId {
+    fn from(val: String) -> Self {
         EmailId(val)
     }
 }
 
-impl TryFrom<String> for EmailId {
-    type Error = ClientError;
-
-    fn try_from(val: String) -> StdResult<Self, Self::Error> {
-        Ok(EmailId(
-            val.parse::<u64>()
-                .map_err(|_| ClientError::UnrecognizedData)?,
-        ))
+impl From<&str> for EmailId {
+    fn from(val: &str) -> Self {
+        EmailId(val.to_string())
     }
 }
 
 impl ToSql for EmailId {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::Owned(Value::Integer(self.0 as i64)))
+        Ok(ToSqlOutput::Borrowed(ValueRef::Text(self.0.as_bytes())))
     }
 }
 
 impl FromSql for EmailId {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value {
-            ValueRef::Integer(val) => Ok(EmailId(val as u64)),
+            ValueRef::Text(val) => Ok(EmailId(
+                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
+            )),
             _ => Err(FromSqlError::InvalidType),
         }
     }
@@ -64,6 +62,7 @@ pub enum ClientError {
 pub struct ClientBuilder {
     jwt: Option<JWT>,
     token_url: Option<String>,
+    user_id: Option<String>,
 }
 
 impl ClientBuilder {
@@ -71,6 +70,7 @@ impl ClientBuilder {
         ClientBuilder {
             jwt: None,
             token_url: None,
+            user_id: None,
         }
     }
     pub fn jwt(self, jwt: JWT) -> Self {
@@ -79,9 +79,15 @@ impl ClientBuilder {
             ..self
         }
     }
-    pub fn token_url(self, url: &str) -> Self {
+    pub fn user_id(self, user_id: String) -> Self {
         ClientBuilder {
-            token_url: Some(url.to_string()),
+            user_id: Some(user_id),
+            ..self
+        }
+    }
+    pub fn token_url(self, url: String) -> Self {
+        ClientBuilder {
+            token_url: Some(url),
             ..self
         }
     }
@@ -91,6 +97,7 @@ impl ClientBuilder {
             jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
+            user_id: self.user_id.ok_or(ClientError::IncompleteBuilder)?,
         })
     }
 }
@@ -100,6 +107,7 @@ pub struct Client {
     jwt: JWT,
     token_url: String,
     token_id: Option<String>,
+    user_id: String,
 }
 
 use reqwest::header::{self, HeaderValue};
@@ -142,7 +150,7 @@ impl Client {
 
         Ok(())
     }
-    pub async fn get_request(&self, url: &str) -> Result<String> {
+    pub async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
         let request = self
             .client
             .get(url)
@@ -163,7 +171,56 @@ impl Client {
 
         println!("DEBUG endpoint request: {:?}", request);
 
-        Ok(self.client.execute(request).await?.text().await?)
+        Ok(self.client.execute(request).await?.json::<T>().await?)
+    }
+    pub async fn request_message(&self, email_id: &EmailId) -> Result<()> {
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ApiMessage {
+            pub id: String,
+            pub thread_id: String,
+            pub payload: ApiPayload,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ApiPayload {
+            pub headers: Vec<Header>,
+            pub parts: Vec<ApiPart>,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct Header {
+            pub name: String,
+            pub value: String,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ApiPart {
+            pub part_id: String,
+            pub mime_type: String,
+            pub filename: String,
+            pub body: ApiBody,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        pub struct ApiBody {
+            pub size: i64,
+            pub data: Option<String>,
+        }
+
+        let message = self
+            .get_request::<ApiMessage>(&format!(
+                "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
+                userId = self.user_id,
+                id = email_id.as_str(),
+            ))
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -252,18 +309,31 @@ fn test_email_client() {
 
         let mut client = ClientBuilder::new()
             .jwt(jwt)
-            .token_url("https://oauth2.googleapis.com/token")
+            .user_id(config.google_email)
+            .token_url("https://oauth2.googleapis.com/token".to_string())
             .build()
             .unwrap();
 
         client.token_request().await.unwrap();
 
+        /*
         let url = format!(
             "https://gmail.googleapis.com/gmail/v1/users/{}/messages",
             config.google_email
         );
-        let res = client.get_request(&url).await.unwrap();
 
-        println!("RES: {}", res);
+        let url = format!(
+            "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
+            userId = config.google_email,
+            id = "174d4b1765d632b1",
+        );
+
+        let res = client.get_request(&url).await.unwrap();
+        */
+
+        let res = client
+            .request_message(&EmailId::from("174d4b1765d632b1"))
+            .await
+            .unwrap();
     });
 }
