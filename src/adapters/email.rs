@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::result::Result as StdResult;
 
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EmailId(String);
 
 impl EmailId {
@@ -173,43 +173,70 @@ impl Client {
 
         Ok(self.client.execute(request).await?.json::<T>().await?)
     }
+    pub async fn request_inbox(&self) -> Result<Vec<EmailId>> {
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ApiInbox {
+            messages: Vec<ApiInboxEntry>,
+            next_page_token: String,
+            result_size_estimate: i64,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ApiInboxEntry {
+            id: EmailId,
+            thread_id: String,
+        }
+
+        Ok(self
+            .get_request::<ApiInbox>(&format!(
+                "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages",
+                userId = self.user_id,
+            ))
+            .await?
+            .messages
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect())
+    }
     pub async fn request_message(&self, email_id: &EmailId) -> Result<()> {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiMessage {
-            pub id: String,
-            pub thread_id: String,
-            pub payload: ApiPayload,
+            id: String,
+            thread_id: String,
+            payload: ApiPayload,
         }
 
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiPayload {
-            pub headers: Vec<Header>,
-            pub parts: Vec<ApiPart>,
+            headers: Vec<Header>,
+            parts: Vec<ApiPart>,
         }
 
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         pub struct Header {
-            pub name: String,
-            pub value: String,
+            name: String,
+            value: String,
         }
 
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiPart {
-            pub part_id: String,
-            pub mime_type: String,
-            pub filename: String,
-            pub body: ApiBody,
+            part_id: String,
+            mime_type: String,
+            filename: String,
+            body: ApiBody,
         }
 
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         pub struct ApiBody {
-            pub size: i64,
-            pub data: Option<String>,
+            size: i64,
+            data: Option<String>,
         }
 
         let message = self
