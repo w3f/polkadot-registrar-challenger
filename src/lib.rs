@@ -9,7 +9,7 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::{MatrixClient, TwitterBuilder};
+use adapters::{MatrixClient, TwitterBuilder, ClientBuilder};
 use comms::CommsVerifier;
 use connector::Connector;
 use db::Database2;
@@ -120,6 +120,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_twitter = manager.register_comms(AccountType::Twitter);
+    let c_email = manager.register_comms(AccountType::Email);
     let c_feeder = manager.register_comms(AccountType::ReservedFeeder);
 
     info!("Trying to connect to Watcher");
@@ -178,6 +179,16 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         .token_secret(config.twitter_token_secret)
         .version(1.0)
         .build()?;
+
+    info!("Setting up Email client");
+    let mut client = ClientBuilder::new(db2.clone(), c_email)
+        .issuer(config.google_issuer)
+        .scope(config.google_scope)
+        .subject(config.google_email)
+        .private_key(config.google_private_key)
+        .token_url("https://oauth2.googleapis.com/token".to_string())
+        .build()
+        .unwrap();
 
     info!("Starting Matrix task");
     tokio::spawn(async move {

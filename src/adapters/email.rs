@@ -1,6 +1,6 @@
 use crate::comms::CommsVerifier;
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
+use crate::primitives::{Account, AccountType, ChallengeStatus, Result, unix_time};
 use crate::verifier::Verifier2;
 use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
@@ -11,10 +11,10 @@ use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
-use std::convert::{TryFrom, TryInto};
+use std::convert::{TryInto};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
@@ -69,7 +69,7 @@ impl ConvertEmailInto<Account> for String {
         if self.contains("\u{003c}") {
             let parts = self.split("\u{003c}");
             if let Some(email) = parts.into_iter().nth(1) {
-                Ok(Account::from((email.replace("\u{003e}", ""))))
+                Ok(Account::from(email.replace("\u{003e}", "")))
             } else {
                 Err(ClientError::UnrecognizedData)
             }
@@ -106,9 +106,11 @@ pub enum ClientError {
 pub struct ClientBuilder {
     db: Database2,
     comms: CommsVerifier,
-    jwt: Option<JWT>,
+    issuer: Option<String>,
+    scope: Option<String>,
+    subject: Option<String>,
+    private_key: Option<String>,
     token_url: Option<String>,
-    user_id: Option<String>,
 }
 
 impl ClientBuilder {
@@ -116,38 +118,44 @@ impl ClientBuilder {
         ClientBuilder {
             db: db,
             comms: comms,
-            jwt: None,
+            issuer: None,
+            scope: None,
+            subject: None,
+            private_key: None,
             token_url: None,
-            user_id: None,
         }
     }
-    pub fn jwt(self, jwt: JWT) -> Self {
-        ClientBuilder {
-            jwt: Some(jwt),
-            ..self
-        }
+    pub fn issuer(mut self, issuer: String) -> Self {
+        self.issuer = Some(issuer);
+        self
     }
-    pub fn user_id(self, user_id: String) -> Self {
-        ClientBuilder {
-            user_id: Some(user_id),
-            ..self
-        }
+    pub fn scope(mut self, scope: String) -> Self {
+        self.scope = Some(scope);
+        self
     }
-    pub fn token_url(self, url: String) -> Self {
-        ClientBuilder {
-            token_url: Some(url),
-            ..self
-        }
+    pub fn subject(mut self, subject: String) -> Self {
+        self.subject = Some(subject);
+        self
+    }
+    pub fn private_key(mut self, private_key: String) -> Self {
+        self.private_key = Some(private_key);
+        self
+    }
+    pub fn token_url(mut self, url: String) -> Self {
+        self.token_url = Some(url);
+        self
     }
     pub fn build(self) -> Result<Client> {
         Ok(Client {
             client: ReqClient::new(),
             db: self.db,
             comms: self.comms,
-            jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
+            issuer: self.issuer.ok_or(ClientError::IncompleteBuilder)?,
+            scope: self.scope.ok_or(ClientError::IncompleteBuilder)?,
+            subject: self.subject.ok_or(ClientError::IncompleteBuilder)?,
+            private_key: self.private_key.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
-            user_id: self.user_id.ok_or(ClientError::IncompleteBuilder)?,
         })
     }
 }
@@ -156,14 +164,25 @@ pub struct Client {
     client: ReqClient,
     db: Database2,
     comms: CommsVerifier,
-    jwt: JWT,
+    issuer: String,
+    scope: String,
+    subject: String,
+    private_key: String,
     token_url: String,
     token_id: Option<String>,
-    user_id: String,
 }
 
 impl Client {
     async fn token_request(&mut self) -> Result<()> {
+        let jwt = JWTBuilder::new()
+            .issuer(&self.issuer)
+            .scope(&self.scope)
+            .sub(&self.subject)
+            .audience(&self.token_url)
+            .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
+            .issued_at(&unix_time().to_string())
+            .sign(&self.private_key)?;
+
         #[derive(Debug, Deserialize)]
         struct TokenResponse {
             access_token: String,
@@ -180,7 +199,7 @@ impl Client {
             )
             .body(reqwest::Body::from(format!(
                 "grant_type={}&assertion={}",
-                "urn:ietf:params:oauth:grant-type:jwt-bearer", self.jwt.0
+                "urn:ietf:params:oauth:grant-type:jwt-bearer", jwt.0
             )))
             .build()?;
 
@@ -241,7 +260,7 @@ impl Client {
         Ok(self
             .get_request::<ApiInbox>(&format!(
                 "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages",
-                userId = self.user_id,
+                userId = self.subject,
             ))
             .await?
             .messages
@@ -291,7 +310,7 @@ impl Client {
         let response = self
             .get_request::<ApiMessage>(&format!(
                 "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
-                userId = self.user_id,
+                userId = self.subject,
                 id = email_id.as_str(),
             ))
             .await?;
@@ -330,7 +349,7 @@ impl Client {
             interval.tick().await;
         }
     }
-    pub async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+    pub async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
         Ok(())
     }
     async fn handle_incoming_messages(&self) -> Result<()> {
@@ -489,19 +508,11 @@ fn test_email_client() {
     rt.block_on(async move {
         let config = crate::open_config().unwrap();
 
-        let jwt = JWTBuilder::new()
-            .issuer(&config.google_issuer)
-            .scope(&config.google_scope)
-            .sub(&config.google_email)
-            .audience("https://oauth2.googleapis.com/token")
-            .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
-            .issued_at(&unix_time().to_string())
-            .sign(&config.google_private_key)
-            .unwrap();
-
-        let mut client = ClientBuilder::new(Database2::new(&db_path()).unwrap())
-            .jwt(jwt)
-            .user_id(config.google_email)
+        let mut client = ClientBuilder::new(Database2::new(&db_path()).unwrap(), CommsVerifier::new())
+            .issuer(config.google_issuer)
+            .scope(config.google_scope)
+            .subject(config.google_email)
+            .private_key(config.google_private_key)
             .token_url("https://oauth2.googleapis.com/token".to_string())
             .build()
             .unwrap();
