@@ -1,5 +1,5 @@
 use crate::db::Database2;
-use crate::primitives::Result;
+use crate::primitives::{Account, Result};
 use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
 use jwt::header::{Header, HeaderType};
@@ -52,37 +52,40 @@ impl FromSql for EmailId {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Sender(String);
+trait ConvertEmailInto<T> {
+    type Error;
 
-impl TryFrom<String> for Sender {
+    fn convert_into(self) -> StdResult<T, Self::Error>;
+}
+
+impl ConvertEmailInto<Account> for String {
     type Error = ClientError;
 
-    fn try_from(val: String) -> StdResult<Self, ClientError> {
-        if val.contains("\u{003c}") {
-            let parts = val.split("\u{003c}");
+    fn convert_into(self) -> StdResult<Account, Self::Error> {
+        if self.contains("\u{003c}") {
+            let parts = self.split("\u{003c}");
             if let Some(email) = parts.into_iter().nth(1) {
-                Ok(Sender(email.replace("\u{003e}", "")))
+                Ok(Account::from((email.replace("\u{003e}", ""))))
             } else {
                 Err(ClientError::UnrecognizedData)
             }
         } else {
-            Ok(Sender(val))
+            Ok(Account::from(self))
         }
     }
 }
 
-impl TryFrom<&str> for Sender {
+impl ConvertEmailInto<Account> for &str {
     type Error = ClientError;
 
-    fn try_from(val: &str) -> StdResult<Self, ClientError> {
-        <Sender as TryFrom<String>>::try_from(val.to_string())
+    fn convert_into(self) -> StdResult<Account, Self::Error> {
+        <String as ConvertEmailInto<Account>>::convert_into(self.to_string())
     }
 }
 
 #[derive(Debug, Clone)]
 struct ReceivedMessageContext {
-    sender: Sender,
+    sender: Account,
     body: String,
 }
 
@@ -289,7 +292,7 @@ impl Client {
             .await?;
 
         let mut messages = vec![];
-        let sender: Sender = response
+        let sender: Account = response
             .payload
             .headers
             .iter()
