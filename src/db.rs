@@ -1,5 +1,5 @@
 use super::Result;
-use crate::adapters::TwitterId;
+use crate::adapters::{TwitterId, EmailId};
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
@@ -227,6 +227,15 @@ impl Database2 {
             )
         ",
             params![],
+        )?;
+
+        // Table for processed email IDs.
+        con.execute("
+            CREATE TABLE IF NOT EXISTS email_processed_ids (
+                id          INTEGER PRIMARY KEY,
+                message_id  INTEGER NOT NULL
+            )
+        ", params![],
         )?;
 
         Ok(Database2 {
@@ -831,6 +840,21 @@ impl Database2 {
                 ":account_ty": account_ty,
             },
         )?;
+
+        Ok(())
+    }
+    pub async fn track_message_id(&self, email_id: &EmailId) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named("
+            INSERT OR IGNORE INTO email_processed_ids (
+                message_id
+            ) VALUES (
+                :email_id
+            )
+        ", named_params! {
+            ":email_id": email_id,
+        })?;
 
         Ok(())
     }

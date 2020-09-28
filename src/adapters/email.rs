@@ -6,13 +6,59 @@ use jwt::{SignWithKey, Token};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
+use std::result::Result as StdResult;
+use std::convert::TryFrom;
+
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
+pub struct EmailId(u64);
+
+impl EmailId {
+    pub fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
+impl From<u64> for EmailId {
+    fn from(val: u64) -> Self {
+        EmailId(val)
+    }
+}
+
+impl TryFrom<String> for EmailId {
+    type Error = ClientError;
+
+    fn try_from(val: String) -> StdResult<Self, Self::Error> {
+        Ok(EmailId(
+            val.parse::<u64>()
+                .map_err(|_| ClientError::UnrecognizedData)?,
+        ))
+    }
+}
+
+impl ToSql for EmailId {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Integer(self.0 as i64)))
+    }
+}
+
+impl FromSql for EmailId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Integer(val) => Ok(EmailId(val as u64)),
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
 
 #[derive(Debug, Fail)]
-enum ClientError {
+pub enum ClientError {
     #[fail(display = "the builder was not used correctly")]
     IncompleteBuilder,
     #[fail(display = "the access token was not requested for the client")]
     MissingAccessToken,
+    #[fail(display = "Unrecognized data returned from the Twitter API")]
+    UnrecognizedData,
 }
 
 pub struct ClientBuilder {
