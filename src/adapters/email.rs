@@ -13,6 +13,7 @@ use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
+use serde::ser::Serialize;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
@@ -204,7 +205,7 @@ impl Client {
             )))
             .build()?;
 
-        println!("DEBUG token request: {:?}", request);
+        trace!("Token request: {:?}", request);
 
         let response = self
             .client
@@ -213,15 +214,14 @@ impl Client {
             .json::<TokenResponse>()
             .await?;
 
-        println!("DEBUG token response: {:?}", response);
+        trace!("Token response: {:?}", response);
 
         self.token_id = Some(response.access_token);
 
         Ok(())
     }
     async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
-        let request = self
-            .client
+        self.client
             .get(url)
             .header(
                 self::header::CONTENT_TYPE,
@@ -236,11 +236,38 @@ impl Client {
                         .ok_or(ClientError::MissingAccessToken)?
                 ))?,
             )
-            .build()?;
-
-        println!("DEBUG endpoint request: {:?}", request);
-
-        Ok(self.client.execute(request).await?.json::<T>().await?)
+            .send()
+            .await?
+            .json::<T>()
+            .await
+            .map_err(|err| err.into())
+    }
+    async fn post_request<T: DeserializeOwned, B: Serialize>(
+        &self,
+        url: &str,
+        body: &B,
+    ) -> Result<T> {
+        self.client
+            .post(url)
+            .header(
+                self::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/x-www-form-urlencoded"),
+            )
+            .header(
+                self::header::AUTHORIZATION,
+                HeaderValue::from_str(&format!(
+                    "Bearer {}",
+                    self.token_id
+                        .as_ref()
+                        .ok_or(ClientError::MissingAccessToken)?
+                ))?,
+            )
+            .body(serde_json::to_string(body)?)
+            .send()
+            .await?
+            .json::<T>()
+            .await
+            .map_err(|err| err.into())
     }
     async fn request_inbox(&self) -> Result<Vec<EmailId>> {
         #[derive(Serialize, Deserialize)]
@@ -270,44 +297,6 @@ impl Client {
             .collect())
     }
     async fn request_message(&self, email_id: &EmailId) -> Result<Vec<ReceivedMessageContext>> {
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ApiMessage {
-            id: String,
-            thread_id: String,
-            payload: ApiPayload,
-        }
-
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ApiPayload {
-            headers: Vec<ApiHeader>,
-            parts: Vec<ApiPart>,
-        }
-
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        pub struct ApiHeader {
-            name: String,
-            value: String,
-        }
-
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ApiPart {
-            part_id: String,
-            mime_type: String,
-            filename: String,
-            body: ApiBody,
-        }
-
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        pub struct ApiBody {
-            size: i64,
-            data: String,
-        }
-
         let response = self
             .get_request::<ApiMessage>(&format!(
                 "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
@@ -343,7 +332,33 @@ impl Client {
 
         Ok(messages)
     }
-    async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
+    async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+        #[derive(Serialize)]
+        struct Payload {
+            raw: String,
+        }
+
+        let payload = Payload {
+            raw: format!(
+                "From: <{sender}>
+                To: <{recipient}>
+                Subject: Account Verification for Polkadot On-Chain Identity
+                {body}",
+                sender = self.subject,
+                recipient = account.as_str(),
+                body = msg,
+            ),
+        };
+
+        self.post_request::<ApiMessage, Payload>(
+            &format!(
+                "https://gmail.googleapis.com/upload/gmail/v1/users/{userId}/messages/send",
+                userId = self.subject
+            ),
+            &payload,
+        )
+        .await?;
+
         Ok(())
     }
     pub async fn start(mut self) {
@@ -553,6 +568,44 @@ impl<'a> JWTBuilder<'a> {
 
         Ok(jwt)
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiMessage {
+    id: String,
+    thread_id: String,
+    payload: ApiPayload,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiPayload {
+    headers: Vec<ApiHeader>,
+    parts: Vec<ApiPart>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiHeader {
+    name: String,
+    value: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiPart {
+    part_id: String,
+    mime_type: String,
+    filename: String,
+    body: ApiBody,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiBody {
+    size: i64,
+    data: String,
 }
 
 #[test]
