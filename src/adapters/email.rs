@@ -1,6 +1,6 @@
-use crate::comms::CommsVerifier;
+use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, ChallengeStatus, Result, unix_time};
+use crate::primitives::{unix_time, Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::verifier::Verifier2;
 use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
@@ -14,7 +14,7 @@ use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
-use std::convert::{TryInto};
+use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
@@ -160,6 +160,7 @@ impl ClientBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct Client {
     client: ReqClient,
     db: Database2,
@@ -342,19 +343,59 @@ impl Client {
 
         Ok(messages)
     }
+    async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
+        Ok(())
+    }
     pub async fn start(mut self) {
+        self.token_request();
+        self.start_responder().await;
+
         let mut interval = time::interval(Duration::from_secs(5));
-        self.token_request().await.unwrap();
 
         loop {
             interval.tick().await;
 
-            let _ = self.handle_incoming_messages().await.map_err(|err| {
-                error!("{}", err)
-            });
+            loop {
+                let _ = self.local().await.map_err(|err| {
+                    error!("{}", err);
+                    err
+                });
+            }
         }
     }
-    pub async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
+    async fn local(&self) -> Result<()> {
+        use CommsMessage::*;
+
+        match self.comms.recv().await {
+            AccountToVerify {
+                net_account,
+                account,
+            } => {
+                self.handle_account_verification(net_account, account)
+                    .await?
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+    async fn start_responder(&self) {
+        let c_self = self.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let _ = c_self.local().await.map_err(|err| {
+                    error!("{}", err);
+                    err
+                });
+            }
+        });
+    }
+    async fn handle_account_verification(
+        &self,
+        _net_account: NetAccount,
+        _account: Account,
+    ) -> Result<()> {
         Ok(())
     }
     async fn handle_incoming_messages(&self) -> Result<()> {
@@ -429,7 +470,8 @@ impl Client {
                     .await?;
             }
 
-            self.send_message(sender, verifier.response_message_builder()).await?;
+            self.send_message(sender, verifier.response_message_builder())
+                .await?;
         }
 
         Ok(())
@@ -513,14 +555,15 @@ fn test_email_client() {
     rt.block_on(async move {
         let config = crate::open_config().unwrap();
 
-        let mut client = ClientBuilder::new(Database2::new(&db_path()).unwrap(), CommsVerifier::new())
-            .issuer(config.google_issuer)
-            .scope(config.google_scope)
-            .subject(config.google_email)
-            .private_key(config.google_private_key)
-            .token_url("https://oauth2.googleapis.com/token".to_string())
-            .build()
-            .unwrap();
+        let mut client =
+            ClientBuilder::new(Database2::new(&db_path()).unwrap(), CommsVerifier::new())
+                .issuer(config.google_issuer)
+                .scope(config.google_scope)
+                .subject(config.google_email)
+                .private_key(config.google_private_key)
+                .token_url("https://oauth2.googleapis.com/token".to_string())
+                .build()
+                .unwrap();
 
         client.token_request().await.unwrap();
 

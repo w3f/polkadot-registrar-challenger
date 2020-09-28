@@ -9,7 +9,7 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::{MatrixClient, TwitterBuilder, ClientBuilder};
+use adapters::{ClientBuilder, MatrixClient, TwitterBuilder};
 use comms::CommsVerifier;
 use connector::Connector;
 use db::Database2;
