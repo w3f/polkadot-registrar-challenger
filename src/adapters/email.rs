@@ -1,5 +1,7 @@
+use crate::comms::CommsVerifier;
 use crate::db::Database2;
-use crate::primitives::{Account, Result};
+use crate::primitives::{Account, AccountType, ChallengeStatus, Result};
+use crate::verifier::Verifier2;
 use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
 use jwt::header::{Header, HeaderType};
@@ -7,9 +9,11 @@ use jwt::{SignWithKey, Token};
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
+use reqwest::header::{self, HeaderValue};
+use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::convert::{TryFrom, TryInto};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
@@ -101,15 +105,17 @@ pub enum ClientError {
 
 pub struct ClientBuilder {
     db: Database2,
+    comms: CommsVerifier,
     jwt: Option<JWT>,
     token_url: Option<String>,
     user_id: Option<String>,
 }
 
 impl ClientBuilder {
-    pub fn new(db: Database2) -> Self {
+    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
         ClientBuilder {
             db: db,
+            comms: comms,
             jwt: None,
             token_url: None,
             user_id: None,
@@ -137,6 +143,7 @@ impl ClientBuilder {
         Ok(Client {
             client: ReqClient::new(),
             db: self.db,
+            comms: self.comms,
             jwt: self.jwt.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
@@ -148,14 +155,12 @@ impl ClientBuilder {
 pub struct Client {
     client: ReqClient,
     db: Database2,
+    comms: CommsVerifier,
     jwt: JWT,
     token_url: String,
     token_id: Option<String>,
     user_id: String,
 }
-
-use reqwest::header::{self, HeaderValue};
-use reqwest::Client as ReqClient;
 
 impl Client {
     async fn token_request(&mut self) -> Result<()> {
@@ -325,22 +330,87 @@ impl Client {
             interval.tick().await;
         }
     }
+    pub async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+        Ok(())
+    }
     async fn handle_incoming_messages(&self) -> Result<()> {
-        let messages = self.request_inbox().await?;
-        let unknown_email_ids = self.db.find_untracked_emails(&messages).await?;
+        let inbox = self.request_inbox().await?;
+        let unknown_email_ids = self.db.find_untracked_email_ids(&inbox).await?;
 
         let mut interval = time::interval(Duration::from_secs(1));
         for email_id in unknown_email_ids {
             interval.tick().await;
 
-            let res = self.request_message(email_id).await?;
+            // Request information/body about the Email ID.
+            let user_messages = self.request_message(email_id).await?;
+            if user_messages.is_empty() {
+                warn!("Received an empty message. Ignoring.");
+                self.db.track_email_id(email_id).await?;
+                continue;
+            }
+
+            let sender = &user_messages.get(1).as_ref().unwrap().sender;
+
+            let challenge_data = self
+                .db
+                .select_challenge_data(sender, &AccountType::Email)
+                .await?;
+
+            if challenge_data.is_empty() {
+                warn!(
+                    "Received message from an unknown email address: {}. Ignoring.",
+                    sender.as_str()
+                );
+
+                self.db.track_email_id(email_id).await?;
+                continue;
+            }
+
+            let mut verifier = Verifier2::new(&challenge_data);
+
+            for message in &user_messages {
+                verifier.verify(&message.body);
+            }
+
+            for network_address in verifier.valid_verifications() {
+                debug!(
+                    "Valid verification for address: {}",
+                    network_address.address().as_str()
+                );
+
+                self.comms
+                    .notify_status_change(network_address.address().clone());
+
+                self.db
+                    .set_challenge_status(
+                        network_address.address(),
+                        &AccountType::Twitter,
+                        ChallengeStatus::Accepted,
+                    )
+                    .await?;
+            }
+
+            for network_address in verifier.invalid_verifications() {
+                debug!(
+                    "Invalid verification for address: {}",
+                    network_address.address().as_str()
+                );
+
+                self.db
+                    .set_challenge_status(
+                        network_address.address(),
+                        &AccountType::Twitter,
+                        ChallengeStatus::Rejected,
+                    )
+                    .await?;
+            }
+
+            self.send_message(sender, verifier.response_message_builder()).await?;
         }
 
         Ok(())
     }
 }
-
-use std::collections::BTreeMap;
 
 pub struct JWTBuilder<'a> {
     claims: BTreeMap<&'a str, &'a str>,
