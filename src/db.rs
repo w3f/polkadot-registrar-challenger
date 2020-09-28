@@ -1,5 +1,5 @@
 use super::Result;
-use crate::adapters::{TwitterId, EmailId};
+use crate::adapters::{EmailId, TwitterId};
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
@@ -230,12 +230,14 @@ impl Database2 {
         )?;
 
         // Table for processed email IDs.
-        con.execute("
+        con.execute(
+            "
             CREATE TABLE IF NOT EXISTS email_processed_ids (
                 id          INTEGER PRIMARY KEY,
-                message_id  INTEGER NOT NULL
+                email_id    INTEGER NOT NULL UNIQUE,
             )
-        ", params![],
+        ",
+            params![],
         )?;
 
         Ok(Database2 {
@@ -843,20 +845,54 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn track_message_id(&self, email_id: &EmailId) -> Result<()> {
+    pub async fn track_email_id(&self, email_id: &EmailId) -> Result<()> {
         let con = self.con.lock().await;
 
-        con.execute_named("
+        con.execute_named(
+            "
             INSERT OR IGNORE INTO email_processed_ids (
-                message_id
+                email_id
             ) VALUES (
                 :email_id
             )
-        ", named_params! {
-            ":email_id": email_id,
-        })?;
+            ",
+            named_params! {
+                ":email_id": email_id,
+            },
+        )?;
 
         Ok(())
+    }
+    pub async fn find_untracked_emails<'a>(&self, ids: &[&'a EmailId]) -> Result<Vec<&'a EmailId>> {
+        let con = self.con.lock().await;
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                id
+            FROM
+                email_processed_ids
+            WHERE
+                email = :email_id
+        ",
+        )?;
+
+        let mut untracked_email_ids = vec![];
+        for &email_id in ids {
+            stmt.query_row_named(
+                named_params! {
+                    ":email_id": email_id
+                },
+                |row| row.get::<_, EmailId>(0),
+            )
+            .optional()?
+            .map(|_| ())
+            .or_else(|| {
+                untracked_email_ids.push(email_id);
+                Some(())
+            });
+        }
+
+        Ok(untracked_email_ids)
     }
 }
 

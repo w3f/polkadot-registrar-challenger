@@ -7,8 +7,8 @@ use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
-use std::result::Result as StdResult;
 use std::convert::TryFrom;
+use std::result::Result as StdResult;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct EmailId(u64);

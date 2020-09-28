@@ -452,7 +452,7 @@ impl Twitter {
 
         if messages.is_empty() {
             trace!("No new messages received");
-            return Ok(())
+            return Ok(());
         } else {
             debug!("Received {} new messasge(-s)", messages.len());
         }
