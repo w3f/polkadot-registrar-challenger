@@ -181,7 +181,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         .build()?;
 
     info!("Setting up Email client");
-    let mut client = ClientBuilder::new(db2.clone(), c_email)
+    let email = ClientBuilder::new(db2.clone(), c_email)
         .issuer(config.google_issuer)
         .scope(config.google_scope)
         .subject(config.google_email)
@@ -198,6 +198,11 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Starting Twitter task");
     tokio::spawn(async move {
         twitter.start().await;
+    });
+
+    info!("Starting Email task");
+    tokio::spawn(async move {
+        email.start().await;
     });
 
     if config.enable_watcher {

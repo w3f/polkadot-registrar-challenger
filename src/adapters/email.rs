@@ -342,11 +342,16 @@ impl Client {
 
         Ok(messages)
     }
-    pub async fn start(self) {
+    pub async fn start(mut self) {
         let mut interval = time::interval(Duration::from_secs(5));
+        self.token_request().await.unwrap();
 
         loop {
             interval.tick().await;
+
+            let _ = self.handle_incoming_messages().await.map_err(|err| {
+                error!("{}", err)
+            });
         }
     }
     pub async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
