@@ -67,10 +67,10 @@ impl ConvertEmailInto<Account> for String {
     type Error = ClientError;
 
     fn convert_into(self) -> StdResult<Account, Self::Error> {
-        if self.contains("\u{003c}") {
-            let parts = self.split("\u{003c}");
+        if self.contains("<") {
+            let parts = self.split("<");
             if let Some(email) = parts.into_iter().nth(1) {
-                Ok(Account::from(email.replace("\u{003e}", "")))
+                Ok(Account::from(email.replace(">", "")))
             } else {
                 Err(ClientError::UnrecognizedData)
             }
@@ -247,12 +247,22 @@ impl Client {
         url: &str,
         body: &B,
     ) -> Result<T> {
-        self.client
+        println!(">>>>> {}", serde_json::to_string(body).unwrap());
+        use self::header::HeaderName;
+
+        let res = self
+            .client
             .post(url)
             .header(
                 self::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-www-form-urlencoded"),
+                HeaderValue::from_static("message/rfc822"),
             )
+            /*
+            .header(
+                self::header::HeaderName::from_static("to"),
+                HeaderValue::from_static("fabio.lama@pm.me"),
+            )
+            */
             .header(
                 self::header::AUTHORIZATION,
                 HeaderValue::from_str(&format!(
@@ -262,12 +272,17 @@ impl Client {
                         .ok_or(ClientError::MissingAccessToken)?
                 ))?,
             )
-            .body(serde_json::to_string(body)?)
-            .send()
-            .await?
-            .json::<T>()
-            .await
-            .map_err(|err| err.into())
+            .body(serde_json::to_string(body)?).build()?;
+
+        println!("REQUEST --> {:?}", res);
+        println!("BODY --> {:?}", String::from_utf8_lossy(res.body().unwrap().as_bytes().unwrap()));
+
+        let res = self.client.execute(res).await?;
+
+        println!("**** {}", res.text().await.unwrap());
+
+        unimplemented!();
+        res.json::<T>().await.map_err(|err| err.into())
     }
     async fn request_inbox(&self) -> Result<Vec<EmailId>> {
         #[derive(Serialize, Deserialize)]
@@ -334,28 +349,55 @@ impl Client {
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
         #[derive(Serialize)]
-        struct Payload {
-            raw: String,
+        #[serde(rename_all = "camelCase")]
+        struct Payload<'a> {
+            user_id: &'a str,
+            resource: Resource<'a>,
         }
 
-        let payload = Payload {
-            raw: format!(
-                "From: <{sender}>
-                To: <{recipient}>
-                Subject: Account Verification for Polkadot On-Chain Identity
-                {body}",
-                sender = self.subject,
-                recipient = account.as_str(),
-                body = msg,
-            ),
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resource<'a> {
+            raw: &'a str,
+        }
+
+        let inner = String::from("From: Fabio Lama <fabio@web3.foundation>\nTo: Fabio Lama <fabio.lama@pm.me>\nSubject: Test Test\nDo you see this?");
+        //let inner = String::from("From: 'John Doe' <john.doe@gmail.com>\nTo: 'Jane Doe' <jane.doe@gmail.com>\nSubject: This is a subject\nDid you receive this message?");
+
+        let encoded = base64::encode_config(&inner, base64::URL_SAFE);
+
+        let payload = Resource {
+            raw: &encoded,
         };
 
-        self.post_request::<ApiMessage, Payload>(
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Entry {
+            headers: Vec<EHeader>,
+            mime_type: String,
+            body: EBody,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct EBody {
+            size: usize,
+            data: String,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct EHeader {
+            name: String,
+            value: String,
+        }
+
+        self.post_request::<ApiMessage, _>(
             &format!(
                 "https://gmail.googleapis.com/upload/gmail/v1/users/{userId}/messages/send",
                 userId = self.subject
             ),
-            &payload,
+            &format!("\raw\": \"{}\"", encoded),
         )
         .await?;
 
@@ -648,7 +690,6 @@ fn test_email_client() {
         );
 
         let res = client.get_request(&url).await.unwrap();
-        */
 
         //let res = client.request_inbox().await.unwrap();
 
@@ -658,5 +699,14 @@ fn test_email_client() {
             .unwrap();
 
         println!("RES: {:?}", res);
+        */
+
+        client
+            .send_message(
+                &Account::from("fabio.lama@pm.me"),
+                "Hello there".to_string(),
+            )
+            .await
+            .unwrap();
     });
 }

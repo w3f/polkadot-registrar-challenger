@@ -875,7 +875,7 @@ impl Database2 {
             FROM
                 email_processed_ids
             WHERE
-                email = :email_id
+                email_id = :email_id
         ",
         )?;
 
@@ -885,7 +885,7 @@ impl Database2 {
                 named_params! {
                     ":email_id": email_id
                 },
-                |row| row.get::<_, EmailId>(0),
+                |row| row.get::<_, i64>(0),
             )
             .optional()?
             .map(|_| ())
@@ -958,7 +958,7 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapters::TwitterId;
+    use crate::adapters::{TwitterId, EmailId};
     use crate::primitives::{Challenge, NetAccount};
     use tokio::runtime::Runtime;
 
@@ -1469,6 +1469,37 @@ mod tests {
 
             assert_eq!(account, bob);
             assert_eq!(init_msg, false);
+        });
+    }
+
+    #[test]
+    fn email_id_tracking() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            let id_1 = EmailId::from("id_1");
+            let id_2 = EmailId::from("id_2");
+            let id_3 = EmailId::from("id_3");
+
+            let list = [
+                id_1.clone(),
+                id_2.clone(),
+                id_3.clone()
+            ];
+
+            let res = db.find_untracked_email_ids(&list).await.unwrap();
+            assert_eq!(&res, &[&id_1, &id_2, &id_3]);
+
+            db.track_email_id(&id_2).await.unwrap();
+
+            let res = db.find_untracked_email_ids(&list).await.unwrap();
+            assert_eq!(&res, &[&id_1, &id_3]);
+
+            db.track_email_id(&id_1).await.unwrap();
+
+            let res = db.find_untracked_email_ids(&list).await.unwrap();
+            assert_eq!(&res, &[&id_3]);
         });
     }
 }
