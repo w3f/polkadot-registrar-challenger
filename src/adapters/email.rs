@@ -272,10 +272,14 @@ impl Client {
                         .ok_or(ClientError::MissingAccessToken)?
                 ))?,
             )
-            .body(serde_json::to_string(body)?).build()?;
+            .body(serde_json::to_string(body)?)
+            .build()?;
 
         println!("REQUEST --> {:?}", res);
-        println!("BODY --> {:?}", String::from_utf8_lossy(res.body().unwrap().as_bytes().unwrap()));
+        println!(
+            "BODY --> {:?}",
+            String::from_utf8_lossy(res.body().unwrap().as_bytes().unwrap())
+        );
 
         let res = self.client.execute(res).await?;
 
@@ -366,9 +370,7 @@ impl Client {
 
         let encoded = base64::encode_config(&inner, base64::URL_SAFE);
 
-        let payload = Resource {
-            raw: &encoded,
-        };
+        let payload = Resource { raw: &encoded };
 
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]

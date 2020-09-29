@@ -38,13 +38,6 @@ pub struct Database2 {
     con: Arc<Mutex<Connection>>,
 }
 
-const PENDING_JUDGMENTS: &'static str = "pending_judgments";
-const KNOWN_MATRIX_ROOMS: &'static str = "known_matrix_rooms";
-const CHALLENGE_STATUS: &'static str = "challenge_status";
-const ACCOUNT_STATUS: &'static str = "account_status";
-const ACCOUNT_TYPES: &'static str = "account_types";
-const ACCOUNT_STATE: &'static str = "account_states";
-
 impl Database2 {
     pub fn new(path: &str) -> Result<Self> {
         let con = Connection::open(path).map_err(|err| DatabaseError::Open(err.into()))?;
@@ -54,32 +47,25 @@ impl Database2 {
 
         // Table for pending identities.
         con.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {table} (
+            "CREATE TABLE IF NOT EXISTS pending_judgments (
                 id           INTEGER PRIMARY KEY,
                 net_account  TEXT NOT NULL UNIQUE
             )",
-                table = PENDING_JUDGMENTS,
-            ),
             params![],
         )?;
 
         // Table for account status.
         con.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {tbl_account_status} (
+            "CREATE TABLE IF NOT EXISTS account_status (
                     id      INTEGER PRIMARY KEY,
                     status  TEXT NOT NULL UNIQUE
             )",
-                tbl_account_status = ACCOUNT_STATUS
-            ),
             params![],
         )?;
 
         // TODO: This should be improved -> what if the enum adds new types?
         con.execute(
-            &format!(
-                "INSERT OR IGNORE INTO {tbl_account_status}
+            "INSERT OR IGNORE INTO account_status
                     (status)
                 VALUES
                     ('unknown'),
@@ -87,54 +73,42 @@ impl Database2 {
                     ('invalid'),
                     ('notified')
             ",
-                tbl_account_status = ACCOUNT_STATUS,
-            ),
             params![],
         )?;
 
         // Table for challenge status.
         con.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {tbl_challenge_status} (
+            "CREATE TABLE IF NOT EXISTS challenge_status (
                     id      INTEGER PRIMARY KEY,
                     status  TEXT NOT NULL UNIQUE
             )",
-                tbl_challenge_status = CHALLENGE_STATUS
-            ),
             params![],
         )?;
 
         // TODO: This should be improved -> what if the enum adds new types?
         con.execute(
-            &format!(
-                "INSERT OR IGNORE INTO {tbl_challenge_status}
+            "INSERT OR IGNORE INTO challenge_status
                     (status)
                 VALUES
                     ('unconfirmed'),
                     ('accepted'),
                     ('rejected')
             ",
-                tbl_challenge_status = CHALLENGE_STATUS,
-            ),
             params![],
         )?;
 
         // Table for account type.
         con.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {tbl_account_ty} (
+            "CREATE TABLE IF NOT EXISTS account_types (
                     id          INTEGER PRIMARY KEY,
                     account_ty  TEXT NOT NULL UNIQUE
             )",
-                tbl_account_ty = ACCOUNT_TYPES
-            ),
             params![],
         )?;
 
         // TODO: This should be improved -> what if the enum adds new types?
         con.execute(
-            &format!(
-                "INSERT OR IGNORE INTO {tbl_account_ty}
+            "INSERT OR IGNORE INTO account_types
                     (account_ty)
                 VALUES
                     ('legal_name'),
@@ -144,15 +118,12 @@ impl Database2 {
                     ('twitter'),
                     ('matrix')
             ",
-                tbl_account_ty = ACCOUNT_TYPES,
-            ),
             params![],
         )?;
 
         // Table for account state.
         con.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {table_main} (
+            "CREATE TABLE IF NOT EXISTS account_states (
                 id                   INTEGER PRIMARY KEY,
                 net_account_id       INTEGER NOT NULL,
                 account              TEXT NOT NULL,
@@ -164,40 +135,30 @@ impl Database2 {
                 UNIQUE (net_account_id, account_ty_id)
 
                 FOREIGN KEY (net_account_id)
-                    REFERENCES {table_identities} (id),
+                    REFERENCES pending_judgments (id),
 
                 FOREIGN KEY (account_ty_id)
-                    REFERENCES {table_account_ty} (id),
+                    REFERENCES account_types (id),
 
                 FOREIGN KEY (account_status_id)
-                    REFERENCES {table_account_status} (id),
+                    REFERENCES account_status (id),
 
                 FOREIGN KEY (challenge_status_id)
-                    REFERENCES {table_challenge_status} (id)
+                    REFERENCES challenge_status (id)
             )",
-                table_main = ACCOUNT_STATE,
-                table_identities = PENDING_JUDGMENTS,
-                table_account_ty = ACCOUNT_TYPES,
-                table_account_status = ACCOUNT_STATUS,
-                table_challenge_status = CHALLENGE_STATUS,
-            ),
             params![],
         )?;
 
         // Table for known Matrix rooms.
         con.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {tbl_matrix_rooms} (
+            "CREATE TABLE IF NOT EXISTS known_matrix_rooms (
                 id              INTEGER PRIMARY KEY,
                 net_account_id  INTEGER NOT NULL UNIQUE,
                 room_id         TEXT,
 
                 FOREIGN KEY (net_account_id)
-                    REFERENCES {tbl_identities} (id)
+                    REFERENCES pending_judgments (id)
             )",
-                tbl_matrix_rooms = KNOWN_MATRIX_ROOMS,
-                tbl_identities = PENDING_JUDGMENTS,
-            ),
             params![],
         )?;
 
@@ -252,12 +213,11 @@ impl Database2 {
         let transaction = con.transaction()?;
 
         {
-            let mut stmt = transaction.prepare(&format!(
-                "INSERT OR IGNORE INTO {tbl_identities} (net_account)
+            let mut stmt = transaction.prepare(
+                "INSERT OR IGNORE INTO pending_judgments (net_account)
                 VALUES (:net_account)
                 ",
-                tbl_identities = PENDING_JUDGMENTS,
-            ))?;
+            )?;
 
             for ident in idents {
                 stmt.execute_named(named_params! {
@@ -265,9 +225,9 @@ impl Database2 {
                 })?;
             }
 
-            let mut stmt = transaction.prepare(&format!(
+            let mut stmt = transaction.prepare(
                 "
-                INSERT OR REPLACE INTO {tbl_account_state} (
+                INSERT OR REPLACE INTO account_states (
                     net_account_id,
                     account,
                     account_ty_id,
@@ -275,23 +235,18 @@ impl Database2 {
                     challenge,
                     challenge_status_id
                 ) VALUES (
-                    (SELECT id FROM {tbl_identities}
+                    (SELECT id FROM pending_judgments
                         WHERE net_account = :net_account),
                     :account,
-                    (SELECT id FROM {tbl_account_ty}
+                    (SELECT id FROM account_types
                         WHERE account_ty = :account_ty),
-                    (SELECT id FROM {tbl_account_status}
+                    (SELECT id FROM account_status
                         WHERE status = :account_status),
                     :challenge,
-                    (SELECT id FROM {tbl_challenge_status}
+                    (SELECT id FROM challenge_status
                         WHERE status = :challenge_status)
                 )",
-                tbl_account_state = ACCOUNT_STATE,
-                tbl_identities = PENDING_JUDGMENTS,
-                tbl_account_ty = ACCOUNT_TYPES,
-                tbl_account_status = ACCOUNT_STATUS,
-                tbl_challenge_status = CHALLENGE_STATUS,
-            ))?;
+            )?;
 
             for ident in idents {
                 for state in ident.account_states() {
@@ -350,17 +305,13 @@ impl Database2 {
     // TODO: Should be account instead of net_account.
     pub async fn insert_room_id(&self, net_account: &NetAccount, room_id: &RoomId) -> Result<()> {
         self.con.lock().await.execute_named(
-            &format!(
-                "INSERT OR REPLACE INTO {tbl_room_id} (
+            "INSERT OR REPLACE INTO known_matrix_rooms (
                     net_account_id,
                     room_id
                 ) VALUES (
-                    (SELECT id FROM {tbl_identities} WHERE net_account = :net_account),
+                    (SELECT id FROM pending_judgments WHERE net_account = :net_account),
                     :room_id
                 )",
-                tbl_room_id = KNOWN_MATRIX_ROOMS,
-                tbl_identities = PENDING_JUDGMENTS,
-            ),
             named_params! {
                 ":net_account": net_account,
                 ":room_id": room_id.as_str(),
@@ -372,17 +323,13 @@ impl Database2 {
     pub async fn select_room_id(&self, net_account: &NetAccount) -> Result<Option<RoomId>> {
         let con = self.con.lock().await;
         con.query_row_named(
-            &format!(
-                "SELECT room_id
-                FROM {tbl_room_id}
+            "SELECT room_id
+                FROM known_matrix_rooms
                 WHERE net_account_id =
-                    (SELECT id from {tbl_identities}
+                    (SELECT id from pending_judgments
                         WHERE
                         net_account = :net_account)
                 ",
-                tbl_room_id = KNOWN_MATRIX_ROOMS,
-                tbl_identities = PENDING_JUDGMENTS,
-            ),
             named_params! {
                 ":net_account": net_account,
             },
@@ -402,10 +349,7 @@ impl Database2 {
     }
     pub async fn select_room_ids(&self) -> Result<Vec<RoomId>> {
         let con = self.con.lock().await;
-        let mut stmt = con.prepare(&format!(
-            "SELECT room_id FROM {table}",
-            table = KNOWN_MATRIX_ROOMS
-        ))?;
+        let mut stmt = con.prepare("SELECT room_id FROM known_matrix_rooms")?;
 
         let mut rows = stmt.query(params![])?;
 
@@ -448,25 +392,20 @@ impl Database2 {
         let con = self.con.lock().await;
 
         con.execute_named(
-            &format!(
-                "UPDATE {tbl_update}
+            "UPDATE
+                    account_states
                 SET account_status_id =
-                    (SELECT id FROM {tbl_account_status}
+                    (SELECT id FROM account_status
                         WHERE status = :account_status)
                 WHERE
                     net_account_id =
-                        (SELECT id FROM {tbl_identities}
+                        (SELECT id FROM pending_judgments
                             WHERE net_account = :net_account)
                 AND
                     account_ty_id =
-                        (SELECT id FROM {tbl_acc_types}
+                        (SELECT id FROM account_types
                             WHERE account_ty = :account_ty)
             ",
-                tbl_update = ACCOUNT_STATE,
-                tbl_account_status = ACCOUNT_STATUS,
-                tbl_identities = PENDING_JUDGMENTS,
-                tbl_acc_types = ACCOUNT_TYPES,
-            ),
             named_params! {
                 ":account_status": status,
                 ":net_account": net_account,
@@ -491,25 +430,20 @@ impl Database2 {
         status: ChallengeStatus,
     ) -> Result<()> {
         self.con.lock().await.execute_named(
-            &format!(
-                "UPDATE {tbl_update}
+            "UPDATE
+                    account_states
                 SET challenge_status_id =
-                    (SELECT id FROM {tbl_challenge_status}
+                    (SELECT id FROM challenge_status
                         WHERE status = :challenge_status)
                 WHERE
                     net_account_id =
-                        (SELECT id FROM {tbl_identities}
+                        (SELECT id FROM pending_judgments
                             WHERE net_account = :net_account)
                 AND
                     account_ty_id =
-                        (SELECT id FROM {tbl_acc_types}
+                        (SELECT id FROM account_types
                             WHERE account_ty = :account_ty)
             ",
-                tbl_update = ACCOUNT_STATE,
-                tbl_challenge_status = CHALLENGE_STATUS,
-                tbl_identities = PENDING_JUDGMENTS,
-                tbl_acc_types = ACCOUNT_TYPES,
-            ),
             named_params! {
                 ":challenge_status": status,
                 ":net_account": net_account,
@@ -958,7 +892,7 @@ impl<'a> ScopedDatabase<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapters::{TwitterId, EmailId};
+    use crate::adapters::{EmailId, TwitterId};
     use crate::primitives::{Challenge, NetAccount};
     use tokio::runtime::Runtime;
 
@@ -1482,11 +1416,7 @@ mod tests {
             let id_2 = EmailId::from("id_2");
             let id_3 = EmailId::from("id_3");
 
-            let list = [
-                id_1.clone(),
-                id_2.clone(),
-                id_3.clone()
-            ];
+            let list = [id_1.clone(), id_2.clone(), id_3.clone()];
 
             let res = db.find_untracked_email_ids(&list).await.unwrap();
             assert_eq!(&res, &[&id_1, &id_2, &id_3]);
