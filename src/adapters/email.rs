@@ -257,12 +257,6 @@ impl Client {
                 self::header::CONTENT_TYPE,
                 HeaderValue::from_static("message/rfc822"),
             )
-            /*
-            .header(
-                self::header::HeaderName::from_static("to"),
-                HeaderValue::from_static("fabio.lama@pm.me"),
-            )
-            */
             .header(
                 self::header::AUTHORIZATION,
                 HeaderValue::from_str(&format!(
@@ -351,57 +345,26 @@ impl Client {
 
         Ok(messages)
     }
-    async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Payload<'a> {
-            user_id: &'a str,
-            resource: Resource<'a>,
-        }
+    async fn send_message(&self, sender: &str, account: &Account, msg: String) -> Result<()> {
+        use lettre::Transport;
+        use lettre::smtp::{SmtpClient, ClientSecurity};
+        use lettre::smtp::authentication::Credentials;
+        use lettre_email::EmailBuilder;
 
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Resource<'a> {
-            raw: &'a str,
-        }
+        let email = EmailBuilder::new()
+            // Addresses can be specified by the tuple (email, alias)
+            .to(account.as_str())
+            .from(sender)
+            .subject("Hi, Hello world")
+            .text("Hello world.")
+            .build()
+            .unwrap();
 
-        let inner = String::from("From: Fabio Lama <fabio@web3.foundation>\nTo: Fabio Lama <fabio.lama@pm.me>\nSubject: Test Test\nDo you see this?");
-        //let inner = String::from("From: 'John Doe' <john.doe@gmail.com>\nTo: 'Jane Doe' <jane.doe@gmail.com>\nSubject: This is a subject\nDid you receive this message?");
+        let mut transport = SmtpClient::new_simple("smtp-relay.gmail.com")?
+            .credentials(Credentials::new("fabio@web3.foundation".to_string(), "ynxzpcvbjjimjwwd".to_string()))
+            .transport();
 
-        let encoded = base64::encode_config(&inner, base64::URL_SAFE);
-
-        let payload = Resource { raw: &encoded };
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Entry {
-            headers: Vec<EHeader>,
-            mime_type: String,
-            body: EBody,
-        }
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct EBody {
-            size: usize,
-            data: String,
-        }
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct EHeader {
-            name: String,
-            value: String,
-        }
-
-        self.post_request::<ApiMessage, _>(
-            &format!(
-                "https://gmail.googleapis.com/upload/gmail/v1/users/{userId}/messages/send",
-                userId = self.subject
-            ),
-            &format!("\raw\": \"{}\"", encoded),
-        )
-        .await?;
+        let x = transport.send(email.into())?;
 
         Ok(())
     }
@@ -678,30 +641,6 @@ fn test_email_client() {
                 .unwrap();
 
         client.token_request().await.unwrap();
-
-        /*
-        let url = format!(
-            "https://gmail.googleapis.com/gmail/v1/users/{}/messages",
-            config.google_email
-        );
-
-        let url = format!(
-            "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
-            userId = config.google_email,
-            id = "174d4b1765d632b1",
-        );
-
-        let res = client.get_request(&url).await.unwrap();
-
-        //let res = client.request_inbox().await.unwrap();
-
-        let res = client
-            .request_message(&EmailId::from("174d4b1765d632b1"))
-            .await
-            .unwrap();
-
-        println!("RES: {:?}", res);
-        */
 
         client
             .send_message(
