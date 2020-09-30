@@ -11,6 +11,7 @@ use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tokio::net::TcpStream;
 use futures::StreamExt;
+use futures::sink::SinkExt;
 use futures::stream::{SplitStream, SplitSink};
 use tungstenite::protocol::Message as TungMessage;
 use tungstenite::error::Error as TungError;
@@ -69,8 +70,8 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
     }
 }
 
+#[derive(Clone)]
 pub struct Connector {
-    client: WebSocket,
     comms: CommsVerifier,
     url: String,
 }
@@ -88,15 +89,15 @@ enum ConnectorError {
 impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
         let mut connector = Connector {
-            client: WebSocket::connect(url).await?,
             comms: comms,
             url: url.to_owned(),
         };
 
-        connector.send_ack(Some("Connection established")).await?;
+        //connector.send_ack(Some("Connection established")).await?;
 
         Ok(connector)
     }
+    /*
     async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
         self.client
             .send_text(
@@ -131,11 +132,15 @@ impl Connector {
             .map_err(|err| ConnectorError::Response(err.into()))
             .map(|_| ())
     }
+    */
     pub async fn start(self) {
         let (client, _) = connect_async(&self.url).await.unwrap();
         let (write, read) = client.split();
  
-        self.start_comms_receiver(write);
+        let c_self = self.clone();
+        tokio::spawn(async move {
+            c_self.start_comms_receiver(write);
+        });
 
         read.for_each(|message| async {
             // TODO: This must be initialized outside, use Cell.
@@ -162,6 +167,7 @@ impl Connector {
             }).map(|message| {
                 match message {
                     TungMessage::Text(payload) => {
+                        trace!("Received message from Watcher: {}", payload);
                         let try_msg = serde_json::from_str::<Message>(&payload);
                         let msg = if let Ok(msg) = try_msg {
                             msg
@@ -192,87 +198,33 @@ impl Connector {
             });
         });
     }
-    fn start_comms_receiver(&self, writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
-        tokio::spawn(async move {
-            loop {
-
-            }
-        });
+    async fn start_comms_receiver(self, mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
+        loop {
+            let _ = self.handle_comms_message(&mut writer).await.map_err(|err| {
+                error!("{}", err);
+            });
+        }
     }
-    async fn handle_comms_message(&self) -> Result<()> {
-        /*
+    async fn handle_comms_message(&self, writer: &mut SplitSink<WebSocketStream<TcpStream>, TungMessage>) -> Result<()> {
         match self.comms.recv().await {
             CommsMessage::JudgeIdentity {
                 net_account,
-                judgement,
+                judgement
             } => {
-                self.client
-                    .send_text(
-                        serde_json::to_string(&Message {
-                            event: EventType::JudgementResult,
-                            data: serde_json::to_value(&JudgementResponse {
-                                address: net_account.clone(),
-                                judgement: judgement,
-                            })
-                            .map_err(|err| ConnectorError::Response(err.into()))?,
-                        })
-                        .map_err(|err| ConnectorError::Response(err.into()))?,
-                    )
-                    .await
-                    .map_err(|err| ConnectorError::Response(err.into()))?;
+                writer.send(TungMessage::Text(
+                serde_json::to_string(&Message {
+                    event: EventType::JudgementResult,
+                    data: serde_json::to_value(&JudgementResponse {
+                        address: net_account.clone(),
+                        judgement: judgement,
+                    })
+                    .map_err(|err| ConnectorError::Response(err.into()))?,
+                })
+                .map_err(|err| ConnectorError::Response(err.into()))?,
+                ));
             }
-            _ => panic!("Received invalid message in Connector"),
+            _ => {}
         }
-        */
-
-        Ok(())
-    }
-    async fn local(&self, reader: SplitStream<WebSocketStream<TcpStream>>) -> StdResult<(), ConnectorError> {
-        use EventType::*;
-
-
-        /*
-        select_biased! {
-            frame = self.client.receive().fuse() => {
-                match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
-                    Frame::Text { payload, .. } => {
-                        trace!("Received message from Watcher: {}", payload);
-
-                        let try_msg = serde_json::from_str::<Message>(&payload);
-                        let msg = if let Ok(msg) = try_msg {
-                            msg
-                        } else {
-                            self.send_error().await?;
-                            return Err(ConnectorError::InvalidMessage(try_msg.unwrap_err().into()));
-                        };
-
-                        match msg.event {
-                            NewJudgementRequest => {
-                                info!("Received a new judgement request from Watcher");
-                                if let Ok(request) =
-                                    serde_json::from_value::<JudgementRequest>(msg.data)
-                                {
-                                    let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                        self.send_ack(None).await?;
-
-                                        self.comms.notify_new_identity(ident);
-                                    } else {
-                                        self.send_error().await?;
-                                    };
-                                } else {
-                                    self.send_error().await?;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    _ => {
-                        self.send_error().await?;
-                    }
-                }
-            }
-        };
-        */
 
         Ok(())
     }
