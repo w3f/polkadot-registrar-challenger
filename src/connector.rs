@@ -9,6 +9,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
+use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
 use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
@@ -136,10 +137,12 @@ impl Connector {
         let (client, _) = connect_async(&self.url).await.unwrap();
         let (write, read) = client.split();
 
+        let write = Arc::new(Mutex::new(write));
+
         //let c_self = self.clone();
         let comms = self.comms.clone();
         tokio::spawn(async move {
-            Self::start_comms_receiver(comms, write);
+            Self::start_comms_receiver(comms, Arc::clone(&write));
         });
 
         read.for_each(|message| async {
@@ -204,10 +207,10 @@ impl Connector {
     }
     async fn start_comms_receiver(
         comms: CommsVerifier,
-        mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
+        mut writer: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
     ) {
         loop {
-            let _ = Self::handle_comms_message(&comms, &mut writer)
+            let _ = Self::handle_comms_message(&comms, &writer)
                 .await
                 .map_err(|err| {
                     error!("{}", err);
@@ -216,14 +219,14 @@ impl Connector {
     }
     async fn handle_comms_message(
         comms: &CommsVerifier,
-        writer: &mut SplitSink<WebSocketStream<TcpStream>, TungMessage>,
+        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
     ) -> Result<()> {
         match comms.recv().await {
             CommsMessage::JudgeIdentity {
                 net_account,
                 judgement,
             } => {
-                writer.send(TungMessage::Text(
+                writer.lock().unwrap().send(TungMessage::Text(
                     serde_json::to_string(&Message {
                         event: EventType::JudgementResult,
                         data: serde_json::to_value(&JudgementResponse {
