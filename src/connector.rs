@@ -95,51 +95,17 @@ impl Connector {
             url: url.to_owned(),
         };
 
-        //connector.send_ack(Some("Connection established")).await?;
-
         Ok(connector)
     }
-    fn send_ack(
-        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
-    ) -> Result<()> {
-        writer.lock().unwrap().send(TungMessage::Text(
-            serde_json::to_string(&Message {
-                event: EventType::Ack,
-                data: serde_json::to_value(&AckResponse {
-                    result: "Message acknowledged".to_string(),
-                })
-                .map_err(|err| ConnectorError::Response(err.into()))?,
-            })
-            .map_err(|err| ConnectorError::Response(err.into()))?,
-        ));
-
-        Ok(())
-    }
-    fn send_error(
-        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
-    ) -> Result<()> {
-        writer.lock().unwrap().send(TungMessage::Text(
-            serde_json::to_string(&Message {
-                event: EventType::Error,
-                data: serde_json::to_value(&ErrorResponse {
-                    error: "Message is invalid. Rejected".to_string(),
-                })
-                .map_err(|err| ConnectorError::Response(err.into()))?,
-            })
-            .map_err(|err| ConnectorError::Response(err.into()))?,
-        ));
-
-        Ok(())
-    }
     pub async fn start(self) {
-        let (client, _) = connect_async(&self.url).await.unwrap();
-        let (write, read) = client.split();
+        let (writer, reader) = self.client.split();
+        let writer = Arc::new(Mutex::new(writer));
 
-        let write = Arc::new(Mutex::new(write));
+        Self::send_ack(Some("Connection established"), &writer);
 
         futures::join!(
-            Self::start_comms_receiver(self.comms.clone(), read, Arc::clone(&write)),
-            Self::handle_comms_message(self.comms.clone(), Arc::clone(&write)),
+            Self::start_comms_receiver(self.comms.clone(), reader, Arc::clone(&writer)),
+            Self::handle_comms_message(self.comms.clone(), Arc::clone(&writer)),
         );
     }
     async fn start_comms_receiver(
@@ -232,6 +198,39 @@ impl Connector {
             }
             _ => {}
         }
+
+        Ok(())
+    }
+    fn send_ack(
+        msg: Option<&str>,
+        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
+    ) -> Result<()> {
+        writer.lock().unwrap().send(TungMessage::Text(
+            serde_json::to_string(&Message {
+                event: EventType::Ack,
+                data: serde_json::to_value(&AckResponse {
+                    result: msg.unwrap_or("Message acknowledged").to_string(),
+                })
+                .map_err(|err| ConnectorError::Response(err.into()))?,
+            })
+            .map_err(|err| ConnectorError::Response(err.into()))?,
+        ));
+
+        Ok(())
+    }
+    fn send_error(
+        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
+    ) -> Result<()> {
+        writer.lock().unwrap().send(TungMessage::Text(
+            serde_json::to_string(&Message {
+                event: EventType::Error,
+                data: serde_json::to_value(&ErrorResponse {
+                    error: "Message is invalid. Rejected".to_string(),
+                })
+                .map_err(|err| ConnectorError::Response(err.into()))?,
+            })
+            .map_err(|err| ConnectorError::Response(err.into()))?,
+        ));
 
         Ok(())
     }
