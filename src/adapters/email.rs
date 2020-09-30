@@ -104,7 +104,7 @@ pub enum ClientError {
     IncompleteBuilder,
     #[fail(display = "the access token was not requested for the client")]
     MissingAccessToken,
-    #[fail(display = "Unrecognized data returned from the Twitter API")]
+    #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
 }
 
@@ -249,7 +249,8 @@ impl Client {
         Ok(())
     }
     async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
-        self.client
+        let resp = self
+            .client
             .get(url)
             .header(
                 self::header::CONTENT_TYPE,
@@ -265,10 +266,18 @@ impl Client {
                 ))?,
             )
             .send()
-            .await?
+            .await?;
+        /*
+        resp
             .json::<T>()
             .await
             .map_err(|err| err.into())
+        */
+
+        let txt = resp.text().await?;
+        //println!("GET response: {}", txt);
+
+        serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
     async fn post_request<T: DeserializeOwned, B: Serialize>(
         &self,
@@ -314,9 +323,9 @@ impl Client {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiInbox {
-            messages: Vec<ApiInboxEntry>,
-            next_page_token: String,
-            result_size_estimate: i64,
+            messages: Option<Vec<ApiInboxEntry>>,
+            next_page_token: Option<String>,
+            result_size_estimate: Option<i64>,
         }
 
         #[derive(Serialize, Deserialize)]
@@ -333,6 +342,7 @@ impl Client {
             ))
             .await?
             .messages
+            .unwrap_or(vec![])
             .into_iter()
             .map(|entry| entry.id)
             .collect())
@@ -351,12 +361,22 @@ impl Client {
             .payload
             .headers
             .iter()
-            .find(|header| header.name == "From")
-            .ok_or(ClientError::IncompleteBuilder)?
+            .find(|header| header.name.to_lowercase() == "from")
+            .ok_or(ClientError::UnrecognizedData)?
             .value
             .clone()
             .try_into()?;
 
+        if let Some(body) = response.payload.body {
+            if let Some(data) = body.data {
+                messages.push(ReceivedMessageContext {
+                    sender: sender.clone(),
+                    body: String::from_utf8(base64::decode_config(data, base64::URL_SAFE)?)?,
+                });
+            }
+        }
+
+        /*
         for part in response.payload.parts {
             messages.push(ReceivedMessageContext {
                 sender: sender.clone(),
@@ -370,6 +390,7 @@ impl Client {
                 .to_string(),
             });
         }
+        */
 
         Ok(messages)
     }
@@ -455,6 +476,8 @@ impl Client {
             .select_challenge_data(&account, &AccountType::Email)
             .await?;
 
+        debug!("Sending initial message to {}", account.as_str());
+
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
         self.send_message(&account, verifier.init_message_builder())
@@ -478,7 +501,7 @@ impl Client {
                 continue;
             }
 
-            let sender = &user_messages.get(1).as_ref().unwrap().sender;
+            let sender = &user_messages.get(0).as_ref().unwrap().sender;
 
             let challenge_data = self
                 .db
@@ -598,8 +621,6 @@ impl<'a> JWTBuilder<'a> {
             .as_str()
             .to_string());
 
-        //println!("DEBUG jwt: {}", jwt.0);
-
         Ok(jwt)
     }
 }
@@ -616,7 +637,8 @@ struct ApiMessage {
 #[serde(rename_all = "camelCase")]
 struct ApiPayload {
     headers: Vec<ApiHeader>,
-    parts: Vec<ApiPart>,
+    body: Option<ApiBody>,
+    parts: Option<Vec<ApiPart>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -639,7 +661,7 @@ struct ApiPart {
 #[serde(rename_all = "camelCase")]
 pub struct ApiBody {
     size: i64,
-    data: String,
+    data: Option<String>,
 }
 
 #[test]
