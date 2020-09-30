@@ -7,6 +7,13 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
 use websockets::{Frame, WebSocket};
+use tokio::time::{self, Duration};
+use tokio_tungstenite::{connect_async, WebSocketStream};
+use tokio::net::TcpStream;
+use futures::StreamExt;
+use futures::stream::{SplitStream, SplitSink};
+use tungstenite::protocol::Message as TungMessage;
+use tungstenite::error::Error as TungError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -125,10 +132,14 @@ impl Connector {
             .map(|_| ())
     }
     pub async fn start(mut self) {
-        let mut receiver_error = false;
+        let (client, _) = connect_async(&self.url).await.unwrap();
+        let (write, read) = client.split();
+ 
+        self.start_comms_receiver(&write);
 
+        let mut receiver_error = false;
         loop {
-            if let Err(err) = self.local().await {
+            if let Err(err) = self.local(&read).await {
                 match err {
                     ConnectorError::Receiver(err) => {
                         // Prevent spamming log messages if the server is
@@ -157,34 +168,45 @@ impl Connector {
             };
         }
     }
-    async fn local(&mut self) -> StdResult<(), ConnectorError> {
+    fn start_comms_receiver(&self, writer: &SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
+        tokio::spawn(async move {
+            loop {
+
+            }
+        });
+    }
+    async fn handle_comms_message(&self) -> Result<()> {
+        /*
+        match self.comms.recv().await {
+            CommsMessage::JudgeIdentity {
+                net_account,
+                judgement,
+            } => {
+                self.client
+                    .send_text(
+                        serde_json::to_string(&Message {
+                            event: EventType::JudgementResult,
+                            data: serde_json::to_value(&JudgementResponse {
+                                address: net_account.clone(),
+                                judgement: judgement,
+                            })
+                            .map_err(|err| ConnectorError::Response(err.into()))?,
+                        })
+                        .map_err(|err| ConnectorError::Response(err.into()))?,
+                    )
+                    .await
+                    .map_err(|err| ConnectorError::Response(err.into()))?;
+            }
+            _ => panic!("Received invalid message in Connector"),
+        }
+        */
+
+        Ok(())
+    }
+    async fn local(&mut self, reader: &SplitStream<WebSocketStream<TcpStream>>) -> StdResult<(), ConnectorError> {
         use EventType::*;
 
         select_biased! {
-            msg = self.comms.recv().fuse() => {
-                match msg {
-                    CommsMessage::JudgeIdentity {
-                        net_account,
-                        judgement,
-                    } => {
-                        self.client
-                            .send_text(
-                                serde_json::to_string(&Message {
-                                    event: EventType::JudgementResult,
-                                    data: serde_json::to_value(&JudgementResponse {
-                                        address: net_account.clone(),
-                                        judgement: judgement,
-                                    })
-                                    .map_err(|err| ConnectorError::Response(err.into()))?,
-                                })
-                                .map_err(|err| ConnectorError::Response(err.into()))?,
-                            )
-                            .await
-                            .map_err(|err| ConnectorError::Response(err.into()))?;
-                    }
-                    _ => panic!("Received invalid message in Connector"),
-                }
-            },
             frame = self.client.receive().fuse() => {
                 match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
                     Frame::Text { payload, .. } => {
