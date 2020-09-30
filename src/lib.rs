@@ -140,7 +140,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
             break;
         }
 
-        if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
+        if let Ok(con) = Connector::new(config.watcher_url, c_connector.clone()).await {
             info!("Connecting to Watcher succeeded");
             connector = Some(con);
             break;
@@ -190,6 +190,9 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         .scope(config.google_scope)
         .subject(config.google_email)
         .private_key(config.google_private_key)
+        .email_server(config.email_server)
+        .email_user(config.email_user)
+        .email_password(config.email_password)
         .token_url("https://oauth2.googleapis.com/token".to_string())
         .build()
         .unwrap();
