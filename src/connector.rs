@@ -72,6 +72,7 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 }
 
 pub struct Connector {
+    client: WebSocketStream<TcpStream>,
     comms: CommsVerifier,
     url: String,
 }
@@ -89,6 +90,7 @@ enum ConnectorError {
 impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
         let mut connector = Connector {
+            client: connect_async(url).await?.0,
             comms: comms,
             url: url.to_owned(),
         };
@@ -97,55 +99,55 @@ impl Connector {
 
         Ok(connector)
     }
-    /*
-    async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
-        self.client
-            .send_text(
-                serde_json::to_string(&Message {
-                    event: EventType::Ack,
-                    data: serde_json::to_value(&AckResponse {
-                        result: msg
-                            .map(|txt| txt.to_string())
-                            .unwrap_or("Message acknowledged".to_string()),
-                    })
-                    .map_err(|err| ConnectorError::Response(err.into()))?,
+    fn send_ack(
+        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
+    ) -> Result<()> {
+        writer.lock().unwrap().send(TungMessage::Text(
+            serde_json::to_string(&Message {
+                event: EventType::Ack,
+                data: serde_json::to_value(&AckResponse {
+                    result: "Message acknowledged".to_string(),
                 })
                 .map_err(|err| ConnectorError::Response(err.into()))?,
-            )
-            .await
-            .map_err(|err| ConnectorError::Response(err.into()))
-            .map(|_| ())
+            })
+            .map_err(|err| ConnectorError::Response(err.into()))?,
+        ));
+
+        Ok(())
     }
-    async fn send_error(&mut self) -> StdResult<(), ConnectorError> {
-        self.client
-            .send_text(
-                serde_json::to_string(&Message {
-                    event: EventType::Error,
-                    data: serde_json::to_value(&ErrorResponse {
-                        error: "Message is invalid. Rejected".to_string(),
-                    })
-                    .map_err(|err| ConnectorError::Response(err.into()))?,
+    fn send_error(
+        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
+    ) -> Result<()> {
+        writer.lock().unwrap().send(TungMessage::Text(
+            serde_json::to_string(&Message {
+                event: EventType::Error,
+                data: serde_json::to_value(&ErrorResponse {
+                    error: "Message is invalid. Rejected".to_string(),
                 })
                 .map_err(|err| ConnectorError::Response(err.into()))?,
-            )
-            .await
-            .map_err(|err| ConnectorError::Response(err.into()))
-            .map(|_| ())
+            })
+            .map_err(|err| ConnectorError::Response(err.into()))?,
+        ));
+
+        Ok(())
     }
-    */
     pub async fn start(self) {
         let (client, _) = connect_async(&self.url).await.unwrap();
         let (write, read) = client.split();
 
         let write = Arc::new(Mutex::new(write));
 
-        //let c_self = self.clone();
-        let comms = self.comms.clone();
-        tokio::spawn(async move {
-            Self::start_comms_receiver(comms, Arc::clone(&write));
-        });
-
-        read.for_each(|message| async {
+        futures::join!(
+            Self::start_comms_receiver(self.comms.clone(), read, Arc::clone(&write)),
+            Self::handle_comms_message(self.comms.clone(), Arc::clone(&write)),
+        );
+    }
+    async fn start_comms_receiver(
+        comms: CommsVerifier,
+        reader: SplitStream<WebSocketStream<TcpStream>>,
+        writer: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
+    ) {
+        reader.for_each(|message| async {
             // TODO: This must be initialized outside, use Cell.
             let mut receiver_error = false;
 
@@ -178,6 +180,8 @@ impl Connector {
                                 msg
                             } else {
                                 // TODO: Respond with error
+                                Self::send_error(&writer).unwrap();
+
                                 return;
                             };
 
@@ -189,7 +193,7 @@ impl Connector {
                                     {
                                         if let Ok(ident) = OnChainIdentity::try_from(request) {
                                             // TODO: Respond with acknowledgement
-                                            self.comms.notify_new_identity(ident);
+                                            comms.notify_new_identity(ident);
                                         } else {
                                             // TODO: Respond with error
                                         };
@@ -205,21 +209,9 @@ impl Connector {
                 });
         });
     }
-    async fn start_comms_receiver(
-        comms: CommsVerifier,
-        mut writer: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
-    ) {
-        loop {
-            let _ = Self::handle_comms_message(&comms, &writer)
-                .await
-                .map_err(|err| {
-                    error!("{}", err);
-                });
-        }
-    }
     async fn handle_comms_message(
-        comms: &CommsVerifier,
-        writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
+        comms: CommsVerifier,
+        writer: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
     ) -> Result<()> {
         match comms.recv().await {
             CommsMessage::JudgeIdentity {
