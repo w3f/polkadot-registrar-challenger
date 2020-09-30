@@ -48,6 +48,20 @@ pub(crate) struct JudgementRequest {
     pub accounts: HashMap<AccountType, Account>,
 }
 
+impl TryFrom<JudgementRequest> for OnChainIdentity {
+    type Error = failure::Error;
+
+    fn try_from(request: JudgementRequest) -> Result<Self> {
+        let mut ident = OnChainIdentity::new(request.address)?;
+
+        for (account_ty, account) in request.accounts {
+            ident.push_account(account_ty, account)?;
+        }
+
+        Ok(ident)
+    }
+}
+
 pub struct Connector {
     client: WebSocket,
     comms: CommsVerifier,
@@ -89,8 +103,6 @@ impl Connector {
                     .map_err(|err| ConnectorError::Response(err.into()))?,
                 })
                 .map_err(|err| ConnectorError::Response(err.into()))?,
-                false,
-                true,
             )
             .await
             .map_err(|err| ConnectorError::Response(err.into()))
@@ -107,8 +119,6 @@ impl Connector {
                     .map_err(|err| ConnectorError::Response(err.into()))?,
                 })
                 .map_err(|err| ConnectorError::Response(err.into()))?,
-                false,
-                true,
             )
             .await
             .map_err(|err| ConnectorError::Response(err.into()))
@@ -168,8 +178,6 @@ impl Connector {
                                     .map_err(|err| ConnectorError::Response(err.into()))?,
                                 })
                                 .map_err(|err| ConnectorError::Response(err.into()))?,
-                                false,
-                                true,
                             )
                             .await
                             .map_err(|err| ConnectorError::Response(err.into()))?;
@@ -218,19 +226,5 @@ impl Connector {
         };
 
         Ok(())
-    }
-}
-
-impl TryFrom<JudgementRequest> for OnChainIdentity {
-    type Error = failure::Error;
-
-    fn try_from(request: JudgementRequest) -> Result<Self> {
-        let mut ident = OnChainIdentity::new(request.address)?;
-
-        for (account_ty, account) in request.accounts {
-            ident.push_account(account_ty, account)?;
-        }
-
-        Ok(ident)
     }
 }

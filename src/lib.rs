@@ -51,6 +51,10 @@ pub struct Config {
     pub google_issuer: String,
     pub google_scope: String,
     pub google_email: String,
+    //
+    pub email_server: String,
+    pub email_user: String,
+    pub email_password: String,
 }
 
 fn open_config() -> Result<Config> {
@@ -186,6 +190,9 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         .scope(config.google_scope)
         .subject(config.google_email)
         .private_key(config.google_private_key)
+        .email_server(config.email_server)
+        .email_user(config.email_user)
+        .email_password(config.email_password)
         .token_url("https://oauth2.googleapis.com/token".to_string())
         .build()
         .unwrap();
@@ -207,8 +214,10 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
 
     if config.enable_watcher {
         info!("Starting Watcher connector task, listening...");
+        let connector = connector.unwrap();
+
         tokio::spawn(async move {
-            connector.unwrap().start().await;
+            connector.start().await;
         });
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");

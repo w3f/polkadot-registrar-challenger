@@ -553,7 +553,9 @@ impl Database2 {
                                 account_types
                             WHERE
                                 account_ty IN (
-                                    'matrix'
+                                    'matrix',
+                                    'email',
+                                    'twitter'
                                 )
                         )
                     AND challenge_status_id

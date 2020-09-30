@@ -6,6 +6,10 @@ use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
 use jwt::header::{Header, HeaderType};
 use jwt::{SignWithKey, Token};
+use lettre::smtp::authentication::Credentials;
+use lettre::smtp::{ClientSecurity, SmtpClient};
+use lettre::Transport;
+use lettre_email::EmailBuilder;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -100,7 +104,7 @@ pub enum ClientError {
     IncompleteBuilder,
     #[fail(display = "the access token was not requested for the client")]
     MissingAccessToken,
-    #[fail(display = "Unrecognized data returned from the Twitter API")]
+    #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
 }
 
@@ -112,6 +116,9 @@ pub struct ClientBuilder {
     subject: Option<String>,
     private_key: Option<String>,
     token_url: Option<String>,
+    server: Option<String>,
+    user: Option<String>,
+    password: Option<String>,
 }
 
 impl ClientBuilder {
@@ -124,6 +131,9 @@ impl ClientBuilder {
             subject: None,
             private_key: None,
             token_url: None,
+            server: None,
+            user: None,
+            password: None,
         }
     }
     pub fn issuer(mut self, issuer: String) -> Self {
@@ -146,6 +156,18 @@ impl ClientBuilder {
         self.token_url = Some(url);
         self
     }
+    pub fn email_server(mut self, server: String) -> Self {
+        self.server = Some(server);
+        self
+    }
+    pub fn email_user(mut self, user: String) -> Self {
+        self.user = Some(user);
+        self
+    }
+    pub fn email_password(mut self, password: String) -> Self {
+        self.password = Some(password);
+        self
+    }
     pub fn build(self) -> Result<Client> {
         Ok(Client {
             client: ReqClient::new(),
@@ -157,6 +179,9 @@ impl ClientBuilder {
             private_key: self.private_key.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
+            server: self.server.ok_or(ClientError::IncompleteBuilder)?,
+            user: self.user.ok_or(ClientError::IncompleteBuilder)?,
+            password: self.password.ok_or(ClientError::IncompleteBuilder)?,
         })
     }
 }
@@ -172,6 +197,9 @@ pub struct Client {
     private_key: String,
     token_url: String,
     token_id: Option<String>,
+    server: String,
+    user: String,
+    password: String,
 }
 
 impl Client {
@@ -221,7 +249,8 @@ impl Client {
         Ok(())
     }
     async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
-        self.client
+        let resp = self
+            .client
             .get(url)
             .header(
                 self::header::CONTENT_TYPE,
@@ -237,10 +266,18 @@ impl Client {
                 ))?,
             )
             .send()
-            .await?
+            .await?;
+        /*
+        resp
             .json::<T>()
             .await
             .map_err(|err| err.into())
+        */
+
+        let txt = resp.text().await?;
+        //println!("GET response: {}", txt);
+
+        serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
     async fn post_request<T: DeserializeOwned, B: Serialize>(
         &self,
@@ -257,12 +294,6 @@ impl Client {
                 self::header::CONTENT_TYPE,
                 HeaderValue::from_static("message/rfc822"),
             )
-            /*
-            .header(
-                self::header::HeaderName::from_static("to"),
-                HeaderValue::from_static("fabio.lama@pm.me"),
-            )
-            */
             .header(
                 self::header::AUTHORIZATION,
                 HeaderValue::from_str(&format!(
@@ -292,9 +323,9 @@ impl Client {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct ApiInbox {
-            messages: Vec<ApiInboxEntry>,
-            next_page_token: String,
-            result_size_estimate: i64,
+            messages: Option<Vec<ApiInboxEntry>>,
+            next_page_token: Option<String>,
+            result_size_estimate: Option<i64>,
         }
 
         #[derive(Serialize, Deserialize)]
@@ -311,6 +342,7 @@ impl Client {
             ))
             .await?
             .messages
+            .unwrap_or(vec![])
             .into_iter()
             .map(|entry| entry.id)
             .collect())
@@ -329,12 +361,22 @@ impl Client {
             .payload
             .headers
             .iter()
-            .find(|header| header.name == "From")
-            .ok_or(ClientError::IncompleteBuilder)?
+            .find(|header| header.name.to_lowercase() == "from")
+            .ok_or(ClientError::UnrecognizedData)?
             .value
             .clone()
             .try_into()?;
 
+        if let Some(body) = response.payload.body {
+            if let Some(data) = body.data {
+                messages.push(ReceivedMessageContext {
+                    sender: sender.clone(),
+                    body: String::from_utf8(base64::decode_config(data, base64::URL_SAFE)?)?,
+                });
+            }
+        }
+
+        /*
         for part in response.payload.parts {
             messages.push(ReceivedMessageContext {
                 sender: sender.clone(),
@@ -348,60 +390,29 @@ impl Client {
                 .to_string(),
             });
         }
+        */
 
         Ok(messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Payload<'a> {
-            user_id: &'a str,
-            resource: Resource<'a>,
-        }
+        let email = EmailBuilder::new()
+            // Addresses can be specified by the tuple (email, alias)
+            .to(account.as_str())
+            .from(self.user.as_str())
+            .subject("W3F Registrar Verification Service")
+            .text(msg)
+            .build()
+            .unwrap();
 
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Resource<'a> {
-            raw: &'a str,
-        }
+        // TODO: Can cloning/to_string be avoided here?
+        let mut transport = SmtpClient::new_simple(&self.server)?
+            .credentials(Credentials::new(
+                self.user.to_string(),
+                self.password.to_string(),
+            ))
+            .transport();
 
-        let inner = String::from("From: Fabio Lama <fabio@web3.foundation>\nTo: Fabio Lama <fabio.lama@pm.me>\nSubject: Test Test\nDo you see this?");
-        //let inner = String::from("From: 'John Doe' <john.doe@gmail.com>\nTo: 'Jane Doe' <jane.doe@gmail.com>\nSubject: This is a subject\nDid you receive this message?");
-
-        let encoded = base64::encode_config(&inner, base64::URL_SAFE);
-
-        let payload = Resource { raw: &encoded };
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Entry {
-            headers: Vec<EHeader>,
-            mime_type: String,
-            body: EBody,
-        }
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct EBody {
-            size: usize,
-            data: String,
-        }
-
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct EHeader {
-            name: String,
-            value: String,
-        }
-
-        self.post_request::<ApiMessage, _>(
-            &format!(
-                "https://gmail.googleapis.com/upload/gmail/v1/users/{userId}/messages/send",
-                userId = self.subject
-            ),
-            &format!("\raw\": \"{}\"", encoded),
-        )
-        .await?;
+        let x = transport.send(email.into())?;
 
         Ok(())
     }
@@ -465,6 +476,8 @@ impl Client {
             .select_challenge_data(&account, &AccountType::Email)
             .await?;
 
+        debug!("Sending initial message to {}", account.as_str());
+
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
         self.send_message(&account, verifier.init_message_builder())
@@ -488,7 +501,7 @@ impl Client {
                 continue;
             }
 
-            let sender = &user_messages.get(1).as_ref().unwrap().sender;
+            let sender = &user_messages.get(0).as_ref().unwrap().sender;
 
             let challenge_data = self
                 .db
@@ -608,8 +621,6 @@ impl<'a> JWTBuilder<'a> {
             .as_str()
             .to_string());
 
-        //println!("DEBUG jwt: {}", jwt.0);
-
         Ok(jwt)
     }
 }
@@ -626,7 +637,8 @@ struct ApiMessage {
 #[serde(rename_all = "camelCase")]
 struct ApiPayload {
     headers: Vec<ApiHeader>,
-    parts: Vec<ApiPart>,
+    body: Option<ApiBody>,
+    parts: Option<Vec<ApiPart>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -649,7 +661,7 @@ struct ApiPart {
 #[serde(rename_all = "camelCase")]
 pub struct ApiBody {
     size: i64,
-    data: String,
+    data: Option<String>,
 }
 
 #[test]
@@ -673,35 +685,14 @@ fn test_email_client() {
                 .scope(config.google_scope)
                 .subject(config.google_email)
                 .private_key(config.google_private_key)
+                .email_server(config.email_server)
+                .email_user(config.email_user)
+                .email_password(config.email_password)
                 .token_url("https://oauth2.googleapis.com/token".to_string())
                 .build()
                 .unwrap();
 
         client.token_request().await.unwrap();
-
-        /*
-        let url = format!(
-            "https://gmail.googleapis.com/gmail/v1/users/{}/messages",
-            config.google_email
-        );
-
-        let url = format!(
-            "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
-            userId = config.google_email,
-            id = "174d4b1765d632b1",
-        );
-
-        let res = client.get_request(&url).await.unwrap();
-
-        //let res = client.request_inbox().await.unwrap();
-
-        let res = client
-            .request_message(&EmailId::from("174d4b1765d632b1"))
-            .await
-            .unwrap();
-
-        println!("RES: {:?}", res);
-        */
 
         client
             .send_message(

@@ -37,8 +37,6 @@ pub enum MatrixError {
     JoinRoomTimeout(Account),
     #[fail(display = "the remote UserId was not found when trying to respond")]
     RemoteUserIdNotFound,
-    #[fail(display = "the UserId is unknown (no pending on-chain judgement request)")]
-    UnknownUser,
     #[fail(display = "failed to send message: {}", 0)]
     SendMessage(failure::Error),
     #[fail(display = "database error occured: {}", 0)]
@@ -121,7 +119,7 @@ impl MatrixClient {
         for (room_id, _) in rooms.iter() {
             if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
                 warn!("Leaving dead room: {}", room_id.as_str());
-                let _ = client.leave_room(room_id).await?;
+                let _ = client.leave_room(room_id).await;
             }
         }
 
