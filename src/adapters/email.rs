@@ -112,6 +112,9 @@ pub struct ClientBuilder {
     subject: Option<String>,
     private_key: Option<String>,
     token_url: Option<String>,
+    server: Option<String>,
+    user: Option<String>,
+    password: Option<String>,
 }
 
 impl ClientBuilder {
@@ -124,6 +127,9 @@ impl ClientBuilder {
             subject: None,
             private_key: None,
             token_url: None,
+            server: None,
+            user: None,
+            password: None,
         }
     }
     pub fn issuer(mut self, issuer: String) -> Self {
@@ -146,6 +152,18 @@ impl ClientBuilder {
         self.token_url = Some(url);
         self
     }
+    pub fn email_server(mut self, server: String) -> Self {
+        self.server = Some(server);
+        self
+    }
+    pub fn email_user(mut self, user: String) -> Self {
+        self.user = Some(user);
+        self
+    }
+    pub fn email_password(mut self, password: String) -> Self {
+        self.password = Some(password);
+        self
+    }
     pub fn build(self) -> Result<Client> {
         Ok(Client {
             client: ReqClient::new(),
@@ -157,6 +175,9 @@ impl ClientBuilder {
             private_key: self.private_key.ok_or(ClientError::IncompleteBuilder)?,
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
+            server: self.server.ok_or(ClientError::IncompleteBuilder)?,
+            user: self.user.ok_or(ClientError::IncompleteBuilder)?,
+            password: self.password.ok_or(ClientError::IncompleteBuilder)?,
         })
     }
 }
@@ -172,6 +193,9 @@ pub struct Client {
     private_key: String,
     token_url: String,
     token_id: Option<String>,
+    server: String,
+    user: String,
+    password: String,
 }
 
 impl Client {
@@ -345,7 +369,7 @@ impl Client {
 
         Ok(messages)
     }
-    async fn send_message(&self, sender: &str, account: &Account, msg: String) -> Result<()> {
+    async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
         use lettre::Transport;
         use lettre::smtp::{SmtpClient, ClientSecurity};
         use lettre::smtp::authentication::Credentials;
@@ -354,14 +378,15 @@ impl Client {
         let email = EmailBuilder::new()
             // Addresses can be specified by the tuple (email, alias)
             .to(account.as_str())
-            .from(sender)
-            .subject("Hi, Hello world")
-            .text("Hello world.")
+            .from(self.user.as_str())
+            .subject("W3F Registrar Verification Service")
+            .text(msg)
             .build()
             .unwrap();
 
-        let mut transport = SmtpClient::new_simple("smtp-relay.gmail.com")?
-            .credentials(Credentials::new("fabio@web3.foundation".to_string(), "ynxzpcvbjjimjwwd".to_string()))
+        // TODO: Can cloning/to_string be avoided here?
+        let mut transport = SmtpClient::new_simple(&self.server)?
+            .credentials(Credentials::new(self.user.to_string(), self.password.to_string()))
             .transport();
 
         let x = transport.send(email.into())?;
@@ -636,6 +661,9 @@ fn test_email_client() {
                 .scope(config.google_scope)
                 .subject(config.google_email)
                 .private_key(config.google_private_key)
+                .email_server(config.email_server)
+                .email_user(config.email_user)
+                .email_password(config.email_password)
                 .token_url("https://oauth2.googleapis.com/token".to_string())
                 .build()
                 .unwrap();

@@ -37,8 +37,6 @@ pub enum MatrixError {
     JoinRoomTimeout(Account),
     #[fail(display = "the remote UserId was not found when trying to respond")]
     RemoteUserIdNotFound,
-    #[fail(display = "the UserId is unknown (no pending on-chain judgement request)")]
-    UnknownUser,
     #[fail(display = "failed to send message: {}", 0)]
     SendMessage(failure::Error),
     #[fail(display = "database error occured: {}", 0)]
@@ -46,10 +44,7 @@ pub enum MatrixError {
     Database(failure::Error),
     #[fail(display = "contacted by a user who's RoomId was not registered anywhere")]
     RoomIdNotFound,
-    #[fail(
-        display = "Failed to fetch challenge data from database for account: {:?}",
-        0
-    )]
+    #[fail(display = "Failed to fetch challenge data from database for account: {:?}", 0)]
     ChallengeDataNotFound(Account),
 }
 

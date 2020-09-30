@@ -51,6 +51,10 @@ pub struct Config {
     pub google_issuer: String,
     pub google_scope: String,
     pub google_email: String,
+    //
+    pub email_server: String,
+    pub email_user: String,
+    pub email_password: String,
 }
 
 fn open_config() -> Result<Config> {
