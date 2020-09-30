@@ -131,17 +131,19 @@ impl Connector {
             .map_err(|err| ConnectorError::Response(err.into()))
             .map(|_| ())
     }
-    pub async fn start(mut self) {
+    pub async fn start(self) {
         let (client, _) = connect_async(&self.url).await.unwrap();
         let (write, read) = client.split();
  
-        self.start_comms_receiver(&write);
+        self.start_comms_receiver(write);
 
-        let mut receiver_error = false;
-        loop {
-            if let Err(err) = self.local(&read).await {
+        read.for_each(|message| async {
+            // TODO: This must be initialized outside, use Cell.
+            let mut receiver_error = false;
+
+            message.map_err(|err| {
                 match err {
-                    ConnectorError::Receiver(err) => {
+                    TungError::ConnectionClosed => {
                         // Prevent spamming log messages if the server is
                         // disconnected.
                         if !receiver_error {
@@ -150,25 +152,47 @@ impl Connector {
                         }
 
                         // Try to silently reconnect
-                        WebSocket::connect(&self.url)
-                            .await
-                            .map(|client| {
-                                info!("Reconnected to Watcher");
-                                self.client = client;
-                                receiver_error = false;
-                            })
-                            .unwrap_or(());
-                    }
+                        // TODO...
+                    },
                     _ => {
                         receiver_error = false;
-
-                        error!("{}", err);
+                        error!("{}", err)
                     }
+                };
+            }).map(|message| {
+                match message {
+                    TungMessage::Text(payload) => {
+                        let try_msg = serde_json::from_str::<Message>(&payload);
+                        let msg = if let Ok(msg) = try_msg {
+                            msg
+                        } else {
+                            // TODO: Respond with error
+                            return;
+                        };
+
+                        match msg.event {
+                            EventType::NewJudgementRequest => {
+                                info!("Received a new judgement request from Watcher");
+                                if let Ok(request) = serde_json::from_value::<JudgementRequest>(msg.data) {
+                                    if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                        // TODO: Respond with acknowledgement
+                                        self.comms.notify_new_identity(ident);
+                                    } else {
+                                        // TODO: Respond with error
+                                    };
+                                } else {
+                                    // TODO: Respond with error
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    _ => {}
                 }
-            };
-        }
+            });
+        });
     }
-    fn start_comms_receiver(&self, writer: &SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
+    fn start_comms_receiver(&self, writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
         tokio::spawn(async move {
             loop {
 
@@ -203,9 +227,11 @@ impl Connector {
 
         Ok(())
     }
-    async fn local(&mut self, reader: &SplitStream<WebSocketStream<TcpStream>>) -> StdResult<(), ConnectorError> {
+    async fn local(&self, reader: SplitStream<WebSocketStream<TcpStream>>) -> StdResult<(), ConnectorError> {
         use EventType::*;
 
+
+        /*
         select_biased! {
             frame = self.client.receive().fuse() => {
                 match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
@@ -246,6 +272,7 @@ impl Connector {
                 }
             }
         };
+        */
 
         Ok(())
     }
