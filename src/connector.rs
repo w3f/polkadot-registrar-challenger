@@ -124,40 +124,38 @@ impl Connector {
             .map_err(|err| ConnectorError::Response(err.into()))
             .map(|_| ())
     }
-    pub fn start(mut self) {
+    pub async fn start(mut self) {
         let mut receiver_error = false;
 
-        async {
-            loop {
-                if let Err(err) = self.local().await {
-                    match err {
-                        ConnectorError::Receiver(err) => {
-                            // Prevent spamming log messages if the server is
-                            // disconnected.
-                            if !receiver_error {
-                                error!("Disconnected from Listener: {}", err);
-                                receiver_error = true;
-                            }
-
-                            // Try to silently reconnect
-                            WebSocket::connect(&self.url)
-                                .await
-                                .map(|client| {
-                                    info!("Reconnected to Watcher");
-                                    self.client = client;
-                                    receiver_error = false;
-                                })
-                                .unwrap_or(());
+        loop {
+            if let Err(err) = self.local().await {
+                match err {
+                    ConnectorError::Receiver(err) => {
+                        // Prevent spamming log messages if the server is
+                        // disconnected.
+                        if !receiver_error {
+                            error!("Disconnected from Listener: {}", err);
+                            receiver_error = true;
                         }
-                        _ => {
-                            receiver_error = false;
 
-                            error!("{}", err);
-                        }
+                        // Try to silently reconnect
+                        WebSocket::connect(&self.url)
+                            .await
+                            .map(|client| {
+                                info!("Reconnected to Watcher");
+                                self.client = client;
+                                receiver_error = false;
+                            })
+                            .unwrap_or(());
                     }
-                };
-            }
-        };
+                    _ => {
+                        receiver_error = false;
+
+                        error!("{}", err);
+                    }
+                }
+            };
+        }
     }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         use EventType::*;
