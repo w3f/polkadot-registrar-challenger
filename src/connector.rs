@@ -70,7 +70,6 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
     }
 }
 
-#[derive(Clone)]
 pub struct Connector {
     comms: CommsVerifier,
     url: String,
@@ -137,9 +136,10 @@ impl Connector {
         let (client, _) = connect_async(&self.url).await.unwrap();
         let (write, read) = client.split();
  
-        let c_self = self.clone();
+        //let c_self = self.clone();
+        let comms = self.comms.clone();
         tokio::spawn(async move {
-            c_self.start_comms_receiver(write);
+            Self::start_comms_receiver(comms, write);
         });
 
         read.for_each(|message| async {
@@ -198,15 +198,15 @@ impl Connector {
             });
         });
     }
-    async fn start_comms_receiver(self, mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
+    async fn start_comms_receiver(comms: CommsVerifier, mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) {
         loop {
-            let _ = self.handle_comms_message(&mut writer).await.map_err(|err| {
+            let _ = Self::handle_comms_message(&comms, &mut writer).await.map_err(|err| {
                 error!("{}", err);
             });
         }
     }
-    async fn handle_comms_message(&self, writer: &mut SplitSink<WebSocketStream<TcpStream>, TungMessage>) -> Result<()> {
-        match self.comms.recv().await {
+    async fn handle_comms_message(comms: &CommsVerifier, writer: &mut SplitSink<WebSocketStream<TcpStream>, TungMessage>) -> Result<()> {
+        match comms.recv().await {
             CommsMessage::JudgeIdentity {
                 net_account,
                 judgement
