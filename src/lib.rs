@@ -140,7 +140,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
             break;
         }
 
-        if let Ok(con) = Connector::new(config.watcher_url, c_connector.clone()).await {
+        if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
             info!("Connecting to Watcher succeeded");
             connector = Some(con);
             break;
@@ -214,8 +214,10 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
 
     if config.enable_watcher {
         info!("Starting Watcher connector task, listening...");
+        let connector = connector.unwrap();
+
         tokio::spawn(async move {
-            connector.unwrap().start().await;
+            connector.start();
         });
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");

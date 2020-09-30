@@ -24,7 +24,7 @@ failure = "0.1.8"
 serde = "1.0.116"
 serde_json = "1.0.57"
 crossbeam = "0.7.3"
-websockets = { version = "0.1.5", rev = "9c876558ad07063a54f7dc7b83ebfe993f360dd8" }
+websockets = "0.1.5"
 reqwest = { version = "0.10.8", features = ["json"] }
 urlencoding = "1.1.1"
 matrix-sdk = { version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk.git" }

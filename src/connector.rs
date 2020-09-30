@@ -79,9 +79,9 @@ enum ConnectorError {
 }
 
 impl Connector {
-    pub async fn new(url: String, comms: CommsVerifier) -> Result<Self> {
+    pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
         let mut connector = Connector {
-            client: WebSocket::connect(&url).await?,
+            client: WebSocket::connect(url).await?,
             comms: comms,
             url: url.to_owned(),
         };
@@ -102,7 +102,7 @@ impl Connector {
                     })
                     .map_err(|err| ConnectorError::Response(err.into()))?,
                 })
-                .map_err(|err| ConnectorError::Response(err.into()))?
+                .map_err(|err| ConnectorError::Response(err.into()))?,
             )
             .await
             .map_err(|err| ConnectorError::Response(err.into()))
@@ -124,38 +124,40 @@ impl Connector {
             .map_err(|err| ConnectorError::Response(err.into()))
             .map(|_| ())
     }
-    pub async fn start(mut self) {
+    pub fn start(mut self) {
         let mut receiver_error = false;
 
-        loop {
-            if let Err(err) = self.local().await {
-                match err {
-                    ConnectorError::Receiver(err) => {
-                        // Prevent spamming log messages if the server is
-                        // disconnected.
-                        if !receiver_error {
-                            error!("Disconnected from Listener: {}", err);
-                            receiver_error = true;
+        async {
+            loop {
+                if let Err(err) = self.local().await {
+                    match err {
+                        ConnectorError::Receiver(err) => {
+                            // Prevent spamming log messages if the server is
+                            // disconnected.
+                            if !receiver_error {
+                                error!("Disconnected from Listener: {}", err);
+                                receiver_error = true;
+                            }
+
+                            // Try to silently reconnect
+                            WebSocket::connect(&self.url)
+                                .await
+                                .map(|client| {
+                                    info!("Reconnected to Watcher");
+                                    self.client = client;
+                                    receiver_error = false;
+                                })
+                                .unwrap_or(());
                         }
+                        _ => {
+                            receiver_error = false;
 
-                        // Try to silently reconnect
-                        WebSocket::connect(&self.url)
-                            .await
-                            .map(|client| {
-                                info!("Reconnected to Watcher");
-                                self.client = client;
-                                receiver_error = false;
-                            })
-                            .unwrap_or(());
+                            error!("{}", err);
+                        }
                     }
-                    _ => {
-                        receiver_error = false;
-
-                        error!("{}", err);
-                    }
-                }
-            };
-        }
+                };
+            }
+        };
     }
     async fn local(&mut self) -> StdResult<(), ConnectorError> {
         use EventType::*;

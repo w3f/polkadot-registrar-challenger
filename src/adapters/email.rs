@@ -6,6 +6,10 @@ use jwt::algorithm::openssl::PKeyWithDigest;
 use jwt::algorithm::AlgorithmType;
 use jwt::header::{Header, HeaderType};
 use jwt::{SignWithKey, Token};
+use lettre::smtp::authentication::Credentials;
+use lettre::smtp::{ClientSecurity, SmtpClient};
+use lettre::Transport;
+use lettre_email::EmailBuilder;
 use openssl::hash::MessageDigest;
 use openssl::pkey::PKey;
 use openssl::rsa::Rsa;
@@ -14,14 +18,10 @@ use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
-use tokio::time::{self, Duration};
-use lettre::Transport;
-use lettre::smtp::{SmtpClient, ClientSecurity};
-use lettre::smtp::authentication::Credentials;
-use lettre_email::EmailBuilder;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
+use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EmailId(String);
@@ -385,7 +385,10 @@ impl Client {
 
         // TODO: Can cloning/to_string be avoided here?
         let mut transport = SmtpClient::new_simple(&self.server)?
-            .credentials(Credentials::new(self.user.to_string(), self.password.to_string()))
+            .credentials(Credentials::new(
+                self.user.to_string(),
+                self.password.to_string(),
+            ))
             .transport();
 
         let x = transport.send(email.into())?;
