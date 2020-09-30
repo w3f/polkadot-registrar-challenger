@@ -14,10 +14,14 @@ use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
+use tokio::time::{self, Duration};
+use lettre::Transport;
+use lettre::smtp::{SmtpClient, ClientSecurity};
+use lettre::smtp::authentication::Credentials;
+use lettre_email::EmailBuilder;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
-use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EmailId(String);
@@ -370,11 +374,6 @@ impl Client {
         Ok(messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        use lettre::Transport;
-        use lettre::smtp::{SmtpClient, ClientSecurity};
-        use lettre::smtp::authentication::Credentials;
-        use lettre_email::EmailBuilder;
-
         let email = EmailBuilder::new()
             // Addresses can be specified by the tuple (email, alias)
             .to(account.as_str())
