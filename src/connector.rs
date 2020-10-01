@@ -16,7 +16,7 @@ use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::error::Error as TungError;
 use tungstenite::protocol::Message as TungMessage;
 use websockets::{Frame, WebSocket};
-use futures_channel::mpsc::{Sender, Receiver};
+use futures_channel::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -85,7 +85,7 @@ enum ConnectorError {
     #[fail(display = "failed to respond: {}", 0)]
     Response(failure::Error),
     #[fail(display = "failed to fetch messages from the listener: {}", 0)]
-    Receiver(failure::Error),
+    UnboundedReceiver(failure::Error),
 }
 
 impl Connector {
@@ -100,105 +100,107 @@ impl Connector {
     }
     pub async fn start(self) {
         let (writer, reader) = self.client.split();
-        let writer = Arc::new(Mutex::new(writer));
+        let (sender, receiver) = unbounded();
 
-        //Self::send_ack(Some("Connection established"), &writer);
-
+        tokio::spawn(Self::start_comms_receiver(self.comms.clone(), sender.clone()));
+        tokio::spawn(Self::start_websocket_writer(writer, self.comms.clone(), receiver));
+        tokio::spawn(Self::start_websocket_reader(reader, self.comms.clone(), sender));
     }
-    async fn start_comms_receiver(comms: CommsVerifier, mut sender: Sender<Message>) {
-        tokio::spawn(async move {
-            loop {
-                match comms.recv().await {
-                    CommsMessage::JudgeIdentity {
-                        net_account,
-                        judgement,
-                    } => {
-                        sender.send(
-                            Message {
-                                event: EventType::JudgementResult,
-                                data: serde_json::to_value(&JudgementResponse {
-                                    address: net_account.clone(),
-                                    judgement: judgement,
-                                })
-                                .map_err(|err| ConnectorError::Response(err.into())).unwrap(),
-                            }
-                        );
-                    }
-                    _ => {}
+    async fn start_comms_receiver(comms: CommsVerifier, mut sender: UnboundedSender<Message>) {
+        loop {
+            match comms.recv().await {
+                CommsMessage::JudgeIdentity {
+                    net_account,
+                    judgement,
+                } => {
+                    sender.send(
+                        Message {
+                            event: EventType::JudgementResult,
+                            data: serde_json::to_value(&JudgementResponse {
+                                address: net_account.clone(),
+                                judgement: judgement,
+                            })
+                            .map_err(|err| ConnectorError::Response(err.into())).unwrap(),
+                        }
+                    );
                 }
+                _ => {}
             }
-        });
+        }
     }
-    async fn start_websocket_writer(mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>, comms: CommsVerifier, receiver: Receiver<Message>) {
-        receiver.for_each(|message| async move {
-            let message = message.clone();
-            let payload = serde_json::to_string(&message).unwrap();
-            writer.send(TungMessage::Text(
-                payload
-            ));
-        });
+    async fn start_websocket_writer(mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>, comms: CommsVerifier, mut receiver: UnboundedReceiver<Message>) {
+        loop {
+            println!("Wating for messages...");
+            if let Some(message) = receiver.next().await {
+                writer.send(TungMessage::Text(
+                    serde_json::to_string(&message).unwrap()
+                ));
+            }
+        }
     }
-    async fn start_websocket_reader(reader: SplitStream<WebSocketStream<TcpStream>>, comms: CommsVerifier, sender: Sender<Message>) {
-        reader.for_each(|message| async {
-            // TODO: This must be initialized outside, use Cell.
-            let mut receiver_error = false;
+    async fn start_websocket_reader(mut reader: SplitStream<WebSocketStream<TcpStream>>, comms: CommsVerifier, sender: UnboundedSender<Message>) {
+        loop {
+            if let Some(message) = reader.next().await {
+                // TODO: This must be initialized outside, use Cell.
+                let mut receiver_error = false;
 
-            message
-                .map_err(|err| {
-                    match err {
-                        TungError::ConnectionClosed => {
-                            // Prevent spamming log messages if the server is
-                            // disconnected.
-                            if !receiver_error {
-                                error!("Disconnected from Listener: {}", err);
-                                receiver_error = true;
+                message
+                    .map_err(|err| {
+                        match err {
+                            TungError::ConnectionClosed => {
+                                // Prevent spamming log messages if the server is
+                                // disconnected.
+                                if !receiver_error {
+                                    error!("Disconnected from Listener: {}", err);
+                                    receiver_error = true;
+                                }
+
+                                // Try to silently reconnect
+                                // TODO...
                             }
+                            _ => {
+                                receiver_error = false;
+                                error!("{}", err)
+                            }
+                        };
+                    })
+                    .map(|message| {
+                        match message {
+                            TungMessage::Text(payload) => {
+                                trace!("Received message from Watcher: {}", payload);
+                                let try_msg = serde_json::from_str::<Message>(&payload);
+                                let msg = if let Ok(msg) = try_msg {
+                                    msg
+                                } else {
+                                    // TODO: Respond with error
 
-                            // Try to silently reconnect
-                            // TODO...
-                        }
-                        _ => {
-                            receiver_error = false;
-                            error!("{}", err)
-                        }
-                    };
-                })
-                .map(|message| {
-                    match message {
-                        TungMessage::Text(payload) => {
-                            trace!("Received message from Watcher: {}", payload);
-                            let try_msg = serde_json::from_str::<Message>(&payload);
-                            let msg = if let Ok(msg) = try_msg {
-                                msg
-                            } else {
-                                // TODO: Respond with error
+                                    return;
+                                };
 
-                                return;
-                            };
-
-                            match msg.event {
-                                EventType::NewJudgementRequest => {
-                                    info!("Received a new judgement request from Watcher");
-                                    if let Ok(request) =
-                                        serde_json::from_value::<JudgementRequest>(msg.data)
-                                    {
-                                        if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                            // TODO: Respond with acknowledgement
-                                            comms.notify_new_identity(ident);
+                                match msg.event {
+                                    EventType::NewJudgementRequest => {
+                                        info!("Received a new judgement request from Watcher");
+                                        if let Ok(request) =
+                                            serde_json::from_value::<JudgementRequest>(msg.data)
+                                        {
+                                            if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                                // TODO: Respond with acknowledgement
+                                                comms.notify_new_identity(ident);
+                                            } else {
+                                                // TODO: Respond with error
+                                            };
                                         } else {
                                             // TODO: Respond with error
-                                        };
-                                    } else {
-                                        // TODO: Respond with error
+                                        }
                                     }
+                                    _ => {}
                                 }
-                                _ => {}
                             }
+                            _ => {}
                         }
-                        _ => {}
-                    }
-                });
-        });
+                    });
+            }
+        }
     }
     /*
     fn send_ack(
