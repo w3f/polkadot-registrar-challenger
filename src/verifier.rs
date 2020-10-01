@@ -62,11 +62,11 @@ impl<'a> Verifier2<'a> {
 
         if send_context {
             message.push_str(
-                "
-                [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n
+                "\
+                [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
                 This contact address was discovered in the Polkadot on-chain naming system and\
-                the issuer has requested the Web3 Registrar service to judge this account.\n\n
-                If you did not issue this request then just ignore this message.\
+                the issuer has requested the Web3 Registrar service to judge this account.\
+                If you did not issue this request then just ignore this message.\n\n\
             ",
             );
         }
@@ -106,18 +106,16 @@ impl<'a> Verifier2<'a> {
             message.push_str(challenge.as_str());
         }
 
-        if !self.invalid_verifications().is_empty() {
+        if !self.invalid.is_empty() {
             message.push_str("\n\nPending/Unconfirmed address(-es) for this account:\n");
-        }
 
-        for (network_address, challenge) in &self.invalid {
-            message.push_str("\n- Address:\n");
-            message.push_str(network_address.address().as_str());
-            message.push_str("\n- Challenge:\n");
-            message.push_str(challenge.as_str());
-        }
+            for (network_address, challenge) in &self.invalid {
+                message.push_str("\n- Address:\n");
+                message.push_str(network_address.address().as_str());
+                message.push_str("\n- Challenge:\n");
+                message.push_str(challenge.as_str());
+            }
 
-        if !self.invalid_verifications().is_empty() {
             message.push_str("\n\nRefer to the Polkadot Wiki guide");
         }
 

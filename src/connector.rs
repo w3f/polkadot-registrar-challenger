@@ -70,7 +70,7 @@ struct JudgementResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct JudgementRequest {
     pub address: NetAccount,
-    pub accounts: HashMap<AccountType, Account>,
+    pub accounts: HashMap<AccountType, Option<Account>>,
 }
 
 impl TryFrom<JudgementRequest> for OnChainIdentity {
@@ -80,7 +80,9 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
         let mut ident = OnChainIdentity::new(request.address)?;
 
         for (account_ty, account) in request.accounts {
-            ident.push_account(account_ty, account)?;
+            if let Some(account) = account {
+                ident.push_account(account_ty, account)?;
+            }
         }
 
         Ok(ident)
@@ -167,7 +169,7 @@ impl Connector {
                 if let Ok(message) = &message {
                     match message {
                         TungMessage::Text(payload) => {
-                            trace!("Received message from Watcher: {}", payload);
+                            debug!("Received message from Watcher: {}", payload);
                             let try_msg = serde_json::from_str::<Message>(&payload);
                             let msg = if let Ok(msg) = try_msg {
                                 msg
@@ -187,18 +189,19 @@ impl Connector {
                                             sender.send(Message::ack(None)).await.unwrap();
                                             comms.notify_new_identity(ident);
                                         } else {
+                                            error!("Failed to convert message");
                                             sender.send(Message::error()).await.unwrap();
                                         };
                                     } else {
+                                        error!("Failed to convert message");
                                         sender.send(Message::error()).await.unwrap();
                                     }
                                 }
-                                _ => {
-                                    sender.send(Message::error()).await.unwrap();
-                                }
+                                _ => {}
                             }
                         }
                         _ => {
+                            error!("Failed to convert message");
                             sender.send(Message::error()).await.unwrap();
                         }
                     }

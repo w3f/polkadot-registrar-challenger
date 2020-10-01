@@ -864,9 +864,11 @@ mod tests {
                 "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
             ))
             .unwrap();
+
             ident
                 .push_account(AccountType::DisplayName, Account::from("Alice"))
                 .unwrap();
+
             ident
                 .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
                 .unwrap();
@@ -900,13 +902,16 @@ mod tests {
             );
 
             // Change a field, insert and return value.
+            // (Reset account state)
             let mut ident = OnChainIdentity::new(NetAccount::from(
                 "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
             ))
             .unwrap();
+
             ident
                 .push_account(AccountType::DisplayName, Account::from("Alice"))
                 .unwrap();
+
             ident
                 .push_account(
                     AccountType::Matrix,
@@ -932,9 +937,11 @@ mod tests {
                 "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
             ))
             .unwrap();
+
             ident
                 .push_account(AccountType::DisplayName, Account::from("Bob"))
                 .unwrap();
+
             ident
                 .push_account(AccountType::Matrix, Account::from("@bob:matrix.org"))
                 .unwrap();
@@ -951,6 +958,7 @@ mod tests {
                     .account,
                 Account::from("@alice_second:matrix.org")
             );
+
             assert_eq!(
                 res[1]
                     .get_account_state(&AccountType::Matrix)
