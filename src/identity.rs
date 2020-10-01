@@ -207,11 +207,10 @@ impl IdentityManager {
                     comms.notify_identity_judgment(net_account.clone(), Judgement::Reasonable);
                 })?;
 
-            self.get_comms(&AccountType::Matrix)
-                .map(|comms| {
-                    debug!("Closing Matrix room for {}", net_account.as_str());
-                    comms.leave_matrix_room(net_account);
-                })?;
+            self.get_comms(&AccountType::Matrix).map(|comms| {
+                debug!("Closing Matrix room for {}", net_account.as_str());
+                comms.leave_matrix_room(net_account);
+            })?;
         }
 
         Ok(())

@@ -168,7 +168,10 @@ impl MatrixClient {
                     debug!("Leaving room: {}", room_id.as_str());
                     let _ = self.client.leave_room(&room_id).await?;
                 } else {
-                    warn!("Failed to find RoomId for address {} when trying to leave room", net_account.as_str());
+                    warn!(
+                        "Failed to find RoomId for address {} when trying to leave room",
+                        net_account.as_str()
+                    );
                 }
 
                 Ok(())
@@ -243,21 +246,12 @@ impl MatrixClient {
             .select_challenge_data(&account, &AccountType::Matrix)
             .await?;
 
-        for (network_address, challenge) in challenge_data {
-            // Send the instructions for verification to the user.
-            debug!("Sending instructions to user");
-            self.send_msg(
-                include_str!("../../messages/instructions")
-                    .replace("{:PAYLOAD}", &challenge.as_str())
-                    .replace("{:ADDRESS}", network_address.address().as_str())
-                    .as_str(),
-                &room_id,
-            )
+        debug!("Sending instructions to user");
+        let verifier = Verifier2::new(&challenge_data);
+        self.send_msg(&verifier.init_message_builder(true), &room_id)
             .await
-            .map_err(|err| MatrixError::SendMessage(err.into()))?;
-        }
-
-        Ok(())
+            .map_err(|err| MatrixError::SendMessage(err.into()).into())
+            .map(|_| ())
     }
 }
 
@@ -325,8 +319,7 @@ impl Responder {
 
             // Fetch the text message from the event.
             let msg_body = if let SyncMessageEvent {
-                content:
-                    MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
+                content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
                 ..
             } = event
             {
