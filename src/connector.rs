@@ -184,7 +184,6 @@ impl Connector {
                                         serde_json::from_value::<JudgementRequest>(msg.data)
                                     {
                                         if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                            // TODO: Respond with acknowledgement
                                             sender.send(Message::ack(None)).await.unwrap();
                                             comms.notify_new_identity(ident);
                                         } else {

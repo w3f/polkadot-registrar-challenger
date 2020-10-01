@@ -97,7 +97,6 @@ impl CommsVerifier {
     pub fn try_recv(&self) -> Option<CommsMessage> {
         self.recv.try_recv().ok()
     }
-    // TODO: Make pub to connector module
     pub fn notify_new_identity(&self, ident: OnChainIdentity) {
         self.sender
             .send(CommsMessage::NewJudgementRequest(ident))

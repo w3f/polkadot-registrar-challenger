@@ -171,11 +171,10 @@ impl fmt::Display for Account {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-// TODO: Make fields private
 pub struct NetworkAddress {
-    pub address: NetAccount,
-    pub algo: Algorithm,
-    pub pub_key: PubKey,
+    address: NetAccount,
+    algo: Algorithm,
+    pub_key: PubKey,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -298,7 +297,6 @@ impl ToSql for ChallengeStatus {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-// TODO: implement `ToSql` and `FromSql` for Challenge.
 pub struct Challenge(pub String);
 
 impl Challenge {

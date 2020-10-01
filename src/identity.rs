@@ -206,8 +206,6 @@ impl IdentityManager {
                     );
                     comms.notify_identity_judgment(net_account, Judgement::Reasonable);
                 })?;
-        } else {
-            // TODO
         }
 
         Ok(())
