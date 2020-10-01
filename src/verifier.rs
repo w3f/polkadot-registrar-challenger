@@ -91,8 +91,17 @@ impl<'a> Verifier2<'a> {
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn init_message_builder(&self) -> String {
+    pub fn init_message_builder(&self, send_context: bool) -> String {
         let mut message = String::new();
+
+        if send_context {
+            message.push_str("
+                [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n
+                This contact address was discovered in the Polkadot on-chain naming system and\
+                the issuer has requested the Web3 Registrar service to judge this account.\n\n
+                If you did not issue this request then just ignore this message.\
+            ");
+        }
 
         if self.challenges.len() > 1 {
             message.push_str("Please sign each challenge with the corresponding address:\n");

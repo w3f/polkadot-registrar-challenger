@@ -439,7 +439,7 @@ impl Client {
 
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
-        self.send_message(&account, verifier.init_message_builder())
+        self.send_message(&account, verifier.init_message_builder(true))
             .await?;
 
         Ok(())

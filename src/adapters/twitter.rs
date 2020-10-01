@@ -534,7 +534,7 @@ impl Twitter {
             let mut verifier = Verifier2::new(&challenge_data);
 
             if !*init_msg {
-                self.send_message(&twitter_id, verifier.init_message_builder())
+                self.send_message(&twitter_id, verifier.init_message_builder(false))
                     .await?;
                 self.db.confirm_init_message(&account).await?;
                 continue;
