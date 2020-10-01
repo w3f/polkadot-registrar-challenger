@@ -115,10 +115,9 @@ impl<'a> Verifier2<'a> {
                 message.push_str("\n- Challenge:\n");
                 message.push_str(challenge.as_str());
             }
-
-            message.push_str("\n\nRefer to the Polkadot Wiki guide");
         }
 
+        message.push_str("\n\nRefer to the Polkadot Wiki guide.");
         message
     }
 }

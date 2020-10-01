@@ -18,7 +18,6 @@ use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
@@ -274,7 +273,6 @@ impl Client {
         */
 
         let txt = resp.text().await?;
-        //println!("GET response: {}", txt);
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
@@ -324,7 +322,7 @@ impl Client {
             .ok_or(ClientError::UnrecognizedData)?
             .value
             .clone()
-            .try_into()?;
+            .convert_into()?;
 
         if let Some(body) = response.payload.body {
             if let Some(data) = body.data {
@@ -522,6 +520,7 @@ impl Client {
 
             self.send_message(sender, verifier.response_message_builder())
                 .await?;
+            self.db.track_email_id(email_id).await?;
         }
 
         Ok(())
