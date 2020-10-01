@@ -430,7 +430,7 @@ impl Twitter {
             .remove(0)
             .1;
 
-        let mut interval = time::interval(Duration::from_secs(60));
+        let mut interval = time::interval(Duration::from_secs(3));
 
         loop {
             interval.tick().await;
@@ -445,8 +445,7 @@ impl Twitter {
             .db
             .select_watermark(&AccountType::Twitter)
             .await?
-            .or_else(|| Some(0))
-            .unwrap();
+            .unwrap_or(0);
 
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
