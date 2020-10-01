@@ -130,7 +130,6 @@ impl Connector {
     }
     async fn start_websocket_writer(mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>, comms: CommsVerifier, mut receiver: UnboundedReceiver<Message>) {
         loop {
-            println!("Wating for messages...");
             if let Some(message) = receiver.next().await {
                 writer.send(TungMessage::Text(
                     serde_json::to_string(&message).unwrap()

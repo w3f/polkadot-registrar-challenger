@@ -217,7 +217,7 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         let connector = connector.unwrap();
 
         tokio::spawn(async move {
-            //connector.start().await;
+            connector.start().await;
         });
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");
