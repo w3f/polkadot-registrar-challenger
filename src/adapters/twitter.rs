@@ -562,6 +562,9 @@ impl Twitter {
                         ChallengeStatus::Accepted,
                     )
                     .await?;
+
+                // Tell the manager to check the user's account states.
+                self.comms.notify_status_change(network_address.address().clone());
             }
 
             for network_address in verifier.invalid_verifications() {
