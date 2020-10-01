@@ -4,19 +4,13 @@ use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
 use futures::StreamExt;
-use futures::{select_biased, FutureExt};
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::result::Result as StdResult;
-use std::sync::{Arc, Mutex};
 use tokio::net::TcpStream;
-use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
-use tungstenite::error::Error as TungError;
 use tungstenite::protocol::Message as TungMessage;
-use websockets::{Frame, WebSocket};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -96,25 +90,13 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 pub struct Connector {
     client: WebSocketStream<TcpStream>,
     comms: CommsVerifier,
-    url: String,
-}
-
-#[derive(Debug, Fail)]
-enum ConnectorError {
-    #[fail(display = "the received message is invalid: {}", 0)]
-    InvalidMessage(failure::Error),
-    #[fail(display = "failed to respond: {}", 0)]
-    Response(failure::Error),
-    #[fail(display = "failed to fetch messages from the listener: {}", 0)]
-    UnboundedReceiver(failure::Error),
 }
 
 impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
-        let mut connector = Connector {
+        let connector = Connector {
             client: connect_async(url).await?.0,
             comms: comms,
-            url: url.to_owned(),
         };
 
         Ok(connector)
@@ -152,10 +134,10 @@ impl Connector {
                                 address: net_account.clone(),
                                 judgement: judgement,
                             })
-                            .map_err(|err| ConnectorError::Response(err.into()))
                             .unwrap(),
                         })
-                        .await;
+                        .await
+                        .unwrap();
                 }
                 _ => {}
             }
@@ -163,7 +145,7 @@ impl Connector {
     }
     async fn start_websocket_writer(
         mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
-        comms: CommsVerifier,
+        _comms: CommsVerifier,
         mut receiver: UnboundedReceiver<Message>,
     ) {
         loop {
