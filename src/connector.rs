@@ -1,12 +1,16 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::identity::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
-use futures::{select_biased, FutureExt};
+use futures::sink::SinkExt;
+use futures::stream::{SplitSink, SplitStream};
+use futures::StreamExt;
+use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::result::Result as StdResult;
-use websockets::{Frame, WebSocket};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{connect_async, WebSocketStream};
+use tungstenite::protocol::Message as TungMessage;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -24,6 +28,27 @@ enum EventType {
 struct Message {
     event: EventType,
     data: Value,
+}
+
+impl Message {
+    fn ack(msg: Option<&str>) -> Message {
+        Message {
+            event: EventType::Ack,
+            data: serde_json::to_value(&AckResponse {
+                result: msg.unwrap_or("Message acknowledged").to_string(),
+            })
+            .unwrap(),
+        }
+    }
+    fn error() -> Message {
+        Message {
+            event: EventType::Error,
+            data: serde_json::to_value(&ErrorResponse {
+                error: "Message is invalid. Rejected".to_string(),
+            })
+            .unwrap(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,168 +88,126 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 }
 
 pub struct Connector {
-    client: WebSocket,
+    client: WebSocketStream<TcpStream>,
     comms: CommsVerifier,
-    url: String,
-}
-
-#[derive(Debug, Fail)]
-enum ConnectorError {
-    #[fail(display = "the received message is invalid: {}", 0)]
-    InvalidMessage(failure::Error),
-    #[fail(display = "failed to respond: {}", 0)]
-    Response(failure::Error),
-    #[fail(display = "failed to fetch messages from the listener: {}", 0)]
-    Receiver(failure::Error),
 }
 
 impl Connector {
     pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
-        let mut connector = Connector {
-            client: WebSocket::connect(url).await?,
+        let connector = Connector {
+            client: connect_async(url).await?.0,
             comms: comms,
-            url: url.to_owned(),
         };
-
-        connector.send_ack(Some("Connection established")).await?;
 
         Ok(connector)
     }
-    async fn send_ack(&mut self, msg: Option<&str>) -> StdResult<(), ConnectorError> {
-        self.client
-            .send_text(
-                serde_json::to_string(&Message {
-                    event: EventType::Ack,
-                    data: serde_json::to_value(&AckResponse {
-                        result: msg
-                            .map(|txt| txt.to_string())
-                            .unwrap_or("Message acknowledged".to_string()),
-                    })
-                    .map_err(|err| ConnectorError::Response(err.into()))?,
-                })
-                .map_err(|err| ConnectorError::Response(err.into()))?,
-            )
-            .await
-            .map_err(|err| ConnectorError::Response(err.into()))
-            .map(|_| ())
-    }
-    async fn send_error(&mut self) -> StdResult<(), ConnectorError> {
-        self.client
-            .send_text(
-                serde_json::to_string(&Message {
-                    event: EventType::Error,
-                    data: serde_json::to_value(&ErrorResponse {
-                        error: "Message is invalid. Rejected".to_string(),
-                    })
-                    .map_err(|err| ConnectorError::Response(err.into()))?,
-                })
-                .map_err(|err| ConnectorError::Response(err.into()))?,
-            )
-            .await
-            .map_err(|err| ConnectorError::Response(err.into()))
-            .map(|_| ())
-    }
-    pub async fn start(mut self) {
-        let mut receiver_error = false;
+    pub async fn start(self) {
+        let (writer, reader) = self.client.split();
+        let (sender, receiver) = unbounded();
 
+        tokio::spawn(Self::start_comms_receiver(
+            self.comms.clone(),
+            sender.clone(),
+        ));
+        tokio::spawn(Self::start_websocket_writer(
+            writer,
+            self.comms.clone(),
+            receiver,
+        ));
+        tokio::spawn(Self::start_websocket_reader(
+            reader,
+            self.comms.clone(),
+            sender,
+        ));
+    }
+    async fn start_comms_receiver(comms: CommsVerifier, mut sender: UnboundedSender<Message>) {
         loop {
-            if let Err(err) = self.local().await {
-                match err {
-                    ConnectorError::Receiver(err) => {
-                        // Prevent spamming log messages if the server is
-                        // disconnected.
-                        if !receiver_error {
-                            error!("Disconnected from Listener: {}", err);
-                            receiver_error = true;
-                        }
-
-                        // Try to silently reconnect
-                        WebSocket::connect(&self.url)
-                            .await
-                            .map(|client| {
-                                info!("Reconnected to Watcher");
-                                self.client = client;
-                                receiver_error = false;
+            match comms.recv().await {
+                CommsMessage::JudgeIdentity {
+                    net_account,
+                    judgement,
+                } => {
+                    sender
+                        .send(Message {
+                            event: EventType::JudgementResult,
+                            data: serde_json::to_value(&JudgementResponse {
+                                address: net_account.clone(),
+                                judgement: judgement,
                             })
-                            .unwrap_or(());
-                    }
-                    _ => {
-                        receiver_error = false;
-
-                        error!("{}", err);
-                    }
+                            .unwrap(),
+                        })
+                        .await
+                        .unwrap();
                 }
-            };
+                _ => {}
+            }
         }
     }
-    async fn local(&mut self) -> StdResult<(), ConnectorError> {
-        use EventType::*;
+    async fn start_websocket_writer(
+        mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
+        _comms: CommsVerifier,
+        mut receiver: UnboundedReceiver<Message>,
+    ) {
+        loop {
+            if let Some(message) = receiver.next().await {
+                writer
+                    .send(TungMessage::Text(serde_json::to_string(&message).unwrap()))
+                    .await
+                    .unwrap();
+            }
+        }
+    }
+    async fn start_websocket_reader(
+        mut reader: SplitStream<WebSocketStream<TcpStream>>,
+        comms: CommsVerifier,
+        mut sender: UnboundedSender<Message>,
+    ) {
+        loop {
+            if let Some(message) = reader.next().await {
+                if let Ok(message) = &message {
+                    match message {
+                        TungMessage::Text(payload) => {
+                            trace!("Received message from Watcher: {}", payload);
+                            let try_msg = serde_json::from_str::<Message>(&payload);
+                            let msg = if let Ok(msg) = try_msg {
+                                msg
+                            } else {
+                                sender.send(Message::error()).await.unwrap();
 
-        select_biased! {
-            msg = self.comms.recv().fuse() => {
-                match msg {
-                    CommsMessage::JudgeIdentity {
-                        net_account,
-                        judgement,
-                    } => {
-                        self.client
-                            .send_text(
-                                serde_json::to_string(&Message {
-                                    event: EventType::JudgementResult,
-                                    data: serde_json::to_value(&JudgementResponse {
-                                        address: net_account.clone(),
-                                        judgement: judgement,
-                                    })
-                                    .map_err(|err| ConnectorError::Response(err.into()))?,
-                                })
-                                .map_err(|err| ConnectorError::Response(err.into()))?,
-                            )
-                            .await
-                            .map_err(|err| ConnectorError::Response(err.into()))?;
-                    }
-                    _ => panic!("Received invalid message in Connector"),
-                }
-            },
-            frame = self.client.receive().fuse() => {
-                match frame.map_err(|err| ConnectorError::Receiver(err.into()))? {
-                    Frame::Text { payload, .. } => {
-                        trace!("Received message from Watcher: {}", payload);
+                                return;
+                            };
 
-                        let try_msg = serde_json::from_str::<Message>(&payload);
-                        let msg = if let Ok(msg) = try_msg {
-                            msg
-                        } else {
-                            self.send_error().await?;
-                            return Err(ConnectorError::InvalidMessage(try_msg.unwrap_err().into()));
-                        };
-
-                        match msg.event {
-                            NewJudgementRequest => {
-                                info!("Received a new judgement request from Watcher");
-                                if let Ok(request) =
-                                    serde_json::from_value::<JudgementRequest>(msg.data)
-                                {
-                                    let ident = if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                        self.send_ack(None).await?;
-
-                                        self.comms.notify_new_identity(ident);
+                            match msg.event {
+                                EventType::NewJudgementRequest => {
+                                    info!("Received a new judgement request from Watcher");
+                                    if let Ok(request) =
+                                        serde_json::from_value::<JudgementRequest>(msg.data)
+                                    {
+                                        if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                            // TODO: Respond with acknowledgement
+                                            sender.send(Message::ack(None)).await.unwrap();
+                                            comms.notify_new_identity(ident);
+                                        } else {
+                                            sender.send(Message::error()).await.unwrap();
+                                        };
                                     } else {
-                                        self.send_error().await?;
-                                    };
-                                } else {
-                                    self.send_error().await?;
+                                        sender.send(Message::error()).await.unwrap();
+                                    }
+                                }
+                                _ => {
+                                    sender.send(Message::error()).await.unwrap();
                                 }
                             }
-                            _ => {}
+                        }
+                        _ => {
+                            sender.send(Message::error()).await.unwrap();
                         }
                     }
-                    _ => {
-                        self.send_error().await?;
-                    }
+                }
+                if let Err(err) = message {
+                    error!("{}", err);
                 }
             }
-        };
-
-        Ok(())
+        }
     }
 }

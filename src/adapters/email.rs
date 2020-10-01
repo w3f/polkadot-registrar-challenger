@@ -7,7 +7,7 @@ use jwt::algorithm::AlgorithmType;
 use jwt::header::{Header, HeaderType};
 use jwt::{SignWithKey, Token};
 use lettre::smtp::authentication::Credentials;
-use lettre::smtp::{ClientSecurity, SmtpClient};
+use lettre::smtp::SmtpClient;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
 use openssl::hash::MessageDigest;
@@ -17,7 +17,6 @@ use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use serde::de::DeserializeOwned;
-use serde::ser::Serialize;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
@@ -279,46 +278,6 @@ impl Client {
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
-    async fn post_request<T: DeserializeOwned, B: Serialize>(
-        &self,
-        url: &str,
-        body: &B,
-    ) -> Result<T> {
-        println!(">>>>> {}", serde_json::to_string(body).unwrap());
-        use self::header::HeaderName;
-
-        let res = self
-            .client
-            .post(url)
-            .header(
-                self::header::CONTENT_TYPE,
-                HeaderValue::from_static("message/rfc822"),
-            )
-            .header(
-                self::header::AUTHORIZATION,
-                HeaderValue::from_str(&format!(
-                    "Bearer {}",
-                    self.token_id
-                        .as_ref()
-                        .ok_or(ClientError::MissingAccessToken)?
-                ))?,
-            )
-            .body(serde_json::to_string(body)?)
-            .build()?;
-
-        println!("REQUEST --> {:?}", res);
-        println!(
-            "BODY --> {:?}",
-            String::from_utf8_lossy(res.body().unwrap().as_bytes().unwrap())
-        );
-
-        let res = self.client.execute(res).await?;
-
-        println!("**** {}", res.text().await.unwrap());
-
-        unimplemented!();
-        res.json::<T>().await.map_err(|err| err.into())
-    }
     async fn request_inbox(&self) -> Result<Vec<EmailId>> {
         #[derive(Serialize, Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -412,7 +371,7 @@ impl Client {
             ))
             .transport();
 
-        let x = transport.send(email.into())?;
+        let _x = transport.send(email.into())?;
 
         Ok(())
     }
@@ -666,7 +625,7 @@ pub struct ApiBody {
 
 #[test]
 fn test_email_client() {
-    use crate::primitives::{unix_time, Challenge};
+    use crate::primitives::Challenge;
     use crate::Database2;
     use tokio::runtime::Runtime;
 
