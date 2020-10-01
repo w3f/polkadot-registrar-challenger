@@ -1,7 +1,6 @@
 use crate::identity::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use matrix_sdk::identifiers::RoomId;
 use tokio::time::{self, Duration};
 
 pub fn generate_comms(
@@ -27,7 +26,7 @@ pub enum CommsMessage {
         judgement: Judgement,
     },
     LeaveRoom {
-        room_id: RoomId,
+        net_account: NetAccount,
     },
     AccountToVerify {
         net_account: NetAccount,
@@ -57,6 +56,13 @@ impl CommsMain {
             .send(CommsMessage::JudgeIdentity {
                 net_account: net_account,
                 judgement: judgment,
+            })
+            .fatal();
+    }
+    pub fn leave_matrix_room(&self, net_account: NetAccount) {
+        self.sender
+            .send(CommsMessage::LeaveRoom {
+                net_account: net_account,
             })
             .fatal();
     }

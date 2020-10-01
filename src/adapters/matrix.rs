@@ -162,10 +162,14 @@ impl MatrixClient {
                 net_account,
                 account,
             } => self.handle_account_verification(net_account, account).await,
-            LeaveRoom { room_id } => {
-                self.send_msg("Bye bye!", &room_id).await?;
-                debug!("Leaving room: {}", room_id.as_str());
-                let _ = self.client.leave_room(&room_id).await?;
+            LeaveRoom { net_account } => {
+                if let Some(room_id) = self.db.select_room_id(&net_account).await? {
+                    self.send_msg("Bye bye!", &room_id).await?;
+                    debug!("Leaving room: {}", room_id.as_str());
+                    let _ = self.client.leave_room(&room_id).await?;
+                } else {
+                    warn!("Failed to find RoomId for address {} when trying to leave room", net_account.as_str());
+                }
 
                 Ok(())
             }

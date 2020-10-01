@@ -204,7 +204,13 @@ impl IdentityManager {
                         "Address {} is fully verified. Notifying Watcher...",
                         net_account.as_str()
                     );
-                    comms.notify_identity_judgment(net_account, Judgement::Reasonable);
+                    comms.notify_identity_judgment(net_account.clone(), Judgement::Reasonable);
+                })?;
+
+            self.get_comms(&AccountType::Matrix)
+                .map(|comms| {
+                    debug!("Closing Matrix room for {}", net_account.as_str());
+                    comms.leave_matrix_room(net_account);
                 })?;
         }
 
