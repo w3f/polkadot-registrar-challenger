@@ -16,6 +16,7 @@ use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::error::Error as TungError;
 use tungstenite::protocol::Message as TungMessage;
 use websockets::{Frame, WebSocket};
+use futures_channel::mpsc::{Sender, Receiver};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -101,18 +102,43 @@ impl Connector {
         let (writer, reader) = self.client.split();
         let writer = Arc::new(Mutex::new(writer));
 
-        Self::send_ack(Some("Connection established"), &writer);
+        //Self::send_ack(Some("Connection established"), &writer);
 
-        futures::join!(
-            Self::start_comms_receiver(self.comms.clone(), reader, Arc::clone(&writer)),
-            Self::handle_comms_message(self.comms.clone(), Arc::clone(&writer)),
-        );
     }
-    async fn start_comms_receiver(
-        comms: CommsVerifier,
-        reader: SplitStream<WebSocketStream<TcpStream>>,
-        writer: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
-    ) {
+    async fn start_comms_receiver(comms: CommsVerifier, mut sender: Sender<Message>) {
+        tokio::spawn(async move {
+            loop {
+                match comms.recv().await {
+                    CommsMessage::JudgeIdentity {
+                        net_account,
+                        judgement,
+                    } => {
+                        sender.send(
+                            Message {
+                                event: EventType::JudgementResult,
+                                data: serde_json::to_value(&JudgementResponse {
+                                    address: net_account.clone(),
+                                    judgement: judgement,
+                                })
+                                .map_err(|err| ConnectorError::Response(err.into())).unwrap(),
+                            }
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+    async fn start_websocket_writer(mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>, comms: CommsVerifier, receiver: Receiver<Message>) {
+        receiver.for_each(|message| async move {
+            let message = message.clone();
+            let payload = serde_json::to_string(&message).unwrap();
+            writer.send(TungMessage::Text(
+                payload
+            ));
+        });
+    }
+    async fn start_websocket_reader(reader: SplitStream<WebSocketStream<TcpStream>>, comms: CommsVerifier, sender: Sender<Message>) {
         reader.for_each(|message| async {
             // TODO: This must be initialized outside, use Cell.
             let mut receiver_error = false;
@@ -146,7 +172,6 @@ impl Connector {
                                 msg
                             } else {
                                 // TODO: Respond with error
-                                Self::send_error(&writer).unwrap();
 
                                 return;
                             };
@@ -175,32 +200,7 @@ impl Connector {
                 });
         });
     }
-    async fn handle_comms_message(
-        comms: CommsVerifier,
-        writer: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
-    ) -> Result<()> {
-        match comms.recv().await {
-            CommsMessage::JudgeIdentity {
-                net_account,
-                judgement,
-            } => {
-                writer.lock().unwrap().send(TungMessage::Text(
-                    serde_json::to_string(&Message {
-                        event: EventType::JudgementResult,
-                        data: serde_json::to_value(&JudgementResponse {
-                            address: net_account.clone(),
-                            judgement: judgement,
-                        })
-                        .map_err(|err| ConnectorError::Response(err.into()))?,
-                    })
-                    .map_err(|err| ConnectorError::Response(err.into()))?,
-                ));
-            }
-            _ => {}
-        }
-
-        Ok(())
-    }
+    /*
     fn send_ack(
         msg: Option<&str>,
         writer: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, TungMessage>>>,
@@ -234,4 +234,5 @@ impl Connector {
 
         Ok(())
     }
+    */
 }

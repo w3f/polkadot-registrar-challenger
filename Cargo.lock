@@ -2096,6 +2096,7 @@ dependencies = [
  "env_logger",
  "failure",
  "futures",
+ "futures-channel",
  "hex",
  "hmac 0.9.0",
  "jwt",
