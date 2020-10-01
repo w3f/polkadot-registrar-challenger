@@ -625,7 +625,7 @@ pub struct ApiBody {
 
 #[test]
 fn test_email_client() {
-    use crate::primitives::{unix_time, Challenge};
+    use crate::primitives::Challenge;
     use crate::Database2;
     use tokio::runtime::Runtime;
 
