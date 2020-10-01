@@ -328,7 +328,12 @@ impl Client {
             if let Some(data) = body.data {
                 messages.push(ReceivedMessageContext {
                     sender: sender.clone(),
-                    body: String::from_utf8(base64::decode_config(data, base64::URL_SAFE)?)?,
+                    body: String::from_utf8(base64::decode_config(data, base64::URL_SAFE)?)?
+                        .lines()
+                        .nth(0)
+                        .ok_or(ClientError::UnrecognizedData)?
+                        .trim()
+                        .to_string(),
                 });
             }
         }

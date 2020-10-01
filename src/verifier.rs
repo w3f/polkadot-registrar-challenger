@@ -92,7 +92,7 @@ impl<'a> Verifier2<'a> {
         let mut message = String::new();
 
         if self.valid.is_empty() {
-            message.push_str("The signature is invalid.");
+            message.push_str("The signature is invalid. Refer to the Polkadot Wiki guide.");
         } else if self.valid.len() == 1 {
             message.push_str("The following address has been verified:\n")
         } else {
@@ -117,7 +117,6 @@ impl<'a> Verifier2<'a> {
             }
         }
 
-        message.push_str("\n\nRefer to the Polkadot Wiki guide.");
         message
     }
 }
