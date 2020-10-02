@@ -7,3 +7,4 @@ target/
 Dockerfile
 LICENSE
 README.md
+config.sample.json
