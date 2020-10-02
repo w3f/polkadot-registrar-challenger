@@ -2,11 +2,13 @@ use base58::FromBase58;
 use failure::err_msg;
 
 use rand::{thread_rng, Rng};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
+use std::fmt;
 use std::fmt::Debug;
 use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,7 +23,7 @@ pub fn unix_time() -> u64 {
         .as_secs()
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PubKey(SchnorrkelPubKey);
 
 impl PubKey {
@@ -83,6 +85,26 @@ impl From<SchnorrkelSignature> for Signature {
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NetAccount(String);
 
+impl ToSql for NetAccount {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        Ok(Borrowed(Text(self.as_str().as_bytes())))
+    }
+}
+
+impl FromSql for NetAccount {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(val) => Ok(NetAccount(
+                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
+            )),
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
 impl NetAccount {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -104,6 +126,26 @@ impl From<&str> for NetAccount {
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Account(String);
 
+impl FromSql for Account {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(val) => Ok(Account(
+                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
+            )),
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
+impl ToSql for Account {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        Ok(Borrowed(Text(self.as_str().as_bytes())))
+    }
+}
+
 impl Account {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
@@ -122,15 +164,20 @@ impl From<&str> for Account {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-// TODO: Make fields private
-pub struct NetworkAddress {
-    pub address: NetAccount,
-    pub algo: Algorithm,
-    pub pub_key: PubKey,
+impl fmt::Display for Account {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct NetworkAddress {
+    address: NetAccount,
+    algo: Algorithm,
+    pub_key: PubKey,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Algorithm {
     #[serde(rename = "schnorr")]
     Schnorr,
@@ -172,6 +219,10 @@ impl TryFrom<NetAccount> for NetworkAddress {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum AccountType {
+    #[serde(rename = "legal_name")]
+    LegalName,
+    #[serde(rename = "display_name")]
+    DisplayName,
     #[serde(rename = "email")]
     Email,
     #[serde(rename = "web")]
@@ -186,6 +237,41 @@ pub enum AccountType {
     ReservedFeeder,
 }
 
+impl ToSql for AccountType {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use AccountType::*;
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        match self {
+            LegalName => Ok(Borrowed(Text(b"legal_name"))),
+            DisplayName => Ok(Borrowed(Text(b"display_name"))),
+            Email => Ok(Borrowed(Text(b"email"))),
+            Web => Ok(Borrowed(Text(b"web"))),
+            Twitter => Ok(Borrowed(Text(b"twitter"))),
+            Matrix => Ok(Borrowed(Text(b"matrix"))),
+            _ => Err(rusqlite::Error::InvalidQuery),
+        }
+    }
+}
+
+impl FromSql for AccountType {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(val) => match val {
+                b"legal_name" => Ok(AccountType::LegalName),
+                b"display_name" => Ok(AccountType::DisplayName),
+                b"email" => Ok(AccountType::Email),
+                b"web" => Ok(AccountType::Web),
+                b"twitter" => Ok(AccountType::Twitter),
+                b"matrix" => Ok(AccountType::Matrix),
+                _ => Err(FromSqlError::InvalidType),
+            },
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ChallengeStatus {
     #[serde(rename = "unconfirmed")]
@@ -196,8 +282,22 @@ pub enum ChallengeStatus {
     Rejected,
 }
 
+impl ToSql for ChallengeStatus {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        use ChallengeStatus::*;
+        use ToSqlOutput::*;
+        use ValueRef::*;
+
+        match self {
+            Unconfirmed => Ok(Borrowed(Text(b"unconfirmed"))),
+            Accepted => Ok(Borrowed(Text(b"accepted"))),
+            Rejected => Ok(Borrowed(Text(b"rejected"))),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Challenge(String);
+pub struct Challenge(pub String);
 
 impl Challenge {
     pub fn gen_random() -> Challenge {

@@ -20,14 +20,18 @@ env_logger = "0.7.1"
 tokio = { version = "0.2.22", features = ["macros"] }
 futures = "0.3.5"
 async-trait = "0.1.40"
+tungstenite = "0.11.1"
+tokio-tungstenite = "0.11.0"
 failure = "0.1.8"
 serde = "1.0.116"
 serde_json = "1.0.57"
 crossbeam = "0.7.3"
-websockets = "0.1.5"
+futures-channel = "0.3.5"
 reqwest = { version = "0.10.8", features = ["json"] }
 urlencoding = "1.1.1"
 matrix-sdk = { version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk.git" }
+lettre = "0.9.0"
+lettre_email = "0.9.4"
 oauth2 = { version = "3.0", features = ["reqwest-010", "futures-03"], default-features = false }
 jwt = { version = "0.10.0", features = ["openssl"] }
 openssl = "0.10.30"
@@ -37,7 +41,7 @@ sha2 = "0.9.1"
 base58 = "0.1.0"
 base64 = "0.12.3"
 url = "2.1.1"
-rocksdb = "0.15.0"
+rusqlite = ">=0.17.3"
 schnorrkel = "0.9.1"
 rand = "0.7.3"
 hex = "0.4.2"

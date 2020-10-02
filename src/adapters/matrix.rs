@@ -1,10 +1,12 @@
 use crate::comms::{CommsMessage, CommsVerifier};
+use crate::db::Database2;
 use crate::identity::AccountStatus;
-use crate::primitives::{Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result};
-use crate::verifier::Verifier;
+use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
+use crate::verifier::Verifier2;
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
+    api::r0::room::Visibility,
     events::{
         room::message::{MessageEventContent, TextMessageEventContent},
         AnyMessageEventContent, SyncMessageEvent,
@@ -31,14 +33,22 @@ pub enum MatrixError {
     InvalidUserId(failure::Error),
     #[fail(display = "failed to join room: {}", 0)]
     JoinRoom(failure::Error),
-    #[fail(display = "joining room timed out")]
-    JoinRoomTimeout,
+    #[fail(display = "timeout while trying to join room with: {}", 0)]
+    JoinRoomTimeout(Account),
     #[fail(display = "the remote UserId was not found when trying to respond")]
     RemoteUserIdNotFound,
-    #[fail(display = "the UserId is unknown (no pending on-chain judgement request)")]
-    UnknownUser,
     #[fail(display = "failed to send message: {}", 0)]
     SendMessage(failure::Error),
+    #[fail(display = "database error occured: {}", 0)]
+    // TODO: Use `DatabaseError`
+    Database(failure::Error),
+    #[fail(display = "contacted by a user who's RoomId was not registered anywhere")]
+    RoomIdNotFound,
+    #[fail(
+        display = "Failed to fetch challenge data from database for account: {:?}",
+        0
+    )]
+    ChallengeDataNotFound(Account),
 }
 
 async fn send_msg(
@@ -64,6 +74,7 @@ async fn send_msg(
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
     comms: CommsVerifier,
+    db: Database2,
 }
 
 impl MatrixClient {
@@ -72,6 +83,7 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
+        db: Database2,
         comms: CommsVerifier,
         comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
@@ -98,14 +110,7 @@ impl MatrixClient {
             .map_err(|err| MatrixError::Sync(err.into()))?;
 
         // Request a list of open/pending room ids. Used to detect dead rooms.
-        comms.notify_request_all_room_ids();
-        let pending_room_ids = match comms.recv().await {
-            CommsMessage::AllRoomIds { room_ids } => room_ids,
-            _ => {
-                error!("Expected list of room ids, received unexpected message");
-                std::process::exit(1);
-            }
-        };
+        let pending_room_ids = db.select_room_ids().await?;
 
         // Leave dead rooms.
         info!("Detecting dead Matrix rooms");
@@ -114,14 +119,14 @@ impl MatrixClient {
         for (room_id, _) in rooms.iter() {
             if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
                 warn!("Leaving dead room: {}", room_id.as_str());
-                let _ = client.leave_room(room_id).await?;
+                let _ = client.leave_room(room_id).await;
             }
         }
 
         // Add event emitter (responder)
         client
             .add_event_emitter(Box::new(
-                Responder::new(client.clone(), comms_emmiter).await,
+                Responder::new(client.clone(), db.clone(), comms_emmiter).await,
             ))
             .await;
 
@@ -135,6 +140,7 @@ impl MatrixClient {
         Ok(MatrixClient {
             client: client,
             comms: comms,
+            db: db,
         })
     }
     async fn send_msg(&self, msg: &str, room_id: &RoomId) -> Result<()> {
@@ -153,18 +159,20 @@ impl MatrixClient {
 
         match self.comms.recv().await {
             AccountToVerify {
-                network_address,
+                net_account,
                 account,
-                challenge,
-                room_id,
-            } => {
-                self.handle_account_verification(network_address, account, challenge, room_id)
-                    .await
-            }
-            LeaveRoom { room_id } => {
-                self.send_msg("Bye bye!", &room_id).await?;
-                debug!("Leaving room: {}", room_id.as_str());
-                let _ = self.client.leave_room(&room_id).await?;
+            } => self.handle_account_verification(net_account, account).await,
+            LeaveRoom { net_account } => {
+                if let Some(room_id) = self.db.select_room_id(&net_account).await? {
+                    self.send_msg("Bye bye!", &room_id).await?;
+                    debug!("Leaving room: {}", room_id.as_str());
+                    let _ = self.client.leave_room(&room_id).await?;
+                } else {
+                    warn!(
+                        "Failed to find RoomId for address {} when trying to leave room",
+                        net_account.as_str()
+                    );
+                }
 
                 Ok(())
             }
@@ -173,13 +181,11 @@ impl MatrixClient {
     }
     async fn handle_account_verification(
         &self,
-        network_address: NetworkAddress,
+        net_account: NetAccount,
         account: Account,
-        challenge: Challenge,
-        room_id: Option<RoomId>,
     ) -> Result<()> {
         // If a room already exists, don't create a new one.
-        let room_id = if let Some(room_id) = room_id {
+        let room_id = if let Some(room_id) = self.db.select_room_id(&net_account).await? {
             room_id
         } else {
             // When the UserId is invalid, even though it can be successfully
@@ -188,15 +194,16 @@ impl MatrixClient {
             if let Ok(room_id) = time::timeout(Duration::from_secs(15), async {
                 debug!("Connecting to {}", account.as_str());
 
-                let to_invite = [account
+                let to_invite = &[account
                     .as_str()
                     .clone()
                     .try_into()
                     .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?];
 
                 let mut request = Request::default();
-                request.invite = &to_invite;
+                request.invite = to_invite;
                 request.name = Some("W3F Registrar Verification");
+                request.visibility = Visibility::Private;
 
                 let resp = self
                     .client
@@ -206,8 +213,11 @@ impl MatrixClient {
 
                 debug!("Connection to user established");
 
-                self.comms
-                    .notify_room_id(network_address.address().clone(), resp.room_id.clone());
+                // Keep track of RoomId
+                self.db
+                    .insert_room_id(&net_account, &resp.room_id)
+                    .await
+                    .map_err(|err| MatrixError::Database(err.into()))?;
 
                 StdResult::<_, MatrixError>::Ok(resp.room_id)
             })
@@ -215,43 +225,48 @@ impl MatrixClient {
             {
                 room_id?
             } else {
-                return Err(MatrixError::JoinRoomTimeout)?;
+                debug!("Failed to connect to account: {}", account.as_str());
+
+                // Mark the account as valid.
+                self.db
+                    .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Invalid)
+                    .await?;
+
+                return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
             }
         };
 
-        // Notify that the account is valid.
-        self.comms.notify_account_status(
-            network_address.clone(),
-            AccountType::Matrix,
-            AccountStatus::Valid,
-        );
+        // Mark the account as invalid.
+        self.db
+            .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Valid)
+            .await?;
 
-        // Send the instructions for verification to the user.
+        let challenge_data = self
+            .db
+            .select_challenge_data(&account, &AccountType::Matrix)
+            .await?;
+
         debug!("Sending instructions to user");
-        self.send_msg(
-            include_str!("../../messages/instructions")
-                .replace("{:PAYLOAD}", &challenge.as_str())
-                .replace("{:ADDRESS}", network_address.address().as_str())
-                .as_str(),
-            &room_id,
-        )
-        .await
-        .map_err(|err| MatrixError::SendMessage(err.into()))?;
-
-        Ok(())
+        let verifier = Verifier2::new(&challenge_data);
+        self.send_msg(&verifier.init_message_builder(true), &room_id)
+            .await
+            .map_err(|err| MatrixError::SendMessage(err.into()).into())
+            .map(|_| ())
     }
 }
 
 struct Responder {
     client: Client,
     comms: CommsVerifier,
+    db: Database2,
 }
 
 impl Responder {
-    async fn new(client: Client, comms: CommsVerifier) -> Self {
+    async fn new(client: Client, db: Database2, comms: CommsVerifier) -> Self {
         Responder {
             client: client,
             comms: comms,
+            db: db,
         }
     }
     async fn send_msg(&self, msg: &str, room_id: &matrix_sdk::identifiers::RoomId) -> Result<()> {
@@ -273,29 +288,34 @@ impl Responder {
             return Ok(());
         }
 
+        debug!("Reacting to received message");
+
         if let SyncRoom::Joined(room) = room {
-            // Request information about the sender.
-            self.comms.notify_account_state_request(
-                Account::from(event.sender.as_str().to_string()),
-                AccountType::Matrix,
-            );
+            debug!("Search for address based on RoomId");
 
             let room_id = &room.read().await.room_id;
-
-            let (network_address, challenge) = match self.comms.recv().await {
-                CommsMessage::AccountToVerify {
-                    network_address,
-                    challenge,
-                    ..
-                } => (network_address, challenge),
-                CommsMessage::InvalidRequest => {
-                    // Reject user
-                    return Err(failure::Error::from(MatrixError::UnknownUser));
-                }
-                _ => panic!("Received unrecognized message type on Matrix client. Report as bug."),
+            let net_account = if let Some(net_account) =
+                self.db.select_net_account_from_room_id(&room_id).await?
+            {
+                net_account
+            } else {
+                return Err(MatrixError::RoomIdNotFound.into());
             };
 
-            let verifier = Verifier::new(network_address.clone(), challenge);
+            let account = Account::from(event.sender.as_str());
+
+            debug!("Fetching challenge data");
+            let challenge_data = self
+                .db
+                .select_challenge_data(&account, &AccountType::Matrix)
+                .await?;
+
+            if challenge_data.is_empty() {
+                return Err(MatrixError::ChallengeDataNotFound(account.clone()).into());
+            }
+
+            debug!("Initializing verifier");
+            let mut verifier = Verifier2::new(&challenge_data);
 
             // Fetch the text message from the event.
             let msg_body = if let SyncMessageEvent {
@@ -320,32 +340,49 @@ impl Responder {
                 return Ok(());
             };
 
-            match verifier.verify(&msg_body) {
-                Ok(msg) => {
-                    debug!("Received valid challenge");
-                    self.send_msg(&msg, room_id)
-                        .await
-                        .map_err(|err| MatrixError::SendMessage(err.into()))?;
+            verifier.verify(msg_body);
 
-                    self.comms.notify_challenge_status(
-                        network_address,
-                        AccountType::Matrix,
+            for network_address in verifier.valid_verifications() {
+                debug!(
+                    "Valid verification for address: {}",
+                    network_address.address().as_str()
+                );
+
+                self.comms
+                    .notify_status_change(network_address.address().clone());
+
+                self.db
+                    .set_challenge_status(
+                        network_address.address(),
+                        &AccountType::Matrix,
                         ChallengeStatus::Accepted,
-                    );
-                }
-                Err(err) => {
-                    debug!("Received invalid challenge");
-                    self.send_msg(&err.to_string(), room_id)
-                        .await
-                        .map_err(|err| MatrixError::SendMessage(err.into()))?;
+                    )
+                    .await?;
+            }
 
-                    self.comms.notify_challenge_status(
-                        network_address,
-                        AccountType::Matrix,
+            for network_address in verifier.invalid_verifications() {
+                debug!(
+                    "Invalid verification for address: {}",
+                    network_address.address().as_str()
+                );
+
+                self.db
+                    .set_challenge_status(
+                        network_address.address(),
+                        &AccountType::Matrix,
                         ChallengeStatus::Rejected,
-                    );
-                }
-            };
+                    )
+                    .await?;
+            }
+
+            self.send_msg(&verifier.response_message_builder(), room_id)
+                .await
+                .map_err(|err| MatrixError::SendMessage(err.into()))?;
+
+            // Tell the manager to check the user's account states.
+            self.comms.notify_status_change(net_account.clone());
+        } else {
+            warn!("Received an message from an un-joined room");
         }
 
         Ok(())

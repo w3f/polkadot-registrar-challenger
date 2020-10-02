@@ -9,33 +9,94 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::MatrixClient;
+use adapters::{ClientBuilder, MatrixClient, TwitterBuilder};
 use comms::CommsVerifier;
 use connector::Connector;
-use db::Database;
+use db::Database2;
 use identity::IdentityManager;
-use primitives::{AccountType, Result};
+use primitives::{Account, AccountType, Fatal, Result};
+use std::env;
+use std::fs::File;
+use std::io::prelude::*;
 use std::process::exit;
 use tokio::time::{self, Duration};
 
 pub mod adapters;
 mod comms;
 pub mod connector;
-mod db;
+pub mod db;
 mod identity;
 mod primitives;
 mod verifier;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub registrar_db_path: String,
     pub matrix_db_path: String,
     pub log_level: log::LevelFilter,
     pub watcher_url: String,
     pub enable_watcher: bool,
+    //
     pub matrix_homeserver: String,
     pub matrix_username: String,
     pub matrix_password: String,
+    //
+    pub twitter_screen_name: String,
+    pub twitter_api_key: String,
+    pub twitter_api_secret: String,
+    pub twitter_token: String,
+    pub twitter_token_secret: String,
+    //
+    pub google_private_key: String,
+    pub google_issuer: String,
+    pub google_scope: String,
+    pub google_email: String,
+    //
+    pub email_server: String,
+    pub email_user: String,
+    pub email_password: String,
+}
+
+fn open_config() -> Result<Config> {
+    // Open config file.
+    let mut file = File::open("config.json")
+        .or_else(|_| File::open("/etc/registrar/config.json"))
+        .map_err(|_| {
+            eprintln!("Failed to open config at 'config.json' or '/etc/registrar/config.json'.");
+            std::process::exit(1);
+        })
+        .fatal();
+
+    // Parse config file as JSON.
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    let config = serde_json::from_str::<Config>(&contents)
+        .map_err(|err| {
+            eprintln!("Failed to parse config: {}", err);
+            std::process::exit(1);
+        })
+        .fatal();
+
+    Ok(config)
+}
+
+pub fn init_env() -> Result<Config> {
+    let config = open_config()?;
+
+    // Env variables for log level overwrites config.
+    if let Ok(_) = env::var("RUST_LOG") {
+        println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
+        env_logger::init();
+    } else {
+        println!("Setting log level to '{}' from config.", config.log_level);
+        env_logger::builder()
+            .filter_module("registrar", config.log_level)
+            .init();
+    }
+
+    println!("Logger initiated");
+
+    Ok(config)
 }
 
 pub async fn block() {
@@ -55,13 +116,15 @@ pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
 
 pub async fn setup(config: Config) -> Result<CommsVerifier> {
     info!("Setting up database and manager");
-    let db = Database::new(&config.registrar_db_path)?;
-    let mut manager = IdentityManager::new(db)?;
+    let db2 = Database2::new(&config.registrar_db_path)?;
+    let mut manager = IdentityManager::new(db2.clone())?;
 
     info!("Setting up communication channels");
     let c_connector = manager.register_comms(AccountType::ReservedConnector);
     let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
     let c_matrix = manager.register_comms(AccountType::Matrix);
+    let c_twitter = manager.register_comms(AccountType::Twitter);
+    let c_email = manager.register_comms(AccountType::Email);
     let c_feeder = manager.register_comms(AccountType::ReservedFeeder);
 
     info!("Trying to connect to Watcher");
@@ -104,20 +167,57 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         &config.matrix_username,
         &config.matrix_password,
         &config.matrix_db_path,
+        db2.clone(),
         c_matrix,
         c_emitter,
     )
     .await?;
+
+    info!("Setting up Twitter client");
+    let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
+        .screen_name(Account::from(config.twitter_screen_name))
+        .consumer_key(config.twitter_api_key)
+        .consumer_secret(config.twitter_api_secret)
+        .sig_method("HMAC-SHA1".to_string())
+        .token(config.twitter_token)
+        .token_secret(config.twitter_token_secret)
+        .version(1.0)
+        .build()?;
+
+    info!("Setting up Email client");
+    let email = ClientBuilder::new(db2.clone(), c_email)
+        .issuer(config.google_issuer)
+        .scope(config.google_scope)
+        .subject(config.google_email)
+        .private_key(config.google_private_key)
+        .email_server(config.email_server)
+        .email_user(config.email_user)
+        .email_password(config.email_password)
+        .token_url("https://oauth2.googleapis.com/token".to_string())
+        .build()
+        .unwrap();
 
     info!("Starting Matrix task");
     tokio::spawn(async move {
         matrix.start().await;
     });
 
+    info!("Starting Twitter task");
+    tokio::spawn(async move {
+        twitter.start().await;
+    });
+
+    info!("Starting Email task");
+    tokio::spawn(async move {
+        email.start().await;
+    });
+
     if config.enable_watcher {
         info!("Starting Watcher connector task, listening...");
+        let connector = connector.unwrap();
+
         tokio::spawn(async move {
-            connector.unwrap().start().await;
+            connector.start().await;
         });
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");
