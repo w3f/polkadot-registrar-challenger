@@ -589,6 +589,44 @@ impl Database2 {
 
         Ok(is_verified)
     }
+    pub async fn select_timed_out_identities(&self, timeout_limit: u64) -> Result<Vec<NetAccount>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                net_account
+            FROM
+                pending_judgments
+            LEFT JOIN
+                account_states
+            ON
+                pending_judgments.id = account_states.net_account_id
+            WHERE
+                pending_judgments.created < :timeout_limit
+            AND
+                account_states.challenge_status_id != (
+                    SELECT
+                        id
+                    FROM
+                        challenge_status
+                    WHERE
+                        status = 'accepted'
+                )
+        ",
+        )?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":timeout_limit": (unix_time() - timeout_limit) as i64,
+        })?;
+
+        let mut net_accounts = vec![];
+        while let Some(row) = rows.next()? {
+            net_accounts.push(row.get::<_, NetAccount>(0)?);
+        }
+
+        Ok(net_accounts)
+    }
     // TODO: Test this
     pub async fn select_invalid_accounts(
         &self,

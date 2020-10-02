@@ -172,6 +172,18 @@ impl IdentityManager {
             }
         }
 
+        self.handle_verification_timeouts().await?;
+
+        Ok(())
+    }
+    pub async fn handle_verification_timeouts(&self) -> Result<()> {
+        let net_accounts = self.db2.select_timed_out_identities(3600).await?;
+
+        let connector = self.get_comms(&AccountType::ReservedConnector)?;
+        for net_account in net_accounts {
+            connector.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
+        }
+
         Ok(())
     }
     pub async fn handle_new_judgment_request(&mut self, ident: OnChainIdentity) -> Result<()> {
