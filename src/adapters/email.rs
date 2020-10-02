@@ -265,14 +265,10 @@ impl Client {
             )
             .send()
             .await?;
-        /*
-        resp
-            .json::<T>()
-            .await
-            .map_err(|err| err.into())
-        */
 
         let txt = resp.text().await?;
+
+        trace!("GET response: {}", txt);
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
@@ -458,7 +454,6 @@ impl Client {
             // Request information/body about the Email ID.
             let user_messages = self.request_message(email_id).await?;
             if user_messages.is_empty() {
-                warn!("Received an empty message. Ignoring.");
                 self.db.track_email_id(email_id).await?;
                 continue;
             }

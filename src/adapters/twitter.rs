@@ -347,7 +347,7 @@ impl Twitter {
         exclude_me: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<ReceivedMessageContext>, u64)> {
-        self.get_request::<ApiMessageEvent>(
+        self.get_request::<ApiMessageRequest>(
             "https://api.twitter.com/1.1/direct_messages/events/list.json",
             None,
         )
@@ -414,9 +414,9 @@ impl Twitter {
             .collect())
     }
     pub async fn send_message(&self, id: &TwitterId, msg: String) -> StdResult<(), TwitterError> {
-        self.post_request::<ApiMessageEvent, _>(
+        self.post_request::<ApiMessageSend, _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
-            ApiMessageEvent::new(id, msg),
+            ApiMessageSend::new(id, msg),
         )
         .await
         .map(|_| ())
@@ -430,7 +430,7 @@ impl Twitter {
             .remove(0)
             .1;
 
-        let mut interval = time::interval(Duration::from_secs(3));
+        let mut interval = time::interval(Duration::from_secs(65));
 
         loop {
             interval.tick().await;
@@ -595,13 +595,18 @@ impl Twitter {
     }
 }
 
-#[derive(Deserialize, Serialize)]
-struct ApiMessageEvent {
-    event: Option<ApiEvent>,
-    events: Option<Vec<ApiEvent>>,
+#[derive(Debug, Deserialize, Serialize)]
+struct ApiMessageSend {
+    event: ApiEvent,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+struct ApiMessageRequest {
+    // Used for receiving messages.
+    events: Vec<ApiEvent>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct ApiEvent {
     #[serde(rename = "type")]
     t_type: String,
@@ -609,19 +614,19 @@ struct ApiEvent {
     message_create: ApiMessageCreate,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ApiMessageCreate {
     target: ApiTarget,
     sender_id: Option<String>,
     message_data: ApiMessageData,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ApiTarget {
     recipient_id: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct ApiMessageData {
     text: String,
 }
@@ -632,10 +637,10 @@ struct ReceivedMessageContext {
     created: u64,
 }
 
-impl ApiMessageEvent {
+impl ApiMessageSend {
     fn new(recipient: &TwitterId, msg: String) -> Self {
-        ApiMessageEvent {
-            event: Some(ApiEvent {
+        ApiMessageSend {
+            event: ApiEvent {
                 t_type: "message_create".to_string(),
                 created_timestamp: None,
                 message_create: ApiMessageCreate {
@@ -645,10 +650,12 @@ impl ApiMessageEvent {
                     sender_id: None,
                     message_data: ApiMessageData { text: msg },
                 },
-            }),
-            events: None,
+            }
         }
     }
+}
+
+impl ApiMessageRequest {
     fn get_messages(
         self,
         my_id: &TwitterId,
@@ -657,29 +664,27 @@ impl ApiMessageEvent {
         let mut msgs = vec![];
 
         let mut new_watermark = watermark;
-        if let Some(events) = self.events {
-            for event in events {
-                let msg = ReceivedMessageContext {
-                    sender: event
-                        .message_create
-                        .sender_id
-                        .ok_or(TwitterError::UnrecognizedData)?
-                        .try_into()?,
-                    message: event.message_create.message_data.text,
-                    created: event
-                        .created_timestamp
-                        .ok_or(TwitterError::UnrecognizedData)?
-                        .parse::<u64>()
-                        .map_err(|_| TwitterError::UnrecognizedData)?,
-                };
+        for event in self.events {
+            let msg = ReceivedMessageContext {
+                sender: event
+                    .message_create
+                    .sender_id
+                    .ok_or(TwitterError::UnrecognizedData)?
+                    .try_into()?,
+                message: event.message_create.message_data.text,
+                created: event
+                    .created_timestamp
+                    .ok_or(TwitterError::UnrecognizedData)?
+                    .parse::<u64>()
+                    .map_err(|_| TwitterError::UnrecognizedData)?,
+            };
 
-                if &msg.sender != my_id && msg.created > watermark {
-                    if msg.created > new_watermark {
-                        new_watermark = msg.created;
-                    }
-
-                    msgs.push(msg);
+            if &msg.sender != my_id && msg.created > watermark {
+                if msg.created > new_watermark {
+                    new_watermark = msg.created;
                 }
+
+                msgs.push(msg);
             }
         }
 
