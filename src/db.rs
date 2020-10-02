@@ -158,6 +158,7 @@ impl Database2 {
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
             )",
             params![],
         )?;
