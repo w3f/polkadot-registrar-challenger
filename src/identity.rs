@@ -21,6 +21,8 @@ pub struct OnChainIdentity {
 enum ManagerError {
     #[fail(display = "no handler registered for account type: {:?}", 0)]
     NoHandlerRegistered(AccountType),
+    #[fail(display = "failed to find account state of identity")]
+    NoAccountState
 }
 
 impl OnChainIdentity {
@@ -58,6 +60,12 @@ impl OnChainIdentity {
     }
     pub fn account_states(&self) -> &Vec<AccountState> {
         &self.accounts
+    }
+    pub fn remove_account_state(&mut self, account_ty: &AccountType) -> Result<()> {
+        let pos = self.accounts.iter().position(|state| &state.account_ty == account_ty).ok_or(ManagerError::NoAccountState)?;
+        self.accounts.remove(pos);
+
+        Ok(())
     }
 }
 
@@ -193,12 +201,29 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_new_judgment_request(&mut self, ident: OnChainIdentity) -> Result<()> {
+    pub async fn handle_new_judgment_request(&mut self, mut ident: OnChainIdentity) -> Result<()> {
         debug!(
             "Handling new judgment request for account: {}",
             ident.net_account().as_str()
         );
 
+        // Check the current, associated addresses of the identity, if any.
+        let accounts = self.db2.select_addresses(&ident.net_account()).await?;
+        let mut to_delete = vec![];
+
+        // Find duplicates.
+        for state in ident.account_states() {
+            // If the same account already exists in storage, remove it (and avoid replacement).
+            if accounts.iter().find(|&account| account == &state.account).is_some() {
+                to_delete.push(state.account_ty.clone());
+            }
+        }
+
+        for ty in to_delete {
+            ident.remove_account_state(&ty)?;
+        }
+
+        // Insert identity into storage, notify tasks for verification.
         self.db2.insert_identity(&ident).await?;
 
         for state in ident.account_states() {
