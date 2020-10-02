@@ -134,7 +134,8 @@ impl Database2 {
                 UNIQUE (net_account_id, account_ty_id)
 
                 FOREIGN KEY (net_account_id)
-                    REFERENCES pending_judgments (id),
+                    REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE,
 
                 FOREIGN KEY (account_ty_id)
                     REFERENCES account_types (id),
@@ -276,8 +277,10 @@ impl Database2 {
         let con = self.con.lock().await;
         let mut stmt = con.prepare(
             "
-            SELECT net_account, account_ty, account
-            FROM pending_judgments
+            SELECT
+                net_account, account_ty, account
+            FROM
+                pending_judgments
             LEFT JOIN account_states
                 ON pending_judgments.id = account_states.net_account_id
             LEFT JOIN account_types
@@ -627,6 +630,25 @@ impl Database2 {
 
         Ok(net_accounts)
     }
+    pub async fn cleanup_timed_out_identities(&self, timeout_limit: u64) -> Result<()> {
+        let net_accounts = self.select_timed_out_identities(timeout_limit).await?;
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare("
+            DELETE FROM
+                pending_judgments
+            WHERE
+                net_account = :net_account
+        ")?;
+
+        for net_account in net_accounts {
+            stmt.execute_named(named_params! {
+                ":net_account": net_account,
+            })?;
+        }
+
+        Ok(())
+    }
     // TODO: Test this
     pub async fn select_invalid_accounts(
         &self,
@@ -884,6 +906,7 @@ mod tests {
     use crate::adapters::{EmailId, TwitterId};
     use crate::primitives::{Challenge, NetAccount};
     use tokio::runtime::Runtime;
+    use tokio::time::{self, Duration};
 
     // Generate a random db path
     fn db_path() -> String {
@@ -1015,6 +1038,72 @@ mod tests {
     }
 
     #[test]
+    fn select_cleanup_timed_out_identities() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            // Prepare addresses.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+
+            // Create identities
+            let mut alice_ident = OnChainIdentity::new(
+                alice.clone()
+            )
+            .unwrap();
+
+            alice_ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+
+            let mut bob_ident = OnChainIdentity::new(
+                bob.clone()
+            )
+            .unwrap();
+
+            bob_ident
+                .push_account(AccountType::Matrix, Account::from("@bob:matrix.org"))
+                .unwrap();
+
+            db.insert_identity_batch(&[&alice_ident, &bob_ident]).await.unwrap();
+
+            let res = db.select_timed_out_identities(3).await.unwrap();
+            assert!(res.is_empty());
+
+            time::delay_for(Duration::from_secs(4)).await;
+
+            // Add new identity
+            let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
+            let mut eve_ident = OnChainIdentity::new(eve.clone()).unwrap();
+            eve_ident
+                .push_account(AccountType::Matrix, Account::from("@eve:matrix.org"))
+                .unwrap();
+
+            db.insert_identity(&eve_ident).await.unwrap();
+
+            let res = db.select_timed_out_identities(3).await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert!(res.contains(&alice));
+            assert!(res.contains(&bob));
+
+            let res = db.select_identities().await.unwrap();
+            let accounts: Vec<&NetAccount> = res.iter().map(|ident| ident.net_account()).collect();
+            assert_eq!(accounts.len(), 3);
+            assert!(accounts.contains(&&alice));
+            assert!(accounts.contains(&&bob));
+            assert!(accounts.contains(&&eve));
+
+            db.cleanup_timed_out_identities(3).await.unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            let accounts: Vec<&NetAccount> = res.iter().map(|ident| ident.net_account()).collect();
+            assert_eq!(accounts.len(), 1);
+            assert!(accounts.contains(&&eve));
+        });
+    }
+
+    #[test]
     fn insert_identity_batch() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
@@ -1079,7 +1168,6 @@ mod tests {
 
             let idents: Vec<&OnChainIdentity> = idents.iter().map(|ident| ident).collect();
 
-            println!(">> {:?}", idents);
             let _ = db.insert_identity_batch(&idents).await.unwrap();
 
             let res = db.select_identities().await.unwrap();

@@ -296,7 +296,7 @@ impl ToSql for ChallengeStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Challenge(pub String);
 
 impl Challenge {
