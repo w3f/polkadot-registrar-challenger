@@ -181,9 +181,12 @@ impl IdentityManager {
 
         let net_accounts = self.db2.select_timed_out_identities(TIMEOUT_LIMIT).await?;
 
-        let connector = self.get_comms(&AccountType::ReservedConnector)?;
+        let connector_comms = self.get_comms(&AccountType::ReservedConnector)?;
+        let matrix_comms = self.get_comms(&AccountType::Matrix)?;
+
         for net_account in net_accounts {
-            connector.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
+            connector_comms.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
+            matrix_comms.leave_matrix_room(net_account);
         }
 
         self.db2.cleanup_timed_out_identities(TIMEOUT_LIMIT).await?;
