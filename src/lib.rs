@@ -53,6 +53,8 @@ pub struct Config {
     pub google_email: String,
     //
     pub email_server: String,
+    pub imap_server: String,
+    pub email_inbox: String,
     pub email_user: String,
     pub email_password: String,
 }

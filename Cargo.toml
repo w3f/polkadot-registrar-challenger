@@ -32,9 +32,12 @@ urlencoding = "1.1.1"
 matrix-sdk = { version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk.git" }
 lettre = "0.9.0"
 lettre_email = "0.9.4"
+imap = "2.3.0"
+mailparse = "0.13.0"
 oauth2 = { version = "3.0", features = ["reqwest-010", "futures-03"], default-features = false }
 jwt = { version = "0.10.0", features = ["openssl"] }
 openssl = "0.10.30"
+native-tls = "0.2.4"
 hmac = "0.9.0"
 sha-1 = "0.9.1"
 sha2 = "0.9.1"

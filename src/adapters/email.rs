@@ -115,6 +115,8 @@ pub struct ClientBuilder {
     private_key: Option<String>,
     token_url: Option<String>,
     server: Option<String>,
+    imap_server: Option<String>,
+    inbox: Option<String>,
     user: Option<String>,
     password: Option<String>,
 }
@@ -130,6 +132,8 @@ impl ClientBuilder {
             private_key: None,
             token_url: None,
             server: None,
+            imap_server: None,
+            inbox: None,
             user: None,
             password: None,
         }
@@ -158,6 +162,14 @@ impl ClientBuilder {
         self.server = Some(server);
         self
     }
+    pub fn imap_server(mut self, imap_server: String) -> Self {
+        self.imap_server = Some(imap_server);
+        self
+    }
+    pub fn email_inbox(mut self, inbox: String) -> Self {
+        self.inbox = Some(inbox);
+        self
+    }
     pub fn email_user(mut self, user: String) -> Self {
         self.user = Some(user);
         self
@@ -178,6 +190,8 @@ impl ClientBuilder {
             token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
             token_id: None,
             server: self.server.ok_or(ClientError::IncompleteBuilder)?,
+            imap_server: self.imap_server.ok_or(ClientError::IncompleteBuilder)?,
+            inbox: self.inbox.ok_or(ClientError::IncompleteBuilder)?,
             user: self.user.ok_or(ClientError::IncompleteBuilder)?,
             password: self.password.ok_or(ClientError::IncompleteBuilder)?,
         })
@@ -196,6 +210,8 @@ pub struct Client {
     token_url: String,
     token_id: Option<String>,
     server: String,
+    imap_server: String,
+    inbox: String,
     user: String,
     password: String,
 }
@@ -351,6 +367,76 @@ impl Client {
         */
 
         Ok(messages)
+    }
+    async fn request_message2(&self) -> Result<Vec<ReceivedMessageContext>> {
+        let tls = native_tls::TlsConnector::builder().build()?;
+        let client = imap::connect((self.imap_server.to_string(), 993), &self.imap_server, &tls)?;
+
+        let mut transport = client
+            .login(&self.user, &self.password)
+            .map_err(|(err, _)| err)?;
+
+        transport.select("Inbox")?;
+        let messages = transport.fetch("1:10", "RFC822")?;
+
+        let mut parsed_messages = vec![];
+        for message in &messages {
+            if let Some(body) = message.body() {
+                let mail = mailparse::parse_mail(body)?;
+
+                let sender = mail
+                    .headers
+                    .iter()
+                    .find(|header| header.get_key_ref() == "From")
+                    .ok_or(ClientError::UnrecognizedData)?
+                    .get_value()
+                    .convert_into()?;
+
+                if let Ok(body) = mail.get_body() {
+                    parsed_messages.push(ReceivedMessageContext {
+                        sender: sender.clone(),
+                        body: body
+                            .split("\n")
+                            .collect::<Vec<&str>>()
+                            .iter()
+                            .nth(0)
+                            // If there is not line, just use an empty string
+                            // which will automatically invalidate the
+                            // signature without aborting the whole process.
+                            .unwrap_or(&"")
+                            .trim()
+                            .to_string(),
+                    });
+                } else {
+                    warn!("No body found in message from {}", sender);
+                }
+
+                for subpart in mail.subparts {
+                    if let Ok(body) = subpart.get_body() {
+                        parsed_messages.push(ReceivedMessageContext {
+                            sender: sender.clone(),
+                            body: body
+                                .split("\n")
+                                .collect::<Vec<&str>>()
+                                .iter()
+                                .nth(0)
+                                // If there is not line, just use an empty string
+                                // which will automatically invalidate the
+                                // signature without aborting the whole process.
+                                .unwrap_or(&"")
+                                .trim()
+                                .to_string(),
+                        });
+                    } else {
+                        warn!("No body found in subpart message from {}", sender);
+                    }
+                }
+            } else {
+                warn!("No body");
+            }
+        }
+
+        Ok(parsed_messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
         let email = EmailBuilder::new()
@@ -624,4 +710,49 @@ struct ApiPart {
 pub struct ApiBody {
     size: i64,
     data: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::open_config;
+    use crate::primitives::Challenge;
+    use crate::CommsVerifier;
+    use crate::Database2;
+    use tokio::runtime::Runtime;
+
+    // Generate a random db path
+    fn db_path() -> String {
+        format!("/tmp/sqlite_{}", Challenge::gen_random().as_str())
+    }
+
+    #[test]
+    fn request_message2() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let config = open_config().unwrap();
+            let db = Database2::new(&db_path()).unwrap();
+
+            let email = ClientBuilder::new(db, CommsVerifier::new())
+                .issuer(config.google_issuer)
+                .scope(config.google_scope)
+                .subject(config.google_email)
+                .private_key(config.google_private_key)
+                .email_server(config.email_server)
+                .imap_server(config.imap_server)
+                .email_inbox(config.email_inbox)
+                .email_user(config.email_user)
+                .email_password(config.email_password)
+                .token_url("https://oauth2.googleapis.com/token".to_string())
+                .build()
+                .unwrap();
+
+            let res = email.request_message2().await.unwrap();
+            for msg in res {
+                println!(">> SENDER: {}", msg.sender.as_str());
+                println!(">> BODY: {}", msg.body);
+                println!("\n\n")
+            }
+        });
+    }
 }
