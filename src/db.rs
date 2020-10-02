@@ -2,7 +2,7 @@ use super::Result;
 use crate::adapters::{EmailId, TwitterId};
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
+    unix_time, Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };
 use matrix_sdk::identifiers::RoomId;
 use rusqlite::{named_params, params, Connection, OptionalExtension};
@@ -47,7 +47,8 @@ impl Database2 {
         con.execute(
             "CREATE TABLE IF NOT EXISTS pending_judgments (
                 id           INTEGER PRIMARY KEY,
-                net_account  TEXT NOT NULL UNIQUE
+                net_account  TEXT NOT NULL UNIQUE,
+                created      INTEGER NOT NULL
             )",
             params![],
         )?;
@@ -212,14 +213,20 @@ impl Database2 {
 
         {
             let mut stmt = transaction.prepare(
-                "INSERT OR IGNORE INTO pending_judgments (net_account)
-                VALUES (:net_account)
+                "INSERT OR IGNORE INTO pending_judgments (
+                    net_account,
+                    created
+                ) VALUES (
+                    :net_account,
+                    :timestamp
+                )
                 ",
             )?;
 
             for ident in idents {
                 stmt.execute_named(named_params! {
-                    ":net_account": ident.net_account()
+                    ":net_account": ident.net_account(),
+                    ":timestamp": unix_time() as i64,
                 })?;
             }
 
