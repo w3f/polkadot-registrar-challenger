@@ -650,7 +650,7 @@ impl ApiMessageSend {
                     sender_id: None,
                     message_data: ApiMessageData { text: msg },
                 },
-            }
+            },
         }
     }
 }
