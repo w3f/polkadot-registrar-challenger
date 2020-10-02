@@ -177,12 +177,16 @@ impl IdentityManager {
         Ok(())
     }
     pub async fn handle_verification_timeouts(&self) -> Result<()> {
-        let net_accounts = self.db2.select_timed_out_identities(3600).await?;
+        const TIMEOUT_LIMIT: u64 = 3600;
+
+        let net_accounts = self.db2.select_timed_out_identities(TIMEOUT_LIMIT).await?;
 
         let connector = self.get_comms(&AccountType::ReservedConnector)?;
         for net_account in net_accounts {
             connector.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
         }
+
+        self.db2.cleanup_timed_out_identities(TIMEOUT_LIMIT).await?;
 
         Ok(())
     }

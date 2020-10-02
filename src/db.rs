@@ -634,12 +634,14 @@ impl Database2 {
         let net_accounts = self.select_timed_out_identities(timeout_limit).await?;
         let con = self.con.lock().await;
 
-        let mut stmt = con.prepare("
+        let mut stmt = con.prepare(
+            "
             DELETE FROM
                 pending_judgments
             WHERE
                 net_account = :net_account
-        ")?;
+        ",
+        )?;
 
         for net_account in net_accounts {
             stmt.execute_named(named_params! {
@@ -1048,25 +1050,21 @@ mod tests {
             let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
 
             // Create identities
-            let mut alice_ident = OnChainIdentity::new(
-                alice.clone()
-            )
-            .unwrap();
+            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
 
             alice_ident
                 .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
                 .unwrap();
 
-            let mut bob_ident = OnChainIdentity::new(
-                bob.clone()
-            )
-            .unwrap();
+            let mut bob_ident = OnChainIdentity::new(bob.clone()).unwrap();
 
             bob_ident
                 .push_account(AccountType::Matrix, Account::from("@bob:matrix.org"))
                 .unwrap();
 
-            db.insert_identity_batch(&[&alice_ident, &bob_ident]).await.unwrap();
+            db.insert_identity_batch(&[&alice_ident, &bob_ident])
+                .await
+                .unwrap();
 
             let res = db.select_timed_out_identities(3).await.unwrap();
             assert!(res.is_empty());
