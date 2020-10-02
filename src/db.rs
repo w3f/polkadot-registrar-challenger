@@ -276,7 +276,8 @@ impl Database2 {
     pub async fn select_addresses(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
         let con = self.con.lock().await;
 
-        let mut stmt = con.prepare("
+        let mut stmt = con.prepare(
+            "
             SELECT
                 account
             FROM
@@ -290,7 +291,8 @@ impl Database2 {
                     WHERE
                         net_account = :net_account
                 )
-        ")?;
+        ",
+        )?;
 
         let mut rows = stmt.query_named(named_params! {
             ":net_account": net_account,

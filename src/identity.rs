@@ -22,7 +22,7 @@ enum ManagerError {
     #[fail(display = "no handler registered for account type: {:?}", 0)]
     NoHandlerRegistered(AccountType),
     #[fail(display = "failed to find account state of identity")]
-    NoAccountState
+    NoAccountState,
 }
 
 impl OnChainIdentity {
@@ -62,7 +62,11 @@ impl OnChainIdentity {
         &self.accounts
     }
     pub fn remove_account_state(&mut self, account_ty: &AccountType) -> Result<()> {
-        let pos = self.accounts.iter().position(|state| &state.account_ty == account_ty).ok_or(ManagerError::NoAccountState)?;
+        let pos = self
+            .accounts
+            .iter()
+            .position(|state| &state.account_ty == account_ty)
+            .ok_or(ManagerError::NoAccountState)?;
         self.accounts.remove(pos);
 
         Ok(())
@@ -214,7 +218,11 @@ impl IdentityManager {
         // Find duplicates.
         for state in ident.account_states() {
             // If the same account already exists in storage, remove it (and avoid replacement).
-            if accounts.iter().find(|&account| account == &state.account).is_some() {
+            if accounts
+                .iter()
+                .find(|&account| account == &state.account)
+                .is_some()
+            {
                 to_delete.push(state.account_ty.clone());
             }
         }
