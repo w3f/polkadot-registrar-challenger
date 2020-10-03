@@ -64,7 +64,7 @@ impl<'a> Verifier2<'a> {
             message.push_str(
                 "\
                 [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
-                This contact address was discovered in the Polkadot on-chain naming system and\
+                This contact address was discovered in the Polkadot on-chain naming system and \
                 the issuer has requested the Web3 Registrar service to judge this account.\
                 If you did not issue this request then just ignore this message.\n\n\
             ",
@@ -93,6 +93,7 @@ impl<'a> Verifier2<'a> {
 
         if self.valid.is_empty() {
             message.push_str("The signature is invalid. Refer to the Polkadot Wiki guide.");
+            return message;
         } else if self.valid.len() == 1 {
             message.push_str("The following address has been verified:\n")
         } else {

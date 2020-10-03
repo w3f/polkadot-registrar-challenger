@@ -166,10 +166,10 @@ impl MatrixClient {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
                     self.send_msg("Bye bye!", &room_id).await?;
                     debug!("Leaving room: {}", room_id.as_str());
-                    let _ = self.client.leave_room(&room_id).await?;
+                    let _ = self.client.leave_room(&room_id).await;
                 } else {
-                    warn!(
-                        "Failed to find RoomId for address {} when trying to leave room",
+                    debug!(
+                        "No active Matrix room found for address {}",
                         net_account.as_str()
                     );
                 }
@@ -311,10 +311,10 @@ impl Responder {
                 .await?;
 
             if challenge_data.is_empty() {
+                warn!("No challenge data found for {}", account.as_str());
                 return Err(MatrixError::ChallengeDataNotFound(account.clone()).into());
             }
 
-            debug!("Initializing verifier");
             let mut verifier = Verifier2::new(&challenge_data);
 
             // Fetch the text message from the event.
@@ -326,7 +326,7 @@ impl Responder {
                 msg_body
             } else {
                 debug!(
-                    "Didn't receive a text message from {}",
+                    "Didn't receive a text message from {}, notifying...",
                     event.sender.as_str()
                 );
 
@@ -340,6 +340,7 @@ impl Responder {
                 return Ok(());
             };
 
+            debug!("Verifying message: {}", msg_body);
             verifier.verify(msg_body);
 
             for network_address in verifier.valid_verifications() {
