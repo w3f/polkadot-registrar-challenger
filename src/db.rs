@@ -553,7 +553,7 @@ impl Database2 {
     }
     // Check whether the identity is fully verified.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
-        let mut con = self.con.lock().await;
+        let con = self.con.lock().await;
 
         let mut stmt = con.prepare(
             "SELECT
