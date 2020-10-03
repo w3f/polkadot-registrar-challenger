@@ -288,7 +288,7 @@ impl Client {
                         .nth(0)
                         .unwrap_or(&"")
                         .trim()
-                ),
+                ).replace("\"", ""),
             }
         }
 
@@ -441,6 +441,7 @@ impl Client {
             let sender = &user_messages.first().unwrap().sender;
             debug!("New message from {}", sender.as_str());
 
+            debug!("Fetching challenge data");
             let challenge_data = self
                 .db
                 .select_challenge_data(sender, &AccountType::Email)
@@ -448,7 +449,7 @@ impl Client {
 
             if challenge_data.is_empty() {
                 warn!(
-                    "Received message from an unknown email address: {}. Ignoring.",
+                    "No challenge data found for {}",
                     sender.as_str()
                 );
 
@@ -459,6 +460,7 @@ impl Client {
             let mut verifier = Verifier2::new(&challenge_data);
 
             for message in &user_messages {
+                debug!("Verifying message: {}", message.body);
                 verifier.verify(&message.body);
             }
 
@@ -474,7 +476,7 @@ impl Client {
                 self.db
                     .set_challenge_status(
                         network_address.address(),
-                        &AccountType::Twitter,
+                        &AccountType::Email,
                         ChallengeStatus::Accepted,
                     )
                     .await?;
@@ -493,7 +495,7 @@ impl Client {
                 self.db
                     .set_challenge_status(
                         network_address.address(),
-                        &AccountType::Twitter,
+                        &AccountType::Email,
                         ChallengeStatus::Rejected,
                     )
                     .await?;
