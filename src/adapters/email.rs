@@ -16,7 +16,6 @@ use openssl::rsa::Rsa;
 use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use serde::de::DeserializeOwned;
 use std::collections::BTreeMap;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
@@ -255,60 +254,6 @@ impl Client {
 
         Ok(())
     }
-    async fn get_request<T: DeserializeOwned>(&self, url: &str) -> Result<T> {
-        let resp = self
-            .client
-            .get(url)
-            .header(
-                self::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-www-form-urlencoded"),
-            )
-            .header(
-                self::header::AUTHORIZATION,
-                HeaderValue::from_str(&format!(
-                    "Bearer {}",
-                    self.token_id
-                        .as_ref()
-                        .ok_or(ClientError::MissingAccessToken)?
-                ))?,
-            )
-            .send()
-            .await?;
-
-        let txt = resp.text().await?;
-
-        trace!("GET response: {}", txt);
-
-        serde_json::from_str::<T>(&txt).map_err(|err| err.into())
-    }
-    async fn request_inbox(&self) -> Result<Vec<EmailId>> {
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ApiInbox {
-            messages: Option<Vec<ApiInboxEntry>>,
-            next_page_token: Option<String>,
-            result_size_estimate: Option<i64>,
-        }
-
-        #[derive(Serialize, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct ApiInboxEntry {
-            id: EmailId,
-            thread_id: String,
-        }
-
-        Ok(self
-            .get_request::<ApiInbox>(&format!(
-                "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages",
-                userId = self.subject,
-            ))
-            .await?
-            .messages
-            .unwrap_or(vec![])
-            .into_iter()
-            .map(|entry| entry.id)
-            .collect())
-    }
     async fn request_message2(&self) -> Result<Vec<ReceivedMessageContext>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.to_string(), 993), &self.imap_server, &tls)?;
@@ -478,23 +423,23 @@ impl Client {
     }
     async fn handle_incoming_messages(&self) -> Result<()> {
         let messages = self.request_message2().await?;
-        let email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
 
+        // Check database on which of the new messages were not processed yet.
+        let email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
         let unknown_email_ids = self
             .db
-            .find_untracked_email_ids(email_ids.as_slice())
+            .find_untracked_email_ids(&email_ids)
             .await?;
 
-        let mut interval = time::interval(Duration::from_secs(1));
         for email_id in unknown_email_ids {
-            interval.tick().await;
-
-            // Request information/body about the Email ID.
+            // Filter messages based on EmailId.
             let user_messages = messages
                 .iter()
                 .filter(|msg| &msg.id == email_id)
                 .collect::<Vec<&ReceivedMessageContext>>();
+
             let sender = &user_messages.first().unwrap().sender;
+            debug!("New message from {}", sender.as_str());
 
             let challenge_data = self
                 .db
