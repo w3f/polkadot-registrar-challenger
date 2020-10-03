@@ -491,9 +491,6 @@ impl Client {
                     network_address.address().as_str()
                 );
 
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -502,7 +499,6 @@ impl Client {
                     )
                     .await?;
 
-                // Tell the manager to check the user's account states.
                 self.comms
                     .notify_status_change(network_address.address().clone());
             }
@@ -520,6 +516,9 @@ impl Client {
                         ChallengeStatus::Rejected,
                     )
                     .await?;
+
+                self.comms
+                    .notify_status_change(network_address.address().clone());
             }
 
             self.send_message(sender, verifier.response_message_builder())
