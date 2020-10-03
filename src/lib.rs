@@ -193,11 +193,12 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         .subject(config.google_email)
         .private_key(config.google_private_key)
         .email_server(config.email_server)
+        .imap_server(config.imap_server)
+        .email_inbox(config.email_inbox)
         .email_user(config.email_user)
         .email_password(config.email_password)
         .token_url("https://oauth2.googleapis.com/token".to_string())
-        .build()
-        .unwrap();
+        .build()?;
 
     info!("Starting Matrix task");
     tokio::spawn(async move {

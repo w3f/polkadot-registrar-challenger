@@ -1563,9 +1563,9 @@ mod tests {
         rt.block_on(async {
             let db = Database2::new(&db_path()).unwrap();
 
-            let id_1 = EmailId::from("id_1");
-            let id_2 = EmailId::from("id_2");
-            let id_3 = EmailId::from("id_3");
+            let id_1 = EmailId::from(11u32);
+            let id_2 = EmailId::from(22u32);
+            let id_3 = EmailId::from(33u32);
 
             let list = [id_1.clone(), id_2.clone(), id_3.clone()];
 

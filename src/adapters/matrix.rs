@@ -311,10 +311,10 @@ impl Responder {
                 .await?;
 
             if challenge_data.is_empty() {
+                warn!("No challenge data found for {}", account.as_str());
                 return Err(MatrixError::ChallengeDataNotFound(account.clone()).into());
             }
 
-            debug!("Initializing verifier");
             let mut verifier = Verifier2::new(&challenge_data);
 
             // Fetch the text message from the event.
@@ -326,7 +326,7 @@ impl Responder {
                 msg_body
             } else {
                 debug!(
-                    "Didn't receive a text message from {}",
+                    "Didn't receive a text message from {}, notifying...",
                     event.sender.as_str()
                 );
 
@@ -340,6 +340,7 @@ impl Responder {
                 return Ok(());
             };
 
+            debug!("Verifying message: {}", msg_body);
             verifier.verify(msg_body);
 
             for network_address in verifier.valid_verifications() {
