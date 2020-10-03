@@ -21,39 +21,31 @@ use std::collections::BTreeMap;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct EmailId(String);
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct EmailId(u64);
 
-impl EmailId {
-    pub fn as_str(&self) -> &str {
-        &self.0
+impl From<u32> for EmailId {
+    fn from(val: u32) -> Self {
+        EmailId(val as u64)
     }
 }
 
-impl From<String> for EmailId {
-    fn from(val: String) -> Self {
+impl From<u64> for EmailId {
+    fn from(val: u64) -> Self {
         EmailId(val)
-    }
-}
-
-impl From<&str> for EmailId {
-    fn from(val: &str) -> Self {
-        EmailId(val.to_string())
     }
 }
 
 impl ToSql for EmailId {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::Borrowed(ValueRef::Text(self.0.as_bytes())))
+        Ok(ToSqlOutput::Borrowed(ValueRef::Integer(self.0 as i64)))
     }
 }
 
 impl FromSql for EmailId {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value {
-            ValueRef::Text(val) => Ok(EmailId(
-                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
-            )),
+            ValueRef::Integer(val) => Ok(EmailId(val as u64)),
             _ => Err(FromSqlError::InvalidType),
         }
     }
@@ -92,6 +84,7 @@ impl ConvertEmailInto<Account> for &str {
 
 #[derive(Debug, Clone)]
 struct ReceivedMessageContext {
+    id: EmailId,
     sender: Account,
     body: String,
 }
@@ -316,58 +309,6 @@ impl Client {
             .map(|entry| entry.id)
             .collect())
     }
-    async fn request_message(&self, email_id: &EmailId) -> Result<Vec<ReceivedMessageContext>> {
-        let response = self
-            .get_request::<ApiMessage>(&format!(
-                "https://gmail.googleapis.com/gmail/v1/users/{userId}/messages/{id}",
-                userId = self.subject,
-                id = email_id.as_str(),
-            ))
-            .await?;
-
-        let mut messages = vec![];
-        let sender: Account = response
-            .payload
-            .headers
-            .iter()
-            .find(|header| header.name.to_lowercase() == "from")
-            .ok_or(ClientError::UnrecognizedData)?
-            .value
-            .clone()
-            .convert_into()?;
-
-        if let Some(body) = response.payload.body {
-            if let Some(data) = body.data {
-                messages.push(ReceivedMessageContext {
-                    sender: sender.clone(),
-                    body: String::from_utf8(base64::decode_config(data, base64::URL_SAFE)?)?
-                        .lines()
-                        .nth(0)
-                        .ok_or(ClientError::UnrecognizedData)?
-                        .trim()
-                        .to_string(),
-                });
-            }
-        }
-
-        /*
-        for part in response.payload.parts {
-            messages.push(ReceivedMessageContext {
-                sender: sender.clone(),
-                body: String::from_utf8_lossy(
-                    &base64::decode_config(part.body.data, base64::URL_SAFE)
-                        .map_err(|_| ClientError::UnrecognizedData)?,
-                )
-                .lines()
-                .nth(0)
-                .ok_or(ClientError::UnrecognizedData)?
-                .to_string(),
-            });
-        }
-        */
-
-        Ok(messages)
-    }
     async fn request_message2(&self) -> Result<Vec<ReceivedMessageContext>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.to_string(), 993), &self.imap_server, &tls)?;
@@ -377,14 +318,19 @@ impl Client {
             .map_err(|(err, _)| err)?;
 
         transport.select("Inbox")?;
-        let messages = transport.fetch("1:10", "RFC822")?;
+        let messages = transport.fetch("1:10", "(RFC822 UID)")?;
 
-        fn create_message_context(sender: Account, body: String) -> ReceivedMessageContext {
+        fn create_message_context(
+            email_id: EmailId,
+            sender: Account,
+            body: String,
+        ) -> ReceivedMessageContext {
             // The very first line must be the signature. If the message cannot
             // be parsed correctly, then just use empty strings which will
             // automatically invalidate the signature without aborting the whole
             // process.
             ReceivedMessageContext {
+                id: email_id,
                 sender: sender,
                 body: format!(
                     "{:?}",
@@ -403,6 +349,7 @@ impl Client {
 
         let mut parsed_messages = vec![];
         for message in &messages {
+            let email_id = EmailId::from(message.uid.ok_or(ClientError::UnrecognizedData)?);
             if let Some(body) = message.body() {
                 let mail = mailparse::parse_mail(body)?;
 
@@ -415,14 +362,18 @@ impl Client {
                     .convert_into()?;
 
                 if let Ok(body) = mail.get_body() {
-                    parsed_messages.push(create_message_context(sender.clone(), body));
+                    parsed_messages.push(create_message_context(email_id, sender.clone(), body));
                 } else {
                     warn!("No body found in message from {}", sender);
                 }
 
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        parsed_messages.push(create_message_context(sender.clone(), body));
+                        parsed_messages.push(create_message_context(
+                            email_id,
+                            sender.clone(),
+                            body,
+                        ));
                     } else {
                         warn!("No body found in subpart message from {}", sender);
                     }
@@ -526,21 +477,24 @@ impl Client {
         Ok(())
     }
     async fn handle_incoming_messages(&self) -> Result<()> {
-        let inbox = self.request_inbox().await?;
-        let unknown_email_ids = self.db.find_untracked_email_ids(&inbox).await?;
+        let messages = self.request_message2().await?;
+        let email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
+
+        let unknown_email_ids = self
+            .db
+            .find_untracked_email_ids(email_ids.as_slice())
+            .await?;
 
         let mut interval = time::interval(Duration::from_secs(1));
         for email_id in unknown_email_ids {
             interval.tick().await;
 
             // Request information/body about the Email ID.
-            let user_messages = self.request_message(email_id).await?;
-            if user_messages.is_empty() {
-                self.db.track_email_id(email_id).await?;
-                continue;
-            }
-
-            let sender = &user_messages.get(0).as_ref().unwrap().sender;
+            let user_messages = messages
+                .iter()
+                .filter(|msg| &msg.id == email_id)
+                .collect::<Vec<&ReceivedMessageContext>>();
+            let sender = &user_messages.first().unwrap().sender;
 
             let challenge_data = self
                 .db
