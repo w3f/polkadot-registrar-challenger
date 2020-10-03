@@ -254,7 +254,7 @@ impl Client {
 
         Ok(())
     }
-    async fn request_message2(&self) -> Result<Vec<ReceivedMessageContext>> {
+    async fn request_message(&self) -> Result<Vec<ReceivedMessageContext>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.to_string(), 993), &self.imap_server, &tls)?;
 
@@ -422,7 +422,7 @@ impl Client {
         Ok(())
     }
     async fn handle_incoming_messages(&self) -> Result<()> {
-        let messages = self.request_message2().await?;
+        let messages = self.request_message().await?;
 
         // Check database on which of the new messages were not processed yet.
         let email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
@@ -622,7 +622,7 @@ mod tests {
     }
 
     #[test]
-    fn request_message2() {
+    fn request_message() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             let config = open_config().unwrap();
@@ -642,7 +642,7 @@ mod tests {
                 .build()
                 .unwrap();
 
-            let res = email.request_message2().await.unwrap();
+            let res = email.request_message().await.unwrap();
             for msg in res {
                 println!(">> SENDER: {}", msg.sender.as_str());
                 println!(">> BODY: {}", msg.body);
