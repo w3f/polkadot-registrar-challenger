@@ -379,6 +379,28 @@ impl Client {
         transport.select("Inbox")?;
         let messages = transport.fetch("1:10", "RFC822")?;
 
+        fn create_message_context(sender: Account, body: String) -> ReceivedMessageContext {
+            // The very first line must be the signature. If the message cannot
+            // be parsed correctly, then just use empty strings which will
+            // automatically invalidate the signature without aborting the whole
+            // process.
+            ReceivedMessageContext {
+                sender: sender,
+                body: format!(
+                    "{:?}",
+                    body.lines()
+                        .nth(0)
+                        .unwrap_or("")
+                        .split(" ")
+                        .collect::<Vec<&str>>()
+                        .iter()
+                        .nth(0)
+                        .unwrap_or(&"")
+                        .trim()
+                ),
+            }
+        }
+
         let mut parsed_messages = vec![];
         for message in &messages {
             if let Some(body) = message.body() {
@@ -393,40 +415,14 @@ impl Client {
                     .convert_into()?;
 
                 if let Ok(body) = mail.get_body() {
-                    parsed_messages.push(ReceivedMessageContext {
-                        sender: sender.clone(),
-                        body: body
-                            .split("\n")
-                            .collect::<Vec<&str>>()
-                            .iter()
-                            .nth(0)
-                            // If there is not line, just use an empty string
-                            // which will automatically invalidate the
-                            // signature without aborting the whole process.
-                            .unwrap_or(&"")
-                            .trim()
-                            .to_string(),
-                    });
+                    parsed_messages.push(create_message_context(sender.clone(), body));
                 } else {
                     warn!("No body found in message from {}", sender);
                 }
 
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        parsed_messages.push(ReceivedMessageContext {
-                            sender: sender.clone(),
-                            body: body
-                                .split("\n")
-                                .collect::<Vec<&str>>()
-                                .iter()
-                                .nth(0)
-                                // If there is not line, just use an empty string
-                                // which will automatically invalidate the
-                                // signature without aborting the whole process.
-                                .unwrap_or(&"")
-                                .trim()
-                                .to_string(),
-                        });
+                        parsed_messages.push(create_message_context(sender.clone(), body));
                     } else {
                         warn!("No body found in subpart message from {}", sender);
                     }
