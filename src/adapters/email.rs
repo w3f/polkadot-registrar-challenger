@@ -273,17 +273,11 @@ impl Client {
         let recent_seq = transport.search("X-GM-RAW \"is:unread\"")?;
 
         if recent_seq.is_empty() {
-            return Ok(vec![])
+            return Ok(vec![]);
         }
 
-        let min = recent_seq
-            .iter()
-            .min()
-            .unwrap();
-        let max = recent_seq
-            .iter()
-            .max()
-            .unwrap();
+        let min = recent_seq.iter().min().unwrap();
+        let max = recent_seq.iter().max().unwrap();
 
         let query = if min == max {
             min.to_string()
@@ -291,10 +285,7 @@ impl Client {
             format!("{}:{}", min.saturating_sub(5).max(1), max)
         };
 
-        let messages = transport.fetch(
-            query,
-            "(RFC822 UID)",
-        )?;
+        let messages = transport.fetch(query, "(RFC822 UID)")?;
 
         fn create_message_context(
             email_id: EmailId,
@@ -457,7 +448,7 @@ impl Client {
         let messages = self.request_message().await?;
 
         if messages.is_empty() {
-            return Ok(())
+            return Ok(());
         }
 
         // Check database on which of the new messages were not processed yet.

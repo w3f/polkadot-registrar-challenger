@@ -551,35 +551,21 @@ impl Database2 {
 
         Ok(challenge_set)
     }
-    // Check whether the identity is fully verified. Currently it only checks
-    // the Matrix account.
+    // Check whether the identity is fully verified.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
         let mut con = self.con.lock().await;
-        let transaction = con.transaction()?;
 
-        // Make sure the identity even exists.
-        transaction.query_row_named(
+        let mut stmt = con.prepare(
             "SELECT
-                    id
-                FROM
-                    pending_judgments
-                WHERE
-                    net_account = :net_account
-                ",
-            named_params! {
-                ":net_account": net_account,
-            },
-            |row| row.get::<_, i32>(0),
-        )?;
-
-        let is_verified = {
-            let mut stmt = transaction.prepare(
-                "SELECT
-                        id
+                        status
                     FROM
+                        challenge_status
+                    LEFT JOIN
                         account_states
+                    ON
+                        account_states.challenge_status_id = challenge_status.id
                     WHERE
-                        net_account_id = (
+                        account_states.net_account_id = (
                             SELECT
                                 id
                             FROM
@@ -600,31 +586,20 @@ impl Database2 {
                                     'twitter'
                                 )
                         )
-                    AND challenge_status_id
-                        IN (
-                            SELECT
-                                id
-                            FROM
-                                challenge_status
-                            WHERE
-                                status IN (
-                                    'unconfirmed',
-                                    'rejected'
-                                )
-                        )
                     ",
-            )?;
+        )?;
 
-            let mut rows = stmt.query_named(named_params! {
-                ":net_account": net_account,
-            })?;
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": net_account,
+        })?;
 
-            rows.next()?.is_none()
-        };
+        while let Some(row) = rows.next()? {
+            if row.get::<_, ChallengeStatus>(0)? != ChallengeStatus::Accepted {
+                return Ok(false);
+            }
+        }
 
-        transaction.commit()?;
-
-        Ok(is_verified)
+        Ok(true)
     }
     pub async fn select_timed_out_identities(&self, timeout_limit: u64) -> Result<Vec<NetAccount>> {
         let con = self.con.lock().await;
@@ -1355,17 +1330,13 @@ mod tests {
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
-            // Alice does not exist.
-            let res = db.is_fully_verified(&alice).await;
-            assert!(res.is_err());
-
             // Create and insert identity into storage.
             let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
             ident
                 .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
                 .unwrap();
             ident
-                .push_account(AccountType::Web, Account::from("alice.com"))
+                .push_account(AccountType::Email, Account::from("alice@example.com"))
                 .unwrap();
 
             db.insert_identity(&ident).await.unwrap();
@@ -1374,8 +1345,8 @@ mod tests {
             let res = db.is_fully_verified(&alice).await.unwrap();
             assert_eq!(res, false);
 
-            // Accept an account.
-            db.set_challenge_status(&alice, &AccountType::Web, ChallengeStatus::Accepted)
+            // Accept an additional account.
+            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1383,8 +1354,8 @@ mod tests {
             let res = db.is_fully_verified(&alice).await.unwrap();
             assert_eq!(res, false);
 
-            // Accept an additional account.
-            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
+            // Accept an account.
+            db.set_challenge_status(&alice, &AccountType::Email, ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
