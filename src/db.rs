@@ -196,7 +196,8 @@ impl Database2 {
             "
             CREATE TABLE IF NOT EXISTS email_processed_ids (
                 id          INTEGER PRIMARY KEY,
-                email_id    INTEGER NOT NULL UNIQUE
+                email_id    INTEGER NOT NULL UNIQUE,
+                timestamp   INTEGER NOT NULL
             )
         ",
             params![],
@@ -887,13 +888,16 @@ impl Database2 {
         con.execute_named(
             "
             INSERT OR IGNORE INTO email_processed_ids (
-                email_id
+                email_id,
+                timestamp
             ) VALUES (
-                :email_id
+                :email_id,
+                :timestamp
             )
             ",
             named_params! {
                 ":email_id": email_id,
+                ":timestamp": unix_time() as i64,
             },
         )?;
 

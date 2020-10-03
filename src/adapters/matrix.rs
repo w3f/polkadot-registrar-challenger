@@ -168,8 +168,8 @@ impl MatrixClient {
                     debug!("Leaving room: {}", room_id.as_str());
                     let _ = self.client.leave_room(&room_id).await?;
                 } else {
-                    warn!(
-                        "Failed to find RoomId for address {} when trying to leave room",
+                    debug!(
+                        "No active Matrix room found for address {}",
                         net_account.as_str()
                     );
                 }

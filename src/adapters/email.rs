@@ -262,8 +262,39 @@ impl Client {
             .login(&self.user, &self.password)
             .map_err(|(err, _)| err)?;
 
-        transport.select("Inbox")?;
-        let messages = transport.fetch("1:10", "(RFC822 UID)")?;
+        transport.select(&self.inbox)?;
+
+        // Find the message sequence/index of unread messages and fetch that
+        // range, plus some extra. The database keeps track of which messages
+        // have been processed.
+        //
+        // Gmail has a custom search syntax and does not support the IMAP
+        // standardized queries.
+        let recent_seq = transport.search("X-GM-RAW \"is:unread\"")?;
+
+        if recent_seq.is_empty() {
+            return Ok(vec![])
+        }
+
+        let min = recent_seq
+            .iter()
+            .min()
+            .unwrap();
+        let max = recent_seq
+            .iter()
+            .max()
+            .unwrap();
+
+        let query = if min == max {
+            min.to_string()
+        } else {
+            format!("{}:{}", min.saturating_sub(5).max(1), max)
+        };
+
+        let messages = transport.fetch(
+            query,
+            "(RFC822 UID)",
+        )?;
 
         fn create_message_context(
             email_id: EmailId,
@@ -288,7 +319,8 @@ impl Client {
                         .nth(0)
                         .unwrap_or(&"")
                         .trim()
-                ).replace("\"", ""),
+                )
+                .replace("\"", ""),
             }
         }
 
@@ -424,12 +456,13 @@ impl Client {
     async fn handle_incoming_messages(&self) -> Result<()> {
         let messages = self.request_message().await?;
 
+        if messages.is_empty() {
+            return Ok(())
+        }
+
         // Check database on which of the new messages were not processed yet.
         let email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
-        let unknown_email_ids = self
-            .db
-            .find_untracked_email_ids(&email_ids)
-            .await?;
+        let unknown_email_ids = self.db.find_untracked_email_ids(&email_ids).await?;
 
         for email_id in unknown_email_ids {
             // Filter messages based on EmailId.
@@ -448,10 +481,7 @@ impl Client {
                 .await?;
 
             if challenge_data.is_empty() {
-                warn!(
-                    "No challenge data found for {}",
-                    sender.as_str()
-                );
+                warn!("No challenge data found for {}", sender.as_str());
 
                 self.db.track_email_id(email_id).await?;
                 continue;
