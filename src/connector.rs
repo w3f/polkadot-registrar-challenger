@@ -197,7 +197,33 @@ impl Connector {
                                         sender.send(Message::error()).await.unwrap();
                                     }
                                 }
-                                _ => {}
+                                EventType::Ack => {
+                                    if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data)
+                                    {
+                                        info!(
+                                            "Received acknowledgement from Watcher: {}",
+                                            msg.result
+                                        );
+                                        comms.notify_ack();
+                                    } else {
+                                        error!("Invalid 'acknowledgement' message from Watcher");
+                                    }
+                                }
+                                EventType::Error => {
+                                    if let Ok(msg) =
+                                        serde_json::from_value::<ErrorResponse>(msg.data)
+                                    {
+                                        error!(
+                                            "Received error message from Watcher: {}",
+                                            msg.error
+                                        );
+                                    } else {
+                                        error!("Invalid 'error' message from Watcher");
+                                    }
+                                }
+                                _ => {
+                                    warn!("Received unknown message from Watcher: '{:?}'", msg);
+                                }
                             }
                         }
                         _ => {
