@@ -2,7 +2,7 @@ use super::Result;
 use crate::adapters::{EmailId, TwitterId};
 use crate::identity::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
+    unix_time, Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };
 use matrix_sdk::identifiers::RoomId;
 use rusqlite::{named_params, params, Connection, OptionalExtension};
@@ -47,7 +47,8 @@ impl Database2 {
         con.execute(
             "CREATE TABLE IF NOT EXISTS pending_judgments (
                 id           INTEGER PRIMARY KEY,
-                net_account  TEXT NOT NULL UNIQUE
+                net_account  TEXT NOT NULL UNIQUE,
+                created      INTEGER NOT NULL
             )",
             params![],
         )?;
@@ -133,7 +134,8 @@ impl Database2 {
                 UNIQUE (net_account_id, account_ty_id)
 
                 FOREIGN KEY (net_account_id)
-                    REFERENCES pending_judgments (id),
+                    REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE,
 
                 FOREIGN KEY (account_ty_id)
                     REFERENCES account_types (id),
@@ -156,6 +158,7 @@ impl Database2 {
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
             )",
             params![],
         )?;
@@ -167,7 +170,8 @@ impl Database2 {
                 id              INTEGER PRIMARY KEY,
                 account         INTEGER NOT NULL UNIQUE,
                 twitter_id      TEXT NOT NULL,
-                init_msg        INTEGER NOT NULL
+                init_msg        INTEGER NOT NULL,
+                timestamp       INTEGER NOT NULL
             )
         ",
             params![],
@@ -193,7 +197,8 @@ impl Database2 {
             "
             CREATE TABLE IF NOT EXISTS email_processed_ids (
                 id          INTEGER PRIMARY KEY,
-                email_id    INTEGER NOT NULL UNIQUE
+                email_id    INTEGER NOT NULL UNIQUE,
+                timestamp   INTEGER NOT NULL
             )
         ",
             params![],
@@ -212,14 +217,20 @@ impl Database2 {
 
         {
             let mut stmt = transaction.prepare(
-                "INSERT OR IGNORE INTO pending_judgments (net_account)
-                VALUES (:net_account)
+                "INSERT OR IGNORE INTO pending_judgments (
+                    net_account,
+                    created
+                ) VALUES (
+                    :net_account,
+                    :timestamp
+                )
                 ",
             )?;
 
             for ident in idents {
                 stmt.execute_named(named_params! {
-                    ":net_account": ident.net_account()
+                    ":net_account": ident.net_account(),
+                    ":timestamp": unix_time() as i64,
                 })?;
             }
 
@@ -264,13 +275,64 @@ impl Database2 {
 
         Ok(())
     }
+    pub async fn remove_identity(&self, net_account: &NetAccount) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            DELETE FROM
+                pending_judgments
+            WHERE
+                net_account = :net_account
+        ",
+            named_params! {
+                ":net_account": net_account,
+            },
+        )?;
+
+        Ok(())
+    }
+    pub async fn select_addresses(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                account
+            FROM
+                account_states
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+        ",
+        )?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": net_account,
+        })?;
+
+        let mut net_accounts = vec![];
+        while let Some(row) = rows.next()? {
+            net_accounts.push(row.get::<_, Account>(0)?)
+        }
+
+        Ok(net_accounts)
+    }
     #[cfg(test)]
     async fn select_identities(&self) -> Result<Vec<OnChainIdentity>> {
         let con = self.con.lock().await;
         let mut stmt = con.prepare(
             "
-            SELECT net_account, account_ty, account
-            FROM pending_judgments
+            SELECT
+                net_account, account_ty, account
+            FROM
+                pending_judgments
             LEFT JOIN account_states
                 ON pending_judgments.id = account_states.net_account_id
             LEFT JOIN account_types
@@ -507,35 +569,21 @@ impl Database2 {
 
         Ok(challenge_set)
     }
-    // Check whether the identity is fully verified. Currently it only checks
-    // the Matrix account.
+    // Check whether the identity is fully verified.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
-        let mut con = self.con.lock().await;
-        let transaction = con.transaction()?;
+        let con = self.con.lock().await;
 
-        // Make sure the identity even exists.
-        transaction.query_row_named(
+        let mut stmt = con.prepare(
             "SELECT
-                    id
-                FROM
-                    pending_judgments
-                WHERE
-                    net_account = :net_account
-                ",
-            named_params! {
-                ":net_account": net_account,
-            },
-            |row| row.get::<_, i32>(0),
-        )?;
-
-        let is_verified = {
-            let mut stmt = transaction.prepare(
-                "SELECT
-                        id
+                        status
                     FROM
+                        challenge_status
+                    LEFT JOIN
                         account_states
+                    ON
+                        account_states.challenge_status_id = challenge_status.id
                     WHERE
-                        net_account_id = (
+                        account_states.net_account_id = (
                             SELECT
                                 id
                             FROM
@@ -556,31 +604,79 @@ impl Database2 {
                                     'twitter'
                                 )
                         )
-                    AND challenge_status_id
-                        IN (
-                            SELECT
-                                id
-                            FROM
-                                challenge_status
-                            WHERE
-                                status IN (
-                                    'unconfirmed',
-                                    'rejected'
-                                )
-                        )
                     ",
-            )?;
+        )?;
 
-            let mut rows = stmt.query_named(named_params! {
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": net_account,
+        })?;
+
+        while let Some(row) = rows.next()? {
+            if row.get::<_, ChallengeStatus>(0)? != ChallengeStatus::Accepted {
+                return Ok(false);
+            }
+        }
+
+        Ok(true)
+    }
+    pub async fn select_timed_out_identities(&self, timeout_limit: u64) -> Result<Vec<NetAccount>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                net_account
+            FROM
+                pending_judgments
+            LEFT JOIN
+                account_states
+            ON
+                pending_judgments.id = account_states.net_account_id
+            WHERE
+                pending_judgments.created < :timeout_limit
+            AND
+                account_states.challenge_status_id != (
+                    SELECT
+                        id
+                    FROM
+                        challenge_status
+                    WHERE
+                        status = 'accepted'
+                )
+        ",
+        )?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":timeout_limit": (unix_time() - timeout_limit) as i64,
+        })?;
+
+        let mut net_accounts = vec![];
+        while let Some(row) = rows.next()? {
+            net_accounts.push(row.get::<_, NetAccount>(0)?);
+        }
+
+        Ok(net_accounts)
+    }
+    pub async fn cleanup_timed_out_identities(&self, timeout_limit: u64) -> Result<()> {
+        let net_accounts = self.select_timed_out_identities(timeout_limit).await?;
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            DELETE FROM
+                pending_judgments
+            WHERE
+                net_account = :net_account
+        ",
+        )?;
+
+        for net_account in net_accounts {
+            stmt.execute_named(named_params! {
                 ":net_account": net_account,
             })?;
+        }
 
-            rows.next()?.is_none()
-        };
-
-        transaction.commit()?;
-
-        Ok(is_verified)
+        Ok(())
     }
     // TODO: Test this
     pub async fn select_invalid_accounts(
@@ -666,12 +762,14 @@ impl Database2 {
                 known_twitter_ids (
                     account,
                     twitter_id,
-                    init_msg 
+                    init_msg,
+                    timestamp
                 )
             VALUES (
                 :account,
                 :twitter_id,
-                '0'
+                '0',
+                :timestamp
             )
         ",
         )?;
@@ -680,6 +778,7 @@ impl Database2 {
             stmt.execute_named(named_params! {
                     ":account": account,
                     ":twitter_id": twitter_id,
+                    ":timestamp": unix_time() as i64,
             })?;
         }
 
@@ -785,13 +884,16 @@ impl Database2 {
         con.execute_named(
             "
             INSERT OR IGNORE INTO email_processed_ids (
-                email_id
+                email_id,
+                timestamp
             ) VALUES (
-                :email_id
+                :email_id,
+                :timestamp
             )
             ",
             named_params! {
                 ":email_id": email_id,
+                ":timestamp": unix_time() as i64,
             },
         )?;
 
@@ -839,6 +941,7 @@ mod tests {
     use crate::adapters::{EmailId, TwitterId};
     use crate::primitives::{Challenge, NetAccount};
     use tokio::runtime::Runtime;
+    use tokio::time::{self, Duration};
 
     // Generate a random db path
     fn db_path() -> String {
@@ -966,6 +1069,120 @@ mod tests {
                     .account,
                 Account::from("@bob:matrix.org")
             );
+
+            // Delete identity
+            db.remove_identity(&NetAccount::from(
+                "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+            ))
+            .await
+            .unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .unwrap()
+                    .account,
+                Account::from("@alice_second:matrix.org")
+            );
+        });
+    }
+
+    #[test]
+    fn select_addresses() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            // Create identity.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
+
+            let res = db.select_addresses(&alice).await.unwrap();
+            assert_eq!(res.len(), 0);
+
+            alice_ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+
+            alice_ident
+                .push_account(AccountType::Email, Account::from("alice@example.com"))
+                .unwrap();
+
+            alice_ident
+                .push_account(AccountType::Twitter, Account::from("@alice"))
+                .unwrap();
+
+            db.insert_identity(&alice_ident).await.unwrap();
+
+            let res = db.select_addresses(&alice).await.unwrap();
+            assert_eq!(res.len(), 3);
+            assert!(res.contains(&Account::from("@alice:matrix.org")));
+            assert!(res.contains(&Account::from("alice@example.com")));
+            assert!(res.contains(&Account::from("@alice")));
+        });
+    }
+
+    #[test]
+    fn select_cleanup_timed_out_identities() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut db = Database2::new(&db_path()).unwrap();
+
+            // Prepare addresses.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+
+            // Create identities
+            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
+
+            alice_ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+
+            let mut bob_ident = OnChainIdentity::new(bob.clone()).unwrap();
+
+            bob_ident
+                .push_account(AccountType::Matrix, Account::from("@bob:matrix.org"))
+                .unwrap();
+
+            db.insert_identity_batch(&[&alice_ident, &bob_ident])
+                .await
+                .unwrap();
+
+            let res = db.select_timed_out_identities(3).await.unwrap();
+            assert!(res.is_empty());
+
+            time::delay_for(Duration::from_secs(4)).await;
+
+            // Add new identity
+            let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
+            let mut eve_ident = OnChainIdentity::new(eve.clone()).unwrap();
+            eve_ident
+                .push_account(AccountType::Matrix, Account::from("@eve:matrix.org"))
+                .unwrap();
+
+            db.insert_identity(&eve_ident).await.unwrap();
+
+            let res = db.select_timed_out_identities(3).await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert!(res.contains(&alice));
+            assert!(res.contains(&bob));
+
+            let res = db.select_identities().await.unwrap();
+            let accounts: Vec<&NetAccount> = res.iter().map(|ident| ident.net_account()).collect();
+            assert_eq!(accounts.len(), 3);
+            assert!(accounts.contains(&&alice));
+            assert!(accounts.contains(&&bob));
+            assert!(accounts.contains(&&eve));
+
+            db.cleanup_timed_out_identities(3).await.unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            let accounts: Vec<&NetAccount> = res.iter().map(|ident| ident.net_account()).collect();
+            assert_eq!(accounts.len(), 1);
+            assert!(accounts.contains(&&eve));
         });
     }
 
@@ -1034,7 +1251,6 @@ mod tests {
 
             let idents: Vec<&OnChainIdentity> = idents.iter().map(|ident| ident).collect();
 
-            println!(">> {:?}", idents);
             let _ = db.insert_identity_batch(&idents).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
@@ -1152,17 +1368,13 @@ mod tests {
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
-            // Alice does not exist.
-            let res = db.is_fully_verified(&alice).await;
-            assert!(res.is_err());
-
             // Create and insert identity into storage.
             let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
             ident
                 .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
                 .unwrap();
             ident
-                .push_account(AccountType::Web, Account::from("alice.com"))
+                .push_account(AccountType::Email, Account::from("alice@example.com"))
                 .unwrap();
 
             db.insert_identity(&ident).await.unwrap();
@@ -1171,8 +1383,8 @@ mod tests {
             let res = db.is_fully_verified(&alice).await.unwrap();
             assert_eq!(res, false);
 
-            // Accept an account.
-            db.set_challenge_status(&alice, &AccountType::Web, ChallengeStatus::Accepted)
+            // Accept an additional account.
+            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1180,8 +1392,8 @@ mod tests {
             let res = db.is_fully_verified(&alice).await.unwrap();
             assert_eq!(res, false);
 
-            // Accept an additional account.
-            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
+            // Accept an account.
+            db.set_challenge_status(&alice, &AccountType::Email, ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1364,9 +1576,9 @@ mod tests {
         rt.block_on(async {
             let db = Database2::new(&db_path()).unwrap();
 
-            let id_1 = EmailId::from("id_1");
-            let id_2 = EmailId::from("id_2");
-            let id_3 = EmailId::from("id_3");
+            let id_1 = EmailId::from(11u32);
+            let id_2 = EmailId::from(22u32);
+            let id_3 = EmailId::from(33u32);
 
             let list = [id_1.clone(), id_2.clone(), id_3.clone()];
 

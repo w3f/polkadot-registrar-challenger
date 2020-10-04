@@ -296,7 +296,21 @@ impl ToSql for ChallengeStatus {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+impl FromSql for ChallengeStatus {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(val) => match val {
+                b"unconfirmed" => Ok(ChallengeStatus::Unconfirmed),
+                b"accepted" => Ok(ChallengeStatus::Accepted),
+                b"rejected" => Ok(ChallengeStatus::Rejected),
+                _ => Err(FromSqlError::InvalidType),
+            },
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Challenge(pub String);
 
 impl Challenge {

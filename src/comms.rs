@@ -35,6 +35,7 @@ pub enum CommsMessage {
     NotifyStatusChange {
         net_account: NetAccount,
     },
+    MessageAcknowledged,
 }
 
 #[derive(Debug, Clone)]
@@ -114,5 +115,8 @@ impl CommsVerifier {
                 net_account: net_account,
             })
             .fatal()
+    }
+    pub fn notify_ack(&self) {
+        self.sender.send(CommsMessage::MessageAcknowledged).fatal();
     }
 }
