@@ -198,6 +198,7 @@ impl IdentityManager {
         let matrix_comms = self.get_comms(&AccountType::Matrix)?;
 
         for net_account in net_accounts {
+            info!("Deleting expired account: {}", net_account.as_str());
             connector_comms.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
             matrix_comms.leave_matrix_room(net_account);
         }
