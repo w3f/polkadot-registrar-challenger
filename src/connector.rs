@@ -232,18 +232,18 @@ impl Connector {
 
         loop {
             futures::select_biased! {
-                token = closure_recv => {
-                    if let Some(_) = token {
-                        debug!("Closing websocket writer task");
-                        break;
-                    }
-                }
                 msg = receiver_recv => {
                     if let Some(msg) = msg {
                         writer
                             .send(TungMessage::Text(serde_json::to_string(&msg).map(|s| {println!("{}", s); s}).unwrap()))
                             .await
                             .unwrap();
+                    }
+                }
+                token = closure_recv => {
+                    if let Some(_) = token {
+                        debug!("Closing websocket writer task");
+                        break;
                     }
                 }
             }
