@@ -25,11 +25,14 @@ enum EventType {
     NewJudgementRequest,
     #[serde(rename = "judgementResult")]
     JudgementResult,
+    #[serde(rename = "pendingJudgementsRequests")]
+    PendingJudgementsRequests,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Message {
     event: EventType,
+    #[serde(skip_serializing_if = "Value::is_null")]
     data: Value,
 }
 
@@ -112,7 +115,10 @@ impl Connector {
         let (mut writer, mut reader) = self.client.split();
 
         loop {
-            let (sender, receiver) = unbounded();
+            let (mut sender, receiver) = unbounded();
+
+            // Special channels for coordinating the exit of the tasks in case
+            // of Watcher disconnect.
             let (tx1, rx1) = unbounded();
             let (tx2, rx2) = unbounded();
 
@@ -121,21 +127,36 @@ impl Connector {
                 sender.clone(),
                 rx1,
             ));
+
             tokio::spawn(Self::start_websocket_writer(
                 writer,
                 self.comms.clone(),
                 receiver,
                 rx2,
             ));
+
             let handle = tokio::spawn(Self::start_websocket_reader(
                 reader,
                 self.comms.clone(),
-                sender,
+                sender.clone(),
                 tx1,
                 tx2,
             ));
 
-            handle.await;
+            // Request pending requests from Watcher.
+            info!("Requesting pending judgments from Watcher");
+            sender
+                .send(Message {
+                    event: EventType::PendingJudgementsRequests,
+                    data: serde_json::to_value(Option::<()>::None).unwrap(),
+                })
+                .await
+                .unwrap();
+
+            // Wait for the reader to exit, which in return will close the comms
+            // receiver and writer task. This occurs when the connection to the
+            // Watcher is closed.
+            handle.await.unwrap();
 
             let mut interval = time::interval(Duration::from_secs(5));
 
@@ -145,7 +166,8 @@ impl Connector {
                 if let Ok(client) = connect_async(&self.url).await {
                     info!("Connected successfully to Watcher, spawning tasks");
 
-                    // (Destructuring assignments are currently not supported)
+                    // (Destructuring assignments are currently not supported.
+                    // https://github.com/rust-lang/rfcs/issues/372)
                     let split = client.0.split();
                     writer = split.0;
                     reader = split.1;
@@ -217,7 +239,7 @@ impl Connector {
                 msg = receiver_recv => {
                     if let Some(msg) = msg {
                         writer
-                            .send(TungMessage::Text(serde_json::to_string(&msg).unwrap()))
+                            .send(TungMessage::Text(serde_json::to_string(&msg).map(|s| {println!("{}", s); s}).unwrap()))
                             .await
                             .unwrap();
                     }
@@ -237,7 +259,6 @@ impl Connector {
                 if let Ok(message) = &message {
                     match message {
                         TungMessage::Text(payload) => {
-                            debug!("Received message from Watcher: {}", payload);
                             let try_msg = serde_json::from_str::<Message>(&payload);
                             let msg = if let Ok(msg) = try_msg {
                                 msg
@@ -249,7 +270,7 @@ impl Connector {
 
                             match msg.event {
                                 EventType::NewJudgementRequest => {
-                                    info!("Received a new judgement request from Watcher");
+                                    info!("Received a new judgement request");
                                     if let Ok(request) =
                                         serde_json::from_value::<JudgementRequest>(msg.data)
                                     {
@@ -257,24 +278,21 @@ impl Connector {
                                             sender.send(Message::ack(None)).await.unwrap();
                                             comms.notify_new_identity(ident);
                                         } else {
-                                            error!("Failed to convert message");
+                                            error!("Invalid `newJudgementRequest` message format");
                                             sender.send(Message::error()).await.unwrap();
                                         };
                                     } else {
-                                        error!("Failed to convert message");
+                                        error!("Invalid `newJudgementRequest` message format");
                                         sender.send(Message::error()).await.unwrap();
                                     }
                                 }
                                 EventType::Ack => {
                                     if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data)
                                     {
-                                        info!(
-                                            "Received acknowledgement from Watcher: {}",
-                                            msg.result
-                                        );
+                                        info!("Received acknowledgement: {}", msg.result);
                                         comms.notify_ack();
                                     } else {
-                                        error!("Invalid 'acknowledgement' message from Watcher");
+                                        error!("Invalid 'acknowledgement' message format");
                                     }
                                 }
                                 EventType::Error => {
@@ -286,11 +304,31 @@ impl Connector {
                                             msg.error
                                         );
                                     } else {
-                                        error!("Invalid 'error' message from Watcher");
+                                        error!("Invalid 'error' message format");
+                                    }
+                                }
+                                EventType::PendingJudgementsRequests => {
+                                    info!("Received pending challenges from Watcher");
+                                    if let Ok(requests) =
+                                        serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
+                                    {
+                                        for request in requests {
+                                            if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                                sender.send(Message::ack(None)).await.unwrap();
+                                                comms.notify_new_identity(ident);
+                                            } else {
+                                                error!(
+                                                    "Invalid `newJudgementRequest` message format"
+                                                );
+                                                sender.send(Message::error()).await.unwrap();
+                                            };
+                                        }
+                                    } else {
+                                        error!("Invalid `pendingChallengesRequest` message format");
                                     }
                                 }
                                 _ => {
-                                    warn!("Received unknown message from Watcher: '{:?}'", msg);
+                                    warn!("Received unrecognized message: '{:?}'", msg);
                                 }
                             }
                         }
