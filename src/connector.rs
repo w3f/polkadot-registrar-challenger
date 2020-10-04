@@ -191,12 +191,6 @@ impl Connector {
 
         loop {
             futures::select_biased! {
-                token = closure_recv => {
-                    if let Some(_) = token {
-                        debug!("Closing websocket comms task");
-                        break;
-                    }
-                }
                 msg = comms_recv => {
                     match msg {
                         CommsMessage::JudgeIdentity {
@@ -216,6 +210,12 @@ impl Connector {
                                 .unwrap();
                         }
                         _ => {}
+                    }
+                }
+                token = closure_recv => {
+                    if let Some(_) = token {
+                        debug!("Closing websocket comms task");
+                        break;
                     }
                 }
             };

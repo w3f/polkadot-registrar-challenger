@@ -264,8 +264,10 @@ impl IdentityManager {
 
             self.get_comms(&AccountType::Matrix).map(|comms| {
                 debug!("Closing Matrix room for {}", net_account.as_str());
-                comms.leave_matrix_room(net_account);
+                comms.leave_matrix_room(net_account.clone());
             })?;
+
+            self.db2.remove_identity(&net_account).await?;
         }
 
         Ok(())

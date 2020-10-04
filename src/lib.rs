@@ -213,7 +213,6 @@ pub async fn setup(config: Config) -> Result<()> {
     }
 
     info!("Starting health check thread");
-    /*
     std::thread::spawn(|| {
         HealthCheck::start()
             .map_err(|err| {
@@ -222,7 +221,6 @@ pub async fn setup(config: Config) -> Result<()> {
             })
             .unwrap();
     });
-    */
 
     Ok(())
 }
