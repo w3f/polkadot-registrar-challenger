@@ -9,7 +9,9 @@ use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 use tokio::net::TcpStream;
+use tokio::sync::RwLock;
 use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::protocol::Message as TungMessage;
@@ -116,31 +118,26 @@ impl Connector {
 
         loop {
             let (mut sender, receiver) = unbounded();
-
-            // Special channels for coordinating the exit of the tasks in case
-            // of Watcher disconnect.
-            let (tx1, rx1) = unbounded();
-            let (tx2, rx2) = unbounded();
+            let exit_token = Arc::new(RwLock::new(false));
 
             tokio::spawn(Self::start_comms_receiver(
                 self.comms.clone(),
                 sender.clone(),
-                rx1,
+                Arc::clone(&exit_token),
             ));
 
             tokio::spawn(Self::start_websocket_writer(
                 writer,
                 self.comms.clone(),
                 receiver,
-                rx2,
+                Arc::clone(&exit_token),
             ));
 
             let handle = tokio::spawn(Self::start_websocket_reader(
                 reader,
                 self.comms.clone(),
                 sender.clone(),
-                tx1,
-                tx2,
+                Arc::clone(&exit_token),
             ));
 
             // Request pending requests from Watcher.
@@ -184,68 +181,61 @@ impl Connector {
     async fn start_comms_receiver(
         comms: CommsVerifier,
         mut sender: UnboundedSender<Message>,
-        mut closure: UnboundedReceiver<bool>,
+        exit_token: Arc<RwLock<bool>>,
     ) {
-        let mut closure_recv = closure.next().fuse();
-        let mut comms_recv = Box::pin(comms.recv().fuse());
-
         loop {
-            futures::select_biased! {
-                msg = comms_recv => {
-                    match msg {
-                        CommsMessage::JudgeIdentity {
-                            net_account,
-                            judgement,
-                        } => {
-                            sender
-                                .send(Message {
-                                    event: EventType::JudgementResult,
-                                    data: serde_json::to_value(&JudgementResponse {
-                                        address: net_account.clone(),
-                                        judgement: judgement,
-                                    })
-                                    .unwrap(),
-                                })
-                                .await
-                                .unwrap();
-                        }
-                        _ => {}
-                    }
+            match comms.try_recv() {
+                Some(CommsMessage::JudgeIdentity {
+                    net_account,
+                    judgement,
+                }) => {
+                    sender
+                        .send(Message {
+                            event: EventType::JudgementResult,
+                            data: serde_json::to_value(&JudgementResponse {
+                                address: net_account.clone(),
+                                judgement: judgement,
+                            })
+                            .unwrap(),
+                        })
+                        .await
+                        .unwrap();
                 }
-                token = closure_recv => {
-                    if let Some(_) = token {
-                        debug!("Closing websocket comms task");
-                        break;
-                    }
-                }
-            };
+                _ => {}
+            }
+
+            let t = exit_token.read().await;
+            if *t {
+                debug!("Closing websocket writer task");
+                break;
+            }
         }
     }
     async fn start_websocket_writer(
         mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
         _comms: CommsVerifier,
         mut receiver: UnboundedReceiver<Message>,
-        mut closure: UnboundedReceiver<bool>,
+        exit_token: Arc<RwLock<bool>>,
     ) {
-        let mut closure_recv = closure.next().fuse();
-        let mut receiver_recv = receiver.next().fuse();
-
         loop {
-            futures::select_biased! {
-                msg = receiver_recv => {
-                    if let Some(msg) = msg {
-                        writer
-                            .send(TungMessage::Text(serde_json::to_string(&msg).map(|s| {println!("{}", s); s}).unwrap()))
-                            .await
-                            .unwrap();
-                    }
-                }
-                token = closure_recv => {
-                    if let Some(_) = token {
-                        debug!("Closing websocket writer task");
-                        break;
-                    }
-                }
+            if let Ok(msg) = time::timeout(Duration::from_millis(10), receiver.next()).await {
+                writer
+                    .send(TungMessage::Text(
+                        serde_json::to_string(&msg)
+                            .map(|s| {
+                                println!("{}", s);
+                                s
+                            })
+                            .unwrap(),
+                    ))
+                    .await
+                    .unwrap();
+            }
+
+            let t = exit_token.read().await;
+            if *t {
+                debug!("Closing websocket writer task");
+                break;
             }
         }
     }
@@ -253,8 +243,7 @@ impl Connector {
         mut reader: SplitStream<WebSocketStream<TcpStream>>,
         comms: CommsVerifier,
         mut sender: UnboundedSender<Message>,
-        mut tx1: UnboundedSender<bool>,
-        mut tx2: UnboundedSender<bool>,
+        exit_token: Arc<RwLock<bool>>,
     ) {
         loop {
             if let Some(message) = reader.next().await {
@@ -348,8 +337,8 @@ impl Connector {
                             debug!("Closing websocket reader task");
 
                             // Close Comms receiver and client writer tasks.
-                            tx1.send(true).await.unwrap();
-                            tx2.send(true).await.unwrap();
+                            let mut t = exit_token.write().await;
+                            *t = true;
 
                             break;
                         }

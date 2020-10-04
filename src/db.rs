@@ -278,14 +278,17 @@ impl Database2 {
     pub async fn remove_identity(&self, net_account: &NetAccount) -> Result<()> {
         let con = self.con.lock().await;
 
-        con.execute_named("
+        con.execute_named(
+            "
             DELETE FROM
                 pending_judgments
             WHERE
                 net_account = :net_account
-        ", named_params! {
-            ":net_account": net_account,
-        })?;
+        ",
+            named_params! {
+                ":net_account": net_account,
+            },
+        )?;
 
         Ok(())
     }
@@ -1068,7 +1071,11 @@ mod tests {
             );
 
             // Delete identity
-            db.remove_identity(&NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).await.unwrap();
+            db.remove_identity(&NetAccount::from(
+                "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+            ))
+            .await
+            .unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
