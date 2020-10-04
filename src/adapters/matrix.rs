@@ -119,7 +119,7 @@ impl MatrixClient {
         for (room_id, _) in rooms.iter() {
             if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
                 warn!("Leaving dead room: {}", room_id.as_str());
-                let _ = client.leave_room(room_id).await;
+                let _ = client.leave_room(room_id).await?;
             }
         }
 
@@ -166,7 +166,7 @@ impl MatrixClient {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
                     self.send_msg("Bye bye!", &room_id).await?;
                     debug!("Leaving room: {}", room_id.as_str());
-                    let _ = self.client.leave_room(&room_id).await;
+                    let _ = self.client.leave_room(&room_id).await?;
                 } else {
                     debug!(
                         "No active Matrix room found for address {}",

@@ -258,6 +258,7 @@ impl IdentityManager {
                         "Address {} is fully verified. Notifying Watcher...",
                         net_account.as_str()
                     );
+
                     comms.notify_identity_judgment(net_account.clone(), Judgement::Reasonable);
                 })?;
 

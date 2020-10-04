@@ -144,6 +144,7 @@ impl Connector {
             ));
 
             // Request pending requests from Watcher.
+            /*
             info!("Requesting pending judgments from Watcher");
             sender
                 .send(Message {
@@ -152,6 +153,7 @@ impl Connector {
                 })
                 .await
                 .unwrap();
+            */
 
             // Wait for the reader to exit, which in return will close the comms
             // receiver and writer task. This occurs when the connection to the
@@ -184,8 +186,8 @@ impl Connector {
         mut sender: UnboundedSender<Message>,
         mut closure: UnboundedReceiver<bool>,
     ) {
-        let mut comms_recv = Box::pin(comms.recv().fuse());
         let mut closure_recv = closure.next().fuse();
+        let mut comms_recv = Box::pin(comms.recv().fuse());
 
         loop {
             futures::select_biased! {
