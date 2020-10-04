@@ -3,17 +3,17 @@ use crate::identity::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
+use futures::FutureExt;
 use futures::StreamExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use tokio::net::TcpStream;
+use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::protocol::Message as TungMessage;
 use tungstenite::Error as TungError;
-use futures::FutureExt;
-use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -127,7 +127,7 @@ impl Connector {
                 receiver,
                 rx2,
             ));
-            let handle= tokio::spawn(Self::start_websocket_reader(
+            let handle = tokio::spawn(Self::start_websocket_reader(
                 reader,
                 self.comms.clone(),
                 sender,
@@ -157,7 +157,11 @@ impl Connector {
             }
         }
     }
-    async fn start_comms_receiver(comms: CommsVerifier, mut sender: UnboundedSender<Message>, mut closure: UnboundedReceiver<bool>) {
+    async fn start_comms_receiver(
+        comms: CommsVerifier,
+        mut sender: UnboundedSender<Message>,
+        mut closure: UnboundedReceiver<bool>,
+    ) {
         let mut comms_recv = Box::pin(comms.recv().fuse());
         let mut closure_recv = closure.next().fuse();
 
@@ -165,7 +169,7 @@ impl Connector {
             futures::select_biased! {
                 token = closure_recv => {
                     if let Some(_) = token {
-                        debug!("Closing Comms task");
+                        debug!("Closing websocket comms task");
                         break;
                     }
                 }
@@ -206,7 +210,7 @@ impl Connector {
             futures::select_biased! {
                 token = closure_recv => {
                     if let Some(_) = token {
-                        debug!("Closing writer task");
+                        debug!("Closing websocket writer task");
                         break;
                     }
                 }
@@ -301,6 +305,7 @@ impl Connector {
                     match err {
                         TungError::ConnectionClosed | TungError::Protocol(_) => {
                             warn!("Connection to Watcher closed");
+                            debug!("Closing websocket reader task");
 
                             // Close Comms receiver and client writer tasks.
                             tx1.send(true).await.unwrap();

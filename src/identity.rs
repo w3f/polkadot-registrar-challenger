@@ -180,9 +180,7 @@ impl IdentityManager {
                 NotifyStatusChange { net_account } => {
                     self.handle_status_change(net_account).await?;
                 }
-                MessageAcknowledged => {
-
-                }
+                MessageAcknowledged => {}
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
