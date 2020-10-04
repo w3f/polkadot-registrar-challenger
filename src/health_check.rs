@@ -1,6 +1,6 @@
 use crate::primitives::Result;
 use actix_web::http::StatusCode;
-use actix_web::{get, App, HttpServer, rt, Responder};
+use actix_web::{get, rt, App, HttpServer, Responder};
 
 /// Currently, the health check endpoint just returns a "200 OK" response. In
 /// the future, this service might be improved for more advanced reporting.
@@ -19,7 +19,7 @@ impl HealthCheck {
             .bind("127.0.0.1:8080")?
             .run();
 
-        sys.block_on(server);
+        sys.block_on(server)?;
 
         Ok(())
     }

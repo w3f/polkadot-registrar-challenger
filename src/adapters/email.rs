@@ -1,22 +1,13 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{unix_time, Account, AccountType, ChallengeStatus, NetAccount, Result};
+use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::verifier::Verifier2;
-use jwt::algorithm::openssl::PKeyWithDigest;
-use jwt::algorithm::AlgorithmType;
-use jwt::header::{Header, HeaderType};
-use jwt::{SignWithKey, Token};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
-use openssl::hash::MessageDigest;
-use openssl::pkey::PKey;
-use openssl::rsa::Rsa;
-use reqwest::header::{self, HeaderValue};
 use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use std::collections::BTreeMap;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
@@ -101,11 +92,6 @@ pub enum ClientError {
 pub struct ClientBuilder {
     db: Database2,
     comms: CommsVerifier,
-    issuer: Option<String>,
-    scope: Option<String>,
-    subject: Option<String>,
-    private_key: Option<String>,
-    token_url: Option<String>,
     server: Option<String>,
     imap_server: Option<String>,
     inbox: Option<String>,
@@ -118,37 +104,12 @@ impl ClientBuilder {
         ClientBuilder {
             db: db,
             comms: comms,
-            issuer: None,
-            scope: None,
-            subject: None,
-            private_key: None,
-            token_url: None,
             server: None,
             imap_server: None,
             inbox: None,
             user: None,
             password: None,
         }
-    }
-    pub fn issuer(mut self, issuer: String) -> Self {
-        self.issuer = Some(issuer);
-        self
-    }
-    pub fn scope(mut self, scope: String) -> Self {
-        self.scope = Some(scope);
-        self
-    }
-    pub fn subject(mut self, subject: String) -> Self {
-        self.subject = Some(subject);
-        self
-    }
-    pub fn private_key(mut self, private_key: String) -> Self {
-        self.private_key = Some(private_key);
-        self
-    }
-    pub fn token_url(mut self, url: String) -> Self {
-        self.token_url = Some(url);
-        self
     }
     pub fn email_server(mut self, server: String) -> Self {
         self.server = Some(server);
@@ -175,12 +136,6 @@ impl ClientBuilder {
             client: ReqClient::new(),
             db: self.db,
             comms: self.comms,
-            issuer: self.issuer.ok_or(ClientError::IncompleteBuilder)?,
-            scope: self.scope.ok_or(ClientError::IncompleteBuilder)?,
-            subject: self.subject.ok_or(ClientError::IncompleteBuilder)?,
-            private_key: self.private_key.ok_or(ClientError::IncompleteBuilder)?,
-            token_url: self.token_url.ok_or(ClientError::IncompleteBuilder)?,
-            token_id: None,
             server: self.server.ok_or(ClientError::IncompleteBuilder)?,
             imap_server: self.imap_server.ok_or(ClientError::IncompleteBuilder)?,
             inbox: self.inbox.ok_or(ClientError::IncompleteBuilder)?,
@@ -195,12 +150,6 @@ pub struct Client {
     client: ReqClient,
     db: Database2,
     comms: CommsVerifier,
-    issuer: String,
-    scope: String,
-    subject: String,
-    private_key: String,
-    token_url: String,
-    token_id: Option<String>,
     server: String,
     imap_server: String,
     inbox: String,
@@ -209,51 +158,6 @@ pub struct Client {
 }
 
 impl Client {
-    async fn token_request(&mut self) -> Result<()> {
-        let jwt = JWTBuilder::new()
-            .issuer(&self.issuer)
-            .scope(&self.scope)
-            .sub(&self.subject)
-            .audience(&self.token_url)
-            .expiration(&(unix_time() + 3_000).to_string()) // + 50 min
-            .issued_at(&unix_time().to_string())
-            .sign(&self.private_key)?;
-
-        #[derive(Debug, Deserialize)]
-        struct TokenResponse {
-            access_token: String,
-            #[allow(dead_code)]
-            expires_in: usize,
-        }
-
-        let request = self
-            .client
-            .post(&self.token_url)
-            .header(
-                self::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/x-www-form-urlencoded"),
-            )
-            .body(reqwest::Body::from(format!(
-                "grant_type={}&assertion={}",
-                "urn:ietf:params:oauth:grant-type:jwt-bearer", jwt.0
-            )))
-            .build()?;
-
-        trace!("Token request: {:?}", request);
-
-        let response = self
-            .client
-            .execute(request)
-            .await?
-            .json::<TokenResponse>()
-            .await?;
-
-        trace!("Token response: {:?}", response);
-
-        self.token_id = Some(response.access_token);
-
-        Ok(())
-    }
     async fn request_message(&self) -> Result<Vec<ReceivedMessageContext>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.to_string(), 993), &self.imap_server, &tls)?;
@@ -375,15 +279,7 @@ impl Client {
 
         Ok(())
     }
-    pub async fn start(mut self) {
-        self.token_request()
-            .await
-            .map_err(|err| {
-                error!("{}", err);
-                std::process::exit(1);
-            })
-            .unwrap();
-
+    pub async fn start(self) {
         self.start_responder().await;
 
         loop {
@@ -530,66 +426,6 @@ impl Client {
     }
 }
 
-pub struct JWTBuilder<'a> {
-    claims: BTreeMap<&'a str, &'a str>,
-}
-
-pub struct JWT(String);
-
-impl<'a> JWTBuilder<'a> {
-    pub fn new() -> JWTBuilder<'a> {
-        JWTBuilder {
-            claims: BTreeMap::new(),
-        }
-    }
-    pub fn issuer(mut self, iss: &'a str) -> Self {
-        self.claims.insert("iss", iss);
-        self
-    }
-    pub fn scope(mut self, scope: &'a str) -> Self {
-        self.claims.insert("scope", scope);
-        self
-    }
-    pub fn sub(mut self, sub: &'a str) -> Self {
-        self.claims.insert("sub", sub);
-        self
-    }
-    pub fn audience(mut self, aud: &'a str) -> Self {
-        self.claims.insert("aud", aud);
-        self
-    }
-    pub fn expiration(mut self, exp: &'a str) -> Self {
-        self.claims.insert("exp", exp);
-        self
-    }
-    pub fn issued_at(mut self, iat: &'a str) -> Self {
-        self.claims.insert("iat", iat);
-        self
-    }
-    pub fn sign(self, secret: &str) -> Result<JWT> {
-        let rsa = Rsa::private_key_from_pem(secret.replace("\\n", "\n").as_bytes())?;
-
-        let pkey = PKeyWithDigest {
-            digest: MessageDigest::sha256(),
-            key: PKey::from_rsa(rsa)?,
-        };
-
-        let header = Header {
-            algorithm: AlgorithmType::Rs256,
-            key_id: None,
-            type_: Some(HeaderType::JsonWebToken),
-            content_type: None,
-        };
-
-        let jwt = JWT(Token::new(header, self.claims)
-            .sign_with_key(&pkey)?
-            .as_str()
-            .to_string());
-
-        Ok(jwt)
-    }
-}
-
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ApiMessage {
@@ -632,9 +468,9 @@ pub struct ApiBody {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::comms::CommsVerifier;
     use crate::open_config;
     use crate::primitives::Challenge;
-    use crate::CommsVerifier;
     use crate::Database2;
     use tokio::runtime::Runtime;
 
@@ -651,16 +487,11 @@ mod tests {
             let db = Database2::new(&db_path()).unwrap();
 
             let email = ClientBuilder::new(db, CommsVerifier::new())
-                .issuer(config.google_issuer)
-                .scope(config.google_scope)
-                .subject(config.google_email)
-                .private_key(config.google_private_key)
                 .email_server(config.email_server)
                 .imap_server(config.imap_server)
                 .email_inbox(config.email_inbox)
                 .email_user(config.email_user)
                 .email_password(config.email_password)
-                .token_url("https://oauth2.googleapis.com/token".to_string())
                 .build()
                 .unwrap();
 

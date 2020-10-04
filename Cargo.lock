@@ -7,7 +7,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78d1833b3838dbe990df0f1f87baf640cf6146e898166afe401839d1b001e570"
 dependencies = [
  "bitflags",
- "bytes 0.5.6",
+ "bytes",
  "futures-core",
  "futures-sink",
  "log",
@@ -29,7 +29,7 @@ dependencies = [
  "derive_more",
  "either",
  "futures-util",
- "http 0.2.1",
+ "http",
  "log",
  "trust-dns-proto",
  "trust-dns-resolver",
@@ -50,7 +50,7 @@ dependencies = [
  "base64 0.12.3",
  "bitflags",
  "brotli2",
- "bytes 0.5.6",
+ "bytes",
  "cookie",
  "copyless",
  "derive_more",
@@ -62,7 +62,7 @@ dependencies = [
  "futures-util",
  "fxhash",
  "h2",
- "http 0.2.1",
+ "http",
  "httparse",
  "indexmap",
  "itoa",
@@ -99,7 +99,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd1f7dbda1645bf7da33554db60891755f6c01c1b2169e2f4c492098d30c235"
 dependencies = [
  "bytestring",
- "http 0.2.1",
+ "http",
  "log",
  "regex",
  "serde",
@@ -201,7 +201,7 @@ dependencies = [
  "actix-rt",
  "actix-service",
  "bitflags",
- "bytes 0.5.6",
+ "bytes",
  "either",
  "futures-channel",
  "futures-sink",
@@ -230,7 +230,7 @@ dependencies = [
  "actix-utils",
  "actix-web-codegen",
  "awc",
- "bytes 0.5.6",
+ "bytes",
  "derive_more",
  "encoding_rs",
  "futures-channel",
@@ -445,7 +445,7 @@ dependencies = [
  "actix-rt",
  "actix-service",
  "base64 0.12.3",
- "bytes 0.5.6",
+ "bytes",
  "derive_more",
  "futures-core",
  "log",
@@ -599,16 +599,6 @@ checksum = "08c48aae112d48ed9f069b33538ea9e3e90aa263cfa3d1c24309612b1f7472de"
 
 [[package]]
 name = "bytes"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "206fdffcfa2df7cbe15601ef46c813fce0965eb3286db6b56c583b814b51c81c"
-dependencies = [
- "byteorder",
- "iovec",
-]
-
-[[package]]
-name = "bytes"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
@@ -619,7 +609,7 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc7c05fa5172da78a62d9949d662d2ac89d4cc7355d7b49adee5163f1fb3f363"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
 ]
 
 [[package]]
@@ -831,16 +821,6 @@ dependencies = [
  "autocfg 1.0.1",
  "cfg-if",
  "lazy_static",
-]
-
-[[package]]
-name = "crypto-mac"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b584a330336237c1eecd3e94266efb216c56ed91225d634cb2991c5f3fd1aeab"
-dependencies = [
- "generic-array 0.14.4",
- "subtle",
 ]
 
 [[package]]
@@ -1356,12 +1336,12 @@ version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "993f9e0baeed60001cf565546b0d3dbe6a6ad23f2bd31644a133c641eccf6d53"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
  "fnv",
  "futures-core",
  "futures-sink",
  "futures-util",
- "http 0.2.1",
+ "http",
  "indexmap",
  "slab",
  "tokio",
@@ -1401,21 +1381,11 @@ checksum = "644f9158b2f133fd50f5fb3242878846d9eb792e445c893805ff0e3824006e35"
 
 [[package]]
 name = "hmac"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "126888268dcc288495a26bf004b38c5fdbb31682f992c84ceb046a1f0fe38840"
-dependencies = [
- "crypto-mac 0.8.0",
- "digest 0.9.0",
-]
-
-[[package]]
-name = "hmac"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "deae6d9dbb35ec2c502d62b8f7b1c000a0822c3b0794ba36b3149c0a1c840dff"
 dependencies = [
- "crypto-mac 0.9.1",
+ "crypto-mac",
  "digest 0.9.0",
 ]
 
@@ -1442,22 +1412,11 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.1.21"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6ccf5ede3a895d8856620237b2f02972c1bbc78d2965ad7fe8838d4a0ed41f0"
-dependencies = [
- "bytes 0.4.12",
- "fnv",
- "itoa",
-]
-
-[[package]]
-name = "http"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d569972648b2c512421b5f2a405ad6ac9666547189d0c5477a3f200f3e02f9"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
  "fnv",
  "itoa",
 ]
@@ -1468,8 +1427,8 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13d5ff830006f7646652e057693569bfe0d51760c0085a071769d142a205111b"
 dependencies = [
- "bytes 0.5.6",
- "http 0.2.1",
+ "bytes",
+ "http",
 ]
 
 [[package]]
@@ -1499,12 +1458,12 @@ version = "0.13.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f3afcfae8af5ad0576a31e768415edb627824129e8e5a29b8bfccb2f234e835"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
  "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
- "http 0.2.1",
+ "http",
  "http-body",
  "httparse",
  "httpdate",
@@ -1523,7 +1482,7 @@ version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d979acc56dcb5b8dddba3917601745e877576475aa046df3226eabdecef78eed"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
  "hyper",
  "native-tls",
  "tokio",
@@ -1582,7 +1541,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19a8a95243d5a0398cae618ec29477c6e3cb631152be5c19481f80bc71559754"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
 ]
 
 [[package]]
@@ -1647,22 +1606,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b96797f53235a1d6dc985f244a69de54b04c45b7e0e357a35c85a45a847d92f2"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "jwt"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9c3ff253c1ddecb4ff6404e09552a1832159e834ca5d99c97a32c1c7eb635f4"
-dependencies = [
- "base64 0.12.3",
- "crypto-mac 0.8.0",
- "digest 0.9.0",
- "hmac 0.8.1",
- "openssl",
- "serde",
- "serde_json",
- "sha2 0.9.1",
 ]
 
 [[package]]
@@ -1826,7 +1769,7 @@ dependencies = [
  "async-trait",
  "dashmap",
  "futures-timer",
- "http 0.2.1",
+ "http",
  "matrix-sdk-base",
  "matrix-sdk-common",
  "matrix-sdk-common-macros",
@@ -1893,7 +1836,7 @@ dependencies = [
  "cjson",
  "dashmap",
  "getrandom 0.2.0",
- "hmac 0.9.0",
+ "hmac",
  "matrix-sdk-common",
  "matrix-sdk-common-macros",
  "olm-rs",
@@ -2090,28 +2033,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "oauth2"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88d21857941367fdd2514553ff1578254267afd9c1e69d2d8592ba98223560a0"
-dependencies = [
- "async-trait",
- "base64 0.12.3",
- "failure",
- "failure_derive",
- "futures",
- "http 0.1.21",
- "http 0.2.1",
- "rand 0.7.3",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.8.2",
- "unicode-normalization",
- "url",
-]
-
-[[package]]
 name = "object"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2219,7 +2140,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7170d73bf11f39b4ce1809aabc95bf5c33564cdc16fc3200ddda17a5f6e5e48b"
 dependencies = [
- "crypto-mac 0.9.1",
+ "crypto-mac",
 ]
 
 [[package]]
@@ -2530,17 +2451,14 @@ dependencies = [
  "futures",
  "futures-channel",
  "hex",
- "hmac 0.9.0",
+ "hmac",
  "imap",
- "jwt",
  "lettre",
  "lettre_email",
  "log",
  "mailparse",
  "matrix-sdk",
  "native-tls",
- "oauth2",
- "openssl",
  "rand 0.7.3",
  "reqwest",
  "rusqlite",
@@ -2572,11 +2490,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9eaa17ac5d7b838b7503d118fa16ad88f440498bf9ffe5424e621f93190d61e"
 dependencies = [
  "base64 0.12.3",
- "bytes 0.5.6",
+ "bytes",
  "encoding_rs",
  "futures-core",
  "futures-util",
- "http 0.2.1",
+ "http",
  "http-body",
  "hyper",
  "hyper-tls",
@@ -2631,7 +2549,7 @@ name = "ruma-api"
 version = "0.17.0-alpha.1"
 source = "git+https://github.com/ruma/ruma?rev=4a9b1aeb3c87bd8574391d7084ec5bf109f7d363#4a9b1aeb3c87bd8574391d7084ec5bf109f7d363"
 dependencies = [
- "http 0.2.1",
+ "http",
  "percent-encoding",
  "ruma-api-macros",
  "ruma-identifiers",
@@ -2671,7 +2589,7 @@ version = "0.10.0-alpha.1"
 source = "git+https://github.com/ruma/ruma?rev=4a9b1aeb3c87bd8574391d7084ec5bf109f7d363#4a9b1aeb3c87bd8574391d7084ec5bf109f7d363"
 dependencies = [
  "assign",
- "http 0.2.1",
+ "http",
  "js_int",
  "percent-encoding",
  "ruma-api",
@@ -3352,7 +3270,7 @@ version = "0.2.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d34ca54d84bf2b5b4d7d31e901a8464f7b60ac145a284fba25ceb801f2ddccd"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
  "fnv",
  "futures-core",
  "iovec",
@@ -3409,7 +3327,7 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be8242891f2b6cbef26a2d7e8605133c2c554cd35b3e4948ea892d6d68436499"
 dependencies = [
- "bytes 0.5.6",
+ "bytes",
  "futures-core",
  "futures-sink",
  "log",
@@ -3529,8 +3447,8 @@ checksum = "f0308d80d86700c5878b9ef6321f020f29b1bb9d5ff3cab25e75e23f3a492a23"
 dependencies = [
  "base64 0.12.3",
  "byteorder",
- "bytes 0.5.6",
- "http 0.2.1",
+ "bytes",
+ "http",
  "httparse",
  "input_buffer",
  "log",

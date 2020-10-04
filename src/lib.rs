@@ -48,11 +48,6 @@ pub struct Config {
     pub twitter_token: String,
     pub twitter_token_secret: String,
     //
-    pub google_private_key: String,
-    pub google_issuer: String,
-    pub google_scope: String,
-    pub google_email: String,
-    //
     pub email_server: String,
     pub imap_server: String,
     pub email_inbox: String,
@@ -184,16 +179,11 @@ pub async fn setup(config: Config) -> Result<()> {
 
     info!("Setting up Email client");
     let email = ClientBuilder::new(db2.clone(), c_email)
-        .issuer(config.google_issuer)
-        .scope(config.google_scope)
-        .subject(config.google_email)
-        .private_key(config.google_private_key)
         .email_server(config.email_server)
         .imap_server(config.imap_server)
         .email_inbox(config.email_inbox)
         .email_user(config.email_user)
         .email_password(config.email_password)
-        .token_url("https://oauth2.googleapis.com/token".to_string())
         .build()?;
 
     info!("Starting Matrix task");
