@@ -349,9 +349,6 @@ impl Responder {
                     network_address.address().as_str()
                 );
 
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -359,6 +356,9 @@ impl Responder {
                         ChallengeStatus::Accepted,
                     )
                     .await?;
+
+                self.comms
+                    .notify_status_change(network_address.address().clone());
             }
 
             for network_address in verifier.invalid_verifications() {
@@ -374,14 +374,13 @@ impl Responder {
                         ChallengeStatus::Rejected,
                     )
                     .await?;
+
+                self.comms.notify_status_change(net_account.clone());
             }
 
             self.send_msg(&verifier.response_message_builder(), room_id)
                 .await
                 .map_err(|err| MatrixError::SendMessage(err.into()))?;
-
-            // Tell the manager to check the user's account states.
-            self.comms.notify_status_change(net_account.clone());
         } else {
             warn!("Received an message from an un-joined room");
         }
