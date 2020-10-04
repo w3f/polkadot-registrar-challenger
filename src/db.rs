@@ -170,7 +170,8 @@ impl Database2 {
                 id              INTEGER PRIMARY KEY,
                 account         INTEGER NOT NULL UNIQUE,
                 twitter_id      TEXT NOT NULL,
-                init_msg        INTEGER NOT NULL
+                init_msg        INTEGER NOT NULL,
+                timestamp       INTEGER NOT NULL
             )
         ",
             params![],
@@ -271,6 +272,20 @@ impl Database2 {
         }
 
         transaction.commit()?;
+
+        Ok(())
+    }
+    pub async fn remove_identity(&self, net_account: &NetAccount) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named("
+            DELETE FROM
+                pending_judgments
+            WHERE
+                net_account = :net_account
+        ", named_params! {
+            ":net_account": net_account,
+        })?;
 
         Ok(())
     }
@@ -744,12 +759,14 @@ impl Database2 {
                 known_twitter_ids (
                     account,
                     twitter_id,
-                    init_msg 
+                    init_msg,
+                    timestamp
                 )
             VALUES (
                 :account,
                 :twitter_id,
-                '0'
+                '0',
+                :timestamp
             )
         ",
         )?;
@@ -758,6 +775,7 @@ impl Database2 {
             stmt.execute_named(named_params! {
                     ":account": account,
                     ":twitter_id": twitter_id,
+                    ":timestamp": unix_time() as i64,
             })?;
         }
 
@@ -1047,6 +1065,19 @@ mod tests {
                     .unwrap()
                     .account,
                 Account::from("@bob:matrix.org")
+            );
+
+            // Delete identity
+            db.remove_identity(&NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")).await.unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .unwrap()
+                    .account,
+                Account::from("@alice_second:matrix.org")
             );
         });
     }
