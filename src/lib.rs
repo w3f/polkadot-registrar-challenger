@@ -10,9 +10,9 @@ extern crate serde;
 extern crate failure;
 
 use adapters::{ClientBuilder, MatrixClient, TwitterBuilder};
-use comms::CommsVerifier;
 use connector::Connector;
 use db::Database2;
+use health_check::HealthCheck;
 use identity::IdentityManager;
 use primitives::{Account, AccountType, Fatal, Result};
 use std::env;
@@ -25,6 +25,7 @@ pub mod adapters;
 mod comms;
 pub mod connector;
 pub mod db;
+mod health_check;
 mod identity;
 mod primitives;
 mod verifier;
@@ -112,11 +113,7 @@ pub async fn run(config: Config) -> Result<()> {
     setup(config).await.map(|_| ())
 }
 
-pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
-    setup(config).await
-}
-
-pub async fn setup(config: Config) -> Result<CommsVerifier> {
+pub async fn setup(config: Config) -> Result<()> {
     info!("Setting up database and manager");
     let db2 = Database2::new(&config.registrar_db_path)?;
     let mut manager = IdentityManager::new(db2.clone())?;
@@ -127,7 +124,6 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_email = manager.register_comms(AccountType::Email);
-    let c_feeder = manager.register_comms(AccountType::ReservedFeeder);
 
     info!("Trying to connect to Watcher");
     let mut counter = 0;
@@ -226,5 +222,15 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         warn!("Watcher connector task is disabled. Cannot process any requests...");
     }
 
-    Ok(c_feeder)
+    info!("Starting health check thread");
+    std::thread::spawn(|| {
+        HealthCheck::start()
+            .map_err(|err| {
+                error!("Failed to start health check service: {}", err);
+                std::process::exit(1);
+            })
+            .unwrap();
+    });
+
+    Ok(())
 }
