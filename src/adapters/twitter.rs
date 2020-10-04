@@ -551,9 +551,6 @@ impl Twitter {
                     network_address.address().as_str()
                 );
 
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-
                 self.db
                     .set_challenge_status(
                         network_address.address(),
@@ -580,6 +577,10 @@ impl Twitter {
                         ChallengeStatus::Rejected,
                     )
                     .await?;
+
+                // Tell the manager to check the user's account states.
+                self.comms
+                    .notify_status_change(network_address.address().clone());
             }
 
             debug!("Notifying user about verification result");
