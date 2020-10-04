@@ -11,6 +11,9 @@ use std::convert::TryFrom;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::protocol::Message as TungMessage;
+use tungstenite::Error as TungError;
+use futures::FutureExt;
+use tokio::time::{self, Duration};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum EventType {
@@ -92,6 +95,7 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 pub struct Connector {
     client: WebSocketStream<TcpStream>,
     comms: CommsVerifier,
+    url: String,
 }
 
 impl Connector {
@@ -99,63 +103,121 @@ impl Connector {
         let connector = Connector {
             client: connect_async(url).await?.0,
             comms: comms,
+            url: url.to_string(),
         };
 
         Ok(connector)
     }
     pub async fn start(self) {
-        let (writer, reader) = self.client.split();
-        let (sender, receiver) = unbounded();
+        let (mut writer, mut reader) = self.client.split();
 
-        tokio::spawn(Self::start_comms_receiver(
-            self.comms.clone(),
-            sender.clone(),
-        ));
-        tokio::spawn(Self::start_websocket_writer(
-            writer,
-            self.comms.clone(),
-            receiver,
-        ));
-        tokio::spawn(Self::start_websocket_reader(
-            reader,
-            self.comms.clone(),
-            sender,
-        ));
-    }
-    async fn start_comms_receiver(comms: CommsVerifier, mut sender: UnboundedSender<Message>) {
         loop {
-            match comms.recv().await {
-                CommsMessage::JudgeIdentity {
-                    net_account,
-                    judgement,
-                } => {
-                    sender
-                        .send(Message {
-                            event: EventType::JudgementResult,
-                            data: serde_json::to_value(&JudgementResponse {
-                                address: net_account.clone(),
-                                judgement: judgement,
-                            })
-                            .unwrap(),
-                        })
-                        .await
-                        .unwrap();
+            let (sender, receiver) = unbounded();
+            let (tx1, rx1) = unbounded();
+            let (tx2, rx2) = unbounded();
+
+            tokio::spawn(Self::start_comms_receiver(
+                self.comms.clone(),
+                sender.clone(),
+                rx1,
+            ));
+            tokio::spawn(Self::start_websocket_writer(
+                writer,
+                self.comms.clone(),
+                receiver,
+                rx2,
+            ));
+            let handle= tokio::spawn(Self::start_websocket_reader(
+                reader,
+                self.comms.clone(),
+                sender,
+                tx1,
+                tx2,
+            ));
+
+            handle.await;
+
+            let mut interval = time::interval(Duration::from_secs(5));
+
+            info!("Trying to reconnect to Watcher...");
+            loop {
+                interval.tick().await;
+                if let Ok(client) = connect_async(&self.url).await {
+                    info!("Connected successfully to Watcher, spawning tasks");
+
+                    // (Destructuring assignments are currently not supported)
+                    let split = client.0.split();
+                    writer = split.0;
+                    reader = split.1;
+
+                    break;
+                } else {
+                    trace!("Connection to Watcher failed...");
                 }
-                _ => {}
             }
+        }
+    }
+    async fn start_comms_receiver(comms: CommsVerifier, mut sender: UnboundedSender<Message>, mut closure: UnboundedReceiver<bool>) {
+        let mut comms_recv = Box::pin(comms.recv().fuse());
+        let mut closure_recv = closure.next().fuse();
+
+        loop {
+            futures::select_biased! {
+                token = closure_recv => {
+                    if let Some(_) = token {
+                        debug!("Closing Comms task");
+                        break;
+                    }
+                }
+                msg = comms_recv => {
+                    match msg {
+                        CommsMessage::JudgeIdentity {
+                            net_account,
+                            judgement,
+                        } => {
+                            sender
+                                .send(Message {
+                                    event: EventType::JudgementResult,
+                                    data: serde_json::to_value(&JudgementResponse {
+                                        address: net_account.clone(),
+                                        judgement: judgement,
+                                    })
+                                    .unwrap(),
+                                })
+                                .await
+                                .unwrap();
+                        }
+                        _ => {}
+                    }
+                }
+            };
         }
     }
     async fn start_websocket_writer(
         mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
         _comms: CommsVerifier,
         mut receiver: UnboundedReceiver<Message>,
+        mut closure: UnboundedReceiver<bool>,
     ) {
+        let mut closure_recv = closure.next().fuse();
+        let mut receiver_recv = receiver.next().fuse();
+
         loop {
-            if let Some(message) = receiver.next().await {
-                writer
-                    .send(TungMessage::Text(serde_json::to_string(&message).unwrap()))
-                    .await
-                    .unwrap();
+            futures::select_biased! {
+                token = closure_recv => {
+                    if let Some(_) = token {
+                        debug!("Closing writer task");
+                        break;
+                    }
+                }
+                msg = receiver_recv => {
+                    if let Some(msg) = msg {
+                        writer
+                            .send(TungMessage::Text(serde_json::to_string(&msg).unwrap()))
+                            .await
+                            .unwrap();
+                    }
+                }
             }
         }
     }
@@ -163,6 +225,8 @@ impl Connector {
         mut reader: SplitStream<WebSocketStream<TcpStream>>,
         comms: CommsVerifier,
         mut sender: UnboundedSender<Message>,
+        mut tx1: UnboundedSender<bool>,
+        mut tx2: UnboundedSender<bool>,
     ) {
         loop {
             if let Some(message) = reader.next().await {
@@ -232,8 +296,22 @@ impl Connector {
                         }
                     }
                 }
+
                 if let Err(err) = message {
-                    error!("{}", err);
+                    match err {
+                        TungError::ConnectionClosed | TungError::Protocol(_) => {
+                            warn!("Connection to Watcher closed");
+
+                            // Close Comms receiver and client writer tasks.
+                            tx1.send(true).await.unwrap();
+                            tx2.send(true).await.unwrap();
+
+                            break;
+                        }
+                        _ => {
+                            error!("Connection error with Watcher: {}", err);
+                        }
+                    }
                 }
             }
         }
