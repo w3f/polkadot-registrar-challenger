@@ -3,7 +3,6 @@ use crate::identity::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
-use futures::FutureExt;
 use futures::StreamExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
@@ -27,7 +26,7 @@ enum EventType {
     NewJudgementRequest,
     #[serde(rename = "judgementResult")]
     JudgementResult,
-    #[serde(rename = "pendingJudgementsRequests")]
+    #[serde(rename = "pendingJudgementsRequest")]
     PendingJudgementsRequests,
 }
 
@@ -141,7 +140,6 @@ impl Connector {
             ));
 
             // Request pending requests from Watcher.
-            /*
             info!("Requesting pending judgments from Watcher");
             sender
                 .send(Message {
@@ -150,7 +148,6 @@ impl Connector {
                 })
                 .await
                 .unwrap();
-            */
 
             // Wait for the reader to exit, which in return will close the comms
             // receiver and writer task. This occurs when the connection to the
@@ -220,14 +217,7 @@ impl Connector {
         loop {
             if let Ok(msg) = time::timeout(Duration::from_millis(10), receiver.next()).await {
                 writer
-                    .send(TungMessage::Text(
-                        serde_json::to_string(&msg)
-                            .map(|s| {
-                                println!("{}", s);
-                                s
-                            })
-                            .unwrap(),
-                    ))
+                    .send(TungMessage::Text(serde_json::to_string(&msg).unwrap()))
                     .await
                     .unwrap();
             }
