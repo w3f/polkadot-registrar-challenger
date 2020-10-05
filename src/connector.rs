@@ -3,7 +3,6 @@ use crate::identity::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
-use futures::FutureExt;
 use futures::StreamExt;
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
@@ -27,8 +26,10 @@ enum EventType {
     NewJudgementRequest,
     #[serde(rename = "judgementResult")]
     JudgementResult,
-    #[serde(rename = "pendingJudgementsRequests")]
+    #[serde(rename = "pendingJudgementsRequest")]
     PendingJudgementsRequests,
+    #[serde(rename = "pendingJudgementsResponse")]
+    PendingJudgementsResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,7 +142,6 @@ impl Connector {
             ));
 
             // Request pending requests from Watcher.
-            /*
             info!("Requesting pending judgments from Watcher");
             sender
                 .send(Message {
@@ -149,8 +149,11 @@ impl Connector {
                     data: serde_json::to_value(Option::<()>::None).unwrap(),
                 })
                 .await
+                .map_err(|err| {
+                    error!("Failed to fetch pending judgment requests: {}", err);
+                    std::process::exit(1);
+                })
                 .unwrap();
-            */
 
             // Wait for the reader to exit, which in return will close the comms
             // receiver and writer task. This occurs when the connection to the
@@ -220,14 +223,7 @@ impl Connector {
         loop {
             if let Ok(msg) = time::timeout(Duration::from_millis(10), receiver.next()).await {
                 writer
-                    .send(TungMessage::Text(
-                        serde_json::to_string(&msg)
-                            .map(|s| {
-                                println!("{}", s);
-                                s
-                            })
-                            .unwrap(),
-                    ))
+                    .send(TungMessage::Text(serde_json::to_string(&msg).unwrap()))
                     .await
                     .unwrap();
             }
@@ -248,6 +244,8 @@ impl Connector {
         loop {
             if let Some(message) = reader.next().await {
                 if let Ok(message) = &message {
+                    debug!("Received message: {:?}", message);
+
                     match message {
                         TungMessage::Text(payload) => {
                             let try_msg = serde_json::from_str::<Message>(&payload);
@@ -266,8 +264,8 @@ impl Connector {
                                         serde_json::from_value::<JudgementRequest>(msg.data)
                                     {
                                         if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                            sender.send(Message::ack(None)).await.unwrap();
                                             comms.notify_new_identity(ident);
+                                            sender.send(Message::ack(None)).await.unwrap();
                                         } else {
                                             error!("Invalid `newJudgementRequest` message format");
                                             sender.send(Message::error()).await.unwrap();
@@ -298,7 +296,7 @@ impl Connector {
                                         error!("Invalid 'error' message format");
                                     }
                                 }
-                                EventType::PendingJudgementsRequests => {
+                                EventType::PendingJudgementsResponse => {
                                     info!("Received pending challenges from Watcher");
                                     if let Ok(requests) =
                                         serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
@@ -307,6 +305,7 @@ impl Connector {
                                             if let Ok(ident) = OnChainIdentity::try_from(request) {
                                                 sender.send(Message::ack(None)).await.unwrap();
                                                 comms.notify_new_identity(ident);
+                                                sender.send(Message::ack(None)).await.unwrap();
                                             } else {
                                                 error!(
                                                     "Invalid `newJudgementRequest` message format"

@@ -267,6 +267,10 @@ impl IdentityManager {
                 comms.leave_matrix_room(net_account.clone());
             })?;
 
+            // Leave enough time for the Matrix client to close the room.
+            // Not really a problem if that does not happen.
+            time::delay_for(Duration::from_secs(3)).await;
+
             self.db2.remove_identity(&net_account).await?;
         }
 
