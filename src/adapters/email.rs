@@ -11,7 +11,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, 
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EmailId(u64);
 
 impl From<u32> for EmailId {
@@ -348,7 +348,10 @@ impl Client {
         }
 
         // Check database on which of the new messages were not processed yet.
-        let email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
+        let mut email_ids = messages.iter().map(|msg| msg.id).collect::<Vec<EmailId>>();
+        email_ids.sort();
+        email_ids.dedup();
+
         let unknown_email_ids = self.db.find_untracked_email_ids(&email_ids).await?;
 
         for email_id in unknown_email_ids {
