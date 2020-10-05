@@ -28,6 +28,8 @@ enum EventType {
     JudgementResult,
     #[serde(rename = "pendingJudgementsRequest")]
     PendingJudgementsRequests,
+    #[serde(rename = "pendingJudgementsResponse")]
+    PendingJudgementsResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,13 +143,19 @@ impl Connector {
 
             // Request pending requests from Watcher.
             info!("Requesting pending judgments from Watcher");
+            /*
             sender
                 .send(Message {
                     event: EventType::PendingJudgementsRequests,
                     data: serde_json::to_value(Option::<()>::None).unwrap(),
                 })
                 .await
+                .map_err(|err| {
+                    error!("Failed to fetch pending judgment requests: {}", err);
+                    std::process::exit(1);
+                })
                 .unwrap();
+                */
 
             // Wait for the reader to exit, which in return will close the comms
             // receiver and writer task. This occurs when the connection to the
@@ -238,6 +246,8 @@ impl Connector {
         loop {
             if let Some(message) = reader.next().await {
                 if let Ok(message) = &message {
+                    debug!("Received message: {:?}", message);
+
                     match message {
                         TungMessage::Text(payload) => {
                             let try_msg = serde_json::from_str::<Message>(&payload);
@@ -288,7 +298,7 @@ impl Connector {
                                         error!("Invalid 'error' message format");
                                     }
                                 }
-                                EventType::PendingJudgementsRequests => {
+                                EventType::PendingJudgementsResponse => {
                                     info!("Received pending challenges from Watcher");
                                     if let Ok(requests) =
                                         serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
