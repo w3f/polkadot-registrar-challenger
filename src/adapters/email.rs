@@ -160,7 +160,7 @@ pub struct Client {
 impl Client {
     async fn request_message(&self) -> Result<Vec<ReceivedMessageContext>> {
         let tls = native_tls::TlsConnector::builder().build()?;
-        let client = imap::connect((self.imap_server.to_string(), 993), &self.imap_server, &tls)?;
+        let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
         let mut transport = client
             .login(&self.user, &self.password)
