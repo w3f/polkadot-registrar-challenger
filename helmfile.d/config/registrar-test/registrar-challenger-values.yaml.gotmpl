@@ -8,10 +8,8 @@ config:
   twitter_api_secret: {{ env "TWITTER_API_SECRET" }}
   twitter_token: {{ env "TWITTER_TOKEN" }}
   twitter_token_secret: {{ env "TWITTER_TOKEN_SECRET" }}
-  google_private_key: {{ env "GOOGLE_PRIVATE_KEY" }}
-  google_issuer: {{ env "GOOGLE_ISSUER" }}
-  google_scope: "https://mail.google.com https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send"
-  google_email: {{ env "GOOGLE_EMAIL" }}
+  imap_server: "imap.gmail.com"
   email_server: "smtp-relay.gmail.com"
+  email_inbox: "INBOX"
   email_user: {{ env "EMAIL_USER" }}
   email_password: {{ env "EMAIL_PASSWORD" }}

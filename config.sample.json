@@ -12,11 +12,9 @@
   "twitter_api_secret": "twitter_api_secret",
   "twitter_token": "twitter_token",
   "twitter_token_secret": "twitter_token_secret",
-  "google_private_key": "-----BEGIN PRIVATE KEY-----\nXXXXXXX\n-----END PRIVATE KEY-----\n",
-  "google_issuer": "issuer@issuer.iam.gserviceaccount.com",
-  "google_scope": "https://mail.google.com https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send",
-  "google_email": "test@test.test",
+  "imap_server": "imap.gmail.com",
   "email_server": "smtp-relay.gmail.com",
+  "email_inbox": "INBOX",
   "email_user": "test@test.test",
   "email_password": "email_password"
 }
