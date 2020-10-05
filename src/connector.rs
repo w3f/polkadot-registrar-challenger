@@ -264,8 +264,8 @@ impl Connector {
                                         serde_json::from_value::<JudgementRequest>(msg.data)
                                     {
                                         if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                            sender.send(Message::ack(None)).await.unwrap();
                                             comms.notify_new_identity(ident);
+                                            sender.send(Message::ack(None)).await.unwrap();
                                         } else {
                                             error!("Invalid `newJudgementRequest` message format");
                                             sender.send(Message::error()).await.unwrap();
@@ -305,6 +305,7 @@ impl Connector {
                                             if let Ok(ident) = OnChainIdentity::try_from(request) {
                                                 sender.send(Message::ack(None)).await.unwrap();
                                                 comms.notify_new_identity(ident);
+                                                sender.send(Message::ack(None)).await.unwrap();
                                             } else {
                                                 error!(
                                                     "Invalid `newJudgementRequest` message format"
