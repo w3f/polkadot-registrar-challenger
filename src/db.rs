@@ -899,10 +899,10 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn find_untracked_email_ids<'e>(
+    pub async fn find_untracked_email_ids<'id>(
         &self,
-        ids: &'e [EmailId],
-    ) -> Result<Vec<&'e EmailId>> {
+        ids: &'id [EmailId],
+    ) -> Result<Vec<&'id EmailId>> {
         let con = self.con.lock().await;
         let mut stmt = con.prepare(
             "
