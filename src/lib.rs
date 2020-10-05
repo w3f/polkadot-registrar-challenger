@@ -10,9 +10,9 @@ extern crate serde;
 extern crate failure;
 
 use adapters::{ClientBuilder, MatrixClient, TwitterBuilder};
-use comms::CommsVerifier;
 use connector::Connector;
 use db::Database2;
+use health_check::HealthCheck;
 use identity::IdentityManager;
 use primitives::{Account, AccountType, Fatal, Result};
 use std::env;
@@ -25,6 +25,7 @@ pub mod adapters;
 mod comms;
 pub mod connector;
 pub mod db;
+mod health_check;
 mod identity;
 mod primitives;
 mod verifier;
@@ -47,12 +48,9 @@ pub struct Config {
     pub twitter_token: String,
     pub twitter_token_secret: String,
     //
-    pub google_private_key: String,
-    pub google_issuer: String,
-    pub google_scope: String,
-    pub google_email: String,
-    //
     pub email_server: String,
+    pub imap_server: String,
+    pub email_inbox: String,
     pub email_user: String,
     pub email_password: String,
 }
@@ -110,11 +108,7 @@ pub async fn run(config: Config) -> Result<()> {
     setup(config).await.map(|_| ())
 }
 
-pub async fn run_with_feeder(config: Config) -> Result<CommsVerifier> {
-    setup(config).await
-}
-
-pub async fn setup(config: Config) -> Result<CommsVerifier> {
+pub async fn setup(config: Config) -> Result<()> {
     info!("Setting up database and manager");
     let db2 = Database2::new(&config.registrar_db_path)?;
     let mut manager = IdentityManager::new(db2.clone())?;
@@ -125,7 +119,6 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
     let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_email = manager.register_comms(AccountType::Email);
-    let c_feeder = manager.register_comms(AccountType::ReservedFeeder);
 
     info!("Trying to connect to Watcher");
     let mut counter = 0;
@@ -186,16 +179,12 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
 
     info!("Setting up Email client");
     let email = ClientBuilder::new(db2.clone(), c_email)
-        .issuer(config.google_issuer)
-        .scope(config.google_scope)
-        .subject(config.google_email)
-        .private_key(config.google_private_key)
         .email_server(config.email_server)
+        .imap_server(config.imap_server)
+        .email_inbox(config.email_inbox)
         .email_user(config.email_user)
         .email_password(config.email_password)
-        .token_url("https://oauth2.googleapis.com/token".to_string())
-        .build()
-        .unwrap();
+        .build()?;
 
     info!("Starting Matrix task");
     tokio::spawn(async move {
@@ -223,5 +212,15 @@ pub async fn setup(config: Config) -> Result<CommsVerifier> {
         warn!("Watcher connector task is disabled. Cannot process any requests...");
     }
 
-    Ok(c_feeder)
+    info!("Starting health check thread");
+    std::thread::spawn(|| {
+        HealthCheck::start()
+            .map_err(|err| {
+                error!("Failed to start health check service: {}", err);
+                std::process::exit(1);
+            })
+            .unwrap();
+    });
+
+    Ok(())
 }
