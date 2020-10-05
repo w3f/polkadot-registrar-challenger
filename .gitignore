@@ -1,3 +1,4 @@
 /target
 config*
 !config.sample.json
+/scripts/load-env.sh

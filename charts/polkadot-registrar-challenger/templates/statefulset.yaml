@@ -22,33 +22,28 @@ spec:
       - name: {{ .Release.Name }}
         image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
         imagePullPolicy: IfNotPresent
-        readinessProbe:
+        livenessProbe:
           httpGet:
             path: /healthcheck
             port: {{ .Values.config.port }}
-          initialDelaySeconds: 30
-          timeoutSeconds: 3
+          initialDelaySeconds: 10
+          timeoutSeconds: 200
         volumeMounts:
         - name: config
           mountPath: /etc/registrar  
         - name: matrix-db
-          mountPath: {{ .Values.config.matrix_db_path }}
+          mountPath: {{ dir .Values.config.matrix_db_path }}
         - name: registrar-db
-          mountPath: {{ .Values.config.registrar_db_path }}
-      {{- if ne .Values.environment "ci" }}
+          mountPath: {{ dir .Values.config.registrar_db_path }}
+      {{- if eq .Values.environment "production" }}
         resources:
-          limits:
-            cpu: 600m
-            memory: 1Gi
-          requests:
-            cpu: 300m
-            memory: 400Mi
+          {{- toYaml .Values.resources | nindent 10 }}
       {{- end }}
       volumes:
       - name: config
         configMap:
           name: {{ .Release.Name }}  
-      {{ if eq .Values.environment "ci" }}
+      {{ if ne .Values.environment "production" }}
       - name: matrix-db
         emptyDir: {}
       - name: registrar-db

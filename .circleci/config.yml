@@ -67,6 +67,8 @@ workflows:
             tags:
               only: /.*/
       - integrationTests:
+          context: 
+            - registrar-test
           filters:
             tags:
               only: /.*/   
@@ -93,6 +95,7 @@ workflows:
       - deploy:
           context: 
             - engineering-access
+            - registrar-test
           filters:
             branches:
               ignore: /.*/
