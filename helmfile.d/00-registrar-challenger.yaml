@@ -19,7 +19,7 @@ releases:
   chart: ../charts/polkadot-registrar-challenger
   values:
   - ./config/registrar-challenger-values.yaml.gotmpl
-  - ./config/test/registrar-challenger-values.yaml.gotmpl
+  - ./config/integration-test/registrar-challenger-values.yaml.gotmpl
 {{- end }}
 
 {{- if eq .Environment.Name "production" }}  

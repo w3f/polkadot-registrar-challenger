@@ -1,4 +1,5 @@
 /target
 config*
 !config.sample.json
-/scripts/load-env.sh
+!helmfile.d/config
+scripts/load-env.sh
