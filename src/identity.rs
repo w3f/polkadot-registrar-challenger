@@ -219,6 +219,14 @@ impl IdentityManager {
 
         // Find duplicates.
         for state in ident.account_states() {
+            // Reject the entire judgment request if "legal_name" is specified.
+            if state.account_ty == AccountType::LegalName {
+                self.get_comms(&AccountType::ReservedConnector)?
+                    .notify_identity_judgment(ident.net_account().clone(), Judgement::Erroneous);
+
+                return Ok(());
+            }
+
             // If the same account already exists in storage, remove it (and avoid replacement).
             if accounts
                 .iter()
