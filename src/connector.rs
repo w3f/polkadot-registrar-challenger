@@ -143,7 +143,6 @@ impl Connector {
 
             // Request pending requests from Watcher.
             info!("Requesting pending judgments from Watcher");
-            /*
             sender
                 .send(Message {
                     event: EventType::PendingJudgementsRequests,
@@ -155,7 +154,6 @@ impl Connector {
                     std::process::exit(1);
                 })
                 .unwrap();
-                */
 
             // Wait for the reader to exit, which in return will close the comms
             // receiver and writer task. This occurs when the connection to the
