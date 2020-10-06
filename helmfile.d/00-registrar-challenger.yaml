@@ -11,10 +11,16 @@ repositories:
 releases:
 
 {{- if or (eq .Environment.Name "ci") (eq .Environment.Name "local") }} 
+- name: registrar-watcher
+  chart: w3f/polkadot-registrar-watcher
+  values:
+  - ./config/integration-test/registrar-watcher-values.yaml.gotmpl
+
 - name: registrar-challenger
   chart: ../charts/polkadot-registrar-challenger
   values:
   - ./config/registrar-challenger-values.yaml.gotmpl
+  - ./config/integration-test/registrar-challenger-values.yaml.gotmpl
 {{- end }}
 
 {{- if eq .Environment.Name "production" }}  
