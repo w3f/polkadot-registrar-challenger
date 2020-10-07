@@ -119,6 +119,11 @@ pub async fn setup(config: Config) -> Result<()> {
     let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_email = manager.register_comms(AccountType::Email);
 
+    info!("Starting manager task");
+    tokio::spawn(async move {
+        manager.start().await;
+    });
+
     info!("Starting health check thread");
     std::thread::spawn(|| {
         HealthCheck::start()
@@ -161,11 +166,6 @@ pub async fn setup(config: Config) -> Result<()> {
 
         counter += 1;
     }
-
-    info!("Starting manager task");
-    tokio::spawn(async move {
-        manager.start().await;
-    });
 
     info!("Setting up Matrix client");
     let matrix = MatrixClient::new(
