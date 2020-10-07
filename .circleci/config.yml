@@ -67,8 +67,6 @@ workflows:
             tags:
               only: /.*/
       - integrationTests:
-          context: 
-            - registrar-test
           filters:
             tags:
               only: /.*/   

@@ -1,14 +1,4 @@
 config:
+  enable_watcher: true
+  enable_accounts: false
   watcher_url: "ws://registrar-watcher:3001"
-  matrix_username: {{ env "TEST_MATRIX_USER" }}
-  matrix_password: {{ env "TEST_MATRIX_PASSWORD" }}
-  twitter_screen_name: "@w3f_registrar"
-  twitter_api_key: {{ env "TWITTER_API_KEY" }}
-  twitter_api_secret: {{ env "TWITTER_API_SECRET" }}
-  twitter_token: {{ env "TWITTER_TOKEN" }}
-  twitter_token_secret: {{ env "TWITTER_TOKEN_SECRET" }}
-  imap_server: "imap.gmail.com"
-  email_server: "smtp-relay.gmail.com"
-  email_inbox: "INBOX"
-  email_user: {{ env "EMAIL_USER" }}
-  email_password: {{ env "EMAIL_PASSWORD" }}

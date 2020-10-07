@@ -1,10 +1,6 @@
-.circleci
-charts/
-helmfile.d
-scripts/
-target/
-.gitignore
-Dockerfile
-LICENSE
-README.md
-config.sample.json
+*
+!Cargo.toml
+!Cargo.lock
+!src
+!messages
+!config.sample.json

@@ -22,15 +22,15 @@ spec:
       - name: {{ .Release.Name }}
         image: {{ .Values.image.repo }}:{{ .Values.image.tag }}
         imagePullPolicy: IfNotPresent
-        # ports:
-        # - name: metrics
-        #   containerPort: {{ .Values.config.port }}
-        # livenessProbe:
-        #   httpGet:
-        #     path: /healthcheck
-        #     port: {{ .Values.config.port }}
-        #   initialDelaySeconds: 10
-        #   timeoutSeconds: 200
+        ports:
+        - name: metrics
+          containerPort: {{ .Values.config.port }}
+        livenessProbe:
+          httpGet:
+            path: /healthcheck
+            port: {{ .Values.config.port }}
+          initialDelaySeconds: 10
+          timeoutSeconds: 200
         volumeMounts:
         - name: config
           mountPath: /etc/registrar  
