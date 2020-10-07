@@ -35,7 +35,7 @@ pub struct Config {
     pub log_level: log::LevelFilter,
     pub watcher_url: String,
     pub enable_watcher: bool,
-    pub disable_tasks: bool,
+    pub enable_accounts: bool,
     //
     pub matrix_homeserver: String,
     pub matrix_username: String,
@@ -124,20 +124,6 @@ pub async fn setup(config: Config) -> Result<()> {
         manager.start().await;
     });
 
-    info!("Starting health check thread");
-    std::thread::spawn(|| {
-        HealthCheck::start()
-            .map_err(|err| {
-                error!("Failed to start health check service: {}", err);
-                std::process::exit(1);
-            })
-            .unwrap();
-    });
-
-    if config.disable_tasks {
-        return Ok(())
-    }
-
     info!("Trying to connect to Watcher");
     let mut counter = 0;
     let mut interval = time::interval(Duration::from_secs(5));
@@ -167,52 +153,64 @@ pub async fn setup(config: Config) -> Result<()> {
         counter += 1;
     }
 
-    info!("Setting up Matrix client");
-    let matrix = MatrixClient::new(
-        &config.matrix_homeserver,
-        &config.matrix_username,
-        &config.matrix_password,
-        &config.matrix_db_path,
-        db2.clone(),
-        c_matrix,
-        c_emitter,
-    )
-    .await?;
-
-    info!("Setting up Twitter client");
-    let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
-        .screen_name(Account::from(config.twitter_screen_name))
-        .consumer_key(config.twitter_api_key)
-        .consumer_secret(config.twitter_api_secret)
-        .sig_method("HMAC-SHA1".to_string())
-        .token(config.twitter_token)
-        .token_secret(config.twitter_token_secret)
-        .version(1.0)
-        .build()?;
-
-    info!("Setting up Email client");
-    let email = ClientBuilder::new(db2.clone(), c_email)
-        .email_server(config.email_server)
-        .imap_server(config.imap_server)
-        .email_inbox(config.email_inbox)
-        .email_user(config.email_user)
-        .email_password(config.email_password)
-        .build()?;
-
-    info!("Starting Matrix task");
-    tokio::spawn(async move {
-        matrix.start().await;
+    info!("Starting health check thread");
+    std::thread::spawn(|| {
+        HealthCheck::start()
+            .map_err(|err| {
+                error!("Failed to start health check service: {}", err);
+                std::process::exit(1);
+            })
+            .unwrap();
     });
 
-    info!("Starting Twitter task");
-    tokio::spawn(async move {
-        twitter.start().await;
-    });
+    if config.enable_accounts {
+        info!("Setting up Matrix client");
+        let matrix = MatrixClient::new(
+            &config.matrix_homeserver,
+            &config.matrix_username,
+            &config.matrix_password,
+            &config.matrix_db_path,
+            db2.clone(),
+            c_matrix,
+            c_emitter,
+        )
+        .await?;
 
-    info!("Starting Email task");
-    tokio::spawn(async move {
-        email.start().await;
-    });
+        info!("Setting up Twitter client");
+        let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
+            .screen_name(Account::from(config.twitter_screen_name))
+            .consumer_key(config.twitter_api_key)
+            .consumer_secret(config.twitter_api_secret)
+            .sig_method("HMAC-SHA1".to_string())
+            .token(config.twitter_token)
+            .token_secret(config.twitter_token_secret)
+            .version(1.0)
+            .build()?;
+
+        info!("Setting up Email client");
+        let email = ClientBuilder::new(db2.clone(), c_email)
+            .email_server(config.email_server)
+            .imap_server(config.imap_server)
+            .email_inbox(config.email_inbox)
+            .email_user(config.email_user)
+            .email_password(config.email_password)
+            .build()?;
+
+        info!("Starting Matrix task");
+        tokio::spawn(async move {
+            matrix.start().await;
+        });
+
+        info!("Starting Twitter task");
+        tokio::spawn(async move {
+            twitter.start().await;
+        });
+
+        info!("Starting Email task");
+        tokio::spawn(async move {
+            email.start().await;
+        });
+    }
 
     if config.enable_watcher {
         info!("Starting Watcher connector task, listening...");
