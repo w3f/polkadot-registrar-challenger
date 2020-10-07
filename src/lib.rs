@@ -35,6 +35,7 @@ pub struct Config {
     pub log_level: log::LevelFilter,
     pub watcher_url: String,
     pub enable_watcher: bool,
+    pub disable_tasks: bool,
     //
     pub matrix_homeserver: String,
     pub matrix_username: String,
@@ -117,6 +118,20 @@ pub async fn setup(config: Config) -> Result<()> {
     let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_email = manager.register_comms(AccountType::Email);
+
+    info!("Starting health check thread");
+    std::thread::spawn(|| {
+        HealthCheck::start()
+            .map_err(|err| {
+                error!("Failed to start health check service: {}", err);
+                std::process::exit(1);
+            })
+            .unwrap();
+    });
+
+    if config.disable_tasks {
+        return Ok(())
+    }
 
     info!("Trying to connect to Watcher");
     let mut counter = 0;
@@ -209,16 +224,6 @@ pub async fn setup(config: Config) -> Result<()> {
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");
     }
-
-    info!("Starting health check thread");
-    std::thread::spawn(|| {
-        HealthCheck::start()
-            .map_err(|err| {
-                error!("Failed to start health check service: {}", err);
-                std::process::exit(1);
-            })
-            .unwrap();
-    });
 
     Ok(())
 }
