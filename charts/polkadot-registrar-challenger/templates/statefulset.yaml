@@ -25,12 +25,12 @@ spec:
         ports:
         - name: metrics
           containerPort: {{ .Values.config.port }}
-        # livenessProbe:
-        #   httpGet:
-        #     path: /healthcheck
-        #     port: {{ .Values.config.port }}
-        #   initialDelaySeconds: 10
-        #   timeoutSeconds: 200
+        livenessProbe:
+          httpGet:
+            path: /healthcheck
+            port: {{ .Values.config.port }}
+          initialDelaySeconds: 10
+          timeoutSeconds: 200
         volumeMounts:
         - name: config
           mountPath: /etc/registrar  
