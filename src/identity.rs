@@ -169,7 +169,7 @@ impl IdentityManager {
             });
         }
     }
-    pub async fn local(&mut self) -> Result<()> {
+    async fn local(&mut self) -> Result<()> {
         use CommsMessage::*;
 
         if let Ok(msg) = self.comms.listener.try_recv() {
@@ -189,7 +189,7 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_verification_timeouts(&self) -> Result<()> {
+    async fn handle_verification_timeouts(&self) -> Result<()> {
         const TIMEOUT_LIMIT: u64 = 3600;
 
         let net_accounts = self.db2.select_timed_out_identities(TIMEOUT_LIMIT).await?;
@@ -207,7 +207,7 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_new_judgment_request(&mut self, mut ident: OnChainIdentity) -> Result<()> {
+    async fn handle_new_judgment_request(&mut self, mut ident: OnChainIdentity) -> Result<()> {
         debug!(
             "Handling new judgment request for account: {}",
             ident.net_account().as_str()
@@ -253,7 +253,7 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_status_change(&mut self, net_account: NetAccount) -> Result<()> {
+    async fn handle_status_change(&mut self, net_account: NetAccount) -> Result<()> {
         debug!(
             "Handling status change for account: {}",
             net_account.as_str()

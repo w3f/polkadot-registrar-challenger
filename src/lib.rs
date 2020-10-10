@@ -19,10 +19,10 @@ use std::io::prelude::*;
 use std::process::exit;
 use tokio::time::{self, Duration};
 
-pub mod adapters;
+mod adapters;
 mod comms;
-pub mod connector;
-pub mod db;
+mod connector;
+mod db;
 mod health_check;
 mod identity;
 mod primitives;
