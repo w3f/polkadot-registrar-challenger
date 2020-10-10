@@ -19,8 +19,6 @@ pub enum DatabaseError {
     BackendError(rusqlite::Error),
     #[fail(display = "SQLite database is not in auto-commit mode")]
     NoAutocommit,
-    #[fail(display = "Failed to convert column field into native type")]
-    InvalidType,
     #[fail(display = "Attempt to change something which does not exist")]
     NoChange,
 }
@@ -678,7 +676,8 @@ impl Database2 {
 
         Ok(())
     }
-    // TODO: Test this
+    // TODO: Make use of this
+    #[allow(dead_code)]
     pub async fn select_invalid_accounts(
         &self,
         net_account: &NetAccount,
@@ -750,9 +749,6 @@ impl Database2 {
         transaction.commit()?;
 
         Ok(account_set)
-    }
-    pub async fn insert_twitter_id(&self, account: &Account, twitter_id: &TwitterId) -> Result<()> {
-        self.insert_twitter_ids(&[(account, twitter_id)]).await
     }
     pub async fn insert_twitter_ids(&self, pair: &[(&Account, &TwitterId)]) -> Result<()> {
         let con = self.con.lock().await;

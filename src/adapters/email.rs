@@ -83,8 +83,6 @@ struct ReceivedMessageContext {
 pub enum ClientError {
     #[fail(display = "the builder was not used correctly")]
     IncompleteBuilder,
-    #[fail(display = "the access token was not requested for the client")]
-    MissingAccessToken,
     #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
 }

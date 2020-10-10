@@ -1,6 +1,6 @@
-pub mod email;
-pub mod matrix;
-pub mod twitter;
+mod email;
+mod matrix;
+mod twitter;
 
 pub use email::{ClientBuilder, EmailId};
 pub use matrix::MatrixClient;

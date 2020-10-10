@@ -2,7 +2,7 @@ use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress,
-    PubKey, Result,
+    Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
@@ -49,14 +49,6 @@ impl OnChainIdentity {
     }
     pub fn net_account(&self) -> &NetAccount {
         self.network_address.address()
-    }
-    pub fn pub_key(&self) -> &PubKey {
-        &self.network_address.pub_key()
-    }
-    pub fn get_account_state(&self, account_ty: &AccountType) -> Option<&AccountState> {
-        self.accounts
-            .iter()
-            .find(|state| &state.account_ty == account_ty)
     }
     pub fn account_states(&self) -> &Vec<AccountState> {
         &self.accounts
