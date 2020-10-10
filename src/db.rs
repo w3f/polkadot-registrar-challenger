@@ -750,6 +750,10 @@ impl Database2 {
 
         Ok(account_set)
     }
+    #[cfg(test)]
+    pub async fn insert_twitter_id(&self, account: &Account, twitter_id: &TwitterId) -> Result<()> {
+        self.insert_twitter_ids(&[(account, twitter_id)]).await
+    }
     pub async fn insert_twitter_ids(&self, pair: &[(&Account, &TwitterId)]) -> Result<()> {
         let con = self.con.lock().await;
         let mut stmt = con.prepare(
