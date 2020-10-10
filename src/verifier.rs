@@ -132,7 +132,10 @@ pub async fn verification_handler<'a>(
     comms: &CommsVerifier,
 ) -> Result<()> {
     for network_address in verifier.valid_verifications() {
-        debug!("Valid verification for address: {}", network_address.address().as_str());
+        debug!(
+            "Valid verification for address: {}",
+            network_address.address().as_str()
+        );
 
         db.set_challenge_status(
             network_address.address(),

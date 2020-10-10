@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{Verifier2, verification_handler};
+use crate::verifier::{verification_handler, Verifier2};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
