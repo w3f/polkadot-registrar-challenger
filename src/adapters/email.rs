@@ -7,8 +7,13 @@ use lettre::smtp::SmtpClient;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
+use tokio::sync::Mutex;
+use native_tls::TlsStream;
+use lettre::smtp::SmtpTransport;
+use std::result::Result as StdResult;
+use std::net::TcpStream;
+use std::sync::Arc;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EmailId(u64);
@@ -129,46 +134,50 @@ impl ClientBuilder {
         self
     }
     pub fn build(self) -> Result<Client> {
+        let smtp_server = self.server.ok_or(ClientError::IncompleteBuilder)?;
+        let imap_server = self.imap_server.ok_or(ClientError::IncompleteBuilder)?;
+        let inbox = self.inbox.ok_or(ClientError::IncompleteBuilder)?;
+        let user = self.user.ok_or(ClientError::IncompleteBuilder)?;
+        let password = self.password.ok_or(ClientError::IncompleteBuilder)?;
+
+        // SMTP transport
+        let mut smtp = SmtpClient::new_simple(&smtp_server)?
+            .credentials(Credentials::new(
+                user.to_string(),
+                password.to_string(),
+            ))
+            .transport();
+
+        // IMAP transport
+        let tls = native_tls::TlsConnector::builder().build()?;
+        let client = imap::connect((imap_server.as_str(), 993), &imap_server, &tls)?;
+
+        let mut imap = client
+            .login(&user, &password)
+            .map_err(|(err, _)| err)?;
+
+        imap.select(&inbox)?;
+
         Ok(Client {
             db: self.db,
             comms: self.comms,
-            server: self.server.ok_or(ClientError::IncompleteBuilder)?,
-            imap_server: self.imap_server.ok_or(ClientError::IncompleteBuilder)?,
-            inbox: self.inbox.ok_or(ClientError::IncompleteBuilder)?,
-            user: self.user.ok_or(ClientError::IncompleteBuilder)?,
-            password: self.password.ok_or(ClientError::IncompleteBuilder)?,
+            smtp: Arc::new(Mutex::new(smtp)),
+            imap: Arc::new(Mutex::new(imap)),
+            user: user,
         })
     }
 }
 
 #[async_trait]
 pub trait EmailTransport: Sized + Send + Sync {
-    async fn new() -> Result<Self>;
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
     async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }
 
-#[derive(Clone)]
-pub struct Client {
-    db: Database2,
-    comms: CommsVerifier,
-    server: String,
-    imap_server: String,
-    inbox: String,
-    user: String,
-    password: String,
-}
-
-impl Client {
-    async fn request_message(&self) -> Result<Vec<ReceivedMessageContext>> {
-        let tls = native_tls::TlsConnector::builder().build()?;
-        let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
-
-        let mut transport = client
-            .login(&self.user, &self.password)
-            .map_err(|(err, _)| err)?;
-
-        transport.select(&self.inbox)?;
+#[async_trait]
+impl EmailTransport for Client {
+    async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
+        let transport = self.imap.lock().await;
 
         // Find the message sequence/index of unread messages and fetch that
         // range, plus some extra. The database keeps track of which messages
@@ -260,6 +269,8 @@ impl Client {
         Ok(parsed_messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+        let transport = self.smtp.lock().await;
+
         let email = EmailBuilder::new()
             // Addresses can be specified by the tuple (email, alias)
             .to(account.as_str())
@@ -269,18 +280,22 @@ impl Client {
             .build()
             .unwrap();
 
-        // TODO: Can cloning/to_string be avoided here?
-        let mut transport = SmtpClient::new_simple(&self.server)?
-            .credentials(Credentials::new(
-                self.user.to_string(),
-                self.password.to_string(),
-            ))
-            .transport();
-
-        let _x = transport.send(email.into())?;
+        let _ = transport.send(email.into())?;
 
         Ok(())
     }
+}
+
+#[derive(Clone)]
+pub struct Client {
+    db: Database2,
+    comms: CommsVerifier,
+    smtp: Arc<Mutex<SmtpTransport>>,
+    imap: Arc<Mutex<imap::Session<TlsStream<TcpStream>>>>,
+    user: String,
+}
+
+impl Client {
     pub async fn start2<T: EmailTransport>(self) {
         self.start_responder::<T>().await;
 
