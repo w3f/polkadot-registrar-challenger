@@ -1,6 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::identity::AccountStatus;
+use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::verifier::Verifier2;
 use matrix_sdk::{

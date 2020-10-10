@@ -1,6 +1,6 @@
 use super::Result;
 use crate::adapters::{EmailId, TwitterId};
-use crate::identity::{AccountStatus, OnChainIdentity};
+use crate::manager::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     unix_time, Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };

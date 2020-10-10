@@ -11,7 +11,7 @@ use adapters::{ClientBuilder, MatrixClient, TwitterBuilder};
 use connector::Connector;
 use db::Database2;
 use health_check::HealthCheck;
-use identity::IdentityManager;
+use manager::IdentityManager;
 use primitives::{Account, AccountType, Fatal, Result};
 use std::env;
 use std::fs::File;
@@ -24,7 +24,7 @@ mod comms;
 mod connector;
 mod db;
 mod health_check;
-mod identity;
+mod manager;
 mod primitives;
 mod verifier;
 
