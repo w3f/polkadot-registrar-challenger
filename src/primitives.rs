@@ -232,9 +232,11 @@ pub enum AccountType {
     #[serde(rename = "matrix")]
     Matrix,
     // Reserved types for internal communication.
+    //
+    // Websocket connection to Watcher
     ReservedConnector,
+    // Matrix emitter which reacts on Matrix messages
     ReservedEmitter,
-    ReservedFeeder,
 }
 
 impl ToSql for AccountType {
