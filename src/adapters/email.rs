@@ -72,7 +72,7 @@ impl ConvertEmailInto<Account> for &str {
 }
 
 #[derive(Debug, Clone)]
-struct ReceivedMessageContext {
+pub struct ReceivedMessageContext {
     id: EmailId,
     sender: Account,
     body: String,
@@ -139,6 +139,13 @@ impl ClientBuilder {
             password: self.password.ok_or(ClientError::IncompleteBuilder)?,
         })
     }
+}
+
+#[async_trait]
+pub trait EmailTransport: Sized + Send + Sync {
+    async fn new() -> Result<Self>;
+    async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
+    async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -274,7 +281,19 @@ impl Client {
 
         Ok(())
     }
+    pub async fn start2<T: EmailTransport>(self) {
+        self.start_responder::<T>().await;
+
+        let client = T::new().await.unwrap();
+        loop {
+            let _ = self.local(&client).await.map_err(|err| {
+                error!("{}", err);
+                err
+            });
+        }
+    }
     pub async fn start(self) {
+        /*
         self.start_responder().await;
 
         loop {
@@ -283,8 +302,9 @@ impl Client {
                 err
             });
         }
+        */
     }
-    async fn local(&self) -> Result<()> {
+    async fn local<T: EmailTransport>(&self, client: &T) -> Result<()> {
         use CommsMessage::*;
 
         match self.comms.recv().await {
@@ -292,7 +312,7 @@ impl Client {
                 net_account,
                 account,
             } => {
-                self.handle_account_verification(net_account, account)
+                self.handle_account_verification(client, account)
                     .await?
             }
             _ => {}
@@ -300,25 +320,26 @@ impl Client {
 
         Ok(())
     }
-    async fn start_responder(&self) {
+    async fn start_responder<T: EmailTransport>(&self) {
         let c_self = self.clone();
 
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(3));
+            let client = T::new().await.unwrap();
 
             loop {
                 interval.tick().await;
 
-                let _ = c_self.handle_incoming_messages().await.map_err(|err| {
+                let _ = c_self.handle_incoming_messages(&client).await.map_err(|err| {
                     error!("{}", err);
                     err
                 });
             }
         });
     }
-    async fn handle_account_verification(
+    async fn handle_account_verification<T: EmailTransport>(
         &self,
-        _net_account: NetAccount,
+        client: &T,
         account: Account,
     ) -> Result<()> {
         let challenge_data = self
@@ -330,13 +351,13 @@ impl Client {
 
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
-        self.send_message(&account, verifier.init_message_builder(true))
+        client.send_message(&account, verifier.init_message_builder(true))
             .await?;
 
         Ok(())
     }
-    async fn handle_incoming_messages(&self) -> Result<()> {
-        let messages = self.request_message().await?;
+    async fn handle_incoming_messages<T: EmailTransport>(&self, client: &T) -> Result<()> {
+        let messages = client.request_messages().await?;
 
         if messages.is_empty() {
             return Ok(());
