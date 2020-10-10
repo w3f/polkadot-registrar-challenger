@@ -334,7 +334,7 @@ impl Responder {
             verifier.verify(msg_body);
 
             // Update challenge statuses and notify manager
-            verification_handler(&verifier, &self.db, &self.comms).await?;
+            verification_handler(&verifier, &self.db, &self.comms, &AccountType::Matrix).await?;
 
             // Inform user about the current state of the verification
             self.send_msg(&verifier.response_message_builder(), room_id)

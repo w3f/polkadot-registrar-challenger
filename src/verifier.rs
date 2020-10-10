@@ -130,6 +130,7 @@ pub async fn verification_handler<'a>(
     verifier: &Verifier2<'a>,
     db: &Database2,
     comms: &CommsVerifier,
+    account_ty: &AccountType,
 ) -> Result<()> {
     for network_address in verifier.valid_verifications() {
         debug!(
@@ -139,8 +140,8 @@ pub async fn verification_handler<'a>(
 
         db.set_challenge_status(
             network_address.address(),
-            &AccountType::Matrix,
-            ChallengeStatus::Accepted,
+            account_ty,
+            &ChallengeStatus::Accepted,
         )
         .await?;
 
@@ -155,8 +156,8 @@ pub async fn verification_handler<'a>(
 
         db.set_challenge_status(
             network_address.address(),
-            &AccountType::Matrix,
-            ChallengeStatus::Rejected,
+            account_ty,
+            &ChallengeStatus::Rejected,
         )
         .await?;
 

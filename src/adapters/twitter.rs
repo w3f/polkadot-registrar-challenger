@@ -1,7 +1,7 @@
 use crate::comms::CommsVerifier;
 use crate::db::Database2;
-use crate::primitives::{unix_time, Account, AccountType, Challenge, ChallengeStatus, Result};
-use crate::verifier::Verifier2;
+use crate::primitives::{unix_time, Account, AccountType, Challenge, Result};
+use crate::verifier::{Verifier2, verification_handler};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -545,45 +545,10 @@ impl Twitter {
                 .filter(|msg| &msg.sender == *twitter_id)
                 .for_each(|msg| verifier.verify(&msg.message));
 
-            for network_address in verifier.valid_verifications() {
-                debug!(
-                    "Valid verification for address: {}",
-                    network_address.address().as_str()
-                );
+            // Update challenge statuses and notify manager
+            verification_handler(&verifier, &self.db, &self.comms, &AccountType::Twitter).await?;
 
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Twitter,
-                        ChallengeStatus::Accepted,
-                    )
-                    .await?;
-
-                // Tell the manager to check the user's account states.
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            for network_address in verifier.invalid_verifications() {
-                debug!(
-                    "Invalid verification for address: {}",
-                    network_address.address().as_str()
-                );
-
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Twitter,
-                        ChallengeStatus::Rejected,
-                    )
-                    .await?;
-
-                // Tell the manager to check the user's account states.
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            debug!("Notifying user about verification result");
+            // Inform user about the current state of the verification
             self.send_message(&twitter_id, verifier.response_message_builder())
                 .await?;
         }

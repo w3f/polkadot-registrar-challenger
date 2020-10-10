@@ -383,7 +383,7 @@ impl Client {
             }
 
             // Update challenge statuses and notify manager
-            verification_handler(&verifier, &self.db, &self.comms).await?;
+            verification_handler(&verifier, &self.db, &self.comms, &AccountType::Email).await?;
 
             // Inform user about the current state of the verification
             self.send_message(sender, verifier.response_message_builder())

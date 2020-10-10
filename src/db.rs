@@ -463,7 +463,7 @@ impl Database2 {
         &self,
         net_account: &NetAccount,
         account_ty: &AccountType,
-        status: ChallengeStatus,
+        status: &ChallengeStatus,
     ) -> Result<()> {
         self.con.lock().await.execute_named(
             "UPDATE
