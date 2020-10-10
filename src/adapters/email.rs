@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
-use crate::verifier::Verifier2;
+use crate::primitives::{Account, AccountType, NetAccount, Result};
+use crate::verifier::{Verifier2, verification_handler};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
@@ -382,42 +382,10 @@ impl Client {
                 verifier.verify(&message.body);
             }
 
-            for network_address in verifier.valid_verifications() {
-                debug!(
-                    "Valid verification for address: {}",
-                    network_address.address().as_str()
-                );
+            // Update challenge statuses and notify manager
+            verification_handler(&verifier, &self.db, &self.comms).await?;
 
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Email,
-                        ChallengeStatus::Accepted,
-                    )
-                    .await?;
-
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            for network_address in verifier.invalid_verifications() {
-                debug!(
-                    "Invalid verification for address: {}",
-                    network_address.address().as_str()
-                );
-
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Email,
-                        ChallengeStatus::Rejected,
-                    )
-                    .await?;
-
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
+            // Inform user about the current state of the verification
             self.send_message(sender, verifier.response_message_builder())
                 .await?;
             self.db.track_email_id(email_id).await?;
