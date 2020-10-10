@@ -6,7 +6,6 @@ use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
-use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
@@ -131,7 +130,6 @@ impl ClientBuilder {
     }
     pub fn build(self) -> Result<Client> {
         Ok(Client {
-            client: ReqClient::new(),
             db: self.db,
             comms: self.comms,
             server: self.server.ok_or(ClientError::IncompleteBuilder)?,
@@ -145,7 +143,6 @@ impl ClientBuilder {
 
 #[derive(Clone)]
 pub struct Client {
-    client: ReqClient,
     db: Database2,
     comms: CommsVerifier,
     server: String,
