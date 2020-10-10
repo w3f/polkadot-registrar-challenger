@@ -92,8 +92,6 @@ pub enum ClientError {
 }
 
 pub struct ClientBuilder {
-    db: Database2,
-    comms: CommsVerifier,
     server: Option<String>,
     imap_server: Option<String>,
     inbox: Option<String>,
@@ -102,10 +100,8 @@ pub struct ClientBuilder {
 }
 
 impl ClientBuilder {
-    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+    pub fn new() -> Self {
         ClientBuilder {
-            db: db,
-            comms: comms,
             server: None,
             imap_server: None,
             inbox: None,
@@ -133,7 +129,7 @@ impl ClientBuilder {
         self.password = Some(password);
         self
     }
-    pub fn build(self) -> Result<Client> {
+    pub fn build(self) -> Result<SmtpImapClient> {
         let smtp_server = self.server.ok_or(ClientError::IncompleteBuilder)?;
         let imap_server = self.imap_server.ok_or(ClientError::IncompleteBuilder)?;
         let inbox = self.inbox.ok_or(ClientError::IncompleteBuilder)?;
@@ -158,9 +154,7 @@ impl ClientBuilder {
 
         imap.select(&inbox)?;
 
-        Ok(Client {
-            db: self.db,
-            comms: self.comms,
+        Ok(SmtpImapClient {
             smtp: Arc::new(Mutex::new(smtp)),
             imap: Arc::new(Mutex::new(imap)),
             user: user,
@@ -174,10 +168,17 @@ pub trait EmailTransport: Sized + Send + Sync {
     async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }
 
+#[derive(Clone)]
+pub struct SmtpImapClient {
+    smtp: Arc<Mutex<SmtpTransport>>,
+    imap: Arc<Mutex<imap::Session<TlsStream<TcpStream>>>>,
+    user: String,
+}
+
 #[async_trait]
-impl EmailTransport for Client {
+impl EmailTransport for SmtpImapClient {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
-        let transport = self.imap.lock().await;
+        let mut transport = self.imap.lock().await;
 
         // Find the message sequence/index of unread messages and fetch that
         // range, plus some extra. The database keeps track of which messages
@@ -269,7 +270,7 @@ impl EmailTransport for Client {
         Ok(parsed_messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        let transport = self.smtp.lock().await;
+        let mut transport = self.smtp.lock().await;
 
         let email = EmailBuilder::new()
             // Addresses can be specified by the tuple (email, alias)
@@ -287,21 +288,27 @@ impl EmailTransport for Client {
 }
 
 #[derive(Clone)]
-pub struct Client {
+pub struct ClientHandler {
     db: Database2,
     comms: CommsVerifier,
-    smtp: Arc<Mutex<SmtpTransport>>,
-    imap: Arc<Mutex<imap::Session<TlsStream<TcpStream>>>>,
-    user: String,
 }
 
-impl Client {
-    pub async fn start2<T: EmailTransport>(self) {
-        self.start_responder::<T>().await;
+impl ClientHandler {
+    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+        ClientHandler {
+            db: db,
+            comms: comms,
+        }
+    }
+}
 
-        let client = T::new().await.unwrap();
+impl ClientHandler {
+    pub async fn start2<T: EmailTransport>(self, transport: T) {
+        // TODO
+        //self.start_responder::<T>().await;
+
         loop {
-            let _ = self.local(&client).await.map_err(|err| {
+            let _ = self.local(&transport).await.map_err(|err| {
                 error!("{}", err);
                 err
             });
@@ -319,7 +326,7 @@ impl Client {
         }
         */
     }
-    async fn local<T: EmailTransport>(&self, client: &T) -> Result<()> {
+    async fn local<T: EmailTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
         match self.comms.recv().await {
@@ -327,7 +334,7 @@ impl Client {
                 net_account,
                 account,
             } => {
-                self.handle_account_verification(client, account)
+                self.handle_account_verification(transport, account)
                     .await?
             }
             _ => {}
@@ -336,6 +343,7 @@ impl Client {
         Ok(())
     }
     async fn start_responder<T: EmailTransport>(&self) {
+        /*
         let c_self = self.clone();
 
         tokio::spawn(async move {
@@ -351,10 +359,11 @@ impl Client {
                 });
             }
         });
+        */
     }
     async fn handle_account_verification<T: EmailTransport>(
         &self,
-        client: &T,
+        transport: &T,
         account: Account,
     ) -> Result<()> {
         let challenge_data = self
@@ -366,13 +375,13 @@ impl Client {
 
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
-        client.send_message(&account, verifier.init_message_builder(true))
+        transport.send_message(&account, verifier.init_message_builder(true))
             .await?;
 
         Ok(())
     }
-    async fn handle_incoming_messages<T: EmailTransport>(&self, client: &T) -> Result<()> {
-        let messages = client.request_messages().await?;
+    async fn handle_incoming_messages<T: EmailTransport>(&self, transport: &T) -> Result<()> {
+        let messages = transport.request_messages().await?;
 
         if messages.is_empty() {
             return Ok(());
@@ -419,8 +428,9 @@ impl Client {
             verification_handler(&verifier, &self.db, &self.comms, &AccountType::Email).await?;
 
             // Inform user about the current state of the verification
-            self.send_message(sender, verifier.response_message_builder())
+            transport.send_message(sender, verifier.response_message_builder())
                 .await?;
+
             self.db.track_email_id(email_id).await?;
         }
 
