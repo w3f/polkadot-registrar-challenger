@@ -1,8 +1,8 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::manager::AccountStatus;
-use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
-use crate::verifier::Verifier2;
+use crate::primitives::{Account, AccountType, NetAccount, Result};
+use crate::verifier::{Verifier2, verification_handler};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::Request,
@@ -42,8 +42,6 @@ pub enum MatrixError {
     #[fail(display = "database error occured: {}", 0)]
     // TODO: Use `DatabaseError`
     Database(failure::Error),
-    #[fail(display = "contacted by a user who's RoomId was not registered anywhere")]
-    RoomIdNotFound,
     #[fail(
         display = "Failed to fetch challenge data from database for account: {:?}",
         0
@@ -294,14 +292,6 @@ impl Responder {
             debug!("Search for address based on RoomId");
 
             let room_id = &room.read().await.room_id;
-            let net_account = if let Some(net_account) =
-                self.db.select_net_account_from_room_id(&room_id).await?
-            {
-                net_account
-            } else {
-                return Err(MatrixError::RoomIdNotFound.into());
-            };
-
             let account = Account::from(event.sender.as_str());
 
             debug!("Fetching challenge data");
@@ -343,41 +333,10 @@ impl Responder {
             debug!("Verifying message: {}", msg_body);
             verifier.verify(msg_body);
 
-            for network_address in verifier.valid_verifications() {
-                debug!(
-                    "Valid verification for address: {}",
-                    network_address.address().as_str()
-                );
+            // Update challenge statuses and notify manager
+            verification_handler(&verifier, &self.db, &self.comms).await?;
 
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Matrix,
-                        ChallengeStatus::Accepted,
-                    )
-                    .await?;
-
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            for network_address in verifier.invalid_verifications() {
-                debug!(
-                    "Invalid verification for address: {}",
-                    network_address.address().as_str()
-                );
-
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Matrix,
-                        ChallengeStatus::Rejected,
-                    )
-                    .await?;
-
-                self.comms.notify_status_change(net_account.clone());
-            }
-
+            // Inform user about the current state of the verification
             self.send_msg(&verifier.response_message_builder(), room_id)
                 .await
                 .map_err(|err| MatrixError::SendMessage(err.into()))?;

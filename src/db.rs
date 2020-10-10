@@ -419,28 +419,6 @@ impl Database2 {
 
         Ok(room_ids)
     }
-    pub async fn select_net_account_from_room_id(
-        &self,
-        room_id: &RoomId,
-    ) -> Result<Option<NetAccount>> {
-        let con = self.con.lock().await;
-
-        con.query_row_named(
-            "SELECT net_account
-                FROM pending_judgments
-                INNER JOIN known_matrix_rooms
-                    ON known_matrix_rooms.net_account_id = pending_judgments.id
-                WHERE
-                    known_matrix_rooms.room_id = :room_id
-                ",
-            named_params! {
-                ":room_id": room_id.as_str(),
-            },
-            |row| row.get::<_, NetAccount>(0),
-        )
-        .optional()
-        .map_err(|err| failure::Error::from(err))
-    }
     pub async fn set_account_status(
         &self,
         net_account: &NetAccount,
@@ -1321,7 +1299,6 @@ mod tests {
             let alice_room_1 = RoomId::try_from("!ALICE1:matrix.org").unwrap();
             let alice_room_2 = RoomId::try_from("!ALICE2:matrix.org").unwrap();
             let bob_room = RoomId::try_from("!BOB:matrix.org").unwrap();
-            let eve_room = RoomId::try_from("!EVE:matrix.org").unwrap();
 
             // Insert RoomIds
             db.insert_room_id(&alice, &alice_room_1).await.unwrap();
@@ -1345,18 +1322,6 @@ mod tests {
             assert_eq!(res.len(), 2);
             assert!(res.contains(&alice_room_2));
             assert!(res.contains(&bob_room));
-
-            // Get NetAccount based on RoomId.
-            let res = db
-                .select_net_account_from_room_id(&bob_room)
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(res, bob);
-
-            // Does not exist.
-            let res = db.select_net_account_from_room_id(&eve_room).await.unwrap();
-            assert!(res.is_none());
         });
     }
 
