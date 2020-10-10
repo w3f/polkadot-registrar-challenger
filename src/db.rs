@@ -1349,7 +1349,7 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an additional account.
-            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
+            db.set_challenge_status(&alice, &AccountType::Matrix, &ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1358,7 +1358,7 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an account.
-            db.set_challenge_status(&alice, &AccountType::Email, ChallengeStatus::Accepted)
+            db.set_challenge_status(&alice, &AccountType::Email, &ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
