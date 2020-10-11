@@ -163,6 +163,45 @@ pub trait EmailTransport: Sized + Send + Sync + Clone {
     async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiMessage {
+    id: String,
+    thread_id: String,
+    payload: ApiPayload,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiPayload {
+    headers: Vec<ApiHeader>,
+    body: Option<ApiBody>,
+    parts: Option<Vec<ApiPart>>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiHeader {
+    name: String,
+    value: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiPart {
+    part_id: String,
+    mime_type: String,
+    filename: String,
+    body: ApiBody,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiBody {
+    size: i64,
+    data: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct SmtpImapClient {
     smtp: Arc<Mutex<SmtpTransport>>,
@@ -417,43 +456,4 @@ impl EmailHandler {
 
         Ok(())
     }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApiMessage {
-    id: String,
-    thread_id: String,
-    payload: ApiPayload,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApiPayload {
-    headers: Vec<ApiHeader>,
-    body: Option<ApiBody>,
-    parts: Option<Vec<ApiPart>>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiHeader {
-    name: String,
-    value: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApiPart {
-    part_id: String,
-    mime_type: String,
-    filename: String,
-    body: ApiBody,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiBody {
-    size: i64,
-    data: Option<String>,
 }
