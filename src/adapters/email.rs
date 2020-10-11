@@ -158,7 +158,7 @@ impl SmtpImapClientBuilder {
 }
 
 #[async_trait]
-pub trait EmailTransport: Send + Sync {
+pub trait EmailTransport: 'static + Send + Sync {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
     async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }

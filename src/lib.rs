@@ -8,14 +8,15 @@ extern crate serde;
 extern crate failure;
 
 use adapters::{
-    EmailHandler, MatrixClient, MatrixHandler, MatrixTransport, SmtpImapClientBuilder, TwitterBuilder,
-    TwitterHandler,
+    EmailHandler, EmailTransport, MatrixHandler, MatrixTransport, TwitterHandler, TwitterTransport,
 };
-use connector::Connector;
-use db::Database2;
-use health_check::HealthCheck;
+pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
+pub use connector::Connector;
+pub use db::Database2;
+pub use health_check::HealthCheck;
 use manager::IdentityManager;
-use primitives::{Account, AccountType, Fatal, Result};
+pub use primitives::Account;
+use primitives::{AccountType, Fatal, Result};
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -106,13 +107,15 @@ pub async fn block() {
     }
 }
 
-pub async fn run(config: Config) -> Result<()> {
-    setup(config).await.map(|_| ())
-}
-
-pub async fn setup(config: Config) -> Result<()> {
-    info!("Setting up database and manager");
-    let db2 = Database2::new(&config.registrar_db_path)?;
+pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
+    enable_watcher: bool,
+    watcher_url: &str,
+    db2: Database2,
+    mut matrix_transport: M,
+    twitter_transport: T,
+    email_transport: E,
+) -> Result<()> {
+    info!("Setting up manager");
     let mut manager = IdentityManager::new(db2.clone())?;
 
     info!("Setting up communication channels");
@@ -127,106 +130,58 @@ pub async fn setup(config: Config) -> Result<()> {
         manager.start().await;
     });
 
-    info!("Trying to connect to Watcher");
-    let mut counter = 0;
-    let mut interval = time::interval(Duration::from_secs(5));
+    info!("Starting Matrix task");
+    let l_db = db2.clone();
+    tokio::spawn(async move {
+        matrix_transport.run_emitter(l_db.clone(), c_emitter).await;
 
-    let mut connector = None;
-    loop {
-        interval.tick().await;
-
-        // Only connect to Watcher if the config specifies so.
-        if !config.enable_watcher {
-            break;
-        }
-
-        if let Ok(con) = Connector::new(&config.watcher_url, c_connector.clone()).await {
-            info!("Connecting to Watcher succeeded");
-            connector = Some(con);
-            break;
-        } else {
-            warn!("Connecting to Watcher failed, trying again...");
-        }
-
-        if counter == 2 {
-            error!("Failed connecting to Watcher, exiting...");
-            exit(1);
-        }
-
-        counter += 1;
-    }
-
-    info!("Starting health check thread");
-    std::thread::spawn(|| {
-        HealthCheck::start()
-            .map_err(|err| {
-                error!("Failed to start health check service: {}", err);
-                std::process::exit(1);
-            })
-            .unwrap();
+        MatrixHandler::new(l_db, c_matrix, matrix_transport)
+            .start()
+            .await;
     });
 
-    if config.enable_accounts {
-        info!("Setting up Matrix client");
-        let mut matrix_transport = MatrixClient::new(
-            &config.matrix_homeserver,
-            &config.matrix_username,
-            &config.matrix_password,
-            &config.matrix_db_path,
-            db2.clone(),
-        )
-        .await?;
+    info!("Starting Twitter task");
+    let l_db = db2.clone();
+    tokio::spawn(async move {
+        TwitterHandler::new(l_db, c_twitter)
+            .start(twitter_transport)
+            .await;
+    });
 
-        info!("Setting up Twitter client");
-        let twitter_transport = TwitterBuilder::new()
-            .screen_name(Account::from(config.twitter_screen_name))
-            .consumer_key(config.twitter_api_key)
-            .consumer_secret(config.twitter_api_secret)
-            .sig_method("HMAC-SHA1".to_string())
-            .token(config.twitter_token)
-            .token_secret(config.twitter_token_secret)
-            .version(1.0)
-            .build()?;
+    info!("Starting Email task");
+    let l_db = db2.clone();
+    tokio::spawn(async move {
+        EmailHandler::new(l_db, c_email)
+            .start(email_transport)
+            .await;
+    });
 
-        info!("Setting up Email client");
-        let email_transport = SmtpImapClientBuilder::new()
-            .email_server(config.email_server)
-            .imap_server(config.imap_server)
-            .email_inbox(config.email_inbox)
-            .email_user(config.email_user)
-            .email_password(config.email_password)
-            .build()?;
+    if enable_watcher {
+        info!("Trying to connect to Watcher");
+        let mut counter = 0;
+        let mut interval = time::interval(Duration::from_secs(5));
 
-        info!("Starting Matrix task");
-        let l_db = db2.clone();
-        tokio::spawn(async move {
-            matrix_transport.run_emitter(l_db.clone(), c_emitter).await;
+        let connector;
+        loop {
+            interval.tick().await;
 
-            MatrixHandler::new(l_db, c_matrix, matrix_transport)
-                .start()
-                .await;
-        });
+            if let Ok(con) = Connector::new(watcher_url, c_connector.clone()).await {
+                info!("Connecting to Watcher succeeded");
+                connector = con;
+                break;
+            } else {
+                warn!("Connecting to Watcher failed, trying again...");
+            }
 
-        info!("Starting Twitter task");
-        let l_db = db2.clone();
-        tokio::spawn(async move {
-            TwitterHandler::new(l_db, c_twitter)
-                .start(twitter_transport)
-                .await;
-        });
+            if counter == 2 {
+                error!("Failed connecting to Watcher, exiting...");
+                exit(1);
+            }
 
-        info!("Starting Email task");
-        let l_db = db2.clone();
-        tokio::spawn(async move {
-            EmailHandler::new(l_db, c_email)
-                .start(email_transport)
-                .await;
-        });
-    }
+            counter += 1;
+        }
 
-    if config.enable_watcher {
         info!("Starting Watcher connector task, listening...");
-        let connector = connector.unwrap();
 
         tokio::spawn(async move {
             connector.start().await;

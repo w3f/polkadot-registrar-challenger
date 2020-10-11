@@ -50,7 +50,7 @@ pub enum MatrixError {
 }
 
 #[async_trait]
-pub trait MatrixTransport: Send + Sync {
+pub trait MatrixTransport: 'static + Send + Sync {
     async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()>;
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response>;
     async fn leave_room(&self, room_id: &RoomId) -> Result<()>;
@@ -156,13 +156,8 @@ impl MatrixTransport for MatrixClient {
     }
     async fn run_emitter(&mut self, db: Database2, comms: CommsVerifier) {
         // Add event emitter
-       self 
-            .client
-            .add_event_emitter(Box::new(MatrixHandler::new(
-                db,
-                comms,
-                self.clone(),
-            )))
+        self.client
+            .add_event_emitter(Box::new(MatrixHandler::new(db, comms, self.clone())))
             .await;
     }
 }

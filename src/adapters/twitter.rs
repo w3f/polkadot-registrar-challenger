@@ -176,7 +176,7 @@ impl HttpMethod {
 }
 
 #[async_trait]
-pub trait TwitterTransport {
+pub trait TwitterTransport: 'static + Send + Sync {
     async fn request_messages(
         &self,
         exclude: &TwitterId,
