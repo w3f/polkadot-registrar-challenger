@@ -91,7 +91,7 @@ pub enum ClientError {
     UnrecognizedData,
 }
 
-pub struct ClientBuilder {
+pub struct SmtpImapClientBuilder {
     server: Option<String>,
     imap_server: Option<String>,
     inbox: Option<String>,
@@ -99,9 +99,9 @@ pub struct ClientBuilder {
     password: Option<String>,
 }
 
-impl ClientBuilder {
+impl SmtpImapClientBuilder {
     pub fn new() -> Self {
-        ClientBuilder {
+        SmtpImapClientBuilder {
             server: None,
             imap_server: None,
             inbox: None,
@@ -479,7 +479,7 @@ mod tests {
             let config = open_config().unwrap();
             let db = Database2::new(&db_path()).unwrap();
 
-            let email = ClientBuilder::new(db, CommsVerifier::new())
+            let email = SmtpImapClientBuilder::new(db, CommsVerifier::new())
                 .email_server(config.email_server)
                 .imap_server(config.imap_server)
                 .email_inbox(config.email_inbox)
