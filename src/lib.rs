@@ -8,7 +8,7 @@ extern crate serde;
 extern crate failure;
 
 use adapters::{
-    EmailHandler, MatrixClient, MatrixHandler, SmtpImapClientBuilder, TwitterBuilder,
+    EmailHandler, MatrixClient, MatrixHandler, MatrixTransport, SmtpImapClientBuilder, TwitterBuilder,
     TwitterHandler,
 };
 use connector::Connector;
@@ -168,13 +168,12 @@ pub async fn setup(config: Config) -> Result<()> {
 
     if config.enable_accounts {
         info!("Setting up Matrix client");
-        let matrix_transport = MatrixClient::new(
+        let mut matrix_transport = MatrixClient::new(
             &config.matrix_homeserver,
             &config.matrix_username,
             &config.matrix_password,
             &config.matrix_db_path,
             db2.clone(),
-            c_emitter,
         )
         .await?;
 
@@ -201,6 +200,8 @@ pub async fn setup(config: Config) -> Result<()> {
         info!("Starting Matrix task");
         let l_db = db2.clone();
         tokio::spawn(async move {
+            matrix_transport.run_emitter(l_db.clone(), c_emitter).await;
+
             MatrixHandler::new(l_db, c_matrix, matrix_transport)
                 .start()
                 .await;

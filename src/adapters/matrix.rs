@@ -55,6 +55,7 @@ pub trait MatrixTransport: Send + Sync {
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response>;
     async fn leave_room(&self, room_id: &RoomId) -> Result<()>;
     async fn user_id(&self) -> Result<UserId>;
+    async fn run_emitter(&mut self, db: Database2, comms: CommsVerifier);
 }
 
 #[derive(Clone)]
@@ -69,7 +70,6 @@ impl MatrixClient {
         password: &str,
         db_path: &str,
         db: Database2,
-        comms_emmiter: CommsVerifier,
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
@@ -114,17 +114,7 @@ impl MatrixClient {
                 .await;
         });
 
-        let mut matrix = MatrixClient { client: client };
-
-        // Add event emitter
-        matrix
-            .client
-            .add_event_emitter(Box::new(MatrixHandler::new(
-                db,
-                comms_emmiter,
-                matrix.clone(),
-            )))
-            .await;
+        let matrix = MatrixClient { client: client };
 
         Ok(matrix)
     }
@@ -163,6 +153,17 @@ impl MatrixTransport for MatrixClient {
         //self.client.user_id().await.ok_or(failure::Error::from(Err(MatrixError::RemoteUserIdNotFound)))
         // TODO
         Ok(self.client.user_id().await.unwrap())
+    }
+    async fn run_emitter(&mut self, db: Database2, comms: CommsVerifier) {
+        // Add event emitter
+       self 
+            .client
+            .add_event_emitter(Box::new(MatrixHandler::new(
+                db,
+                comms,
+                self.clone(),
+            )))
+            .await;
     }
 }
 
