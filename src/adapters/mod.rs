@@ -4,4 +4,4 @@ mod twitter;
 
 pub use email::{EmailHandler, EmailId, SmtpImapClientBuilder};
 pub use matrix::{MatrixClient, MatrixHandler};
-pub use twitter::{Twitter, TwitterBuilder, TwitterId};
+pub use twitter::{Twitter, TwitterBuilder, TwitterHandler, TwitterId};

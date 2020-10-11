@@ -7,7 +7,10 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::{EmailHandler, MatrixClient, MatrixHandler, SmtpImapClientBuilder, TwitterBuilder};
+use adapters::{
+    EmailHandler, MatrixClient, MatrixHandler, SmtpImapClientBuilder, TwitterBuilder,
+    TwitterHandler,
+};
 use connector::Connector;
 use db::Database2;
 use health_check::HealthCheck;
@@ -176,8 +179,7 @@ pub async fn setup(config: Config) -> Result<()> {
         .await?;
 
         info!("Setting up Twitter client");
-        /*
-        let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
+        let twitter_transport = TwitterBuilder::new()
             .screen_name(Account::from(config.twitter_screen_name))
             .consumer_key(config.twitter_api_key)
             .consumer_secret(config.twitter_api_secret)
@@ -186,10 +188,8 @@ pub async fn setup(config: Config) -> Result<()> {
             .token_secret(config.twitter_token_secret)
             .version(1.0)
             .build()?;
-        */
 
         info!("Setting up Email client");
-        //let email = SmtpImapClientBuilder::new(db2.clone(), c_email)
         let email_transport = SmtpImapClientBuilder::new()
             .email_server(config.email_server)
             .imap_server(config.imap_server)
@@ -207,11 +207,12 @@ pub async fn setup(config: Config) -> Result<()> {
         });
 
         info!("Starting Twitter task");
-        /*
+        let l_db = db2.clone();
         tokio::spawn(async move {
-            twitter.start().await;
+            TwitterHandler::new(l_db, c_twitter)
+                .start(twitter_transport)
+                .await;
         });
-        */
 
         info!("Starting Email task");
         let l_db = db2.clone();

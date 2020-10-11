@@ -87,12 +87,10 @@ pub struct TwitterBuilder {
     token: Option<String>,
     token_secret: Option<String>,
     version: Option<f64>,
-    db: Database2,
-    comms: CommsVerifier,
 }
 
 impl TwitterBuilder {
-    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+    pub fn new() -> Self {
         TwitterBuilder {
             screen_name: None,
             consumer_key: None,
@@ -101,8 +99,6 @@ impl TwitterBuilder {
             token: None,
             token_secret: None,
             version: None,
-            db: db,
-            comms: comms,
         }
     }
     pub fn screen_name(mut self, account: Account) -> Self {
@@ -145,8 +141,6 @@ impl TwitterBuilder {
             token: self.token.ok_or(TwitterError::IncompleteBuilder)?,
             token_secret: self.token_secret.ok_or(TwitterError::IncompleteBuilder)?,
             version: self.version.ok_or(TwitterError::IncompleteBuilder)?,
-            db: self.db,
-            comms: self.comms,
         })
     }
 }
@@ -160,8 +154,6 @@ pub struct Twitter {
     token: String,
     token_secret: String,
     version: f64,
-    db: Database2,
-    comms: CommsVerifier,
 }
 
 use hmac::{Hmac, Mac, NewMac};
@@ -205,6 +197,12 @@ pub struct TwitterHandler {
 }
 
 impl TwitterHandler {
+    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+        TwitterHandler {
+            db: db,
+            comms: comms,
+        }
+    }
     pub async fn start<T: TwitterTransport>(self, transport: T) {
         // TODO: Improve error case
         let my_id = transport
@@ -219,12 +217,19 @@ impl TwitterHandler {
         loop {
             interval.tick().await;
 
-            let _ = self.handle_incoming_messages(&transport, &my_id).await.map_err(|err| {
-                error!("{}", err);
-            });
+            let _ = self
+                .handle_incoming_messages(&transport, &my_id)
+                .await
+                .map_err(|err| {
+                    error!("{}", err);
+                });
         }
     }
-    pub async fn handle_incoming_messages<T: TwitterTransport>(&self, transport: &T, my_id: &TwitterId) -> Result<()> {
+    pub async fn handle_incoming_messages<T: TwitterTransport>(
+        &self,
+        transport: &T,
+        my_id: &TwitterId,
+    ) -> Result<()> {
         let watermark = self
             .db
             .select_watermark(&AccountType::Twitter)
@@ -317,7 +322,8 @@ impl TwitterHandler {
             let mut verifier = Verifier2::new(&challenge_data);
 
             if !*init_msg {
-                transport.send_message(&twitter_id, verifier.init_message_builder(false))
+                transport
+                    .send_message(&twitter_id, verifier.init_message_builder(false))
                     .await?;
                 self.db.confirm_init_message(&account).await?;
                 continue;
@@ -333,7 +339,8 @@ impl TwitterHandler {
             verification_handler(&verifier, &self.db, &self.comms, &AccountType::Twitter).await?;
 
             // Inform user about the current state of the verification
-            transport.send_message(&twitter_id, verifier.response_message_builder())
+            transport
+                .send_message(&twitter_id, verifier.response_message_builder())
                 .await?;
         }
 
