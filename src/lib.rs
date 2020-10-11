@@ -165,6 +165,7 @@ pub async fn setup(config: Config) -> Result<()> {
 
     if config.enable_accounts {
         info!("Setting up Matrix client");
+        /*
         let matrix = MatrixClient::new(
             &config.matrix_homeserver,
             &config.matrix_username,
@@ -175,6 +176,7 @@ pub async fn setup(config: Config) -> Result<()> {
             c_emitter,
         )
         .await?;
+        */
 
         info!("Setting up Twitter client");
         let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
@@ -198,9 +200,11 @@ pub async fn setup(config: Config) -> Result<()> {
             .build()?;
 
         info!("Starting Matrix task");
+        /*
         tokio::spawn(async move {
             matrix.start().await;
         });
+        */
 
         info!("Starting Twitter task");
         tokio::spawn(async move {
