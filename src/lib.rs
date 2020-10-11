@@ -7,7 +7,7 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::{SmtpImapClientBuilder, EmailHandler, MatrixClient, MatrixHandler, TwitterBuilder};
+use adapters::{EmailHandler, MatrixClient, MatrixHandler, SmtpImapClientBuilder, TwitterBuilder};
 use connector::Connector;
 use db::Database2;
 use health_check::HealthCheck;
@@ -199,7 +199,9 @@ pub async fn setup(config: Config) -> Result<()> {
         info!("Starting Matrix task");
         let l_db = db2.clone();
         tokio::spawn(async move {
-            MatrixHandler::new(l_db, c_matrix, matrix_transport).start().await;
+            MatrixHandler::new(l_db, c_matrix, matrix_transport)
+                .start()
+                .await;
         });
 
         info!("Starting Twitter task");
@@ -210,7 +212,9 @@ pub async fn setup(config: Config) -> Result<()> {
         info!("Starting Email task");
         let l_db = db2.clone();
         tokio::spawn(async move {
-            EmailHandler::new(l_db, c_email).start(email_transport).await;
+            EmailHandler::new(l_db, c_email)
+                .start(email_transport)
+                .await;
         });
     }
 

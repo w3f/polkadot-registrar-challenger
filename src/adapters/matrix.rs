@@ -114,15 +114,16 @@ impl MatrixClient {
                 .await;
         });
 
-        let mut matrix = MatrixClient {
-            client: client,
-        };
+        let mut matrix = MatrixClient { client: client };
 
-        // Add event emitter (responder)
-        matrix.client
-            .add_event_emitter(Box::new(
-                MatrixHandler::new(db, comms_emmiter, matrix.clone()),
-            ))
+        // Add event emitter
+        matrix
+            .client
+            .add_event_emitter(Box::new(MatrixHandler::new(
+                db,
+                comms_emmiter,
+                matrix.clone(),
+            )))
             .await;
 
         Ok(matrix)
@@ -146,10 +147,17 @@ impl MatrixTransport for MatrixClient {
             .map(|_| ())
     }
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response> {
-        self.client.create_room(request).await.map_err(|err| err.into())
+        self.client
+            .create_room(request)
+            .await
+            .map_err(|err| err.into())
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
-        self.client.leave_room(room_id).await.map_err(|err| err.into()).map(|_| ())
+        self.client
+            .leave_room(room_id)
+            .await
+            .map_err(|err| err.into())
+            .map(|_| ())
     }
     async fn user_id(&self) -> Result<UserId> {
         //self.client.user_id().await.ok_or(failure::Error::from(Err(MatrixError::RemoteUserIdNotFound)))
@@ -168,7 +176,7 @@ impl MatrixHandler {
     pub fn new<T: 'static + MatrixTransport>(
         db: Database2,
         comms: CommsVerifier,
-        transport: T
+        transport: T,
     ) -> Self {
         MatrixHandler {
             db: db,
@@ -194,7 +202,9 @@ impl MatrixHandler {
             } => self.handle_account_verification(net_account, account).await,
             LeaveRoom { net_account } => {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
-                    self.transport.send_message(&room_id, "Bye bye!".to_string()).await?;
+                    self.transport
+                        .send_message(&room_id, "Bye bye!".to_string())
+                        .await?;
                     debug!("Leaving room: {}", room_id.as_str());
                     let _ = self.transport.leave_room(&room_id).await;
                 } else {
@@ -224,20 +234,19 @@ impl MatrixHandler {
             if let Ok(room_id) = time::timeout(Duration::from_secs(20), async {
                 debug!("Connecting to {}", account.as_str());
 
-                let to_invite = [
-                    account
-                        .as_str()
-                        .clone()
-                        .try_into()
-                        .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?
-                ];
+                let to_invite = [account
+                    .as_str()
+                    .clone()
+                    .try_into()
+                    .map_err(|err| MatrixError::InvalidUserId(failure::Error::from(err)))?];
 
                 let mut request = Request::default();
                 request.invite = &to_invite;
                 request.name = Some("W3F Registrar Verification");
                 request.visibility = Visibility::Private;
 
-                let resp = self.transport
+                let resp = self
+                    .transport
                     .create_room(request)
                     .await
                     .map_err(|err| MatrixError::JoinRoom(err.into()))?;
@@ -279,7 +288,8 @@ impl MatrixHandler {
 
         debug!("Sending instructions to user");
         let verifier = Verifier2::new(&challenge_data);
-        self.transport.send_message(&room_id, verifier.init_message_builder(true))
+        self.transport
+            .send_message(&room_id, verifier.init_message_builder(true))
             .await
             .map_err(|err| MatrixError::SendMessage(err.into()).into())
             .map(|_| ())
@@ -291,7 +301,8 @@ impl MatrixHandler {
     ) -> Result<()> {
         // Do not respond to its own messages.
         if event.sender
-            == self.transport
+            == self
+                .transport
                 .user_id()
                 .await
                 .map_err(|_| MatrixError::RemoteUserIdNotFound)?
@@ -333,12 +344,13 @@ impl MatrixHandler {
                     event.sender.as_str()
                 );
 
-                self.transport.send_message(
-                    room_id,
-                    "Please send the signature directly as a text message.".to_string(),
-                )
-                .await
-                .map_err(|err| MatrixError::SendMessage(err.into()))?;
+                self.transport
+                    .send_message(
+                        room_id,
+                        "Please send the signature directly as a text message.".to_string(),
+                    )
+                    .await
+                    .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
                 return Ok(());
             };
@@ -350,7 +362,8 @@ impl MatrixHandler {
             verification_handler(&verifier, &self.db, &self.comms, &AccountType::Matrix).await?;
 
             // Inform user about the current state of the verification
-            self.transport.send_message(room_id, verifier.response_message_builder())
+            self.transport
+                .send_message(room_id, verifier.response_message_builder())
                 .await
                 .map_err(|err| MatrixError::SendMessage(err.into()))?;
         } else {
@@ -364,8 +377,11 @@ impl MatrixHandler {
 #[async_trait]
 impl EventEmitter for MatrixHandler {
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
-        let _ = self.handle_incoming_messages(room, event).await.map_err(|err| {
-            error!("{}", err);
-        });
+        let _ = self
+            .handle_incoming_messages(room, event)
+            .await
+            .map_err(|err| {
+                error!("{}", err);
+            });
     }
 }

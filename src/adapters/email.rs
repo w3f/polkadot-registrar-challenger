@@ -158,7 +158,7 @@ impl SmtpImapClientBuilder {
 }
 
 #[async_trait]
-pub trait EmailTransport: Sized + Send + Sync + Clone {
+pub trait EmailTransport: Send + Sync {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
     async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }
@@ -338,8 +338,6 @@ impl EmailHandler {
 
 impl EmailHandler {
     pub async fn start<T: 'static + EmailTransport>(self, transport: T) {
-        self.start_responder(transport.clone()).await;
-
         loop {
             let _ = self.local(&transport).await.map_err(|err| {
                 error!("{}", err);
@@ -350,34 +348,21 @@ impl EmailHandler {
     async fn local<T: EmailTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
-        match self.comms.recv().await {
-            AccountToVerify {
+        let mut interval = time::interval(Duration::from_secs(3));
+        match self.comms.try_recv() {
+            Some(AccountToVerify {
                 net_account: _,
                 account,
-            } => self.handle_account_verification(transport, account).await?,
-            _ => {}
+            }) => {
+                self.handle_account_verification(transport, account).await?;
+            }
+            _ => {
+                interval.tick().await;
+                self.handle_incoming_messages(transport).await?;
+            }
         }
 
         Ok(())
-    }
-    async fn start_responder<T: 'static + EmailTransport>(&self, transport: T) {
-        let c_self = self.clone();
-
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(3));
-
-            loop {
-                interval.tick().await;
-
-                let _ = c_self
-                    .handle_incoming_messages(&transport)
-                    .await
-                    .map_err(|err| {
-                        error!("{}", err);
-                        err
-                    });
-            }
-        });
     }
     async fn handle_account_verification<T: EmailTransport>(
         &self,
