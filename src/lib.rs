@@ -176,6 +176,7 @@ pub async fn setup(config: Config) -> Result<()> {
         .await?;
 
         info!("Setting up Twitter client");
+        /*
         let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
             .screen_name(Account::from(config.twitter_screen_name))
             .consumer_key(config.twitter_api_key)
@@ -185,6 +186,7 @@ pub async fn setup(config: Config) -> Result<()> {
             .token_secret(config.twitter_token_secret)
             .version(1.0)
             .build()?;
+        */
 
         info!("Setting up Email client");
         //let email = SmtpImapClientBuilder::new(db2.clone(), c_email)
@@ -205,9 +207,11 @@ pub async fn setup(config: Config) -> Result<()> {
         });
 
         info!("Starting Twitter task");
+        /*
         tokio::spawn(async move {
             twitter.start().await;
         });
+        */
 
         info!("Starting Email task");
         let l_db = db2.clone();
