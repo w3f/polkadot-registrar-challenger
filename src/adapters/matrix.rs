@@ -49,25 +49,6 @@ pub enum MatrixError {
     ChallengeDataNotFound(Account),
 }
 
-async fn send_msg(
-    client: &Client,
-    msg: String,
-    room_id: &matrix_sdk::identifiers::RoomId,
-) -> Result<()> {
-    client
-        .room_send(
-            room_id,
-            AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
-                // TODO: Make a proper Message Creator for this
-                TextMessageEventContent::plain(msg),
-            )),
-            None,
-        )
-        .await?;
-
-    Ok(())
-}
-
 #[async_trait]
 pub trait MatrixTransport: Send + Sync {
     async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()>;
@@ -82,14 +63,13 @@ pub struct MatrixClient {
 }
 
 impl MatrixClient {
-    pub async fn new<T: 'static + MatrixTransport>(
+    pub async fn new(
         homeserver: &str,
         username: &str,
         password: &str,
         db_path: &str,
         db: Database2,
         comms_emmiter: CommsVerifier,
-        transport: T,
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
@@ -97,7 +77,7 @@ impl MatrixClient {
         let client_config = ClientConfig::new().state_store(Box::new(store));
 
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
-        let mut client = Client::new_with_config(homeserver, client_config)
+        let client = Client::new_with_config(homeserver, client_config)
             .map_err(|err| MatrixError::ClientCreation(err.into()))?;
 
         // Login with credentials
@@ -127,13 +107,6 @@ impl MatrixClient {
             }
         }
 
-        // Add event emitter (responder)
-        client
-            .add_event_emitter(Box::new(
-                MatrixHandler::new(db, comms_emmiter, transport),
-            ))
-            .await;
-
         let sync_client = client.clone();
         tokio::spawn(async move {
             sync_client
@@ -141,9 +114,18 @@ impl MatrixClient {
                 .await;
         });
 
-        Ok(MatrixClient {
+        let mut matrix = MatrixClient {
             client: client,
-        })
+        };
+
+        // Add event emitter (responder)
+        matrix.client
+            .add_event_emitter(Box::new(
+                MatrixHandler::new(db, comms_emmiter, matrix.clone()),
+            ))
+            .await;
+
+        Ok(matrix)
     }
 }
 
@@ -194,27 +176,27 @@ impl MatrixHandler {
             transport: Box::new(transport),
         }
     }
-    pub async fn start<T: MatrixTransport>(self, transport: T) {
+    pub async fn start(self) {
         loop {
-            let _ = self.local(&transport).await.map_err(|err| {
+            let _ = self.local().await.map_err(|err| {
                 error!("{}", err);
                 err
             });
         }
     }
-    async fn local<T: MatrixTransport>(&self, transport: &T) -> Result<()> {
+    async fn local(&self) -> Result<()> {
         use CommsMessage::*;
 
         match self.comms.recv().await {
             AccountToVerify {
                 net_account,
                 account,
-            } => self.handle_account_verification(transport, net_account, account).await,
+            } => self.handle_account_verification(net_account, account).await,
             LeaveRoom { net_account } => {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
-                    transport.send_message(&room_id, "Bye bye!".to_string()).await?;
+                    self.transport.send_message(&room_id, "Bye bye!".to_string()).await?;
                     debug!("Leaving room: {}", room_id.as_str());
-                    let _ = transport.leave_room(&room_id).await;
+                    let _ = self.transport.leave_room(&room_id).await;
                 } else {
                     debug!(
                         "No active Matrix room found for address {}",
@@ -227,9 +209,8 @@ impl MatrixHandler {
             _ => panic!(),
         }
     }
-    async fn handle_account_verification<T: MatrixTransport>(
+    async fn handle_account_verification(
         &self,
-        transport: &T,
         net_account: NetAccount,
         account: Account,
     ) -> Result<()> {
@@ -256,7 +237,7 @@ impl MatrixHandler {
                 request.name = Some("W3F Registrar Verification");
                 request.visibility = Visibility::Private;
 
-                let resp = transport
+                let resp = self.transport
                     .create_room(request)
                     .await
                     .map_err(|err| MatrixError::JoinRoom(err.into()))?;
@@ -298,20 +279,19 @@ impl MatrixHandler {
 
         debug!("Sending instructions to user");
         let verifier = Verifier2::new(&challenge_data);
-        transport.send_message(&room_id, verifier.init_message_builder(true))
+        self.transport.send_message(&room_id, verifier.init_message_builder(true))
             .await
             .map_err(|err| MatrixError::SendMessage(err.into()).into())
             .map(|_| ())
     }
     async fn handle_incoming_messages(
         &self,
-        transport: &dyn MatrixTransport,
         room: SyncRoom,
         event: &SyncMessageEvent<MessageEventContent>,
     ) -> Result<()> {
         // Do not respond to its own messages.
         if event.sender
-            == transport
+            == self.transport
                 .user_id()
                 .await
                 .map_err(|_| MatrixError::RemoteUserIdNotFound)?
@@ -353,7 +333,7 @@ impl MatrixHandler {
                     event.sender.as_str()
                 );
 
-                transport.send_message(
+                self.transport.send_message(
                     room_id,
                     "Please send the signature directly as a text message.".to_string(),
                 )
@@ -370,7 +350,7 @@ impl MatrixHandler {
             verification_handler(&verifier, &self.db, &self.comms, &AccountType::Matrix).await?;
 
             // Inform user about the current state of the verification
-            transport.send_message(room_id, verifier.response_message_builder())
+            self.transport.send_message(room_id, verifier.response_message_builder())
                 .await
                 .map_err(|err| MatrixError::SendMessage(err.into()))?;
         } else {
@@ -384,7 +364,7 @@ impl MatrixHandler {
 #[async_trait]
 impl EventEmitter for MatrixHandler {
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
-        let _ = self.handle_incoming_messages(&*self.transport, room, event).await.map_err(|err| {
+        let _ = self.handle_incoming_messages(room, event).await.map_err(|err| {
             error!("{}", err);
         });
     }

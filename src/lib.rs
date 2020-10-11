@@ -7,7 +7,7 @@ extern crate serde;
 #[macro_use]
 extern crate failure;
 
-use adapters::{SmtpImapClientBuilder, EmailHandler, MatrixClient, TwitterBuilder};
+use adapters::{SmtpImapClientBuilder, EmailHandler, MatrixClient, MatrixHandler, TwitterBuilder};
 use connector::Connector;
 use db::Database2;
 use health_check::HealthCheck;
@@ -165,18 +165,15 @@ pub async fn setup(config: Config) -> Result<()> {
 
     if config.enable_accounts {
         info!("Setting up Matrix client");
-        /*
-        let matrix = MatrixClient::new(
+        let matrix_transport = MatrixClient::new(
             &config.matrix_homeserver,
             &config.matrix_username,
             &config.matrix_password,
             &config.matrix_db_path,
             db2.clone(),
-            c_matrix,
             c_emitter,
         )
         .await?;
-        */
 
         info!("Setting up Twitter client");
         let twitter = TwitterBuilder::new(db2.clone(), c_twitter)
@@ -200,11 +197,10 @@ pub async fn setup(config: Config) -> Result<()> {
             .build()?;
 
         info!("Starting Matrix task");
-        /*
+        let l_db = db2.clone();
         tokio::spawn(async move {
-            matrix.start().await;
+            MatrixHandler::new(l_db, c_matrix, matrix_transport).start().await;
         });
-        */
 
         info!("Starting Twitter task");
         tokio::spawn(async move {
@@ -212,8 +208,9 @@ pub async fn setup(config: Config) -> Result<()> {
         });
 
         info!("Starting Email task");
+        let l_db = db2.clone();
         tokio::spawn(async move {
-            EmailHandler::new(db2.clone(), c_email).start(email_transport).await;
+            EmailHandler::new(l_db, c_email).start(email_transport).await;
         });
     }
 
