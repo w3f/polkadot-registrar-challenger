@@ -1,7 +1,7 @@
 use crate::comms::CommsVerifier;
 use crate::db::Database2;
 use crate::primitives::{unix_time, Account, AccountType, Challenge, Result};
-use crate::verifier::{Verifier2, verification_handler};
+use crate::verifier::{verification_handler, Verifier2};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};

@@ -1,19 +1,19 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{Verifier2, verification_handler};
+use crate::primitives::{Account, AccountType, Result};
+use crate::verifier::{verification_handler, Verifier2};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
+use lettre::smtp::SmtpTransport;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use tokio::time::{self, Duration};
-use tokio::sync::Mutex;
 use native_tls::TlsStream;
-use lettre::smtp::SmtpTransport;
-use std::result::Result as StdResult;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::net::TcpStream;
+use std::result::Result as StdResult;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::{self, Duration};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EmailId(u64);
@@ -137,20 +137,15 @@ impl ClientBuilder {
         let password = self.password.ok_or(ClientError::IncompleteBuilder)?;
 
         // SMTP transport
-        let mut smtp = SmtpClient::new_simple(&smtp_server)?
-            .credentials(Credentials::new(
-                user.to_string(),
-                password.to_string(),
-            ))
+        let smtp = SmtpClient::new_simple(&smtp_server)?
+            .credentials(Credentials::new(user.to_string(), password.to_string()))
             .transport();
 
         // IMAP transport
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((imap_server.as_str(), 993), &imap_server, &tls)?;
 
-        let mut imap = client
-            .login(&user, &password)
-            .map_err(|(err, _)| err)?;
+        let mut imap = client.login(&user, &password).map_err(|(err, _)| err)?;
 
         imap.select(&inbox)?;
 
@@ -163,7 +158,7 @@ impl ClientBuilder {
 }
 
 #[async_trait]
-pub trait EmailTransport: Sized + Send + Sync {
+pub trait EmailTransport: Sized + Send + Sync + Clone {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
     async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
 }
@@ -288,24 +283,23 @@ impl EmailTransport for SmtpImapClient {
 }
 
 #[derive(Clone)]
-pub struct ClientHandler {
+pub struct EmailHandler {
     db: Database2,
     comms: CommsVerifier,
 }
 
-impl ClientHandler {
+impl EmailHandler {
     pub fn new(db: Database2, comms: CommsVerifier) -> Self {
-        ClientHandler {
+        EmailHandler {
             db: db,
             comms: comms,
         }
     }
 }
 
-impl ClientHandler {
-    pub async fn start2<T: EmailTransport>(self, transport: T) {
-        // TODO
-        //self.start_responder::<T>().await;
+impl EmailHandler {
+    pub async fn start<T: 'static + EmailTransport>(self, transport: T) {
+        self.start_responder(transport.clone()).await;
 
         loop {
             let _ = self.local(&transport).await.map_err(|err| {
@@ -314,52 +308,37 @@ impl ClientHandler {
             });
         }
     }
-    pub async fn start(self) {
-        /*
-        self.start_responder().await;
-
-        loop {
-            let _ = self.local().await.map_err(|err| {
-                error!("{}", err);
-                err
-            });
-        }
-        */
-    }
     async fn local<T: EmailTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
         match self.comms.recv().await {
             AccountToVerify {
-                net_account,
+                net_account: _,
                 account,
-            } => {
-                self.handle_account_verification(transport, account)
-                    .await?
-            }
+            } => self.handle_account_verification(transport, account).await?,
             _ => {}
         }
 
         Ok(())
     }
-    async fn start_responder<T: EmailTransport>(&self) {
-        /*
+    async fn start_responder<T: 'static + EmailTransport>(&self, transport: T) {
         let c_self = self.clone();
 
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(3));
-            let client = T::new().await.unwrap();
 
             loop {
                 interval.tick().await;
 
-                let _ = c_self.handle_incoming_messages(&client).await.map_err(|err| {
-                    error!("{}", err);
-                    err
-                });
+                let _ = c_self
+                    .handle_incoming_messages(&transport)
+                    .await
+                    .map_err(|err| {
+                        error!("{}", err);
+                        err
+                    });
             }
         });
-        */
     }
     async fn handle_account_verification<T: EmailTransport>(
         &self,
@@ -375,7 +354,8 @@ impl ClientHandler {
 
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
-        transport.send_message(&account, verifier.init_message_builder(true))
+        transport
+            .send_message(&account, verifier.init_message_builder(true))
             .await?;
 
         Ok(())
@@ -428,7 +408,8 @@ impl ClientHandler {
             verification_handler(&verifier, &self.db, &self.comms, &AccountType::Email).await?;
 
             // Inform user about the current state of the verification
-            transport.send_message(sender, verifier.response_message_builder())
+            transport
+                .send_message(sender, verifier.response_message_builder())
                 .await?;
 
             self.db.track_email_id(email_id).await?;
