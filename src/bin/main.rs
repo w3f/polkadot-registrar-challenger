@@ -15,14 +15,16 @@ async fn main() -> Result<(), Error> {
     let db2 = Database2::new(&config.registrar_db_path)?;
 
     info!("Starting health check thread");
-    std::thread::spawn(|| {
-        HealthCheck::start()
-            .map_err(|err| {
-                error!("Failed to start health check service: {}", err);
-                std::process::exit(1);
-            })
-            .unwrap();
-    });
+    if config.enable_health_check {
+        std::thread::spawn(|| {
+            HealthCheck::start()
+                .map_err(|err| {
+                    error!("Failed to start health check service: {}", err);
+                    std::process::exit(1);
+                })
+                .unwrap();
+        });
+    }
 
     if config.enable_accounts {
         info!("Setting up Matrix client");

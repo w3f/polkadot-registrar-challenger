@@ -244,7 +244,7 @@ impl Connector {
         loop {
             if let Some(message) = reader.next().await {
                 if let Ok(message) = &message {
-                    debug!("Received message: {:?}", message);
+                    trace!("Received message: {:?}", message);
 
                     match message {
                         TungMessage::Text(payload) => {

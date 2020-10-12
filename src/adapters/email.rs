@@ -214,13 +214,12 @@ impl EmailTransport for SmtpImapClient {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
         let mut transport = self.imap.lock().await;
 
-        // Find the message sequence/index of unread messages and fetch that
-        // range, plus some extra. The database keeps track of which messages
+        // Fetch the messages of the last day. The database keeps track of which messages
         // have been processed.
         //
         // Gmail has a custom search syntax and does not support the IMAP
         // standardized queries.
-        let recent_seq = transport.search("X-GM-RAW \"is:unread\"")?;
+        let recent_seq = transport.search("X-GM-RAW \"newer_than:2d\"")?;
 
         if recent_seq.is_empty() {
             return Ok(vec![]);
@@ -232,7 +231,7 @@ impl EmailTransport for SmtpImapClient {
         let query = if min == max {
             min.to_string()
         } else {
-            format!("{}:{}", min.saturating_sub(5).max(1), max)
+            format!("{}:{}", min, max)
         };
 
         let messages = transport.fetch(query, "(RFC822 UID)")?;
@@ -348,7 +347,6 @@ impl EmailHandler {
     async fn local<T: EmailTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
-        let mut interval = time::interval(Duration::from_secs(3));
         match self.comms.try_recv() {
             Some(AccountToVerify {
                 net_account: _,
@@ -357,7 +355,7 @@ impl EmailHandler {
                 self.handle_account_verification(transport, account).await?;
             }
             _ => {
-                interval.tick().await;
+                time::delay_for(Duration::from_secs(3)).await;
                 self.handle_incoming_messages(transport).await?;
             }
         }
@@ -388,6 +386,7 @@ impl EmailHandler {
         let messages = transport.request_messages().await?;
 
         if messages.is_empty() {
+            debug!("No new messages found");
             return Ok(());
         }
 

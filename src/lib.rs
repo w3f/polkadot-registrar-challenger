@@ -40,6 +40,7 @@ pub struct Config {
     pub watcher_url: String,
     pub enable_watcher: bool,
     pub enable_accounts: bool,
+    pub enable_health_check: bool,
     //
     pub matrix_homeserver: String,
     pub matrix_username: String,
@@ -182,7 +183,6 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
         }
 
         info!("Starting Watcher connector task, listening...");
-
         tokio::spawn(async move {
             connector.start().await;
         });
