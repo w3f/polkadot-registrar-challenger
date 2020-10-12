@@ -368,7 +368,7 @@ impl EmailHandler {
                 .await?;
 
             if challenge_data.is_empty() {
-                warn!("No challenge data found for {}", sender.as_str());
+                warn!("No challenge data found for {}. Ignoring", sender.as_str());
 
                 self.db.track_email_id(email_id).await?;
                 continue;
