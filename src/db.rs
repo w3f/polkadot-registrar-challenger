@@ -202,6 +202,15 @@ impl Database2 {
             params![],
         )?;
 
+        // Table for all display names.
+        con.execute("
+            CREATE TABLE IF NOT EXISTS display_names (
+                id    INTEGER PRIMARY KEY,
+                name  TEXT NOT NULL UNIQUE
+            )
+        ",
+        params![])?;
+
         Ok(Database2 {
             con: Arc::new(Mutex::new(con)),
         })
@@ -317,7 +326,7 @@ impl Database2 {
 
         let mut net_accounts = vec![];
         while let Some(row) = rows.next()? {
-            net_accounts.push(row.get::<_, Account>(0)?)
+            net_accounts.push(row.get::<_, Account>(0)?);
         }
 
         Ok(net_accounts)
@@ -910,6 +919,25 @@ impl Database2 {
         }
 
         Ok(untracked_email_ids)
+    }
+    pub async fn select_display_names(&self) -> Result<Vec<Account>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare("
+            SELECT
+                name
+            FROM
+                display_names
+        ")?;
+
+        let mut rows = stmt.query(params![])?;
+
+        let mut accounts = vec![];
+        while let Some(row) = rows.next()? {
+            accounts.push(row.get::<_, Account>(0)?);
+        }
+
+        Ok(accounts)
     }
 }
 

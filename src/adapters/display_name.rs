@@ -1,5 +1,5 @@
 use crate::Database2;
-use crate::comms::CommsVerifier;
+use crate::comms::{CommsVerifier, CommsMessage};
 use crate::primitives::Result;
 
 pub struct StringMatcher {
@@ -23,6 +23,17 @@ impl StringMatcher {
         }
     }
     pub async fn local(&self) -> Result<()> {
+        use CommsMessage::*;
+
+        match self.comms.recv().await {
+            AccountToVerify {
+                net_account,
+                account,
+            } => {
+
+            }
+            _ => error!("Received unrecognized message type"),
+        }
 
         Ok(())
     }
