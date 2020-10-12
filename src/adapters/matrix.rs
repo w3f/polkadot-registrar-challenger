@@ -195,7 +195,10 @@ impl MatrixHandler {
             AccountToVerify {
                 net_account,
                 account,
-            } => self.handle_account_verification(net_account, account).await?,
+            } => {
+                self.handle_account_verification(net_account, account)
+                    .await?
+            }
             LeaveRoom { net_account } => {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
                     self.transport

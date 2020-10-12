@@ -1,6 +1,6 @@
-use crate::Database2;
-use crate::comms::{CommsVerifier, CommsMessage};
+use crate::comms::{CommsMessage, CommsVerifier};
 use crate::primitives::Result;
+use crate::Database2;
 
 pub struct StringMatcher {
     db: Database2,
@@ -29,9 +29,7 @@ impl StringMatcher {
             AccountToVerify {
                 net_account,
                 account,
-            } => {
-
-            }
+            } => {}
             _ => error!("Received unrecognized message type"),
         }
 

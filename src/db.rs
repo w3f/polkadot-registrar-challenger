@@ -203,13 +203,15 @@ impl Database2 {
         )?;
 
         // Table for all display names.
-        con.execute("
+        con.execute(
+            "
             CREATE TABLE IF NOT EXISTS display_names (
                 id    INTEGER PRIMARY KEY,
                 name  TEXT NOT NULL UNIQUE
             )
         ",
-        params![])?;
+            params![],
+        )?;
 
         Ok(Database2 {
             con: Arc::new(Mutex::new(con)),
@@ -920,15 +922,35 @@ impl Database2 {
 
         Ok(untracked_email_ids)
     }
+    pub async fn insert_display_name(&self, account: &Account) -> Result<()> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.execute_named(
+            "
+            INSERT OR IGNORE INTO display_names (
+                name
+            ) VALUES (
+                :account
+            )
+        ",
+            named_params! {
+                ":account": account,
+            },
+        )?;
+
+        Ok(())
+    }
     pub async fn select_display_names(&self) -> Result<Vec<Account>> {
         let con = self.con.lock().await;
 
-        let mut stmt = con.prepare("
+        let mut stmt = con.prepare(
+            "
             SELECT
                 name
             FROM
                 display_names
-        ")?;
+        ",
+        )?;
 
         let mut rows = stmt.query(params![])?;
 
