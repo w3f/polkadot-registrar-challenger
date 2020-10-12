@@ -130,29 +130,12 @@ impl SmtpImapClientBuilder {
         self
     }
     pub fn build(self) -> Result<SmtpImapClient> {
-        let smtp_server = self.server.ok_or(ClientError::IncompleteBuilder)?;
-        let imap_server = self.imap_server.ok_or(ClientError::IncompleteBuilder)?;
-        let inbox = self.inbox.ok_or(ClientError::IncompleteBuilder)?;
-        let user = self.user.ok_or(ClientError::IncompleteBuilder)?;
-        let password = self.password.ok_or(ClientError::IncompleteBuilder)?;
-
-        // SMTP transport
-        let smtp = SmtpClient::new_simple(&smtp_server)?
-            .credentials(Credentials::new(user.to_string(), password.to_string()))
-            .transport();
-
-        // IMAP transport
-        let tls = native_tls::TlsConnector::builder().build()?;
-        let client = imap::connect((imap_server.as_str(), 993), &imap_server, &tls)?;
-
-        let mut imap = client.login(&user, &password).map_err(|(err, _)| err)?;
-
-        imap.select(&inbox)?;
-
         Ok(SmtpImapClient {
-            smtp: Arc::new(Mutex::new(smtp)),
-            imap: Arc::new(Mutex::new(imap)),
-            user: user,
+            smtp_server: self.server.ok_or(ClientError::IncompleteBuilder)?,
+            imap_server: self.imap_server.ok_or(ClientError::IncompleteBuilder)?,
+            inbox: self.inbox.ok_or(ClientError::IncompleteBuilder)?,
+            user: self.user.ok_or(ClientError::IncompleteBuilder)?,
+            password: self.password.ok_or(ClientError::IncompleteBuilder)?,
         })
     }
 }
@@ -165,22 +148,29 @@ pub trait EmailTransport: 'static + Send + Sync {
 
 #[derive(Clone)]
 pub struct SmtpImapClient {
-    smtp: Arc<Mutex<SmtpTransport>>,
-    imap: Arc<Mutex<imap::Session<TlsStream<TcpStream>>>>,
+    smtp_server: String,
+    imap_server: String,
+    inbox: String,
     user: String,
+    password: String,
 }
 
 #[async_trait]
 impl EmailTransport for SmtpImapClient {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
-        let mut transport = self.imap.lock().await;
+        let tls = native_tls::TlsConnector::builder().build()?;
+        let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
+
+        let mut imap = client.login(&self.user, &self.password).map_err(|(err, _)| err)?;
+
+        imap.select(&self.inbox)?;
 
         // Fetch the messages of the last day. The database keeps track of which messages
         // have been processed.
         //
         // Gmail has a custom search syntax and does not support the IMAP
         // standardized queries.
-        let recent_seq = transport.search("X-GM-RAW \"newer_than:2d\"")?;
+        let recent_seq = imap.search("X-GM-RAW \"newer_than:2d\"")?;
 
         if recent_seq.is_empty() {
             return Ok(vec![]);
@@ -195,7 +185,7 @@ impl EmailTransport for SmtpImapClient {
             format!("{}:{}", min, max)
         };
 
-        let messages = transport.fetch(query, "(RFC822 UID)")?;
+        let messages = imap.fetch(query, "(RFC822 UID)")?;
 
         fn create_message_context(
             email_id: EmailId,
@@ -264,7 +254,10 @@ impl EmailTransport for SmtpImapClient {
         Ok(parsed_messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        let mut transport = self.smtp.lock().await;
+        // SMTP transport
+        let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
+            .credentials(Credentials::new(self.user.to_string(), self.password.to_string()))
+            .transport();
 
         let email = EmailBuilder::new()
             // Addresses can be specified by the tuple (email, alias)
@@ -275,7 +268,7 @@ impl EmailTransport for SmtpImapClient {
             .build()
             .unwrap();
 
-        let _ = transport.send(email.into())?;
+        let _ = smtp.send(email.into())?;
 
         Ok(())
     }
