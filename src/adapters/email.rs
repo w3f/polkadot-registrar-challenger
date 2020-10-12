@@ -4,15 +4,10 @@ use crate::primitives::{Account, AccountType, Result};
 use crate::verifier::{verification_handler, Verifier2};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
-use lettre::smtp::SmtpTransport;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
-use native_tls::TlsStream;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use std::net::TcpStream;
 use std::result::Result as StdResult;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
@@ -161,7 +156,9 @@ impl EmailTransport for SmtpImapClient {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
-        let mut imap = client.login(&self.user, &self.password).map_err(|(err, _)| err)?;
+        let mut imap = client
+            .login(&self.user, &self.password)
+            .map_err(|(err, _)| err)?;
 
         imap.select(&self.inbox)?;
 
@@ -256,7 +253,10 @@ impl EmailTransport for SmtpImapClient {
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
         // SMTP transport
         let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
-            .credentials(Credentials::new(self.user.to_string(), self.password.to_string()))
+            .credentials(Credentials::new(
+                self.user.to_string(),
+                self.password.to_string(),
+            ))
             .transport();
 
         let email = EmailBuilder::new()
