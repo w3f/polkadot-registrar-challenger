@@ -1,5 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::identity::OnChainIdentity;
+use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
@@ -244,7 +244,7 @@ impl Connector {
         loop {
             if let Some(message) = reader.next().await {
                 if let Ok(message) = &message {
-                    debug!("Received message: {:?}", message);
+                    trace!("Received message: {:?}", message);
 
                     match message {
                         TungMessage::Text(payload) => {

@@ -1,4 +1,4 @@
-use crate::identity::OnChainIdentity;
+use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use tokio::time::{self, Duration};

@@ -1,6 +1,6 @@
 use super::Result;
 use crate::adapters::{EmailId, TwitterId};
-use crate::identity::{AccountStatus, OnChainIdentity};
+use crate::manager::{AccountStatus, OnChainIdentity};
 use crate::primitives::{
     unix_time, Account, AccountType, Challenge, ChallengeStatus, NetAccount, NetworkAddress,
 };
@@ -19,8 +19,6 @@ pub enum DatabaseError {
     BackendError(rusqlite::Error),
     #[fail(display = "SQLite database is not in auto-commit mode")]
     NoAutocommit,
-    #[fail(display = "Failed to convert column field into native type")]
-    InvalidType,
     #[fail(display = "Attempt to change something which does not exist")]
     NoChange,
 }
@@ -421,28 +419,6 @@ impl Database2 {
 
         Ok(room_ids)
     }
-    pub async fn select_net_account_from_room_id(
-        &self,
-        room_id: &RoomId,
-    ) -> Result<Option<NetAccount>> {
-        let con = self.con.lock().await;
-
-        con.query_row_named(
-            "SELECT net_account
-                FROM pending_judgments
-                INNER JOIN known_matrix_rooms
-                    ON known_matrix_rooms.net_account_id = pending_judgments.id
-                WHERE
-                    known_matrix_rooms.room_id = :room_id
-                ",
-            named_params! {
-                ":room_id": room_id.as_str(),
-            },
-            |row| row.get::<_, NetAccount>(0),
-        )
-        .optional()
-        .map_err(|err| failure::Error::from(err))
-    }
     pub async fn set_account_status(
         &self,
         net_account: &NetAccount,
@@ -487,7 +463,7 @@ impl Database2 {
         &self,
         net_account: &NetAccount,
         account_ty: &AccountType,
-        status: ChallengeStatus,
+        status: &ChallengeStatus,
     ) -> Result<()> {
         self.con.lock().await.execute_named(
             "UPDATE
@@ -678,7 +654,8 @@ impl Database2 {
 
         Ok(())
     }
-    // TODO: Test this
+    // TODO: Make use of this
+    #[allow(dead_code)]
     pub async fn select_invalid_accounts(
         &self,
         net_account: &NetAccount,
@@ -751,6 +728,7 @@ impl Database2 {
 
         Ok(account_set)
     }
+    #[cfg(test)]
     pub async fn insert_twitter_id(&self, account: &Account, twitter_id: &TwitterId) -> Result<()> {
         self.insert_twitter_ids(&[(account, twitter_id)]).await
     }
@@ -1321,7 +1299,6 @@ mod tests {
             let alice_room_1 = RoomId::try_from("!ALICE1:matrix.org").unwrap();
             let alice_room_2 = RoomId::try_from("!ALICE2:matrix.org").unwrap();
             let bob_room = RoomId::try_from("!BOB:matrix.org").unwrap();
-            let eve_room = RoomId::try_from("!EVE:matrix.org").unwrap();
 
             // Insert RoomIds
             db.insert_room_id(&alice, &alice_room_1).await.unwrap();
@@ -1345,18 +1322,6 @@ mod tests {
             assert_eq!(res.len(), 2);
             assert!(res.contains(&alice_room_2));
             assert!(res.contains(&bob_room));
-
-            // Get NetAccount based on RoomId.
-            let res = db
-                .select_net_account_from_room_id(&bob_room)
-                .await
-                .unwrap()
-                .unwrap();
-            assert_eq!(res, bob);
-
-            // Does not exist.
-            let res = db.select_net_account_from_room_id(&eve_room).await.unwrap();
-            assert!(res.is_none());
         });
     }
 
@@ -1384,7 +1349,7 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an additional account.
-            db.set_challenge_status(&alice, &AccountType::Matrix, ChallengeStatus::Accepted)
+            db.set_challenge_status(&alice, &AccountType::Matrix, &ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 
@@ -1393,7 +1358,7 @@ mod tests {
             assert_eq!(res, false);
 
             // Accept an account.
-            db.set_challenge_status(&alice, &AccountType::Email, ChallengeStatus::Accepted)
+            db.set_challenge_status(&alice, &AccountType::Email, &ChallengeStatus::Accepted)
                 .await
                 .unwrap();
 

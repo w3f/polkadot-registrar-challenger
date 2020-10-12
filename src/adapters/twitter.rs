@@ -1,7 +1,7 @@
 use crate::comms::CommsVerifier;
 use crate::db::Database2;
-use crate::primitives::{unix_time, Account, AccountType, Challenge, ChallengeStatus, Result};
-use crate::verifier::Verifier2;
+use crate::primitives::{unix_time, Account, AccountType, Challenge, Result};
+use crate::verifier::{verification_handler, Verifier2};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -87,12 +87,10 @@ pub struct TwitterBuilder {
     token: Option<String>,
     token_secret: Option<String>,
     version: Option<f64>,
-    db: Database2,
-    comms: CommsVerifier,
 }
 
 impl TwitterBuilder {
-    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+    pub fn new() -> Self {
         TwitterBuilder {
             screen_name: None,
             consumer_key: None,
@@ -101,8 +99,6 @@ impl TwitterBuilder {
             token: None,
             token_secret: None,
             version: None,
-            db: db,
-            comms: comms,
         }
     }
     pub fn screen_name(mut self, account: Account) -> Self {
@@ -145,8 +141,6 @@ impl TwitterBuilder {
             token: self.token.ok_or(TwitterError::IncompleteBuilder)?,
             token_secret: self.token_secret.ok_or(TwitterError::IncompleteBuilder)?,
             version: self.version.ok_or(TwitterError::IncompleteBuilder)?,
-            db: self.db,
-            comms: self.comms,
         })
     }
 }
@@ -160,8 +154,6 @@ pub struct Twitter {
     token: String,
     token_secret: String,
     version: f64,
-    db: Database2,
-    comms: CommsVerifier,
 }
 
 use hmac::{Hmac, Mac, NewMac};
@@ -180,6 +172,183 @@ impl HttpMethod {
             POST => "POST",
             GET => "GET",
         }
+    }
+}
+
+#[async_trait]
+pub trait TwitterTransport: 'static + Send + Sync {
+    async fn request_messages(
+        &self,
+        exclude: &TwitterId,
+        watermark: u64,
+    ) -> Result<(Vec<ReceivedMessageContext>, u64)>;
+    async fn lookup_twitter_id(
+        &self,
+        twitter_ids: Option<&[&TwitterId]>,
+        accounts: Option<&[&Account]>,
+    ) -> Result<Vec<(Account, TwitterId)>>;
+    async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError>;
+    fn my_screen_name(&self) -> &Account;
+}
+
+pub struct TwitterHandler {
+    db: Database2,
+    comms: CommsVerifier,
+}
+
+impl TwitterHandler {
+    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+        TwitterHandler {
+            db: db,
+            comms: comms,
+        }
+    }
+    pub async fn start<T: TwitterTransport>(self, transport: T) {
+        // TODO: Improve error case
+        let my_id = transport
+            .lookup_twitter_id(None, Some(&[transport.my_screen_name()]))
+            .await
+            .unwrap()
+            .remove(0)
+            .1;
+
+        let mut interval = time::interval(Duration::from_secs(65));
+
+        loop {
+            interval.tick().await;
+
+            let _ = self
+                .handle_incoming_messages(&transport, &my_id)
+                .await
+                .map_err(|err| {
+                    error!("{}", err);
+                });
+        }
+    }
+    pub async fn handle_incoming_messages<T: TwitterTransport>(
+        &self,
+        transport: &T,
+        my_id: &TwitterId,
+    ) -> Result<()> {
+        let watermark = self
+            .db
+            .select_watermark(&AccountType::Twitter)
+            .await?
+            .unwrap_or(0);
+
+        let (messages, watermark) = transport.request_messages(my_id, watermark).await?;
+
+        if messages.is_empty() {
+            trace!("No new messages received");
+            return Ok(());
+        } else {
+            debug!("Received {} new messasge(-s)", messages.len());
+        }
+
+        let mut idents = vec![];
+
+        let mut to_lookup = vec![];
+        for message in &messages {
+            // Avoid duplicates.
+            if let Some(_) = idents
+                .iter()
+                .find(|(_, twitter_id, _)| *twitter_id == &message.sender)
+            {
+                continue;
+            }
+
+            // Lookup TwitterId in database.
+            if let Some((account, init_msg)) = self
+                .db
+                .select_account_from_twitter_id(&message.sender)
+                .await?
+            {
+                debug!(
+                    "Found associated match for {}: {}",
+                    message.sender.as_u64(),
+                    account.as_str()
+                );
+
+                // Add items to the identity list, no need to look those up.
+                idents.push((account, &message.sender, init_msg));
+            } else {
+                debug!(
+                    "Requiring to lookup screen name for {}",
+                    message.sender.as_u64()
+                );
+
+                // TwitterIds need to be looked up via the Twitter API.
+                to_lookup.push(&message.sender);
+            }
+        }
+
+        let lookup_results;
+        if !to_lookup.is_empty() {
+            debug!("Looking up TwitterIds");
+            lookup_results = transport.lookup_twitter_id(Some(&to_lookup), None).await?;
+
+            for (account, twitter_id) in &lookup_results {
+                idents.push((account.clone(), &twitter_id, false));
+            }
+
+            self.db
+                .insert_twitter_ids(
+                    lookup_results
+                        .iter()
+                        .map(|(account, twitter_id)| (account, twitter_id))
+                        .collect::<Vec<(&Account, &TwitterId)>>()
+                        .as_slice(),
+                )
+                .await?;
+        }
+
+        for (account, twitter_id, init_msg) in &idents {
+            debug!("Starting verification process for {}", account.as_str());
+
+            let challenge_data = self
+                .db
+                .select_challenge_data(&account, &AccountType::Twitter)
+                .await?;
+
+            // TODO: `select_challenge_data` should return an error.
+            if challenge_data.is_empty() {
+                warn!(
+                    "No challenge data found for account {}. Ignoring.",
+                    account.as_str()
+                );
+                continue;
+            }
+
+            let mut verifier = Verifier2::new(&challenge_data);
+
+            if !*init_msg {
+                transport
+                    .send_message(&twitter_id, verifier.init_message_builder(false))
+                    .await?;
+                self.db.confirm_init_message(&account).await?;
+                continue;
+            }
+
+            // Verify each message received.
+            messages
+                .iter()
+                .filter(|msg| &msg.sender == *twitter_id)
+                .for_each(|msg| verifier.verify(&msg.message));
+
+            // Update challenge statuses and notify manager
+            verification_handler(&verifier, &self.db, &self.comms, &AccountType::Twitter).await?;
+
+            // Inform user about the current state of the verification
+            transport
+                .send_message(&twitter_id, verifier.response_message_builder())
+                .await?;
+        }
+
+        self.db
+            .update_watermark(&AccountType::Twitter, watermark)
+            .await?;
+
+        Ok(())
     }
 }
 
@@ -259,7 +428,7 @@ impl Twitter {
 
         Ok(())
     }
-    pub async fn get_request<T: DeserializeOwned>(
+    async fn get_request<T: DeserializeOwned>(
         &self,
         url: &str,
         params: Option<&[(&str, &str)]>,
@@ -306,7 +475,7 @@ impl Twitter {
             }
         })
     }
-    pub async fn post_request<T: DeserializeOwned, B: Serialize>(
+    async fn post_request<T: DeserializeOwned, B: Serialize>(
         &self,
         url: &str,
         body: B,
@@ -342,9 +511,13 @@ impl Twitter {
             }
         })
     }
+}
+
+#[async_trait]
+impl TwitterTransport for Twitter {
     async fn request_messages(
         &self,
-        exclude_me: &TwitterId,
+        exclude: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<ReceivedMessageContext>, u64)> {
         self.get_request::<ApiMessageRequest>(
@@ -352,9 +525,8 @@ impl Twitter {
             None,
         )
         .await?
-        .get_messages(exclude_me, watermark)
+        .get_messages(exclude, watermark)
     }
-    // TODO: Should return error if empty list gets passed on.
     async fn lookup_twitter_id(
         &self,
         twitter_ids: Option<&[&TwitterId]>,
@@ -413,186 +585,16 @@ impl Twitter {
             .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
-    pub async fn send_message(&self, id: &TwitterId, msg: String) -> StdResult<(), TwitterError> {
+    async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
         self.post_request::<ApiMessageSend, _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
-            ApiMessageSend::new(id, msg),
+            ApiMessageSend::new(id, message),
         )
         .await
         .map(|_| ())
     }
-    pub async fn start(self) {
-        // TODO: Improve error case
-        let my_id = self
-            .lookup_twitter_id(None, Some(&[&self.screen_name]))
-            .await
-            .unwrap()
-            .remove(0)
-            .1;
-
-        let mut interval = time::interval(Duration::from_secs(65));
-
-        loop {
-            interval.tick().await;
-
-            let _ = self.handle_incoming_messages(&my_id).await.map_err(|err| {
-                error!("{}", err);
-            });
-        }
-    }
-    pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
-        let watermark = self
-            .db
-            .select_watermark(&AccountType::Twitter)
-            .await?
-            .unwrap_or(0);
-
-        let (messages, watermark) = self.request_messages(my_id, watermark).await?;
-
-        if messages.is_empty() {
-            trace!("No new messages received");
-            return Ok(());
-        } else {
-            debug!("Received {} new messasge(-s)", messages.len());
-        }
-
-        let mut idents = vec![];
-
-        let mut to_lookup = vec![];
-        for message in &messages {
-            // Avoid duplicates.
-            if let Some(_) = idents
-                .iter()
-                .find(|(_, twitter_id, _)| *twitter_id == &message.sender)
-            {
-                continue;
-            }
-
-            // Lookup TwitterId in database.
-            if let Some((account, init_msg)) = self
-                .db
-                .select_account_from_twitter_id(&message.sender)
-                .await?
-            {
-                debug!(
-                    "Found associated match for {}: {}",
-                    message.sender.as_u64(),
-                    account.as_str()
-                );
-
-                // Add items to the identity list, no need to look those up.
-                idents.push((account, &message.sender, init_msg));
-            } else {
-                debug!(
-                    "Requiring to lookup screen name for {}",
-                    message.sender.as_u64()
-                );
-
-                // TwitterIds need to be looked up via the Twitter API.
-                to_lookup.push(&message.sender);
-            }
-        }
-
-        let lookup_results;
-        if !to_lookup.is_empty() {
-            debug!("Looking up TwitterIds");
-            lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
-
-            for (account, twitter_id) in &lookup_results {
-                idents.push((account.clone(), &twitter_id, false));
-            }
-
-            self.db
-                .insert_twitter_ids(
-                    lookup_results
-                        .iter()
-                        .map(|(account, twitter_id)| (account, twitter_id))
-                        .collect::<Vec<(&Account, &TwitterId)>>()
-                        .as_slice(),
-                )
-                .await?;
-        }
-
-        for (account, twitter_id, init_msg) in &idents {
-            debug!("Starting verification process for {}", account.as_str());
-
-            let challenge_data = self
-                .db
-                .select_challenge_data(&account, &AccountType::Twitter)
-                .await?;
-
-            // TODO: `select_challenge_data` should return an error.
-            if challenge_data.is_empty() {
-                warn!(
-                    "No challenge data found for account {}. Ignoring.",
-                    account.as_str()
-                );
-                continue;
-            }
-
-            let mut verifier = Verifier2::new(&challenge_data);
-
-            if !*init_msg {
-                self.send_message(&twitter_id, verifier.init_message_builder(false))
-                    .await?;
-                self.db.confirm_init_message(&account).await?;
-                continue;
-            }
-
-            // Verify each message received.
-            messages
-                .iter()
-                .filter(|msg| &msg.sender == *twitter_id)
-                .for_each(|msg| verifier.verify(&msg.message));
-
-            for network_address in verifier.valid_verifications() {
-                debug!(
-                    "Valid verification for address: {}",
-                    network_address.address().as_str()
-                );
-
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Twitter,
-                        ChallengeStatus::Accepted,
-                    )
-                    .await?;
-
-                // Tell the manager to check the user's account states.
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            for network_address in verifier.invalid_verifications() {
-                debug!(
-                    "Invalid verification for address: {}",
-                    network_address.address().as_str()
-                );
-
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Twitter,
-                        ChallengeStatus::Rejected,
-                    )
-                    .await?;
-
-                // Tell the manager to check the user's account states.
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            debug!("Notifying user about verification result");
-            self.send_message(&twitter_id, verifier.response_message_builder())
-                .await?;
-        }
-
-        self.db
-            .update_watermark(&AccountType::Twitter, watermark)
-            .await?;
-
-        Ok(())
+    fn my_screen_name(&self) -> &Account {
+        &self.screen_name
     }
 }
 
@@ -632,7 +634,7 @@ struct ApiMessageData {
     text: String,
 }
 
-struct ReceivedMessageContext {
+pub struct ReceivedMessageContext {
     sender: TwitterId,
     message: String,
     created: u64,

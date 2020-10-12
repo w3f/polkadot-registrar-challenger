@@ -232,9 +232,11 @@ pub enum AccountType {
     #[serde(rename = "matrix")]
     Matrix,
     // Reserved types for internal communication.
+    //
+    // Websocket connection to Watcher
     ReservedConnector,
+    // Matrix emitter which reacts on Matrix messages
     ReservedEmitter,
-    ReservedFeeder,
 }
 
 impl ToSql for AccountType {
@@ -326,9 +328,6 @@ impl Challenge {
     }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
-    }
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
     }
 }
 

@@ -1,7 +1,7 @@
-pub mod email;
-pub mod matrix;
-pub mod twitter;
+mod email;
+mod matrix;
+mod twitter;
 
-pub use email::{ClientBuilder, EmailId};
-pub use matrix::MatrixClient;
-pub use twitter::{Twitter, TwitterBuilder, TwitterId};
+pub use email::{EmailHandler, EmailId, EmailTransport, SmtpImapClientBuilder};
+pub use matrix::{MatrixClient, MatrixHandler, MatrixTransport};
+pub use twitter::{Twitter, TwitterBuilder, TwitterHandler, TwitterId, TwitterTransport};

@@ -1,8 +1,7 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::primitives::{
-    Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress,
-    PubKey, Result,
+    Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
@@ -50,9 +49,7 @@ impl OnChainIdentity {
     pub fn net_account(&self) -> &NetAccount {
         self.network_address.address()
     }
-    pub fn pub_key(&self) -> &PubKey {
-        &self.network_address.pub_key()
-    }
+    #[cfg(test)]
     pub fn get_account_state(&self, account_ty: &AccountType) -> Option<&AccountState> {
         self.accounts
             .iter()
@@ -169,7 +166,7 @@ impl IdentityManager {
             });
         }
     }
-    pub async fn local(&mut self) -> Result<()> {
+    async fn local(&mut self) -> Result<()> {
         use CommsMessage::*;
 
         if let Ok(msg) = self.comms.listener.try_recv() {
@@ -189,7 +186,7 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_verification_timeouts(&self) -> Result<()> {
+    async fn handle_verification_timeouts(&self) -> Result<()> {
         const TIMEOUT_LIMIT: u64 = 3600;
 
         let net_accounts = self.db2.select_timed_out_identities(TIMEOUT_LIMIT).await?;
@@ -207,7 +204,7 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_new_judgment_request(&mut self, mut ident: OnChainIdentity) -> Result<()> {
+    async fn handle_new_judgment_request(&mut self, mut ident: OnChainIdentity) -> Result<()> {
         debug!(
             "Handling new judgment request for account: {}",
             ident.net_account().as_str()
@@ -253,7 +250,7 @@ impl IdentityManager {
 
         Ok(())
     }
-    pub async fn handle_status_change(&mut self, net_account: NetAccount) -> Result<()> {
+    async fn handle_status_change(&mut self, net_account: NetAccount) -> Result<()> {
         debug!(
             "Handling status change for account: {}",
             net_account.as_str()

@@ -1,4 +1,8 @@
-use crate::primitives::{Challenge, NetworkAddress, Result, Signature};
+use crate::comms::CommsVerifier;
+use crate::primitives::{
+    AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
+};
+use crate::Database2;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 
 #[derive(Debug, Fail)]
@@ -120,4 +124,45 @@ impl<'a> Verifier2<'a> {
 
         message
     }
+}
+
+pub async fn verification_handler<'a>(
+    verifier: &Verifier2<'a>,
+    db: &Database2,
+    comms: &CommsVerifier,
+    account_ty: &AccountType,
+) -> Result<()> {
+    for network_address in verifier.valid_verifications() {
+        debug!(
+            "Valid verification for address: {}",
+            network_address.address().as_str()
+        );
+
+        db.set_challenge_status(
+            network_address.address(),
+            account_ty,
+            &ChallengeStatus::Accepted,
+        )
+        .await?;
+
+        comms.notify_status_change(network_address.address().clone());
+    }
+
+    for network_address in verifier.invalid_verifications() {
+        debug!(
+            "Invalid verification for address: {}",
+            network_address.address().as_str()
+        );
+
+        db.set_challenge_status(
+            network_address.address(),
+            account_ty,
+            &ChallengeStatus::Rejected,
+        )
+        .await?;
+
+        comms.notify_status_change(network_address.address().clone());
+    }
+
+    Ok(())
 }

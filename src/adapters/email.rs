@@ -1,12 +1,11 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
-use crate::verifier::Verifier2;
+use crate::primitives::{Account, AccountType, Result};
+use crate::verifier::{verification_handler, Verifier2};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
-use reqwest::Client as ReqClient;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
@@ -73,7 +72,7 @@ impl ConvertEmailInto<Account> for &str {
 }
 
 #[derive(Debug, Clone)]
-struct ReceivedMessageContext {
+pub struct ReceivedMessageContext {
     id: EmailId,
     sender: Account,
     body: String,
@@ -83,15 +82,11 @@ struct ReceivedMessageContext {
 pub enum ClientError {
     #[fail(display = "the builder was not used correctly")]
     IncompleteBuilder,
-    #[fail(display = "the access token was not requested for the client")]
-    MissingAccessToken,
     #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
 }
 
-pub struct ClientBuilder {
-    db: Database2,
-    comms: CommsVerifier,
+pub struct SmtpImapClientBuilder {
     server: Option<String>,
     imap_server: Option<String>,
     inbox: Option<String>,
@@ -99,11 +94,9 @@ pub struct ClientBuilder {
     password: Option<String>,
 }
 
-impl ClientBuilder {
-    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
-        ClientBuilder {
-            db: db,
-            comms: comms,
+impl SmtpImapClientBuilder {
+    pub fn new() -> Self {
+        SmtpImapClientBuilder {
             server: None,
             imap_server: None,
             inbox: None,
@@ -131,12 +124,9 @@ impl ClientBuilder {
         self.password = Some(password);
         self
     }
-    pub fn build(self) -> Result<Client> {
-        Ok(Client {
-            client: ReqClient::new(),
-            db: self.db,
-            comms: self.comms,
-            server: self.server.ok_or(ClientError::IncompleteBuilder)?,
+    pub fn build(self) -> Result<SmtpImapClient> {
+        Ok(SmtpImapClient {
+            smtp_server: self.server.ok_or(ClientError::IncompleteBuilder)?,
             imap_server: self.imap_server.ok_or(ClientError::IncompleteBuilder)?,
             inbox: self.inbox.ok_or(ClientError::IncompleteBuilder)?,
             user: self.user.ok_or(ClientError::IncompleteBuilder)?,
@@ -145,36 +135,39 @@ impl ClientBuilder {
     }
 }
 
+#[async_trait]
+pub trait EmailTransport: 'static + Send + Sync {
+    async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
+    async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
+}
+
 #[derive(Clone)]
-pub struct Client {
-    client: ReqClient,
-    db: Database2,
-    comms: CommsVerifier,
-    server: String,
+pub struct SmtpImapClient {
+    smtp_server: String,
     imap_server: String,
     inbox: String,
     user: String,
     password: String,
 }
 
-impl Client {
-    async fn request_message(&self) -> Result<Vec<ReceivedMessageContext>> {
+#[async_trait]
+impl EmailTransport for SmtpImapClient {
+    async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
-        let mut transport = client
+        let mut imap = client
             .login(&self.user, &self.password)
             .map_err(|(err, _)| err)?;
 
-        transport.select(&self.inbox)?;
+        imap.select(&self.inbox)?;
 
-        // Find the message sequence/index of unread messages and fetch that
-        // range, plus some extra. The database keeps track of which messages
+        // Fetch the messages of the last day. The database keeps track of which messages
         // have been processed.
         //
         // Gmail has a custom search syntax and does not support the IMAP
         // standardized queries.
-        let recent_seq = transport.search("X-GM-RAW \"is:unread\"")?;
+        let recent_seq = imap.search("X-GM-RAW \"newer_than:2d\"")?;
 
         if recent_seq.is_empty() {
             return Ok(vec![]);
@@ -186,10 +179,10 @@ impl Client {
         let query = if min == max {
             min.to_string()
         } else {
-            format!("{}:{}", min.saturating_sub(5).max(1), max)
+            format!("{}:{}", min, max)
         };
 
-        let messages = transport.fetch(query, "(RFC822 UID)")?;
+        let messages = imap.fetch(query, "(RFC822 UID)")?;
 
         fn create_message_context(
             email_id: EmailId,
@@ -258,6 +251,14 @@ impl Client {
         Ok(parsed_messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+        // SMTP transport
+        let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
+            .credentials(Credentials::new(
+                self.user.to_string(),
+                self.password.to_string(),
+            ))
+            .transport();
+
         let email = EmailBuilder::new()
             // Addresses can be specified by the tuple (email, alias)
             .to(account.as_str())
@@ -267,63 +268,57 @@ impl Client {
             .build()
             .unwrap();
 
-        // TODO: Can cloning/to_string be avoided here?
-        let mut transport = SmtpClient::new_simple(&self.server)?
-            .credentials(Credentials::new(
-                self.user.to_string(),
-                self.password.to_string(),
-            ))
-            .transport();
-
-        let _x = transport.send(email.into())?;
+        let _ = smtp.send(email.into())?;
 
         Ok(())
     }
-    pub async fn start(self) {
-        self.start_responder().await;
+}
 
+#[derive(Clone)]
+pub struct EmailHandler {
+    db: Database2,
+    comms: CommsVerifier,
+}
+
+impl EmailHandler {
+    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+        EmailHandler {
+            db: db,
+            comms: comms,
+        }
+    }
+}
+
+impl EmailHandler {
+    pub async fn start<T: 'static + EmailTransport>(self, transport: T) {
         loop {
-            let _ = self.local().await.map_err(|err| {
+            let _ = self.local(&transport).await.map_err(|err| {
                 error!("{}", err);
                 err
             });
         }
     }
-    async fn local(&self) -> Result<()> {
+    async fn local<T: EmailTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
-        match self.comms.recv().await {
-            AccountToVerify {
-                net_account,
+        match self.comms.try_recv() {
+            Some(AccountToVerify {
+                net_account: _,
                 account,
-            } => {
-                self.handle_account_verification(net_account, account)
-                    .await?
+            }) => {
+                self.handle_account_verification(transport, account).await?;
             }
-            _ => {}
+            _ => {
+                time::delay_for(Duration::from_secs(3)).await;
+                self.handle_incoming_messages(transport).await?;
+            }
         }
 
         Ok(())
     }
-    async fn start_responder(&self) {
-        let c_self = self.clone();
-
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(3));
-
-            loop {
-                interval.tick().await;
-
-                let _ = c_self.handle_incoming_messages().await.map_err(|err| {
-                    error!("{}", err);
-                    err
-                });
-            }
-        });
-    }
-    async fn handle_account_verification(
+    async fn handle_account_verification<T: EmailTransport>(
         &self,
-        _net_account: NetAccount,
+        transport: &T,
         account: Account,
     ) -> Result<()> {
         let challenge_data = self
@@ -335,15 +330,17 @@ impl Client {
 
         // Only require the verifier to send the initial message
         let verifier = Verifier2::new(&challenge_data);
-        self.send_message(&account, verifier.init_message_builder(true))
+        transport
+            .send_message(&account, verifier.init_message_builder(true))
             .await?;
 
         Ok(())
     }
-    async fn handle_incoming_messages(&self) -> Result<()> {
-        let messages = self.request_message().await?;
+    async fn handle_incoming_messages<T: EmailTransport>(&self, transport: &T) -> Result<()> {
+        let messages = transport.request_messages().await?;
 
         if messages.is_empty() {
+            debug!("No new messages found");
             return Ok(());
         }
 
@@ -384,126 +381,17 @@ impl Client {
                 verifier.verify(&message.body);
             }
 
-            for network_address in verifier.valid_verifications() {
-                debug!(
-                    "Valid verification for address: {}",
-                    network_address.address().as_str()
-                );
+            // Update challenge statuses and notify manager
+            verification_handler(&verifier, &self.db, &self.comms, &AccountType::Email).await?;
 
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Email,
-                        ChallengeStatus::Accepted,
-                    )
-                    .await?;
-
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            for network_address in verifier.invalid_verifications() {
-                debug!(
-                    "Invalid verification for address: {}",
-                    network_address.address().as_str()
-                );
-
-                self.db
-                    .set_challenge_status(
-                        network_address.address(),
-                        &AccountType::Email,
-                        ChallengeStatus::Rejected,
-                    )
-                    .await?;
-
-                self.comms
-                    .notify_status_change(network_address.address().clone());
-            }
-
-            self.send_message(sender, verifier.response_message_builder())
+            // Inform user about the current state of the verification
+            transport
+                .send_message(sender, verifier.response_message_builder())
                 .await?;
+
             self.db.track_email_id(email_id).await?;
         }
 
         Ok(())
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApiMessage {
-    id: String,
-    thread_id: String,
-    payload: ApiPayload,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApiPayload {
-    headers: Vec<ApiHeader>,
-    body: Option<ApiBody>,
-    parts: Option<Vec<ApiPart>>,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiHeader {
-    name: String,
-    value: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ApiPart {
-    part_id: String,
-    mime_type: String,
-    filename: String,
-    body: ApiBody,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiBody {
-    size: i64,
-    data: Option<String>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::comms::CommsVerifier;
-    use crate::open_config;
-    use crate::primitives::Challenge;
-    use crate::Database2;
-    use tokio::runtime::Runtime;
-
-    // Generate a random db path
-    fn db_path() -> String {
-        format!("/tmp/sqlite_{}", Challenge::gen_random().as_str())
-    }
-
-    #[test]
-    fn request_message() {
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            let config = open_config().unwrap();
-            let db = Database2::new(&db_path()).unwrap();
-
-            let email = ClientBuilder::new(db, CommsVerifier::new())
-                .email_server(config.email_server)
-                .imap_server(config.imap_server)
-                .email_inbox(config.email_inbox)
-                .email_user(config.email_user)
-                .email_password(config.email_password)
-                .build()
-                .unwrap();
-
-            let res = email.request_message().await.unwrap();
-            for msg in res {
-                println!(">> SENDER: {}", msg.sender.as_str());
-                println!(">> BODY: {}", msg.body);
-                println!("\n\n")
-            }
-        });
     }
 }
