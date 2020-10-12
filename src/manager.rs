@@ -49,7 +49,6 @@ impl OnChainIdentity {
     pub fn net_account(&self) -> &NetAccount {
         self.network_address.address()
     }
-    #[cfg(test)]
     pub fn get_account_state(&self, account_ty: &AccountType) -> Option<&AccountState> {
         self.accounts
             .iter()

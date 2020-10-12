@@ -1,5 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::primitives::Result;
+use crate::primitives::{Account, Result};
 use crate::Database2;
 
 pub struct StringMatcher {
@@ -29,9 +29,14 @@ impl StringMatcher {
             AccountToVerify {
                 net_account,
                 account,
-            } => {}
+            } => self.handle_display_name_matching(&account).await?,
             _ => error!("Received unrecognized message type"),
         }
+
+        Ok(())
+    }
+    pub async fn handle_display_name_matching(&self, account: &Account) -> Result<()> {
+        let display_names = self.db.select_display_names().await?;
 
         Ok(())
     }

@@ -236,6 +236,16 @@ impl Database2 {
                 ",
             )?;
 
+            let mut stmt_display_name = transaction.prepare(
+                "
+                INSERT OR IGNORE INTO display_names (
+                    name
+                ) VALUES (
+                    :account
+                )
+            ",
+            )?;
+
             for ident in idents {
                 stmt.execute_named(named_params! {
                     ":net_account": ident.net_account(),
@@ -276,6 +286,12 @@ impl Database2 {
                         ":challenge": &state.challenge.as_str(),
                         ":challenge_status": &state.challenge_status,
                     })?;
+
+                    if state.account_ty == AccountType::DisplayName {
+                        stmt_display_name.execute_named(named_params! {
+                            ":account": state.account,
+                        })?;
+                    }
                 }
             }
         }
