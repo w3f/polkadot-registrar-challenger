@@ -61,6 +61,8 @@ impl DisplayNameHandler {
         }
 
         if violations.is_empty() {
+            self.db.insert_display_name(&account).await?;
+
             self.db
                 .set_challenge_status(
                     &net_account,
@@ -73,7 +75,7 @@ impl DisplayNameHandler {
                 .set_challenge_status(
                     &net_account,
                     &AccountType::DisplayName,
-                    &ChallengeStatus::Accepted,
+                    &ChallengeStatus::Rejected,
                 )
                 .await?;
         }

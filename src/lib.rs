@@ -8,7 +8,8 @@ extern crate serde;
 extern crate failure;
 
 use adapters::{
-    EmailHandler, EmailTransport, MatrixHandler, MatrixTransport, TwitterHandler, TwitterTransport, DisplayNameHandler,
+    DisplayNameHandler, EmailHandler, EmailTransport, MatrixHandler, MatrixTransport,
+    TwitterHandler, TwitterTransport,
 };
 pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
 pub use connector::Connector;
@@ -135,7 +136,9 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
     info!("Starting display name handler");
     let l_db = db2.clone();
     tokio::spawn(async move {
-        DisplayNameHandler::new(l_db, c_display_name, 0.8).start().await;
+        DisplayNameHandler::new(l_db, c_display_name, 0.8)
+            .start()
+            .await;
     });
 
     info!("Starting Matrix task");

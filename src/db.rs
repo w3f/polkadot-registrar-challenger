@@ -586,6 +586,7 @@ impl Database2 {
                                 account_types
                             WHERE
                                 account_ty IN (
+                                    'display_name',
                                     'matrix',
                                     'email',
                                     'twitter'
