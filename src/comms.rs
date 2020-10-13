@@ -36,6 +36,10 @@ pub enum CommsMessage {
         net_account: NetAccount,
     },
     MessageAcknowledged,
+    InvalidDisplayName {
+        net_account: NetAccount,
+        violations: Vec<Account>,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +117,14 @@ impl CommsVerifier {
         self.sender
             .send(CommsMessage::NotifyStatusChange {
                 net_account: net_account,
+            })
+            .fatal()
+    }
+    pub fn notify_invalid_display_name(&self, net_account: NetAccount, violations: Vec<Account>) {
+        self.sender
+            .send(CommsMessage::InvalidDisplayName {
+                net_account: net_account,
+                violations: violations,
             })
             .fatal()
     }

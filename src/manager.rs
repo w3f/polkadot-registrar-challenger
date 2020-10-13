@@ -177,13 +177,15 @@ impl IdentityManager {
 
         if let Ok(msg) = self.comms.listener.try_recv() {
             match msg {
-                NewJudgementRequest(ident) => {
-                    self.handle_new_judgment_request(ident).await?;
-                }
-                NotifyStatusChange { net_account } => {
-                    self.handle_status_change(net_account).await?;
-                }
+                NewJudgementRequest(ident) =>
+                    self.handle_new_judgment_request(ident).await?,
+                NotifyStatusChange { net_account } =>
+                    self.handle_status_change(net_account).await?,
                 MessageAcknowledged => {}
+                InvalidDisplayName {
+                    net_account,
+                    violations,
+                } => self.handle_invalid_display_name(net_account, violations).await?,
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
@@ -290,6 +292,10 @@ impl IdentityManager {
 
             self.db2.remove_identity(&net_account).await?;
         }
+
+        Ok(())
+    }
+    async fn handle_invalid_display_name(&self, net_account: NetAccount, violations: Vec<Account>) -> Result<()> {
 
         Ok(())
     }

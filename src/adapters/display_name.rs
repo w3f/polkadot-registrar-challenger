@@ -51,7 +51,7 @@ impl DisplayNameHandler {
 
         for display_name in &display_names {
             if self.is_too_similar(display_name, &account).await {
-                violations.push(display_name);
+                violations.push(display_name.clone());
             }
 
             // Cap this at 5 violations, prevent sending oversized buffers.
@@ -70,6 +70,8 @@ impl DisplayNameHandler {
                     &ChallengeStatus::Accepted,
                 )
                 .await?;
+
+            self.comms.notify_status_change(net_account);
         } else {
             self.db
                 .set_challenge_status(
@@ -78,9 +80,9 @@ impl DisplayNameHandler {
                     &ChallengeStatus::Rejected,
                 )
                 .await?;
-        }
 
-        self.comms.notify_status_change(net_account);
+            self.comms.notify_invalid_display_name(net_account, violations);
+        }
 
         Ok(())
     }
