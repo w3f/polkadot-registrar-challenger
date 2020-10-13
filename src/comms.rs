@@ -39,7 +39,7 @@ pub enum CommsMessage {
     InvalidDisplayName {
         net_account: NetAccount,
         violations: Vec<Account>,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]

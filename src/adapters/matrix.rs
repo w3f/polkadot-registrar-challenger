@@ -266,18 +266,18 @@ impl MatrixHandler {
             } else {
                 debug!("Failed to connect to account: {}", account.as_str());
 
-                // Mark the account as valid.
+                // Mark the account as invalid.
                 self.db
-                    .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Invalid)
+                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Invalid)
                     .await?;
 
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
             }
         };
 
-        // Mark the account as invalid.
+        // Mark the account as valid.
         self.db
-            .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Valid)
+            .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Valid)
             .await?;
 
         let challenge_data = self

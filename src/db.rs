@@ -434,7 +434,7 @@ impl Database2 {
         &self,
         net_account: &NetAccount,
         account_ty: &AccountType,
-        status: AccountStatus,
+        status: &AccountStatus,
     ) -> StdResult<(), DatabaseError> {
         let con = self.con.lock().await;
 
@@ -666,35 +666,18 @@ impl Database2 {
 
         Ok(())
     }
-    // TODO: Make use of this
-    #[allow(dead_code)]
-    pub async fn select_invalid_accounts(
+    pub async fn select_account_statuses(
         &self,
         net_account: &NetAccount,
-    ) -> Result<Vec<(AccountType, Account)>> {
+    ) -> Result<Vec<(AccountType, Account, AccountStatus)>> {
         let mut con = self.con.lock().await;
         let transaction = con.transaction()?;
-
-        // Make sure the identity even exists.
-        transaction.query_row_named(
-            "SELECT
-                    id
-                FROM
-                    pending_judgments
-                WHERE
-                    net_account = :net_account
-                ",
-            named_params! {
-                ":net_account": net_account,
-            },
-            |row| row.get::<_, i32>(0),
-        )?;
 
         let account_set = {
             let mut stmt = transaction.prepare(
                 "
             SELECT
-                account_ty, account
+                account_ty, account, status
             FROM
                 account_states
             INNER JOIN
@@ -711,26 +694,25 @@ impl Database2 {
                     WHERE
                         net_account = :net_account
                 )
-            AND
-                account_status_id
-                    IN (
-                        SELECT
-                            id
-                        FROM
-                            account_status
-                        WHERE
-                            status = 'invalid'
-                    )
+            INNER JOIN
+                account_status
+            ON
+                account_states.account_status_id =
+                    account_status.id
             ",
             )?;
 
             let mut rows = stmt.query_named(named_params! {
-                ":net_account": net_account
+                ":net_account": net_account,
             })?;
 
             let mut account_set = vec![];
             while let Some(row) = rows.next()? {
-                account_set.push((row.get::<_, AccountType>(0)?, row.get::<_, Account>(1)?))
+                account_set.push((
+                    row.get::<_, AccountType>(0)?,
+                    row.get::<_, Account>(1)?,
+                    row.get::<_, AccountStatus>(2)?,
+                ))
             }
 
             account_set

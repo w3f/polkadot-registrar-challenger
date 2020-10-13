@@ -1,4 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
+use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::Database2;
 use strsim::jaro;
@@ -60,8 +61,20 @@ impl DisplayNameHandler {
             }
         }
 
+        // The display name does obviously not need to be verified by
+        // signing a challenge or having to contact an address. But we just
+        // treat it as any other "account".
         if violations.is_empty() {
+            // Keep track of display names for future matching.
             self.db.insert_display_name(&account).await?;
+
+            self.db
+                .set_account_status(
+                    &net_account,
+                    &AccountType::DisplayName,
+                    &AccountStatus::Valid,
+                )
+                .await?;
 
             self.db
                 .set_challenge_status(
@@ -70,9 +83,16 @@ impl DisplayNameHandler {
                     &ChallengeStatus::Accepted,
                 )
                 .await?;
-
-            self.comms.notify_status_change(net_account);
         } else {
+
+            self.db
+                .set_account_status(
+                    &net_account,
+                    &AccountType::DisplayName,
+                    &AccountStatus::Invalid,
+                )
+                .await?;
+
             self.db
                 .set_challenge_status(
                     &net_account,
@@ -80,9 +100,9 @@ impl DisplayNameHandler {
                     &ChallengeStatus::Rejected,
                 )
                 .await?;
-
-            self.comms.notify_invalid_display_name(net_account, violations);
         }
+
+        self.comms.notify_status_change(net_account);
 
         Ok(())
     }

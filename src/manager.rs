@@ -4,7 +4,7 @@ use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
@@ -12,6 +12,12 @@ use tokio::time::{self, Duration};
 
 static WHITELIST: [AccountType; 4] = [
     AccountType::DisplayName,
+    AccountType::Matrix,
+    AccountType::Email,
+    AccountType::Twitter,
+];
+
+static NOTIFY_QUEUE: [AccountType; 3] = [
     AccountType::Matrix,
     AccountType::Email,
     AccountType::Twitter,
@@ -126,6 +132,21 @@ impl ToSql for AccountStatus {
     }
 }
 
+impl FromSql for AccountStatus {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(val) => match val {
+                b"unknown" => Ok(AccountStatus::Unknown),
+                b"valid" => Ok(AccountStatus::Valid),
+                b"invalid" => Ok(AccountStatus::Invalid),
+                b"notified" => Ok(AccountStatus::Notified),
+                _ => Err(FromSqlError::InvalidType),
+            },
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
 pub struct IdentityManager {
     db2: Database2,
     comms: CommsTable,
@@ -177,15 +198,11 @@ impl IdentityManager {
 
         if let Ok(msg) = self.comms.listener.try_recv() {
             match msg {
-                NewJudgementRequest(ident) =>
-                    self.handle_new_judgment_request(ident).await?,
-                NotifyStatusChange { net_account } =>
-                    self.handle_status_change(net_account).await?,
+                NewJudgementRequest(ident) => self.handle_new_judgment_request(ident).await?,
+                NotifyStatusChange { net_account } => {
+                    self.handle_status_change(net_account).await?
+                }
                 MessageAcknowledged => {}
-                InvalidDisplayName {
-                    net_account,
-                    violations,
-                } => self.handle_invalid_display_name(net_account, violations).await?,
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
@@ -194,6 +211,7 @@ impl IdentityManager {
 
         Ok(())
     }
+    // TODO: Remove display_name
     async fn handle_verification_timeouts(&self) -> Result<()> {
         const TIMEOUT_LIMIT: u64 = 3600;
 
@@ -291,11 +309,39 @@ impl IdentityManager {
             time::delay_for(Duration::from_secs(3)).await;
 
             self.db2.remove_identity(&net_account).await?;
+
+            return Ok(());
         }
 
-        Ok(())
-    }
-    async fn handle_invalid_display_name(&self, net_account: NetAccount, violations: Vec<Account>) -> Result<()> {
+        // If an account is marked invalid, implying the account could not be
+        // reached, then find any other valid accounts which can be contacted
+        // and informed about the state of the invalid account. The user should
+        // then update the on-chain identity. Additionally, there's a special
+        // case of `display_name` which can be deemed invalid if it is too
+        // similar to another, existing display_name in the identity system.
+
+        // Find a valid account of the identity which can be notified about an
+        // other account's invalidity. Preference for Matrix, since it's
+        // instant, followed by Email then Twitter.
+        fn find_valid(
+            account_statuses: &[(AccountType, Account, AccountStatus)],
+        ) -> Option<&'static AccountType> {
+            let filtered = account_statuses
+                .iter()
+                .filter(|(_, _, status)| status == &AccountStatus::Valid)
+                .map(|(account_ty, _, _)| account_ty)
+                .collect::<Vec<&AccountType>>();
+
+            for to_notify in &NOTIFY_QUEUE {
+                if filtered.contains(&to_notify) {
+                    return Some(to_notify)
+                }
+            }
+
+            None
+        }
+
+        let account_statuses = self.db2.select_account_statuses(&net_account).await?;
 
         Ok(())
     }
