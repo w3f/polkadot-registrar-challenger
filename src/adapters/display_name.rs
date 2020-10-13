@@ -3,15 +3,15 @@ use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Resul
 use crate::Database2;
 use strsim::jaro;
 
-pub struct StringMatcher {
+pub struct DisplayNameHandler {
     db: Database2,
     comms: CommsVerifier,
     limit: f64,
 }
 
-impl StringMatcher {
+impl DisplayNameHandler {
     pub fn new(db: Database2, comms: CommsVerifier, limit: f64) -> Self {
-        StringMatcher {
+        DisplayNameHandler {
             db: db,
             comms: comms,
             limit: limit,
