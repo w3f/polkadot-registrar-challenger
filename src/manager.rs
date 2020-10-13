@@ -10,6 +10,13 @@ use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
+static WHITELIST: [AccountType; 4] = [
+    AccountType::DisplayName,
+    AccountType::Matrix,
+    AccountType::Email,
+    AccountType::Twitter,
+];
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OnChainIdentity {
     network_address: NetworkAddress,
@@ -215,8 +222,14 @@ impl IdentityManager {
 
         // Find duplicates.
         for state in ident.account_states() {
-            // Reject the entire judgment request if "legal_name" is specified.
-            if state.account_ty == AccountType::LegalName {
+            // Reject the entire judgment request if a non-white listed account type is specified.
+            if !WHITELIST.contains(&state.account_ty) {
+                warn!(
+                    "Reject identity {}, use of unacceptable account type: {:?}",
+                    ident.net_account().as_str(),
+                    state.account_ty
+                );
+
                 self.get_comms(&AccountType::ReservedConnector)?
                     .notify_identity_judgment(ident.net_account().clone(), Judgement::Erroneous);
 
