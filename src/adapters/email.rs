@@ -318,10 +318,11 @@ impl EmailHandler {
                 self.handle_invalid_account_notification(net_account, accounts, transport)
                     .await?
             }
-            _ => {
+            None => {
                 time::delay_for(Duration::from_secs(3)).await;
                 self.handle_incoming_messages(transport).await?;
             }
+            Some(_) => warn!("Received unrecognized message type"),
         }
 
         Ok(())

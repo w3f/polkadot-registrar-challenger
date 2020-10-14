@@ -1,7 +1,7 @@
-use crate::comms::CommsVerifier;
+use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{unix_time, Account, AccountType, Challenge, Result};
-use crate::verifier::{verification_handler, Verifier2};
+use crate::primitives::{unix_time, Account, AccountType, Challenge, NetAccount, Result};
+use crate::verifier::{verification_handler, Verifier2, invalid_accounts_message};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -66,6 +66,8 @@ pub enum TwitterError {
     Serde(failure::Error),
     #[fail(display = "Failed to build request: {}", 0)]
     RequestBuilder(failure::Error),
+    #[fail(display = "No Twitter account found for user: {}", 0)]
+    NoTwitterAccount(String),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -212,18 +214,63 @@ impl TwitterHandler {
             .remove(0)
             .1;
 
-        let mut interval = time::interval(Duration::from_secs(65));
-
         loop {
-            interval.tick().await;
-
-            let _ = self
-                .handle_incoming_messages(&transport, &my_id)
-                .await
-                .map_err(|err| {
-                    error!("{}", err);
-                });
+            let _ = self.local(&transport, &my_id).await.map_err(|err| {
+                error!("{}", err);
+            });
         }
+    }
+    pub async fn local<T: TwitterTransport>(&self, transport: &T, my_id: &TwitterId) -> Result<()> {
+        use CommsMessage::*;
+
+        match self.comms.try_recv() {
+            Some(AccountToVerify {
+                net_account: _,
+                account: _,
+            }) => {
+                // The Twitter adapter has to wait for messages, no need to initiate contact.
+            }
+            Some(NotifyInvalidAccount {
+                net_account,
+                accounts,
+            }) => {
+                self.handle_invalid_account_notification(transport, net_account, accounts)
+                    .await?
+            }
+            None => {
+                time::delay_for(Duration::from_secs(3)).await;
+                self.handle_incoming_messages(transport, my_id).await?;
+            }
+            Some(_) => warn!("Received unrecognized message type"),
+        }
+
+        Ok(())
+    }
+    pub async fn handle_invalid_account_notification<T: TwitterTransport>(
+        &self,
+        transport: &T,
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+    ) -> Result<()> {
+        let account = self
+            .db
+            .select_account_from_net_account(&net_account, &AccountType::Twitter)
+            .await?
+            .ok_or(TwitterError::NoTwitterAccount(
+                net_account.as_str().to_string(),
+            ))?;
+
+        let twitter_id =
+            self.db
+                .select_twitter_id(&account)
+                .await?
+                .ok_or(TwitterError::NoTwitterAccount(
+                    net_account.as_str().to_string(),
+                ))?;
+
+        transport.send_message(&twitter_id, invalid_accounts_message(&accounts)).await?;
+
+        Ok(())
     }
     pub async fn handle_incoming_messages<T: TwitterTransport>(
         &self,

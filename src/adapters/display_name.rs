@@ -126,6 +126,7 @@ fn jaro_words(left: &str, right: &str, delimiter: &str) -> f64 {
         .map(|s| s.trim())
         .filter(|s| !s.is_empty())
         .collect();
+
     let right_words: Vec<&str> = right
         .split(delimiter)
         .map(|s| s.trim())

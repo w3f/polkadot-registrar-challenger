@@ -821,6 +821,25 @@ impl Database2 {
         .optional()
         .map_err(|err| failure::Error::from(err))
     }
+    pub async fn select_twitter_id(&self, account: &Account) -> Result<Option<TwitterId>> {
+        let con = self.con.lock().await;
+        con.query_row_named(
+            "
+            SELECT
+                twitter_id
+            FROM
+                known_twitter_ids
+            WHERE
+                account = :account
+        ",
+            named_params! {
+                ":account": account,
+            },
+            |row| row.get::<_, TwitterId>(0),
+        )
+        .optional()
+        .map_err(|err| err.into())
+    }
     pub async fn confirm_init_message(&self, account: &Account) -> Result<()> {
         let con = self.con.lock().await;
         con.execute_named(
