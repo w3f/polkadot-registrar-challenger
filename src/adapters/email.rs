@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, Result};
-use crate::verifier::{verification_handler, Verifier2};
+use crate::primitives::{Account, AccountType, NetAccount, Result};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
@@ -84,6 +84,9 @@ pub enum ClientError {
     IncompleteBuilder,
     #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
+    #[fail(display = "No Email account found for user: {}", 0)]
+    // TODO: Should be `NetAccount`
+    NoEmailAccount(String),
 }
 
 pub struct SmtpImapClientBuilder {
@@ -308,6 +311,13 @@ impl EmailHandler {
             }) => {
                 self.handle_account_verification(transport, account).await?;
             }
+            Some(NotifyInvalidAccount {
+                net_account,
+                accounts,
+            }) => {
+                self.handle_invalid_account_notification(net_account, accounts, transport)
+                    .await?
+            }
             _ => {
                 time::delay_for(Duration::from_secs(3)).await;
                 self.handle_incoming_messages(transport).await?;
@@ -391,6 +401,26 @@ impl EmailHandler {
 
             self.db.track_email_id(email_id).await?;
         }
+
+        Ok(())
+    }
+    async fn handle_invalid_account_notification<T: EmailTransport>(
+        &self,
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+        transport: &T,
+    ) -> Result<()> {
+        let account = self
+            .db
+            .select_account_from_net_account(&net_account, &AccountType::Email)
+            .await?
+            .ok_or(ClientError::NoEmailAccount(
+                net_account.as_str().to_string(),
+            ))?;
+
+        transport
+            .send_message(&account, invalid_accounts_message(&accounts))
+            .await?;
 
         Ok(())
     }
