@@ -419,8 +419,11 @@ impl EmailHandler {
                 net_account.as_str().to_string(),
             ))?;
 
+        // Check for any display name violations (optional).
+        let violations = self.db.select_display_name_violations(&net_account).await?;
+
         transport
-            .send_message(&account, invalid_accounts_message(&accounts))
+            .send_message(&account, invalid_accounts_message(&accounts, violations))
             .await?;
 
         Ok(())

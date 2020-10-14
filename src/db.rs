@@ -216,7 +216,8 @@ impl Database2 {
         )?;
 
         // Table for display name violations.
-        con.execute("
+        con.execute(
+            "
             CREATE TABLE IF NOT EXISTS display_name_violations (
                 id              INTEGER PRIMARY KEY,
                 name            TEXT NOT NULL,
@@ -227,7 +228,8 @@ impl Database2 {
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
             )
-        ", params![],
+        ",
+            params![],
         )?;
 
         Ok(Database2 {
@@ -1022,10 +1024,15 @@ impl Database2 {
 
         Ok(accounts)
     }
-    pub async fn insert_display_name_violations(&self, net_account: &NetAccount, violations: &[Account]) -> Result<()> {
+    pub async fn insert_display_name_violations(
+        &self,
+        net_account: &NetAccount,
+        violations: &[Account],
+    ) -> Result<()> {
         let con = self.con.lock().await;
 
-        let mut stmt = con.prepare("
+        let mut stmt = con.prepare(
+            "
             INSERT OR IGNORE INTO display_name_violations (
                 name,
                 net_account_id
@@ -1040,7 +1047,8 @@ impl Database2 {
                         net_account = :net_account
                 )
             )
-        ")?;
+        ",
+        )?;
 
         for violation in violations {
             stmt.execute_named(named_params! {
@@ -1051,10 +1059,14 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn select_display_name_violations(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
+    pub async fn select_display_name_violations(
+        &self,
+        net_account: &NetAccount,
+    ) -> Result<Option<Vec<Account>>> {
         let con = self.con.lock().await;
 
-        let mut stmt = con.prepare("
+        let mut stmt = con.prepare(
+            "
             SELECT
                 name
             FROM
@@ -1068,7 +1080,8 @@ impl Database2 {
                     WHERE
                         net_account = :net_account
                 )
-        ")?;
+        ",
+        )?;
 
         let mut rows = stmt.query_named(named_params! {
             ":net_account": net_account,
@@ -1079,7 +1092,11 @@ impl Database2 {
             violations.push(row.get::<_, Account>(0)?);
         }
 
-        Ok(violations)
+        if violations.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(violations))
+        }
     }
 }
 
@@ -1297,13 +1314,22 @@ mod tests {
 
             db.insert_identity(&bob_ident).await.unwrap();
 
-            let res = db.select_account_from_net_account(&alice, &AccountType::Matrix).await.unwrap();
+            let res = db
+                .select_account_from_net_account(&alice, &AccountType::Matrix)
+                .await
+                .unwrap();
             assert_eq!(res.unwrap(), Account::from("@alice:matrix.org"));
 
-            let res = db.select_account_from_net_account(&alice, &AccountType::Email).await.unwrap();
+            let res = db
+                .select_account_from_net_account(&alice, &AccountType::Email)
+                .await
+                .unwrap();
             assert!(res.is_none());
 
-            let res = db.select_account_from_net_account(&bob, &AccountType::Email).await.unwrap();
+            let res = db
+                .select_account_from_net_account(&bob, &AccountType::Email)
+                .await
+                .unwrap();
             assert_eq!(res.unwrap(), Account::from("bob@example.com"));
         });
     }
@@ -1811,6 +1837,7 @@ mod tests {
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
             let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+            let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create and insert identity into storage.
             let ident = OnChainIdentity::new(alice.clone()).unwrap();
@@ -1819,31 +1846,52 @@ mod tests {
             let ident = OnChainIdentity::new(bob.clone()).unwrap();
             db.insert_identity(&ident).await.unwrap();
 
-            db.insert_display_name_violations(&alice, &[
-                Account::from("Alice"),
-                Account::from("alice"),
-                Account::from("Alistair"),
-            ]).await.unwrap();
+            db.insert_display_name_violations(
+                &alice,
+                &[
+                    Account::from("Alice"),
+                    Account::from("alice"),
+                    Account::from("Alistair"),
+                ],
+            )
+            .await
+            .unwrap();
 
-            db.insert_display_name_violations(&bob, &[
-                Account::from("Bob"),
-                Account::from("bob"),
-                Account::from("Bobby"),
-                Account::from("bobby"),
-            ]).await.unwrap();
+            db.insert_display_name_violations(
+                &bob,
+                &[
+                    Account::from("Bob"),
+                    Account::from("bob"),
+                    Account::from("Bobby"),
+                    Account::from("bobby"),
+                ],
+            )
+            .await
+            .unwrap();
 
-            let res = db.select_display_name_violations(&alice).await.unwrap();
+            let res = db
+                .select_display_name_violations(&alice)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(res.len(), 3);
             assert!(res.contains(&Account::from("Alice")));
             assert!(res.contains(&Account::from("alice")));
             assert!(res.contains(&Account::from("Alistair")));
 
-            let res = db.select_display_name_violations(&bob).await.unwrap();
+            let res = db
+                .select_display_name_violations(&bob)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(res.len(), 4);
             assert!(res.contains(&Account::from("Bob")));
             assert!(res.contains(&Account::from("bob")));
             assert!(res.contains(&Account::from("Bobby")));
             assert!(res.contains(&Account::from("bobby")));
+
+            let res = db.select_display_name_violations(&eve).await.unwrap();
+            assert!(res.is_none());
         });
     }
 }

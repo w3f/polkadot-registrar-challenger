@@ -4,6 +4,8 @@ use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Resul
 use crate::Database2;
 use strsim::jaro;
 
+pub const VIOLATIONS_CAP: usize = 5;
+
 pub struct DisplayNameHandler {
     db: Database2,
     comms: CommsVerifier,
@@ -55,8 +57,8 @@ impl DisplayNameHandler {
                 violations.push(display_name.clone());
             }
 
-            // Cap this at 5 violations, prevent sending oversized buffers.
-            if violations.len() == 5 {
+            // Cap the violation list, prevent sending oversized buffers.
+            if violations.len() == VIOLATIONS_CAP {
                 break;
             }
         }
@@ -84,7 +86,9 @@ impl DisplayNameHandler {
                 )
                 .await?;
         } else {
-            self.db.insert_display_name_violations(&net_account, &violations).await?;
+            self.db
+                .insert_display_name_violations(&net_account, &violations)
+                .await?;
 
             self.db
                 .set_account_status(

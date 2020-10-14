@@ -1,3 +1,4 @@
+use crate::adapters::VIOLATIONS_CAP;
 use crate::comms::CommsVerifier;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
@@ -167,7 +168,10 @@ pub async fn verification_handler<'a>(
     Ok(())
 }
 
-pub fn invalid_accounts_message(accounts: &[(AccountType, Account)]) -> String {
+pub fn invalid_accounts_message(
+    accounts: &[(AccountType, Account)],
+    violations: Option<Vec<Account>>,
+) -> String {
     let mut message = String::new();
 
     message.push_str(&format!(
@@ -183,6 +187,25 @@ pub fn invalid_accounts_message(accounts: &[(AccountType, Account)]) -> String {
     ));
 
     for (account_ty, account) in accounts {
+        if account_ty == &AccountType::DisplayName {
+            if let Some(violations) = violations.as_ref() {
+                message.push_str(&format!(
+                    "> \"{}\" (Display Name) is too similar to existing display names:",
+                    account.as_str()
+                ));
+
+                for violation in violations {
+                    message.push_str(&format!("  > \"{}\"", violation.as_str()));
+                }
+
+                if violations.len() == VIOLATIONS_CAP {
+                    message.push_str("  > etc.");
+                }
+            }
+
+            continue;
+        }
+
         message.push_str(&format!(
             "> \"{}\" ({})\n",
             account.as_str(),

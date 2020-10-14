@@ -401,8 +401,11 @@ impl MatrixHandler {
 
         let room_id = self.init_room_id(&net_account, &account).await?;
 
+        // Check for any display name violations (optional).
+        let violations = self.db.select_display_name_violations(&net_account).await?;
+
         self.transport
-            .send_message(&room_id, invalid_accounts_message(&accounts))
+            .send_message(&room_id, invalid_accounts_message(&accounts, violations))
             .await
             .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
