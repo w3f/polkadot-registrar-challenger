@@ -184,7 +184,7 @@ pub fn invalid_accounts_message(accounts: &[(AccountType, Account)]) -> String {
 
     for (account_ty, account) in accounts {
         message.push_str(&format!(
-            "> {} (on {})\n",
+            "> \"{}\" ({})\n",
             account.as_str(),
             account_ty.to_string()
         ));
@@ -192,7 +192,7 @@ pub fn invalid_accounts_message(accounts: &[(AccountType, Account)]) -> String {
 
     message.push_str(
         "\nPlease update the on-chain identity data. No new \
-        `requestJudgement` extrinsic must be issued after the update",
+        `requestJudgement` extrinsic must be issued after the update.",
     );
 
     message
