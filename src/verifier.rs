@@ -174,40 +174,44 @@ pub fn invalid_accounts_message(
 ) -> String {
     let mut message = String::new();
 
-    message.push_str(&format!(
-        "Please note that the following {} could not be reached and \
-        might be invalid:\n\nw",
-        {
-            if accounts.len() > 1 {
-                "accounts"
-            } else {
-                "account"
-            }
-        }
-    ));
+    message.push_str("Please note that the following information is invalid:\n\n");
 
     for (account_ty, account) in accounts {
         if account_ty == &AccountType::DisplayName {
             if let Some(violations) = violations.as_ref() {
                 message.push_str(&format!(
-                    "> \"{}\" (Display Name) is too similar to existing display names:",
-                    account.as_str()
+                    "> \"{}\" (Display Name) is too similar to {}existing display {}:\n",
+                    account.as_str(),
+                    {
+                        if violations.len() == 1 {
+                            "an "
+                        } else {
+                            ""
+                        }
+                    },
+                    {
+                        if violations.len() == 1 {
+                            "name"
+                        } else {
+                            "names"
+                        }
+                    }
                 ));
 
                 for violation in violations {
-                    message.push_str(&format!("  > \"{}\"", violation.as_str()));
+                    message.push_str(&format!("  > \"{}\"\n", violation.as_str()));
                 }
 
                 if violations.len() == VIOLATIONS_CAP {
-                    message.push_str("  > etc.");
+                    message.push_str("  > etc.\n");
                 }
-            }
 
-            continue;
+                continue;
+            }
         }
 
         message.push_str(&format!(
-            "> \"{}\" ({})\n",
+            "> \"{}\" ({}), could not be reached\n",
             account.as_str(),
             account_ty.to_string()
         ));
