@@ -84,7 +84,6 @@ impl DisplayNameHandler {
                 )
                 .await?;
         } else {
-
             self.db
                 .set_account_status(
                     &net_account,

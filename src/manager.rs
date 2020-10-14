@@ -318,11 +318,11 @@ impl IdentityManager {
         // and informed about the state of the invalid account. The user should
         // then update the on-chain identity. Additionally, there's a special
         // case of `display_name` which can be deemed invalid if it is too
-        // similar to another, existing display_name in the identity system.
+        // similar to another, existing `display_name` in the identity system.
 
-        // Find a valid account of the identity which can be notified about an
-        // other account's invalidity. Preference for Matrix, since it's
-        // instant, followed by Email then Twitter.
+        /// Find a valid account of the identity which can be notified about an
+        /// other account's invalidity. Preference for Matrix, since it's
+        /// instant, followed by Email then Twitter.
         fn find_valid(
             account_statuses: &[(AccountType, Account, AccountStatus)],
         ) -> Option<&'static AccountType> {
@@ -334,14 +334,40 @@ impl IdentityManager {
 
             for to_notify in &NOTIFY_QUEUE {
                 if filtered.contains(&to_notify) {
-                    return Some(to_notify)
+                    return Some(to_notify);
                 }
             }
 
             None
         }
 
+        /// Find invalid accounts.
+        fn find_invalid<'a>(
+            account_statuses: &[(AccountType, Account, AccountStatus)],
+        ) -> Vec<(AccountType, Account)> {
+            account_statuses
+                .iter()
+                .cloned()
+                .filter(|(_, _, status)| status == &AccountStatus::Invalid)
+                .map(|(account_ty, account, _)| (account_ty, account))
+                .collect::<Vec<(AccountType, Account)>>()
+        }
+
         let account_statuses = self.db2.select_account_statuses(&net_account).await?;
+
+        // If invalid accounts were found, attempt to contact the user in order
+        // to inform that person about the current state of invalid accounts.
+        let invalid_accounts = find_invalid(&account_statuses);
+        if !invalid_accounts.is_empty() {
+            if let Some(to_notify) = find_valid(&account_statuses) {
+                self.get_comms(to_notify)
+                    .map(|comms| {
+                        comms.notify_invalid_accounts(net_account.clone(), invalid_accounts);
+                    })?;
+            } else {
+                warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());
+            }
+        }
 
         Ok(())
     }
