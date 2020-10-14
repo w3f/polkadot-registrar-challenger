@@ -215,6 +215,21 @@ impl Database2 {
             params![],
         )?;
 
+        // Table for display name violations.
+        con.execute("
+            CREATE TABLE IF NOT EXISTS display_name_violations (
+                id             INTEGER PRIMARY KEY,
+                name            TEXT NOT NULL
+                net_account_id  INTEGER NOT NULL,
+
+                UNIQUE (name, net_account_id)
+
+                FOREIGN KEY (net_account_id)
+                    REFERENCES pending_judgments (id)
+            )
+        ", params![],
+        )?;
+
         Ok(Database2 {
             con: Arc::new(Mutex::new(con)),
         })
@@ -1006,6 +1021,65 @@ impl Database2 {
         }
 
         Ok(accounts)
+    }
+    pub async fn insert_display_name_violations(&self, net_account: &NetAccount, violations: &[Account]) -> Result<()> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare("
+            INSERT OR IGNORE INTO display_name_violations (
+                name,
+                net_account_id
+            ) VALUES (
+                :name,
+                (
+                    SELECT
+                        id
+                    FROM
+                       pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            )
+        ")?;
+
+        for violation in violations {
+            stmt.execute_named(named_params! {
+                ":name": violation,
+                ":net_account": net_account,
+            })?;
+        }
+
+        Ok(())
+    }
+    pub async fn select_display_name_violations(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare("
+            SELECT
+                name
+            FROM
+                display_name_violations
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+        ")?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": net_account,
+        })?;
+
+        let mut violations = vec![];
+        while let Some(row) = rows.next()? {
+            violations.push(row.get::<_, Account>(0)?);
+        }
+
+        Ok(violations)
     }
 }
 

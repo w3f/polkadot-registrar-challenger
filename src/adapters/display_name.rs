@@ -84,6 +84,8 @@ impl DisplayNameHandler {
                 )
                 .await?;
         } else {
+            self.db.insert_display_name_violations(&net_account, &violations).await?;
+
             self.db
                 .set_account_status(
                     &net_account,
