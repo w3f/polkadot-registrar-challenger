@@ -301,6 +301,7 @@ impl Database2 {
 
         Ok(())
     }
+    // TODO: Should return AccountType, too.
     pub async fn select_addresses(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
         let con = self.con.lock().await;
 

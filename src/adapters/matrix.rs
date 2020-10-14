@@ -213,16 +213,16 @@ impl MatrixHandler {
                     );
                 }
             }
+            NotifyInvalidAccount {
+                net_account,
+                accounts,
+            } => self.handle_invalid_account_notification(net_account, accounts).await?,
             _ => error!("Received unrecognized message type"),
         }
 
         Ok(())
     }
-    async fn handle_account_verification(
-        &self,
-        net_account: NetAccount,
-        account: Account,
-    ) -> Result<()> {
+    async fn init_room_id(&self, net_account: &NetAccount, account: &Account) -> Result<RoomId> {
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = self.db.select_room_id(&net_account).await? {
             room_id
@@ -274,6 +274,15 @@ impl MatrixHandler {
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
             }
         };
+
+        Ok(room_id)
+    }
+    async fn handle_account_verification(
+        &self,
+        net_account: NetAccount,
+        account: Account,
+    ) -> Result<()> {
+        let room_id = self.init_room_id(&net_account, &account).await?;
 
         // Mark the account as valid.
         self.db
@@ -368,6 +377,10 @@ impl MatrixHandler {
         } else {
             warn!("Received an message from an un-joined room");
         }
+
+        Ok(())
+    }
+    async fn handle_invalid_account_notification(&self, net_account: NetAccount, accounts: Vec<(AccountType, Account)>) -> Result<()> {
 
         Ok(())
     }
