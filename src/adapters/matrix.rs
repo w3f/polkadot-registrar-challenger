@@ -268,6 +268,11 @@ impl MatrixHandler {
             })
             .await
             {
+                // Mark the account as valid.
+                self.db
+                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Valid)
+                    .await?;
+
                 room_id?
             } else {
                 debug!("Failed to connect to account: {}", account.as_str());
@@ -289,11 +294,6 @@ impl MatrixHandler {
         account: Account,
     ) -> Result<()> {
         let room_id = self.init_room_id(&net_account, &account).await?;
-
-        // Mark the account as valid.
-        self.db
-            .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Valid)
-            .await?;
 
         let challenge_data = self
             .db
