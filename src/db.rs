@@ -167,9 +167,11 @@ impl Database2 {
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
                 id              INTEGER PRIMARY KEY,
                 account         INTEGER NOT NULL UNIQUE,
-                twitter_id      TEXT NOT NULL,
+                twitter_id      INTEGER NOT NULL,
                 init_msg        INTEGER NOT NULL,
-                timestamp       INTEGER NOT NULL
+                timestamp       INTEGER NOT NULL,
+
+                UNIQUE (account, twitter_id)
             )
         ",
             params![],
@@ -1624,6 +1626,16 @@ mod tests {
 
             db.insert_twitter_id(&alice, &alice_id).await.unwrap();
             db.insert_twitter_id(&bob, &bob_id).await.unwrap();
+
+            let res = db.select_twitter_id(&alice).await.unwrap().unwrap();
+            assert_eq!(res, alice_id);
+
+            let res = db.select_twitter_id(&bob).await.unwrap().unwrap();
+            assert_eq!(res, bob_id);
+
+            let eve = Account::from("Eve");
+            let res = db.select_twitter_id(&eve).await.unwrap();
+            assert!(res.is_none());
 
             let (account, init_msg) = db
                 .select_account_from_twitter_id(&alice_id)
