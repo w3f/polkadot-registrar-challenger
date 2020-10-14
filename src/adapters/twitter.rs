@@ -238,7 +238,7 @@ impl TwitterHandler {
                     .await?
             }
             None => {
-                time::delay_for(Duration::from_secs(3)).await;
+                time::delay_for(Duration::from_secs(65)).await;
                 self.handle_incoming_messages(transport, my_id).await?;
             }
             Some(_) => warn!("Received unrecognized message type"),

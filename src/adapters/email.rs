@@ -351,7 +351,7 @@ impl EmailHandler {
         let messages = transport.request_messages().await?;
 
         if messages.is_empty() {
-            debug!("No new messages found");
+            trace!("No new messages found");
             return Ok(());
         }
 
