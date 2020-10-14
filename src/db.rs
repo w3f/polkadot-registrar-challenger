@@ -218,8 +218,8 @@ impl Database2 {
         // Table for display name violations.
         con.execute("
             CREATE TABLE IF NOT EXISTS display_name_violations (
-                id             INTEGER PRIMARY KEY,
-                name            TEXT NOT NULL
+                id              INTEGER PRIMARY KEY,
+                name            TEXT NOT NULL,
                 net_account_id  INTEGER NOT NULL,
 
                 UNIQUE (name, net_account_id)
@@ -1775,6 +1775,75 @@ mod tests {
 
             let res = db.find_untracked_email_ids(&list).await.unwrap();
             assert_eq!(&res, &[&id_3]);
+        });
+    }
+
+    #[test]
+    fn insert_select_display_names() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            let alice = Account::from("alice");
+            let bob = Account::from("bob");
+            let eve = Account::from("eve");
+
+            db.insert_display_name(&alice).await.unwrap();
+            db.insert_display_name(&bob).await.unwrap();
+            // Multiple inserts of the same value.
+            db.insert_display_name(&eve).await.unwrap();
+            db.insert_display_name(&eve).await.unwrap();
+
+            let res = db.select_display_names().await.unwrap();
+            assert_eq!(res.len(), 3);
+            assert!(res.contains(&alice));
+            assert!(res.contains(&bob));
+            assert!(res.contains(&eve));
+        });
+    }
+
+    #[test]
+    fn insert_select_display_name_violations() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            // Prepare addresses.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+
+            // Create and insert identity into storage.
+            let ident = OnChainIdentity::new(alice.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
+            let ident = OnChainIdentity::new(bob.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
+            db.insert_display_name_violations(&alice, &[
+                Account::from("Alice"),
+                Account::from("alice"),
+                Account::from("Alistair"),
+            ]).await.unwrap();
+
+            db.insert_display_name_violations(&bob, &[
+                Account::from("Bob"),
+                Account::from("bob"),
+                Account::from("Bobby"),
+                Account::from("bobby"),
+            ]).await.unwrap();
+
+            let res = db.select_display_name_violations(&alice).await.unwrap();
+            assert_eq!(res.len(), 3);
+            assert!(res.contains(&Account::from("Alice")));
+            assert!(res.contains(&Account::from("alice")));
+            assert!(res.contains(&Account::from("Alistair")));
+
+            let res = db.select_display_name_violations(&bob).await.unwrap();
+            assert_eq!(res.len(), 4);
+            assert!(res.contains(&Account::from("Bob")));
+            assert!(res.contains(&Account::from("bob")));
+            assert!(res.contains(&Account::from("Bobby")));
+            assert!(res.contains(&Account::from("bobby")));
         });
     }
 }
