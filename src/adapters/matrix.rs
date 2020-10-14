@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{verification_handler, Verifier2};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::{Request, Response},
@@ -47,6 +47,9 @@ pub enum MatrixError {
         0
     )]
     ChallengeDataNotFound(Account),
+    #[fail(display = "No Matrix account found for user: {}", 0)]
+    // TODO: Should be `NetAccount`
+    NoMatrixAccount(String),
 }
 
 #[async_trait]
@@ -216,7 +219,10 @@ impl MatrixHandler {
             NotifyInvalidAccount {
                 net_account,
                 accounts,
-            } => self.handle_invalid_account_notification(net_account, accounts).await?,
+            } => {
+                self.handle_invalid_account_notification(net_account, accounts)
+                    .await?
+            }
             _ => error!("Received unrecognized message type"),
         }
 
@@ -380,7 +386,25 @@ impl MatrixHandler {
 
         Ok(())
     }
-    async fn handle_invalid_account_notification(&self, net_account: NetAccount, accounts: Vec<(AccountType, Account)>) -> Result<()> {
+    async fn handle_invalid_account_notification(
+        &self,
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+    ) -> Result<()> {
+        let account = self
+            .db
+            .select_account_from_net_account(&net_account, &AccountType::Matrix)
+            .await?
+            .ok_or(MatrixError::NoMatrixAccount(
+                net_account.as_str().to_string(),
+            ))?;
+
+        let room_id = self.init_room_id(&net_account, &account).await?;
+
+        self.transport
+            .send_message(&room_id, invalid_accounts_message(&accounts))
+            .await
+            .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
         Ok(())
     }

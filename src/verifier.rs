@@ -1,6 +1,6 @@
 use crate::comms::CommsVerifier;
 use crate::primitives::{
-    AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
+    Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
 };
 use crate::Database2;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
@@ -165,4 +165,35 @@ pub async fn verification_handler<'a>(
     }
 
     Ok(())
+}
+
+pub fn invalid_accounts_message(accounts: &[(AccountType, Account)]) -> String {
+    let mut message = String::new();
+
+    message.push_str(&format!(
+        "Please note that the following {} could not be reached and \
+        might be invalid:\n\nw",
+        {
+            if accounts.len() > 1 {
+                "accounts"
+            } else {
+                "account"
+            }
+        }
+    ));
+
+    for (account_ty, account) in accounts {
+        message.push_str(&format!(
+            "> {} (on {})\n",
+            account.as_str(),
+            account_ty.to_string()
+        ));
+    }
+
+    message.push_str(
+        "\nPlease update the on-chain identity data. No new \
+        `requestJudgement` extrinsic must be issued after the update",
+    );
+
+    message
 }

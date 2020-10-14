@@ -360,10 +360,9 @@ impl IdentityManager {
         let invalid_accounts = find_invalid(&account_statuses);
         if !invalid_accounts.is_empty() {
             if let Some(to_notify) = find_valid(&account_statuses) {
-                self.get_comms(to_notify)
-                    .map(|comms| {
-                        comms.notify_invalid_accounts(net_account.clone(), invalid_accounts);
-                    })?;
+                self.get_comms(to_notify).map(|comms| {
+                    comms.notify_invalid_accounts(net_account.clone(), invalid_accounts);
+                })?;
             } else {
                 warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());
             }

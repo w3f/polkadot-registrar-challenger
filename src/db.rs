@@ -334,6 +334,47 @@ impl Database2 {
 
         Ok(net_accounts)
     }
+    pub async fn select_account_from_net_account(
+        &self,
+        net_account: &NetAccount,
+        account_ty: &AccountType,
+    ) -> Result<Option<Account>> {
+        let con = self.con.lock().await;
+
+        con.query_row_named(
+            "
+            SELECT
+                account
+            FROM
+                account_states
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ",
+            named_params! {
+                ":net_account": net_account,
+                ":account_ty": account_ty,
+            },
+            |row| row.get::<_, Account>(0),
+        )
+        .optional()
+        .map_err(|err| err.into())
+    }
     #[cfg(test)]
     async fn select_identities(&self) -> Result<Vec<OnChainIdentity>> {
         let con = self.con.lock().await;

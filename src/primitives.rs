@@ -8,8 +8,7 @@ use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::TryFrom;
-use std::fmt;
-use std::fmt::Debug;
+use std::fmt::{self, Debug, Display};
 use std::result::Result as StdResult;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -237,6 +236,22 @@ pub enum AccountType {
     ReservedConnector,
     // Matrix emitter which reacts on Matrix messages
     ReservedEmitter,
+}
+
+impl Display for AccountType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use AccountType::*;
+
+        match self {
+            LegalName => write!(f, "Legal Name"),
+            DisplayName => write!(f, "Display Name"),
+            Email => write!(f, "Email"),
+            Web => write!(f, "Web"),
+            Twitter => write!(f, "Twitter"),
+            Matrix => write!(f, "Matrix"),
+            _ => Err(fmt::Error),
+        }
+    }
 }
 
 impl ToSql for AccountType {
