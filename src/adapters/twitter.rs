@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::primitives::{unix_time, Account, AccountType, Challenge, NetAccount, Result};
-use crate::verifier::{verification_handler, Verifier2, invalid_accounts_message};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -268,7 +268,9 @@ impl TwitterHandler {
                     net_account.as_str().to_string(),
                 ))?;
 
-        transport.send_message(&twitter_id, invalid_accounts_message(&accounts)).await?;
+        transport
+            .send_message(&twitter_id, invalid_accounts_message(&accounts))
+            .await?;
 
         Ok(())
     }
