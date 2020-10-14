@@ -217,10 +217,10 @@ impl Database2 {
             con: Arc::new(Mutex::new(con)),
         })
     }
-    pub async fn insert_identity(&mut self, ident: &OnChainIdentity) -> Result<()> {
+    pub async fn insert_identity(&self, ident: &OnChainIdentity) -> Result<()> {
         self.insert_identity_batch(&[ident]).await
     }
-    pub async fn insert_identity_batch(&mut self, idents: &[&OnChainIdentity]) -> Result<()> {
+    pub async fn insert_identity_batch(&self, idents: &[&OnChainIdentity]) -> Result<()> {
         let mut con = self.con.lock().await;
         let transaction = con.transaction()?;
 
@@ -1033,7 +1033,7 @@ mod tests {
     fn insert_identity() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let mut ident = OnChainIdentity::new(NetAccount::from(
                 "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
@@ -1165,7 +1165,7 @@ mod tests {
     fn select_addresses() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Create identity.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1197,10 +1197,46 @@ mod tests {
     }
 
     #[test]
+    fn select_account_from_net_account() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            // Create identity.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
+
+            alice_ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+
+            db.insert_identity(&alice_ident).await.unwrap();
+
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+            let mut bob_ident = OnChainIdentity::new(bob.clone()).unwrap();
+
+            bob_ident
+                .push_account(AccountType::Email, Account::from("bob@example.com"))
+                .unwrap();
+
+            db.insert_identity(&bob_ident).await.unwrap();
+
+            let res = db.select_account_from_net_account(&alice, &AccountType::Matrix).await.unwrap();
+            assert_eq!(res.unwrap(), Account::from("@alice:matrix.org"));
+
+            let res = db.select_account_from_net_account(&alice, &AccountType::Email).await.unwrap();
+            assert!(res.is_none());
+
+            let res = db.select_account_from_net_account(&bob, &AccountType::Email).await.unwrap();
+            assert_eq!(res.unwrap(), Account::from("bob@example.com"));
+        });
+    }
+
+    #[test]
     fn select_cleanup_timed_out_identities() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1262,7 +1298,7 @@ mod tests {
     fn insert_identity_batch() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let idents = vec![
                 // Two identical identities with the same values.
@@ -1367,7 +1403,7 @@ mod tests {
     fn insert_select_room_id() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1423,7 +1459,7 @@ mod tests {
     fn set_challenge_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
@@ -1466,7 +1502,7 @@ mod tests {
     fn select_challenge_data() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1510,13 +1546,13 @@ mod tests {
     fn set_account_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
             // Alice does not exists.
             let res = db
-                .set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
+                .set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
                 .await;
             assert!(res.is_err());
 
@@ -1532,7 +1568,7 @@ mod tests {
             db.insert_identity(&ident).await.unwrap();
 
             // Set account status to valid
-            db.set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
+            db.set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
                 .await
                 .unwrap();
         });
