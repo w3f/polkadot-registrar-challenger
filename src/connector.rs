@@ -301,6 +301,10 @@ impl Connector {
                                     if let Ok(requests) =
                                         serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
                                     {
+                                        if requests.is_empty() {
+                                            info!("The pending judgement list is empty");
+                                        }
+
                                         for request in requests {
                                             if let Ok(ident) = OnChainIdentity::try_from(request) {
                                                 sender.send(Message::ack(None)).await.unwrap();
