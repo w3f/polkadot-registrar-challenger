@@ -187,6 +187,7 @@ impl Database2 {
 
                 FOREIGN KEY (account_ty_id)
                     REFERENCES account_types (id)
+                        ON DELETE CASCADE
             )
         ",
             params![],
@@ -227,6 +228,7 @@ impl Database2 {
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
             )
         ",
             params![],
