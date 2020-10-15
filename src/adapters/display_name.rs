@@ -157,3 +157,13 @@ fn jaro_words(left: &str, right: &str, delimiter: &str) -> f64 {
 
     total as f64 / left_words.len().max(right_words.len()) as f64
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_too_similar() {
+
+    }
+}

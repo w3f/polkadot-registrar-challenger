@@ -180,7 +180,7 @@ pub fn invalid_accounts_message(
         if account_ty == &AccountType::DisplayName {
             if let Some(violations) = violations.as_ref() {
                 message.push_str(&format!(
-                    "> \"{}\" (Display Name) is too similar to {}existing display {}:\n",
+                    "* \"{}\" (Display Name) is too similar to {}existing display {}:\n",
                     account.as_str(),
                     {
                         if violations.len() == 1 {
@@ -199,11 +199,11 @@ pub fn invalid_accounts_message(
                 ));
 
                 for violation in violations {
-                    message.push_str(&format!("  > \"{}\"\n", violation.as_str()));
+                    message.push_str(&format!("  * \"{}\"\n", violation.as_str()));
                 }
 
                 if violations.len() == VIOLATIONS_CAP {
-                    message.push_str("  > etc.\n");
+                    message.push_str("  * etc.\n");
                 }
 
                 continue;
@@ -211,7 +211,7 @@ pub fn invalid_accounts_message(
         }
 
         message.push_str(&format!(
-            "> \"{}\" ({}), could not be reached\n",
+            "* \"{}\" ({}), could not be reached\n",
             account.as_str(),
             account_ty.to_string()
         ));

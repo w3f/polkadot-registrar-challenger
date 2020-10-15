@@ -741,7 +741,12 @@ impl Database2 {
                 account_ty, account, status
             FROM
                 account_states
-            INNER JOIN
+            LEFT JOIN
+                account_types
+            ON
+                account_states.account_ty_id =
+                    account_types.id
+            LEFT JOIN
                 account_status
             ON
                 account_states.account_status_id =
@@ -755,11 +760,6 @@ impl Database2 {
                     WHERE
                         net_account = :net_account
                 )
-            INNER JOIN
-                account_status
-            ON
-                account_states.account_status_id =
-                    account_status.id
             ",
             )?;
 
@@ -1652,12 +1652,6 @@ mod tests {
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
-            // Alice does not exists.
-            let res = db
-                .set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
-                .await;
-            assert!(res.is_err());
-
             // Create and insert identity into storage.
             let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
             ident
@@ -1673,6 +1667,11 @@ mod tests {
             db.set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
                 .await
                 .unwrap();
+
+            let res = db.select_account_statuses(&alice).await.unwrap();
+            assert_eq!(res.len(), 2);
+            res.contains(&(AccountType::Matrix, Account::from("@alice:matrix.org"), AccountStatus::Valid));
+            res.contains(&(AccountType::Web, Account::from("alice.com"), AccountStatus::Unknown));
         });
     }
 
