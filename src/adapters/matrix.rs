@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{verification_handler, Verifier2};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::{Request, Response},
@@ -47,6 +47,9 @@ pub enum MatrixError {
         0
     )]
     ChallengeDataNotFound(Account),
+    #[fail(display = "No Matrix account found for user: {}", 0)]
+    // TODO: Should be `NetAccount`
+    NoMatrixAccount(String),
 }
 
 #[async_trait]
@@ -195,7 +198,10 @@ impl MatrixHandler {
             AccountToVerify {
                 net_account,
                 account,
-            } => self.handle_account_verification(net_account, account).await,
+            } => {
+                self.handle_account_verification(net_account, account)
+                    .await?
+            }
             LeaveRoom { net_account } => {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
                     self.transport
@@ -209,17 +215,20 @@ impl MatrixHandler {
                         net_account.as_str()
                     );
                 }
-
-                Ok(())
             }
-            _ => panic!(),
+            NotifyInvalidAccount {
+                net_account,
+                accounts,
+            } => {
+                self.handle_invalid_account_notification(net_account, accounts)
+                    .await?
+            }
+            _ => error!("Received unrecognized message type"),
         }
+
+        Ok(())
     }
-    async fn handle_account_verification(
-        &self,
-        net_account: NetAccount,
-        account: Account,
-    ) -> Result<()> {
+    async fn init_room_id(&self, net_account: &NetAccount, account: &Account) -> Result<RoomId> {
         // If a room already exists, don't create a new one.
         let room_id = if let Some(room_id) = self.db.select_room_id(&net_account).await? {
             room_id
@@ -259,23 +268,32 @@ impl MatrixHandler {
             })
             .await
             {
+                // Mark the account as valid.
+                self.db
+                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Valid)
+                    .await?;
+
                 room_id?
             } else {
                 debug!("Failed to connect to account: {}", account.as_str());
 
-                // Mark the account as valid.
+                // Mark the account as invalid.
                 self.db
-                    .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Invalid)
+                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Invalid)
                     .await?;
 
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
             }
         };
 
-        // Mark the account as invalid.
-        self.db
-            .set_account_status(&net_account, &AccountType::Matrix, AccountStatus::Valid)
-            .await?;
+        Ok(room_id)
+    }
+    async fn handle_account_verification(
+        &self,
+        net_account: NetAccount,
+        account: Account,
+    ) -> Result<()> {
+        let room_id = self.init_room_id(&net_account, &account).await?;
 
         let challenge_data = self
             .db
@@ -365,6 +383,31 @@ impl MatrixHandler {
         } else {
             warn!("Received an message from an un-joined room");
         }
+
+        Ok(())
+    }
+    async fn handle_invalid_account_notification(
+        &self,
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+    ) -> Result<()> {
+        let account = self
+            .db
+            .select_account_from_net_account(&net_account, &AccountType::Matrix)
+            .await?
+            .ok_or(MatrixError::NoMatrixAccount(
+                net_account.as_str().to_string(),
+            ))?;
+
+        let room_id = self.init_room_id(&net_account, &account).await?;
+
+        // Check for any display name violations (optional).
+        let violations = self.db.select_display_name_violations(&net_account).await?;
+
+        self.transport
+            .send_message(&room_id, invalid_accounts_message(&accounts, violations))
+            .await
+            .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
         Ok(())
     }

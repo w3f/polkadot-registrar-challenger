@@ -1,6 +1,7 @@
+use crate::adapters::VIOLATIONS_CAP;
 use crate::comms::CommsVerifier;
 use crate::primitives::{
-    AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
+    Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
 };
 use crate::Database2;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
@@ -165,4 +166,61 @@ pub async fn verification_handler<'a>(
     }
 
     Ok(())
+}
+
+pub fn invalid_accounts_message(
+    accounts: &[(AccountType, Account)],
+    violations: Option<Vec<Account>>,
+) -> String {
+    let mut message = String::new();
+
+    message.push_str("Please note that the following information is invalid:\n\n");
+
+    for (account_ty, account) in accounts {
+        if account_ty == &AccountType::DisplayName {
+            if let Some(violations) = violations.as_ref() {
+                message.push_str(&format!(
+                    "* \"{}\" (Display Name) is too similar to {}existing display {}:\n",
+                    account.as_str(),
+                    {
+                        if violations.len() == 1 {
+                            "an "
+                        } else {
+                            ""
+                        }
+                    },
+                    {
+                        if violations.len() == 1 {
+                            "name"
+                        } else {
+                            "names"
+                        }
+                    }
+                ));
+
+                for violation in violations {
+                    message.push_str(&format!("  * \"{}\"\n", violation.as_str()));
+                }
+
+                if violations.len() == VIOLATIONS_CAP {
+                    message.push_str("  * etc.\n");
+                }
+
+                continue;
+            }
+        }
+
+        message.push_str(&format!(
+            "* \"{}\" ({}), could not be reached\n",
+            account.as_str(),
+            account_ty.to_string()
+        ));
+    }
+
+    message.push_str(
+        "\nPlease update the on-chain identity data. No new \
+        `requestJudgement` extrinsic must be issued after the update.",
+    );
+
+    message
 }

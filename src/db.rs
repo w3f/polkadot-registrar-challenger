@@ -167,9 +167,11 @@ impl Database2 {
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
                 id              INTEGER PRIMARY KEY,
                 account         INTEGER NOT NULL UNIQUE,
-                twitter_id      TEXT NOT NULL,
+                twitter_id      INTEGER NOT NULL,
                 init_msg        INTEGER NOT NULL,
-                timestamp       INTEGER NOT NULL
+                timestamp       INTEGER NOT NULL,
+
+                UNIQUE (account, twitter_id)
             )
         ",
             params![],
@@ -185,6 +187,7 @@ impl Database2 {
 
                 FOREIGN KEY (account_ty_id)
                     REFERENCES account_types (id)
+                        ON DELETE CASCADE
             )
         ",
             params![],
@@ -202,14 +205,43 @@ impl Database2 {
             params![],
         )?;
 
+        // Table for all display names.
+        con.execute(
+            "
+            CREATE TABLE IF NOT EXISTS display_names (
+                id    INTEGER PRIMARY KEY,
+                name  TEXT NOT NULL UNIQUE
+            )
+        ",
+            params![],
+        )?;
+
+        // Table for display name violations.
+        con.execute(
+            "
+            CREATE TABLE IF NOT EXISTS display_name_violations (
+                id              INTEGER PRIMARY KEY,
+                name            TEXT NOT NULL,
+                net_account_id  INTEGER NOT NULL,
+
+                UNIQUE (name, net_account_id)
+
+                FOREIGN KEY (net_account_id)
+                    REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
+            )
+        ",
+            params![],
+        )?;
+
         Ok(Database2 {
             con: Arc::new(Mutex::new(con)),
         })
     }
-    pub async fn insert_identity(&mut self, ident: &OnChainIdentity) -> Result<()> {
+    pub async fn insert_identity(&self, ident: &OnChainIdentity) -> Result<()> {
         self.insert_identity_batch(&[ident]).await
     }
-    pub async fn insert_identity_batch(&mut self, idents: &[&OnChainIdentity]) -> Result<()> {
+    pub async fn insert_identity_batch(&self, idents: &[&OnChainIdentity]) -> Result<()> {
         let mut con = self.con.lock().await;
         let transaction = con.transaction()?;
 
@@ -290,6 +322,7 @@ impl Database2 {
 
         Ok(())
     }
+    // TODO: Should return AccountType, too.
     pub async fn select_addresses(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
         let con = self.con.lock().await;
 
@@ -317,10 +350,51 @@ impl Database2 {
 
         let mut net_accounts = vec![];
         while let Some(row) = rows.next()? {
-            net_accounts.push(row.get::<_, Account>(0)?)
+            net_accounts.push(row.get::<_, Account>(0)?);
         }
 
         Ok(net_accounts)
+    }
+    pub async fn select_account_from_net_account(
+        &self,
+        net_account: &NetAccount,
+        account_ty: &AccountType,
+    ) -> Result<Option<Account>> {
+        let con = self.con.lock().await;
+
+        con.query_row_named(
+            "
+            SELECT
+                account
+            FROM
+                account_states
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ",
+            named_params! {
+                ":net_account": net_account,
+                ":account_ty": account_ty,
+            },
+            |row| row.get::<_, Account>(0),
+        )
+        .optional()
+        .map_err(|err| err.into())
     }
     #[cfg(test)]
     async fn select_identities(&self) -> Result<Vec<OnChainIdentity>> {
@@ -423,7 +497,7 @@ impl Database2 {
         &self,
         net_account: &NetAccount,
         account_ty: &AccountType,
-        status: AccountStatus,
+        status: &AccountStatus,
     ) -> StdResult<(), DatabaseError> {
         let con = self.con.lock().await;
 
@@ -575,6 +649,7 @@ impl Database2 {
                                 account_types
                             WHERE
                                 account_ty IN (
+                                    'display_name',
                                     'matrix',
                                     'email',
                                     'twitter'
@@ -654,38 +729,26 @@ impl Database2 {
 
         Ok(())
     }
-    // TODO: Make use of this
-    #[allow(dead_code)]
-    pub async fn select_invalid_accounts(
+    pub async fn select_account_statuses(
         &self,
         net_account: &NetAccount,
-    ) -> Result<Vec<(AccountType, Account)>> {
+    ) -> Result<Vec<(AccountType, Account, AccountStatus)>> {
         let mut con = self.con.lock().await;
         let transaction = con.transaction()?;
-
-        // Make sure the identity even exists.
-        transaction.query_row_named(
-            "SELECT
-                    id
-                FROM
-                    pending_judgments
-                WHERE
-                    net_account = :net_account
-                ",
-            named_params! {
-                ":net_account": net_account,
-            },
-            |row| row.get::<_, i32>(0),
-        )?;
 
         let account_set = {
             let mut stmt = transaction.prepare(
                 "
             SELECT
-                account_ty, account
+                account_ty, account, status
             FROM
                 account_states
-            INNER JOIN
+            LEFT JOIN
+                account_types
+            ON
+                account_states.account_ty_id =
+                    account_types.id
+            LEFT JOIN
                 account_status
             ON
                 account_states.account_status_id =
@@ -699,26 +762,20 @@ impl Database2 {
                     WHERE
                         net_account = :net_account
                 )
-            AND
-                account_status_id
-                    IN (
-                        SELECT
-                            id
-                        FROM
-                            account_status
-                        WHERE
-                            status = 'invalid'
-                    )
             ",
             )?;
 
             let mut rows = stmt.query_named(named_params! {
-                ":net_account": net_account
+                ":net_account": net_account,
             })?;
 
             let mut account_set = vec![];
             while let Some(row) = rows.next()? {
-                account_set.push((row.get::<_, AccountType>(0)?, row.get::<_, Account>(1)?))
+                account_set.push((
+                    row.get::<_, AccountType>(0)?,
+                    row.get::<_, Account>(1)?,
+                    row.get::<_, AccountStatus>(2)?,
+                ))
             }
 
             account_set
@@ -784,6 +841,25 @@ impl Database2 {
         )
         .optional()
         .map_err(|err| failure::Error::from(err))
+    }
+    pub async fn select_twitter_id(&self, account: &Account) -> Result<Option<TwitterId>> {
+        let con = self.con.lock().await;
+        con.query_row_named(
+            "
+            SELECT
+                twitter_id
+            FROM
+                known_twitter_ids
+            WHERE
+                account = :account
+        ",
+            named_params! {
+                ":account": account,
+            },
+            |row| row.get::<_, TwitterId>(0),
+        )
+        .optional()
+        .map_err(|err| err.into())
     }
     pub async fn confirm_init_message(&self, account: &Account) -> Result<()> {
         let con = self.con.lock().await;
@@ -911,6 +987,119 @@ impl Database2 {
 
         Ok(untracked_email_ids)
     }
+    pub async fn insert_display_name(&self, account: &Account) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            INSERT OR IGNORE INTO display_names (
+                name
+            ) VALUES (
+                :account
+            )
+        ",
+            named_params! {
+                ":account": account,
+            },
+        )?;
+
+        Ok(())
+    }
+    pub async fn select_display_names(&self) -> Result<Vec<Account>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                name
+            FROM
+                display_names
+        ",
+        )?;
+
+        let mut rows = stmt.query(params![])?;
+
+        let mut accounts = vec![];
+        while let Some(row) = rows.next()? {
+            accounts.push(row.get::<_, Account>(0)?);
+        }
+
+        Ok(accounts)
+    }
+    pub async fn insert_display_name_violations(
+        &self,
+        net_account: &NetAccount,
+        violations: &[Account],
+    ) -> Result<()> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            INSERT OR IGNORE INTO display_name_violations (
+                name,
+                net_account_id
+            ) VALUES (
+                :name,
+                (
+                    SELECT
+                        id
+                    FROM
+                       pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            )
+        ",
+        )?;
+
+        for violation in violations {
+            stmt.execute_named(named_params! {
+                ":name": violation,
+                ":net_account": net_account,
+            })?;
+        }
+
+        Ok(())
+    }
+    pub async fn select_display_name_violations(
+        &self,
+        net_account: &NetAccount,
+    ) -> Result<Option<Vec<Account>>> {
+        let con = self.con.lock().await;
+
+        let mut stmt = con.prepare(
+            "
+            SELECT
+                name
+            FROM
+                display_name_violations
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+        ",
+        )?;
+
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": net_account,
+        })?;
+
+        let mut violations = vec![];
+        while let Some(row) = rows.next()? {
+            violations.push(row.get::<_, Account>(0)?);
+        }
+
+        if violations.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(violations))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -939,7 +1128,7 @@ mod tests {
     fn insert_identity() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let mut ident = OnChainIdentity::new(NetAccount::from(
                 "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
@@ -1071,7 +1260,7 @@ mod tests {
     fn select_addresses() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Create identity.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1103,10 +1292,55 @@ mod tests {
     }
 
     #[test]
+    fn select_account_from_net_account() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            // Create identity.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
+
+            alice_ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+
+            db.insert_identity(&alice_ident).await.unwrap();
+
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+            let mut bob_ident = OnChainIdentity::new(bob.clone()).unwrap();
+
+            bob_ident
+                .push_account(AccountType::Email, Account::from("bob@example.com"))
+                .unwrap();
+
+            db.insert_identity(&bob_ident).await.unwrap();
+
+            let res = db
+                .select_account_from_net_account(&alice, &AccountType::Matrix)
+                .await
+                .unwrap();
+            assert_eq!(res.unwrap(), Account::from("@alice:matrix.org"));
+
+            let res = db
+                .select_account_from_net_account(&alice, &AccountType::Email)
+                .await
+                .unwrap();
+            assert!(res.is_none());
+
+            let res = db
+                .select_account_from_net_account(&bob, &AccountType::Email)
+                .await
+                .unwrap();
+            assert_eq!(res.unwrap(), Account::from("bob@example.com"));
+        });
+    }
+
+    #[test]
     fn select_cleanup_timed_out_identities() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1168,7 +1402,7 @@ mod tests {
     fn insert_identity_batch() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let idents = vec![
                 // Two identical identities with the same values.
@@ -1273,7 +1507,7 @@ mod tests {
     fn insert_select_room_id() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1329,7 +1563,7 @@ mod tests {
     fn set_challenge_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
@@ -1372,7 +1606,7 @@ mod tests {
     fn select_challenge_data() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1416,15 +1650,9 @@ mod tests {
     fn set_account_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let mut db = Database2::new(&db_path()).unwrap();
+            let db = Database2::new(&db_path()).unwrap();
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
-
-            // Alice does not exists.
-            let res = db
-                .set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
-                .await;
-            assert!(res.is_err());
 
             // Create and insert identity into storage.
             let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
@@ -1438,9 +1666,22 @@ mod tests {
             db.insert_identity(&ident).await.unwrap();
 
             // Set account status to valid
-            db.set_account_status(&alice, &AccountType::Matrix, AccountStatus::Valid)
+            db.set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
                 .await
                 .unwrap();
+
+            let res = db.select_account_statuses(&alice).await.unwrap();
+            assert_eq!(res.len(), 2);
+            res.contains(&(
+                AccountType::Matrix,
+                Account::from("@alice:matrix.org"),
+                AccountStatus::Valid,
+            ));
+            res.contains(&(
+                AccountType::Web,
+                Account::from("alice.com"),
+                AccountStatus::Unknown,
+            ));
         });
     }
 
@@ -1494,6 +1735,16 @@ mod tests {
 
             db.insert_twitter_id(&alice, &alice_id).await.unwrap();
             db.insert_twitter_id(&bob, &bob_id).await.unwrap();
+
+            let res = db.select_twitter_id(&alice).await.unwrap().unwrap();
+            assert_eq!(res, alice_id);
+
+            let res = db.select_twitter_id(&bob).await.unwrap().unwrap();
+            assert_eq!(res, bob_id);
+
+            let eve = Account::from("Eve");
+            let res = db.select_twitter_id(&eve).await.unwrap();
+            assert!(res.is_none());
 
             let (account, init_msg) = db
                 .select_account_from_twitter_id(&alice_id)
@@ -1559,6 +1810,97 @@ mod tests {
 
             let res = db.find_untracked_email_ids(&list).await.unwrap();
             assert_eq!(&res, &[&id_3]);
+        });
+    }
+
+    #[test]
+    fn insert_select_display_names() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            let alice = Account::from("alice");
+            let bob = Account::from("bob");
+            let eve = Account::from("eve");
+
+            db.insert_display_name(&alice).await.unwrap();
+            db.insert_display_name(&bob).await.unwrap();
+            // Multiple inserts of the same value.
+            db.insert_display_name(&eve).await.unwrap();
+            db.insert_display_name(&eve).await.unwrap();
+
+            let res = db.select_display_names().await.unwrap();
+            assert_eq!(res.len(), 3);
+            assert!(res.contains(&alice));
+            assert!(res.contains(&bob));
+            assert!(res.contains(&eve));
+        });
+    }
+
+    #[test]
+    fn insert_select_display_name_violations() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            // Prepare addresses.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let bob = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
+            let eve = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
+
+            // Create and insert identity into storage.
+            let ident = OnChainIdentity::new(alice.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
+            let ident = OnChainIdentity::new(bob.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
+            db.insert_display_name_violations(
+                &alice,
+                &[
+                    Account::from("Alice"),
+                    Account::from("alice"),
+                    Account::from("Alistair"),
+                ],
+            )
+            .await
+            .unwrap();
+
+            db.insert_display_name_violations(
+                &bob,
+                &[
+                    Account::from("Bob"),
+                    Account::from("bob"),
+                    Account::from("Bobby"),
+                    Account::from("bobby"),
+                ],
+            )
+            .await
+            .unwrap();
+
+            let res = db
+                .select_display_name_violations(&alice)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(res.len(), 3);
+            assert!(res.contains(&Account::from("Alice")));
+            assert!(res.contains(&Account::from("alice")));
+            assert!(res.contains(&Account::from("Alistair")));
+
+            let res = db
+                .select_display_name_violations(&bob)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(res.len(), 4);
+            assert!(res.contains(&Account::from("Bob")));
+            assert!(res.contains(&Account::from("bob")));
+            assert!(res.contains(&Account::from("Bobby")));
+            assert!(res.contains(&Account::from("bobby")));
+
+            let res = db.select_display_name_violations(&eve).await.unwrap();
+            assert!(res.is_none());
         });
     }
 }

@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
-use crate::primitives::{Account, AccountType, Result};
-use crate::verifier::{verification_handler, Verifier2};
+use crate::primitives::{Account, AccountType, NetAccount, Result};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
@@ -84,6 +84,9 @@ pub enum ClientError {
     IncompleteBuilder,
     #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
+    #[fail(display = "No Email account found for user: {}", 0)]
+    // TODO: Should be `NetAccount`
+    NoEmailAccount(String),
 }
 
 pub struct SmtpImapClientBuilder {
@@ -308,10 +311,18 @@ impl EmailHandler {
             }) => {
                 self.handle_account_verification(transport, account).await?;
             }
-            _ => {
+            Some(NotifyInvalidAccount {
+                net_account,
+                accounts,
+            }) => {
+                self.handle_invalid_account_notification(net_account, accounts, transport)
+                    .await?
+            }
+            None => {
                 time::delay_for(Duration::from_secs(3)).await;
                 self.handle_incoming_messages(transport).await?;
             }
+            Some(_) => warn!("Received unrecognized message type"),
         }
 
         Ok(())
@@ -340,7 +351,7 @@ impl EmailHandler {
         let messages = transport.request_messages().await?;
 
         if messages.is_empty() {
-            debug!("No new messages found");
+            trace!("No new messages found");
             return Ok(());
         }
 
@@ -368,7 +379,7 @@ impl EmailHandler {
                 .await?;
 
             if challenge_data.is_empty() {
-                warn!("No challenge data found for {}", sender.as_str());
+                warn!("No challenge data found for {}. Ignoring", sender.as_str());
 
                 self.db.track_email_id(email_id).await?;
                 continue;
@@ -391,6 +402,29 @@ impl EmailHandler {
 
             self.db.track_email_id(email_id).await?;
         }
+
+        Ok(())
+    }
+    async fn handle_invalid_account_notification<T: EmailTransport>(
+        &self,
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+        transport: &T,
+    ) -> Result<()> {
+        let account = self
+            .db
+            .select_account_from_net_account(&net_account, &AccountType::Email)
+            .await?
+            .ok_or(ClientError::NoEmailAccount(
+                net_account.as_str().to_string(),
+            ))?;
+
+        // Check for any display name violations (optional).
+        let violations = self.db.select_display_name_violations(&net_account).await?;
+
+        transport
+            .send_message(&account, invalid_accounts_message(&accounts, violations))
+            .await?;
 
         Ok(())
     }

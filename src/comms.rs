@@ -36,6 +36,10 @@ pub enum CommsMessage {
         net_account: NetAccount,
     },
     MessageAcknowledged,
+    NotifyInvalidAccount {
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +70,18 @@ impl CommsMain {
                 net_account: net_account,
             })
             .fatal();
+    }
+    pub fn notify_invalid_accounts(
+        &self,
+        net_account: NetAccount,
+        accounts: Vec<(AccountType, Account)>,
+    ) {
+        self.sender
+            .send(CommsMessage::NotifyInvalidAccount {
+                net_account: net_account,
+                accounts: accounts,
+            })
+            .fatal()
     }
 }
 

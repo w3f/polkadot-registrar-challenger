@@ -2467,6 +2467,7 @@ dependencies = [
  "serde_json",
  "sha-1",
  "sha2 0.9.1",
+ "strsim",
  "tokio",
  "tokio-tungstenite",
  "tungstenite",
@@ -3088,6 +3089,12 @@ dependencies = [
  "block-cipher",
  "generic-array 0.14.4",
 ]
+
+[[package]]
+name = "strsim"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"

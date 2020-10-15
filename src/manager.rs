@@ -4,11 +4,24 @@ use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress, Result,
 };
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use rusqlite::types::{ToSql, ToSqlOutput, ValueRef};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
+
+static WHITELIST: [AccountType; 4] = [
+    AccountType::DisplayName,
+    AccountType::Matrix,
+    AccountType::Email,
+    AccountType::Twitter,
+];
+
+static NOTIFY_QUEUE: [AccountType; 3] = [
+    AccountType::Matrix,
+    AccountType::Email,
+    AccountType::Twitter,
+];
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OnChainIdentity {
@@ -49,7 +62,6 @@ impl OnChainIdentity {
     pub fn net_account(&self) -> &NetAccount {
         self.network_address.address()
     }
-    #[cfg(test)]
     pub fn get_account_state(&self, account_ty: &AccountType) -> Option<&AccountState> {
         self.accounts
             .iter()
@@ -120,6 +132,21 @@ impl ToSql for AccountStatus {
     }
 }
 
+impl FromSql for AccountStatus {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match value {
+            ValueRef::Text(val) => match val {
+                b"unknown" => Ok(AccountStatus::Unknown),
+                b"valid" => Ok(AccountStatus::Valid),
+                b"invalid" => Ok(AccountStatus::Invalid),
+                b"notified" => Ok(AccountStatus::Notified),
+                _ => Err(FromSqlError::InvalidType),
+            },
+            _ => Err(FromSqlError::InvalidType),
+        }
+    }
+}
+
 pub struct IdentityManager {
     db2: Database2,
     comms: CommsTable,
@@ -171,11 +198,9 @@ impl IdentityManager {
 
         if let Ok(msg) = self.comms.listener.try_recv() {
             match msg {
-                NewJudgementRequest(ident) => {
-                    self.handle_new_judgment_request(ident).await?;
-                }
+                NewJudgementRequest(ident) => self.handle_new_judgment_request(ident).await?,
                 NotifyStatusChange { net_account } => {
-                    self.handle_status_change(net_account).await?;
+                    self.handle_status_change(net_account).await?
                 }
                 MessageAcknowledged => {}
                 _ => panic!("Received unrecognized message type. Report as a bug"),
@@ -186,6 +211,7 @@ impl IdentityManager {
 
         Ok(())
     }
+    // TODO: Remove display_name
     async fn handle_verification_timeouts(&self) -> Result<()> {
         const TIMEOUT_LIMIT: u64 = 3600;
 
@@ -216,8 +242,14 @@ impl IdentityManager {
 
         // Find duplicates.
         for state in ident.account_states() {
-            // Reject the entire judgment request if "legal_name" is specified.
-            if state.account_ty == AccountType::LegalName {
+            // Reject the entire judgment request if a non-white listed account type is specified.
+            if !WHITELIST.contains(&state.account_ty) {
+                warn!(
+                    "Reject identity {}, use of unacceptable account type: {:?}",
+                    ident.net_account().as_str(),
+                    state.account_ty
+                );
+
                 self.get_comms(&AccountType::ReservedConnector)?
                     .notify_identity_judgment(ident.net_account().clone(), Judgement::Erroneous);
 
@@ -277,6 +309,63 @@ impl IdentityManager {
             time::delay_for(Duration::from_secs(3)).await;
 
             self.db2.remove_identity(&net_account).await?;
+
+            return Ok(());
+        }
+
+        // If an account is marked invalid, implying the account could not be
+        // reached, then find any other valid accounts which can be contacted
+        // and informed about the state of the invalid account. The user should
+        // then update the on-chain identity. Additionally, there's a special
+        // case of `display_name` which can be deemed invalid if it is too
+        // similar to another, existing `display_name` in the identity system.
+
+        /// Find a valid account of the identity which can be notified about an
+        /// other account's invalidity. Preference for Matrix, since it's
+        /// instant, followed by Email then Twitter.
+        fn find_valid(
+            account_statuses: &[(AccountType, Account, AccountStatus)],
+        ) -> Option<&'static AccountType> {
+            let filtered = account_statuses
+                .iter()
+                .filter(|(_, _, status)| status == &AccountStatus::Valid)
+                .map(|(account_ty, _, _)| account_ty)
+                .collect::<Vec<&AccountType>>();
+
+            for to_notify in &NOTIFY_QUEUE {
+                if filtered.contains(&to_notify) {
+                    return Some(to_notify);
+                }
+            }
+
+            None
+        }
+
+        /// Find invalid accounts.
+        fn find_invalid<'a>(
+            account_statuses: &[(AccountType, Account, AccountStatus)],
+        ) -> Vec<(AccountType, Account)> {
+            account_statuses
+                .iter()
+                .cloned()
+                .filter(|(_, _, status)| status == &AccountStatus::Invalid)
+                .map(|(account_ty, account, _)| (account_ty, account))
+                .collect::<Vec<(AccountType, Account)>>()
+        }
+
+        let account_statuses = self.db2.select_account_statuses(&net_account).await?;
+
+        // If invalid accounts were found, attempt to contact the user in order
+        // to inform that person about the current state of invalid accounts.
+        let invalid_accounts = find_invalid(&account_statuses);
+        if !invalid_accounts.is_empty() {
+            if let Some(to_notify) = find_valid(&account_statuses) {
+                self.get_comms(to_notify).map(|comms| {
+                    comms.notify_invalid_accounts(net_account.clone(), invalid_accounts);
+                })?;
+            } else {
+                warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());
+            }
         }
 
         Ok(())
