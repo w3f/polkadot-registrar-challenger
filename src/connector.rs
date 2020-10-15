@@ -338,6 +338,14 @@ impl Connector {
                                 }
                                 DisplayNamesResponse => {
                                     info!("Received display names response");
+                                    println!(">>> {:?}", msg.data);
+                                    if let Ok(display_names) =
+                                        serde_json::from_value::<Vec<Account>>(msg.data)
+                                    {
+                                        comms.notify_existing_display_names(display_names);
+                                    } else {
+                                        error!("Invalid `displayNamesResponse` message format");
+                                    }
                                 }
                                 _ => {
                                     warn!("Received unrecognized message: '{:?}'", msg);

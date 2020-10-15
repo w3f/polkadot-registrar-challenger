@@ -203,6 +203,11 @@ impl IdentityManager {
                     self.handle_status_change(net_account).await?
                 }
                 MessageAcknowledged => {}
+                ExistingDisplayNames { accounts } => {
+                    for account in &accounts {
+                        self.db2.insert_display_name(account).await?;
+                    }
+                }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
