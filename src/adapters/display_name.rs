@@ -117,29 +117,32 @@ impl DisplayNameHandler {
 
         let similarities = [
             jaro_winkler(&name_str, &account_str),
-            jaro_words(&name_str, &account_str, " "),
-            jaro_words(&name_str, &account_str, "-"),
-            jaro_words(&name_str, &account_str, "_"),
+            jaro_words(&name_str, &account_str, &[" ", "-", "_"]),
         ];
-
-        println!("{:?}", similarities);
 
         similarities.iter().any(|&s| s > limit)
     }
 }
 
-fn jaro_words(left: &str, right: &str, delimiter: &str) -> f64 {
-    let left_words: Vec<&str> = left
-        .split(delimiter)
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect();
+fn jaro_words(left: &str, right: &str, delimiter: &[&str]) -> f64 {
+    fn splitter<'a>(string: &'a str, delimiter: &[&str]) -> Vec<&'a str> {
+        let mut all = vec![];
 
-    let right_words: Vec<&str> = right
-        .split(delimiter)
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .collect();
+        for del in delimiter {
+            let mut words: Vec<&str> = string
+                .split(del)
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            all.append(&mut words);
+        }
+
+        all
+    }
+
+    let left_words = splitter(left, delimiter);
+    let right_words = splitter(right, delimiter);
 
     let mut total = 0.0;
 
@@ -158,4 +161,142 @@ fn jaro_words(left: &str, right: &str, delimiter: &str) -> f64 {
     }
 
     total as f64 / left_words.len().max(right_words.len()) as f64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::primitives::Account;
+
+    const LIMIT: f64 = 0.8;
+
+    #[test]
+    fn is_too_similar() {
+        let current = [
+            Account::from("dave"),
+            Account::from("Dave"),
+            Account::from("daev"),
+            Account::from("Daev"),
+            Account::from("David"),
+        ];
+
+        let new = Account::from("dave");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(res);
+        }
+
+        let current = [
+            Account::from("alice"),
+            Account::from("Alice"),
+            Account::from("bob"),
+            Account::from("Bob"),
+            Account::from("eve"),
+            Account::from("Eve"),
+        ];
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(!res);
+        }
+    }
+
+    #[test]
+    fn is_too_similar_words() {
+        let current = [
+            Account::from("adam & eve"),
+            Account::from("Adam & Eve"),
+            Account::from("aadm & Eve"),
+            Account::from("Aadm & Eve"),
+            Account::from("adam & ev"),
+            Account::from("Adam & Ev"),
+            Account::from("eve & adam"),
+            Account::from("Eve & Adam"),
+        ];
+
+        let new = Account::from("Adam & Eve");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(res);
+        }
+
+        let current = [
+            Account::from("alice & bob"),
+            Account::from("Alice & Bob"),
+            Account::from("jeff & john"),
+            Account::from("Jeff & John"),
+        ];
+
+        let new = Account::from("Adam & Eve");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(!res);
+        }
+    }
+
+    #[test]
+    fn is_too_similar_words_special_delimiter() {
+        let current = [
+            Account::from("adam & eve"),
+            Account::from("Adam & Eve"),
+            Account::from("aadm & Eve"),
+            Account::from("Aadm & Eve"),
+            Account::from("adam & ev"),
+            Account::from("Adam & Ev"),
+            Account::from("eve & adam"),
+            Account::from("Eve & Adam"),
+            //
+            Account::from("adam-&-eve"),
+            Account::from("Adam-&-Eve"),
+            Account::from("aadm-&-Eve"),
+            Account::from("Aadm-&-Eve"),
+            Account::from("adam-&-ev"),
+            Account::from("Adam-&-Ev"),
+            Account::from("eve-&-adam"),
+            Account::from("Eve-&-Adam"),
+            //
+            Account::from("adam_&_eve"),
+            Account::from("Adam_&_Eve"),
+            Account::from("aadm_&_Eve"),
+            Account::from("Aadm_&_Eve"),
+            Account::from("adam_&_ev"),
+            Account::from("Adam_&_Ev"),
+            Account::from("eve_&_adam"),
+            Account::from("Eve_&_Adam"),
+        ];
+
+        let new = Account::from("Adam & Eve");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(res);
+        }
+
+        let current = [
+            Account::from("alice & bob"),
+            Account::from("Alice & Bob"),
+            Account::from("jeff & john"),
+            Account::from("Jeff & John"),
+            //
+            Account::from("alice_&_bob"),
+            Account::from("Alice_&_Bob"),
+            Account::from("jeff_&_john"),
+            Account::from("Jeff_&_John"),
+            //
+            Account::from("alice-&-bob"),
+            Account::from("Alice-&-Bob"),
+            Account::from("jeff-&-john"),
+            Account::from("Jeff-&-John"),
+        ];
+
+        let new = Account::from("Adam & Eve");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(!res);
+        }
+    }
 }
