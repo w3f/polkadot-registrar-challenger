@@ -30,6 +30,10 @@ enum EventType {
     PendingJudgementsRequests,
     #[serde(rename = "pendingJudgementsResponse")]
     PendingJudgementsResponse,
+    #[serde(rename = "displayNamesRequest")]
+    DisplayNamesRequest,
+    #[serde(rename = "displayNamesResponse")]
+    DisplayNamesResponse,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,8 +145,20 @@ impl Connector {
                 Arc::clone(&exit_token),
             ));
 
-            // Request pending requests from Watcher.
-            info!("Requesting pending judgments from Watcher");
+            info!("Requesting display names");
+            sender
+                .send(Message {
+                    event: EventType::DisplayNamesRequest,
+                    data: serde_json::to_value(Option::<()>::None).unwrap(),
+                })
+                .await
+                .map_err(|err| {
+                    error!("Failed to fetch display names: {}", err);
+                    std::process::exit(1);
+                })
+                .unwrap();
+
+            info!("Requesting pending judgments");
             sender
                 .send(Message {
                     event: EventType::PendingJudgementsRequests,
@@ -241,6 +257,8 @@ impl Connector {
         mut sender: UnboundedSender<Message>,
         exit_token: Arc<RwLock<bool>>,
     ) {
+        use EventType::*;
+
         loop {
             if let Some(message) = reader.next().await {
                 if let Ok(message) = &message {
@@ -258,7 +276,7 @@ impl Connector {
                             };
 
                             match msg.event {
-                                EventType::NewJudgementRequest => {
+                                NewJudgementRequest => {
                                     info!("Received a new judgement request");
                                     if let Ok(request) =
                                         serde_json::from_value::<JudgementRequest>(msg.data)
@@ -275,7 +293,7 @@ impl Connector {
                                         sender.send(Message::error()).await.unwrap();
                                     }
                                 }
-                                EventType::Ack => {
+                                Ack => {
                                     if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data)
                                     {
                                         info!("Received acknowledgement: {}", msg.result);
@@ -284,20 +302,17 @@ impl Connector {
                                         error!("Invalid 'acknowledgement' message format");
                                     }
                                 }
-                                EventType::Error => {
+                                Error => {
                                     if let Ok(msg) =
                                         serde_json::from_value::<ErrorResponse>(msg.data)
                                     {
-                                        error!(
-                                            "Received error message from Watcher: {}",
-                                            msg.error
-                                        );
+                                        error!("Received error message: {}", msg.error);
                                     } else {
                                         error!("Invalid 'error' message format");
                                     }
                                 }
-                                EventType::PendingJudgementsResponse => {
-                                    info!("Received pending challenges from Watcher");
+                                PendingJudgementsResponse => {
+                                    info!("Received pending challenges");
                                     if let Ok(requests) =
                                         serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
                                     {
@@ -320,6 +335,9 @@ impl Connector {
                                     } else {
                                         error!("Invalid `pendingChallengesRequest` message format");
                                     }
+                                }
+                                DisplayNamesResponse => {
+                                    info!("Received display names response");
                                 }
                                 _ => {
                                     warn!("Received unrecognized message: '{:?}'", msg);
