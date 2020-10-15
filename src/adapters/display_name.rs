@@ -120,6 +120,9 @@ impl DisplayNameHandler {
             jaro_words(&name_str, &account_str, &[" ", "-", "_"]),
         ];
 
+        println!("{} - {}", name_str, account_str);
+        println!("{:?}", similarities);
+
         similarities.iter().any(|&s| s > limit)
     }
 }
@@ -293,6 +296,33 @@ mod tests {
         ];
 
         let new = Account::from("Adam & Eve");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(!res);
+        }
+    }
+
+    #[test]
+    fn is_too_similar_unicode() {
+        let current = [
+            Account::from("👻🥺👌 Bob"),
+            Account::from("👻🥺👌 Alice"),
+            Account::from("👻🥺👌 Eve"),
+        ];
+
+        let new = Account::from("👻🥺👌 Alice");
+
+        for account in &current {
+            let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
+            assert!(res);
+        }
+
+        let current = [
+            Account::from("Alice"),
+            Account::from("👻🥺👌 Johnny 💀"),
+            Account::from("🤖👈👈 Alice"),
+        ];
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
