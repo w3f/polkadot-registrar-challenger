@@ -338,7 +338,8 @@ impl Connector {
                                 }
                                 DisplayNamesResponse => {
                                     info!("Received display names response");
-                                    println!(">>> {:?}", msg.data);
+                                    debug!("Display names {:?}", msg.data);
+
                                     if let Ok(display_names) =
                                         serde_json::from_value::<Vec<Account>>(msg.data)
                                     {
