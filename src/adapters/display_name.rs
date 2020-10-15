@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::Database2;
-use strsim::jaro;
+use strsim::jaro_winkler;
 
 pub const VIOLATIONS_CAP: usize = 5;
 
@@ -53,7 +53,7 @@ impl DisplayNameHandler {
         let mut violations = vec![];
 
         for display_name in &display_names {
-            if self.is_too_similar(display_name, &account).await {
+            if Self::is_too_similar(display_name, &account, self.limit) {
                 violations.push(display_name.clone());
             }
 
@@ -111,18 +111,20 @@ impl DisplayNameHandler {
 
         Ok(())
     }
-    async fn is_too_similar(&self, display_name: &Account, account: &Account) -> bool {
+    fn is_too_similar(display_name: &Account, account: &Account, limit: f64) -> bool {
         let name_str = display_name.as_str().to_lowercase();
         let account_str = account.as_str().to_lowercase();
 
         let similarities = [
-            jaro(&name_str, &account_str),
+            jaro_winkler(&name_str, &account_str),
             jaro_words(&name_str, &account_str, " "),
             jaro_words(&name_str, &account_str, "-"),
             jaro_words(&name_str, &account_str, "_"),
         ];
 
-        similarities.iter().any(|&s| s > self.limit)
+        println!("{:?}", similarities);
+
+        similarities.iter().any(|&s| s > limit)
     }
 }
 
@@ -145,7 +147,7 @@ fn jaro_words(left: &str, right: &str, delimiter: &str) -> f64 {
         let mut temp = 0.0;
 
         for right_word in &right_words {
-            let sim = strsim::jaro(left_word, right_word);
+            let sim = jaro_winkler(left_word, right_word);
 
             if sim > temp {
                 temp = sim;
@@ -156,14 +158,4 @@ fn jaro_words(left: &str, right: &str, delimiter: &str) -> f64 {
     }
 
     total as f64 / left_words.len().max(right_words.len()) as f64
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn is_too_similar() {
-
-    }
 }

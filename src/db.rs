@@ -1672,8 +1672,16 @@ mod tests {
 
             let res = db.select_account_statuses(&alice).await.unwrap();
             assert_eq!(res.len(), 2);
-            res.contains(&(AccountType::Matrix, Account::from("@alice:matrix.org"), AccountStatus::Valid));
-            res.contains(&(AccountType::Web, Account::from("alice.com"), AccountStatus::Unknown));
+            res.contains(&(
+                AccountType::Matrix,
+                Account::from("@alice:matrix.org"),
+                AccountStatus::Valid,
+            ));
+            res.contains(&(
+                AccountType::Web,
+                Account::from("alice.com"),
+                AccountStatus::Unknown,
+            ));
         });
     }
 
