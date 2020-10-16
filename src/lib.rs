@@ -24,7 +24,7 @@ use std::io::prelude::*;
 use std::process::exit;
 use tokio::time::{self, Duration};
 
-mod adapters;
+pub mod adapters;
 mod comms;
 mod connector;
 mod db;

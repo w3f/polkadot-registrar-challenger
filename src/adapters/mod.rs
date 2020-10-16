@@ -2,6 +2,7 @@ mod display_name;
 mod email;
 mod matrix;
 mod twitter;
+mod mocks;
 
 pub use display_name::{DisplayNameHandler, VIOLATIONS_CAP};
 pub use email::{EmailHandler, EmailId, EmailTransport, SmtpImapClientBuilder};
