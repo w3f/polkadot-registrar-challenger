@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 enum Event {
     Matrix(MatrixEvent),
     Email(EmailEvent),
+    Twitter(TwitterEvent),
 }
 
 enum MatrixEvent {
@@ -29,6 +30,23 @@ enum EmailEvent {
     SendMessage {
         account: Account,
         message: String,
+    }
+}
+
+enum TwitterEvent {
+    RequestMessages {
+        exclude: TwitterId,
+        watermark: u64,
+        messages: Vec<twitter::ReceivedMessageContext>,
+    },
+    LookupTwitterId {
+        twitter_ids: Option<Vec<TwitterId>>,
+        accounts: Option<Vec<Account>>,
+        lookups: Vec<(Account, TwitterId)>,
+    },
+    SendMessage {
+        id: TwitterId,
+        message: String
     }
 }
 
@@ -117,7 +135,12 @@ impl EmailTransport for EmailMocker {
     }
 }
 
-pub struct TwitterMocker {}
+pub struct TwitterMocker {
+    events: EventManager,
+    messages: Arc<RwLock<Vec<twitter::ReceivedMessageContext>>>,
+    watermark: u64,
+    index_book: Vec<(Account, TwitterId)>,
+}
 
 #[async_trait]
 impl TwitterTransport for TwitterMocker {
@@ -126,14 +149,51 @@ impl TwitterTransport for TwitterMocker {
         exclude: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<twitter::ReceivedMessageContext>, u64)> {
-        unimplemented!()
+        self.events.push(Event::Twitter(TwitterEvent::RequestMessages {
+            exclude: exclude.clone(),
+            watermark: watermark,
+            messages: self.messages.read().await.clone(),
+        })).await;
+
+        let messages = self.messages.read().await;
+        self.messages.write().await.clear();
+
+        Ok((messages.to_vec(), self.watermark))
     }
     async fn lookup_twitter_id(
         &self,
         twitter_ids: Option<&[&TwitterId]>,
         accounts: Option<&[&Account]>,
     ) -> Result<Vec<(Account, TwitterId)>> {
-        unimplemented!()
+        let mut lookups = vec![];
+
+        if let Some(twitter_ids) = twitter_ids {
+            for twitter_id in twitter_ids {
+                let pair = self.index_book.iter().find(|(_, id)| {
+                    id == *twitter_id
+                }).unwrap();
+
+                lookups.push(pair.clone());
+            }
+        }
+
+        if let Some(accounts) = accounts {
+            for account in accounts {
+                let pair = self.index_book.iter().find(|(acc, _)| {
+                    acc == *account
+                }).unwrap();
+
+                lookups.push(pair.clone());
+            }
+        }
+
+        self.events.push(Event::Twitter(TwitterEvent::LookupTwitterId {
+            twitter_ids: twitter_ids.map(|ids| ids.iter().map(|&id| id.clone()).collect()),
+            accounts: accounts.map(|accounts| accounts.iter().map(|&account| account.clone()).collect()),
+            lookups: lookups.clone(),
+        })).await;
+
+        Ok(lookups)
     }
     async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
         unimplemented!()
