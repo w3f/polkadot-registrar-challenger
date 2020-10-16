@@ -1,42 +1,45 @@
-use super::{MatrixTransport, EmailTransport, TwitterTransport};
 use super::email;
-use super::twitter::{self, TwitterId, TwitterError};
-use crate::{Database2, Account};
+use super::twitter::{self, TwitterError, TwitterId};
+use super::{EmailTransport, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
-use crate::primitives::{Result, NetAccount, unix_time};
 use crate::manager::OnChainIdentity;
-use matrix_sdk::identifiers::{RoomId, UserId};
+use crate::primitives::{unix_time, NetAccount, Result};
+use crate::{Account, Database2};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
-use tokio::sync::RwLock;
-use std::result::Result as StdResult;
+use matrix_sdk::identifiers::{RoomId, UserId};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::result::Result as StdResult;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 enum Event {
     Matrix(MatrixEvent),
+    Email(EmailEvent),
 }
 
 enum MatrixEvent {
+    SendMessage { room_id: RoomId, message: String },
+    CreateRoom { user_id: UserId },
+    LeaveRoom { room_id: RoomId },
+}
+
+enum EmailEvent {
+    RequestMessages(Vec<email::ReceivedMessageContext>),
     SendMessage {
-        room_id: RoomId,
+        account: Account,
         message: String,
-    },
-    CreateRoom {
-        user_id: UserId,
-    },
-    LeaveRoom {
-        room_id: RoomId,
     }
 }
 
 struct EventManager {
-    events: RwLock<Vec<Event>>,
+    events: Arc<RwLock<Vec<Event>>>,
 }
 
 impl EventManager {
     fn new() -> Self {
         EventManager {
-            events: RwLock::new(vec![]),
+            events: Arc::new(RwLock::new(vec![])),
         }
     }
     async fn push(&self, event: Event) {
@@ -60,16 +63,22 @@ impl MatrixTransport for MatrixMocker {
         Ok(())
     }
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response> {
-        self.events.push(Event::Matrix(MatrixEvent::CreateRoom {
-            user_id: request.invite[0].clone()
-        }));
+        self.events
+            .push(Event::Matrix(MatrixEvent::CreateRoom {
+                user_id: request.invite[0].clone(),
+            }))
+            .await;
 
-        Ok(Response::new(RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap()))
+        Ok(Response::new(
+            RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap(),
+        ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
-        self.events.push(Event::Matrix(MatrixEvent::LeaveRoom {
-            room_id: room_id.clone(),
-        }));
+        self.events
+            .push(Event::Matrix(MatrixEvent::LeaveRoom {
+                room_id: room_id.clone(),
+            }))
+            .await;
 
         Ok(())
     }
@@ -82,22 +91,33 @@ impl MatrixTransport for MatrixMocker {
 }
 
 pub struct EmailMocker {
-
+    events: EventManager,
+    messages: Arc<RwLock<Vec<email::ReceivedMessageContext>>>,
 }
 
 #[async_trait]
 impl EmailTransport for EmailMocker {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
-        unimplemented!()
+        self.events.push(Event::Email(EmailEvent::RequestMessages(
+            self.messages.read().await.clone(),
+        ))).await;
+
+        let messages = self.messages.read().await;
+        self.messages.write().await.clear();
+
+        Ok(messages.to_vec())
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        unimplemented!()
+        self.events.push(Event::Email(EmailEvent::SendMessage {
+            account: account.clone(),
+            message: msg,
+        })).await;
+
+        Ok(())
     }
 }
 
-pub struct TwitterMocker {
-
-}
+pub struct TwitterMocker {}
 
 #[async_trait]
 impl TwitterTransport for TwitterMocker {
