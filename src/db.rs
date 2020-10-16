@@ -908,7 +908,8 @@ impl Database2 {
     }
     pub async fn reset_init_message(&self, account: &Account) -> Result<()> {
         let con = self.con.lock().await;
-        con.execute_named("
+        con.execute_named(
+            "
             UPDATE
                 known_twitter_ids
             SET
@@ -922,9 +923,11 @@ impl Database2 {
                     WHERE
                         account = :account
                 )
-        ", named_params! {
-            ":account": account,
-        })?;
+        ",
+            named_params! {
+                ":account": account,
+            },
+        )?;
 
         Ok(())
     }
@@ -1778,14 +1781,18 @@ mod tests {
             ))
             .unwrap();
 
-            alice_ident.push_account(AccountType::Twitter, alice.clone()).unwrap();
+            alice_ident
+                .push_account(AccountType::Twitter, alice.clone())
+                .unwrap();
 
             let mut bob_ident = OnChainIdentity::new(NetAccount::from(
                 "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
             ))
             .unwrap();
 
-            bob_ident.push_account(AccountType::Twitter, bob.clone()).unwrap();
+            bob_ident
+                .push_account(AccountType::Twitter, bob.clone())
+                .unwrap();
 
             db.insert_identity(&alice_ident).await.unwrap();
             db.insert_identity(&bob_ident).await.unwrap();
