@@ -280,6 +280,10 @@ impl IdentityManager {
         self.db2.insert_identity(&ident).await?;
 
         for state in ident.account_states() {
+            if state.account_ty == AccountType::Twitter {
+                self.db2.reset_init_message(&state.account).await?;
+            }
+
             self.get_comms(&state.account_ty).map(|comms| {
                 comms
                     .notify_account_verification(ident.net_account().clone(), state.account.clone())

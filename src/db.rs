@@ -906,6 +906,28 @@ impl Database2 {
 
         Ok(())
     }
+    pub async fn reset_init_message(&self, account: &Account) -> Result<()> {
+        let con = self.con.lock().await;
+        con.execute_named("
+            UPDATE
+                known_twitter_ids
+            SET
+                init_msg = 0
+            WHERE
+                account_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_states
+                    WHERE
+                        account = :account
+                )
+        ", named_params! {
+            ":account": account,
+        })?;
+
+        Ok(())
+    }
     pub async fn select_watermark(&self, account_ty: &AccountType) -> Result<Option<u64>> {
         let con = self.con.lock().await;
         con.query_row_named(
@@ -1818,6 +1840,17 @@ mod tests {
 
             assert_eq!(account, alice);
             assert_eq!(init_msg, true);
+
+            db.reset_init_message(&alice).await.unwrap();
+
+            let (account, init_msg) = db
+                .select_account_from_twitter_id(&alice_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(account, alice);
+            assert_eq!(init_msg, false);
 
             let (account, init_msg) = db
                 .select_account_from_twitter_id(&bob_id)
