@@ -166,12 +166,14 @@ impl Database2 {
             "
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
                 id              INTEGER PRIMARY KEY,
-                account         INTEGER NOT NULL UNIQUE,
+                account_id      INTEGER NOT NULL UNIQUE,
                 twitter_id      INTEGER NOT NULL,
                 init_msg        INTEGER NOT NULL,
                 timestamp       INTEGER NOT NULL,
 
-                UNIQUE (account, twitter_id)
+                FOREIGN KEY (account_id)
+                    REFERENCES account_states (id)
+                        ON DELETE CASCADE
             )
         ",
             params![],
@@ -795,13 +797,20 @@ impl Database2 {
             "
             INSERT OR REPLACE INTO
                 known_twitter_ids (
-                    account,
+                    account_id,
                     twitter_id,
                     init_msg,
                     timestamp
                 )
             VALUES (
-                :account,
+                (
+                    SELECT
+                        id
+                    FROM
+                        account_states
+                    WHERE
+                        account = :account
+                ),
                 :twitter_id,
                 '0',
                 :timestamp
@@ -830,6 +839,10 @@ impl Database2 {
                 account, init_msg
             FROM
                 known_twitter_ids
+            LEFT JOIN
+                account_states
+            ON
+                known_twitter_ids.account_id = account_states.id
             WHERE
                 twitter_id = :twitter_id
 
@@ -851,7 +864,14 @@ impl Database2 {
             FROM
                 known_twitter_ids
             WHERE
-                account = :account
+                account_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_states
+                    WHERE
+                        account = :account
+                ) 
         ",
             named_params! {
                 ":account": account,
@@ -870,12 +890,41 @@ impl Database2 {
             SET
                 init_msg = 1
             WHERE
-                account = :account
+                account_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_states
+                    WHERE
+                        account = :account
+                )
         ",
             named_params! {
                 ":account": account,
             },
         )?;
+
+        Ok(())
+    }
+    pub async fn reset_init_message(&self, account: &Account) -> Result<()> {
+        let con = self.con.lock().await;
+        con.execute_named("
+            UPDATE
+                known_twitter_ids
+            SET
+                init_msg = 0
+            WHERE
+                account_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_states
+                    WHERE
+                        account = :account
+                )
+        ", named_params! {
+            ":account": account,
+        })?;
 
         Ok(())
     }
@@ -1722,9 +1771,26 @@ mod tests {
             let db = Database2::new(&db_path()).unwrap();
 
             let alice = Account::from("Alice");
-            let alice_id = TwitterId::from(1000);
-
             let bob = Account::from("Bob");
+
+            let mut alice_ident = OnChainIdentity::new(NetAccount::from(
+                "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
+            ))
+            .unwrap();
+
+            alice_ident.push_account(AccountType::Twitter, alice.clone()).unwrap();
+
+            let mut bob_ident = OnChainIdentity::new(NetAccount::from(
+                "163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C",
+            ))
+            .unwrap();
+
+            bob_ident.push_account(AccountType::Twitter, bob.clone()).unwrap();
+
+            db.insert_identity(&alice_ident).await.unwrap();
+            db.insert_identity(&bob_ident).await.unwrap();
+
+            let alice_id = TwitterId::from(1000);
             let bob_id = TwitterId::from(2000);
 
             let res = db.select_account_from_twitter_id(&alice_id).await.unwrap();
@@ -1774,6 +1840,17 @@ mod tests {
 
             assert_eq!(account, alice);
             assert_eq!(init_msg, true);
+
+            db.reset_init_message(&alice).await.unwrap();
+
+            let (account, init_msg) = db
+                .select_account_from_twitter_id(&alice_id)
+                .await
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(account, alice);
+            assert_eq!(init_msg, false);
 
             let (account, init_msg) = db
                 .select_account_from_twitter_id(&bob_id)
