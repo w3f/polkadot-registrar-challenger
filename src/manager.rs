@@ -205,6 +205,7 @@ impl IdentityManager {
                 MessageAcknowledged => {}
                 ExistingDisplayNames { accounts } => {
                     for account in &accounts {
+                        // TODO: Create a function for batch insert
                         self.db2.insert_display_name(account).await?;
                     }
                 }
