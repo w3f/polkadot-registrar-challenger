@@ -166,7 +166,6 @@ impl EmailTransport for EmailMocker {
 pub struct TwitterMocker {
     events: EventManager,
     receiver: Arc<RwLock<UnboundedReceiver<Result<Vec<twitter::ReceivedMessageContext>>>>>,
-    watermark: u64,
     index_book: Vec<(Account, TwitterId)>,
     screen_name: Account,
 }
@@ -180,7 +179,6 @@ impl TwitterMocker {
         TwitterMocker {
             events: EventManager::new(),
             receiver: Arc::new(RwLock::new(receiver)),
-            watermark: 0,
             index_book: index_book,
             screen_name: screen_name,
         }
@@ -204,6 +202,17 @@ impl TwitterTransport for TwitterMocker {
             vec![]
         };
 
+        let mut new_watermark = 0;
+        let messages = messages.into_iter()
+            .filter(|message| {
+                if message.created > new_watermark {
+                    new_watermark = message.created;
+                }
+
+                message.created > watermark
+            })
+            .collect::<Vec<twitter::ReceivedMessageContext>>();
+
         self.events
             .push(Event::Twitter(TwitterEvent::RequestMessages {
                 exclude: exclude.clone(),
@@ -212,7 +221,7 @@ impl TwitterTransport for TwitterMocker {
             }))
             .await;
 
-        Ok((messages, self.watermark))
+        Ok((messages, new_watermark))
     }
     async fn lookup_twitter_id(
         &self,

@@ -690,7 +690,7 @@ struct ApiMessageData {
 pub struct ReceivedMessageContext {
     sender: TwitterId,
     message: String,
-    created: u64,
+    pub(crate) created: u64,
 }
 
 impl ApiMessageSend {
