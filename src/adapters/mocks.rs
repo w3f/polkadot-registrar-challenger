@@ -5,6 +5,8 @@ use crate::comms::CommsVerifier;
 use crate::manager::OnChainIdentity;
 use crate::primitives::{unix_time, NetAccount, Result};
 use crate::{Account, Database2};
+use futures::stream::TryStreamExt;
+use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::collections::HashMap;
@@ -67,6 +69,15 @@ pub struct MatrixMocker {
     user_id: UserId,
 }
 
+impl MatrixMocker {
+    fn new(user_id: UserId) -> Self {
+        MatrixMocker {
+            events: EventManager::new(),
+            user_id: user_id,
+        }
+    }
+}
+
 #[async_trait]
 impl MatrixTransport for MatrixMocker {
     async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()> {
@@ -109,22 +120,36 @@ impl MatrixTransport for MatrixMocker {
 
 pub struct EmailMocker {
     events: EventManager,
-    messages: Arc<RwLock<Vec<email::ReceivedMessageContext>>>,
+    receiver: Arc<RwLock<UnboundedReceiver<Result<Vec<email::ReceivedMessageContext>>>>>,
+}
+
+impl EmailMocker {
+    fn new(receiver: UnboundedReceiver<Result<Vec<email::ReceivedMessageContext>>>) -> Self {
+        EmailMocker {
+            events: EventManager::new(),
+            receiver: Arc::new(RwLock::new(receiver)),
+        }
+    }
 }
 
 #[async_trait]
 impl EmailTransport for EmailMocker {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
+        let mut messages = if let Some(messages) =
+            TryStreamExt::try_next(&mut *self.receiver.write().await)
+                .await
+                .unwrap()
+        {
+            messages
+        } else {
+            vec![]
+        };
+
         self.events
-            .push(Event::Email(EmailEvent::RequestMessages(
-                self.messages.read().await.clone(),
-            )))
+            .push(Event::Email(EmailEvent::RequestMessages(messages.clone())))
             .await;
 
-        let messages = self.messages.read().await;
-        self.messages.write().await.clear();
-
-        Ok(messages.to_vec())
+        Ok(messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
         self.events
