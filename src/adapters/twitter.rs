@@ -686,7 +686,7 @@ struct ApiMessageData {
     text: String,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedMessageContext {
     sender: TwitterId,
     message: String,

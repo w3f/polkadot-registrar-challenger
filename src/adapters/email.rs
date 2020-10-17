@@ -71,7 +71,7 @@ impl ConvertEmailInto<Account> for &str {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReceivedMessageContext {
     id: EmailId,
     sender: Account,

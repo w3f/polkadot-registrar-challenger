@@ -15,23 +15,27 @@ use std::result::Result as StdResult;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum Event {
     Matrix(MatrixEvent),
     Email(EmailEvent),
     Twitter(TwitterEvent),
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum MatrixEvent {
     SendMessage { room_id: RoomId, message: String },
-    CreateRoom { user_id: UserId },
+    CreateRoom { to_invite: UserId },
     LeaveRoom { room_id: RoomId },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum EmailEvent {
     RequestMessages(Vec<email::ReceivedMessageContext>),
     SendMessage { account: Account, message: String },
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum TwitterEvent {
     RequestMessages {
         exclude: TwitterId,
@@ -49,6 +53,7 @@ enum TwitterEvent {
     },
 }
 
+#[derive(Clone, Debug)]
 struct EventManager {
     events: Arc<RwLock<Vec<Event>>>,
 }
@@ -61,6 +66,9 @@ impl EventManager {
     }
     async fn push(&self, event: Event) {
         self.events.write().await.push(event);
+    }
+    async fn events(&self) -> Vec<Event> {
+        (*self.events.read().await).clone()
     }
 }
 
@@ -75,6 +83,9 @@ impl MatrixMocker {
             events: EventManager::new(),
             user_id: user_id,
         }
+    }
+    async fn events(&self) -> Vec<Event> {
+        self.events.events().await
     }
 }
 
@@ -93,7 +104,7 @@ impl MatrixTransport for MatrixMocker {
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response> {
         self.events
             .push(Event::Matrix(MatrixEvent::CreateRoom {
-                user_id: request.invite[0].clone(),
+                to_invite: request.invite[0].clone(),
             }))
             .await;
 
@@ -277,5 +288,40 @@ impl TwitterTransport for TwitterMocker {
     }
     fn my_screen_name(&self) -> &Account {
         &self.screen_name
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::runtime::Runtime;
+
+    #[test]
+    fn matrix_mocker() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
+            let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
+
+            let mut request = Request::new();
+            let to_invite = UserId::try_from("@alice:matrix.org").unwrap();
+            let to_invite_list = [to_invite.clone()];
+            request.invite = &to_invite_list;
+
+            let mocker = MatrixMocker::new(my_user_id.clone());
+            mocker.create_room(request).await.unwrap();
+
+            mocker.send_message(&room_id, String::from("Hello")).await.unwrap();
+            mocker.send_message(&room_id, String::from("World")).await.unwrap();
+
+            mocker.leave_room(&room_id).await.unwrap();
+
+            let events = mocker.events().await;
+            assert_eq!(events.len(), 4);
+            assert_eq!(events[0], Event::Matrix(MatrixEvent::CreateRoom { to_invite: to_invite.clone() }));
+            assert_eq!(events[1], Event::Matrix(MatrixEvent::SendMessage { room_id: room_id.clone(), message: String::from("Hello") }));
+            assert_eq!(events[2], Event::Matrix(MatrixEvent::SendMessage { room_id: room_id.clone(), message: String::from("World") }));
+            assert_eq!(events[3], Event::Matrix(MatrixEvent::LeaveRoom { room_id: room_id.clone() }));
+        });
     }
 }
