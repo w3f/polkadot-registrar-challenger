@@ -165,10 +165,26 @@ impl EmailTransport for EmailMocker {
 
 pub struct TwitterMocker {
     events: EventManager,
-    messages: Arc<RwLock<Vec<twitter::ReceivedMessageContext>>>,
+    receiver: Arc<RwLock<UnboundedReceiver<Result<Vec<twitter::ReceivedMessageContext>>>>>,
     watermark: u64,
     index_book: Vec<(Account, TwitterId)>,
     screen_name: Account,
+}
+
+impl TwitterMocker {
+    fn new(
+        receiver: UnboundedReceiver<Result<Vec<twitter::ReceivedMessageContext>>>,
+        screen_name: Account,
+        index_book: Vec<(Account, TwitterId)>,
+    ) -> Self {
+        TwitterMocker {
+            events: EventManager::new(),
+            receiver: Arc::new(RwLock::new(receiver)),
+            watermark: 0,
+            index_book: index_book,
+            screen_name: screen_name,
+        }
+    }
 }
 
 #[async_trait]
@@ -178,18 +194,25 @@ impl TwitterTransport for TwitterMocker {
         exclude: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<twitter::ReceivedMessageContext>, u64)> {
+        let mut messages = if let Some(messages) =
+            TryStreamExt::try_next(&mut *self.receiver.write().await)
+                .await
+                .unwrap()
+        {
+            messages
+        } else {
+            vec![]
+        };
+
         self.events
             .push(Event::Twitter(TwitterEvent::RequestMessages {
                 exclude: exclude.clone(),
                 watermark: watermark,
-                messages: self.messages.read().await.clone(),
+                messages: messages.clone(),
             }))
             .await;
 
-        let messages = self.messages.read().await;
-        self.messages.write().await.clear();
-
-        Ok((messages.to_vec(), self.watermark))
+        Ok((messages, self.watermark))
     }
     async fn lookup_twitter_id(
         &self,
