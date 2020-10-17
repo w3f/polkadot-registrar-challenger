@@ -27,10 +27,7 @@ enum MatrixEvent {
 
 enum EmailEvent {
     RequestMessages(Vec<email::ReceivedMessageContext>),
-    SendMessage {
-        account: Account,
-        message: String,
-    }
+    SendMessage { account: Account, message: String },
 }
 
 enum TwitterEvent {
@@ -46,8 +43,8 @@ enum TwitterEvent {
     },
     SendMessage {
         id: TwitterId,
-        message: String
-    }
+        message: String,
+    },
 }
 
 struct EventManager {
@@ -73,10 +70,12 @@ pub struct MatrixMocker {
 #[async_trait]
 impl MatrixTransport for MatrixMocker {
     async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()> {
-        self.events.push(Event::Matrix(MatrixEvent::SendMessage {
-            room_id: room_id.clone(),
-            message: message,
-        }));
+        self.events
+            .push(Event::Matrix(MatrixEvent::SendMessage {
+                room_id: room_id.clone(),
+                message: message,
+            }))
+            .await;
 
         Ok(())
     }
@@ -116,9 +115,11 @@ pub struct EmailMocker {
 #[async_trait]
 impl EmailTransport for EmailMocker {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
-        self.events.push(Event::Email(EmailEvent::RequestMessages(
-            self.messages.read().await.clone(),
-        ))).await;
+        self.events
+            .push(Event::Email(EmailEvent::RequestMessages(
+                self.messages.read().await.clone(),
+            )))
+            .await;
 
         let messages = self.messages.read().await;
         self.messages.write().await.clear();
@@ -126,10 +127,12 @@ impl EmailTransport for EmailMocker {
         Ok(messages.to_vec())
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        self.events.push(Event::Email(EmailEvent::SendMessage {
-            account: account.clone(),
-            message: msg,
-        })).await;
+        self.events
+            .push(Event::Email(EmailEvent::SendMessage {
+                account: account.clone(),
+                message: msg,
+            }))
+            .await;
 
         Ok(())
     }
@@ -140,6 +143,7 @@ pub struct TwitterMocker {
     messages: Arc<RwLock<Vec<twitter::ReceivedMessageContext>>>,
     watermark: u64,
     index_book: Vec<(Account, TwitterId)>,
+    screen_name: Account,
 }
 
 #[async_trait]
@@ -149,11 +153,13 @@ impl TwitterTransport for TwitterMocker {
         exclude: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<twitter::ReceivedMessageContext>, u64)> {
-        self.events.push(Event::Twitter(TwitterEvent::RequestMessages {
-            exclude: exclude.clone(),
-            watermark: watermark,
-            messages: self.messages.read().await.clone(),
-        })).await;
+        self.events
+            .push(Event::Twitter(TwitterEvent::RequestMessages {
+                exclude: exclude.clone(),
+                watermark: watermark,
+                messages: self.messages.read().await.clone(),
+            }))
+            .await;
 
         let messages = self.messages.read().await;
         self.messages.write().await.clear();
@@ -169,9 +175,11 @@ impl TwitterTransport for TwitterMocker {
 
         if let Some(twitter_ids) = twitter_ids {
             for twitter_id in twitter_ids {
-                let pair = self.index_book.iter().find(|(_, id)| {
-                    id == *twitter_id
-                }).unwrap();
+                let pair = self
+                    .index_book
+                    .iter()
+                    .find(|(_, id)| id == *twitter_id)
+                    .unwrap();
 
                 lookups.push(pair.clone());
             }
@@ -179,26 +187,38 @@ impl TwitterTransport for TwitterMocker {
 
         if let Some(accounts) = accounts {
             for account in accounts {
-                let pair = self.index_book.iter().find(|(acc, _)| {
-                    acc == *account
-                }).unwrap();
+                let pair = self
+                    .index_book
+                    .iter()
+                    .find(|(acc, _)| acc == *account)
+                    .unwrap();
 
                 lookups.push(pair.clone());
             }
         }
 
-        self.events.push(Event::Twitter(TwitterEvent::LookupTwitterId {
-            twitter_ids: twitter_ids.map(|ids| ids.iter().map(|&id| id.clone()).collect()),
-            accounts: accounts.map(|accounts| accounts.iter().map(|&account| account.clone()).collect()),
-            lookups: lookups.clone(),
-        })).await;
+        self.events
+            .push(Event::Twitter(TwitterEvent::LookupTwitterId {
+                twitter_ids: twitter_ids.map(|ids| ids.iter().map(|&id| id.clone()).collect()),
+                accounts: accounts
+                    .map(|accounts| accounts.iter().map(|&account| account.clone()).collect()),
+                lookups: lookups.clone(),
+            }))
+            .await;
 
         Ok(lookups)
     }
     async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
-        unimplemented!()
+        self.events
+            .push(Event::Twitter(TwitterEvent::SendMessage {
+                id: id.clone(),
+                message: message,
+            }))
+            .await;
+
+        Ok(())
     }
     fn my_screen_name(&self) -> &Account {
-        unimplemented!()
+        &self.screen_name
     }
 }
