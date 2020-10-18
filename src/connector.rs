@@ -3,7 +3,7 @@ use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -99,6 +99,60 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
         }
 
         Ok(ident)
+    }
+}
+
+#[async_trait]
+trait ConnectorReaderTransport {
+    async fn read(&mut self) -> Result<Option<String>>;
+}
+
+#[async_trait]
+trait ConnectorWriterTransport {
+    async fn write(&mut self, message: &Message) -> Result<()>;
+}
+
+pub struct WebSocketReader {
+    reader: SplitStream<WebSocketStream<TcpStream>>,
+}
+
+impl From<SplitStream<WebSocketStream<TcpStream>>> for WebSocketReader {
+    fn from(reader: SplitStream<WebSocketStream<TcpStream>>) -> Self {
+        WebSocketReader { reader: reader }
+    }
+}
+
+#[async_trait]
+impl ConnectorReaderTransport for WebSocketReader {
+    async fn read(&mut self) -> Result<Option<String>> {
+        if let Some(message) = self.reader.try_next().await? {
+            match message {
+                TungMessage::Text(payload) => Ok(Some(payload)),
+                _ => Err(failure::err_msg("Not a text message")),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+pub struct WebSocketWriter {
+    writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
+}
+
+impl From<SplitSink<WebSocketStream<TcpStream>, TungMessage>> for WebSocketWriter {
+    fn from(writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) -> Self {
+        WebSocketWriter { writer: writer }
+    }
+}
+
+#[async_trait]
+impl ConnectorWriterTransport for WebSocketWriter {
+    async fn write(&mut self, message: &Message) -> Result<()> {
+        self.writer
+            .send(TungMessage::Text(serde_json::to_string(message)?))
+            .await
+            .map_err(|err| err.into())
     }
 }
 
