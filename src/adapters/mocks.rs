@@ -3,10 +3,11 @@ use super::twitter::{self, TwitterError, TwitterId};
 use super::{EmailTransport, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
 use crate::manager::OnChainIdentity;
-use crate::primitives::{unix_time, NetAccount, Result};
+use crate::primitives::{unix_time, NetAccount, Result, AccountType};
 use crate::{Account, Database2};
+use futures::sink::SinkExt;
 use futures::stream::TryStreamExt;
-use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::collections::HashMap;
@@ -51,6 +52,42 @@ enum TwitterEvent {
         id: TwitterId,
         message: String,
     },
+}
+
+struct EventManager2 {
+    sender: UnboundedSender<Event>,
+    receiver: UnboundedReceiver<Event>,
+}
+
+impl EventManager2 {
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::unbounded();
+
+        EventManager2 {
+            sender: sender,
+            receiver: receiver,
+        }
+    }
+    fn new_child<T>(&self, receiver: UnboundedReceiver<Result<T>>) -> EventChild<T> {
+        EventChild {
+            sender: Arc::new(RwLock::new(self.sender.clone())),
+            receiver: Arc::new(RwLock::new(receiver)),
+        }
+    }
+}
+
+struct EventChild<T> {
+    sender: Arc<RwLock<UnboundedSender<Event>>>,
+    receiver: Arc<RwLock<UnboundedReceiver<Result<T>>>>,
+}
+
+impl<T> EventChild<T> {
+    async fn messages(&self) -> Option<T> {
+        TryStreamExt::try_next(&mut *self.receiver.write().await).await.unwrap()
+    }
+    async fn push_event(&self, event: Event) {
+        self.sender.write().await.send(event).await.unwrap();
+    }
 }
 
 #[derive(Clone, Debug)]
