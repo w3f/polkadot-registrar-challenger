@@ -688,9 +688,9 @@ struct ApiMessageData {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedMessageContext {
-    sender: TwitterId,
-    message: String,
-    pub(crate) created: u64,
+    pub sender: TwitterId,
+    pub message: String,
+    pub created: u64,
 }
 
 impl ApiMessageSend {

@@ -86,8 +86,8 @@ pub struct EventChildSender<T> {
 }
 
 impl<T> EventChildSender<T> {
-    pub async fn send_message(&self, messages: T) {
-        self.messages.write().await.push(messages);
+    pub async fn send_message(&self, message: T) {
+        self.messages.write().await.push(message);
     }
 }
 
@@ -231,7 +231,7 @@ impl TwitterTransport for TwitterMocker {
                     new_watermark = message.created;
                 }
 
-                message.created > watermark
+                message.created > watermark && &message.sender != exclude
             })
             .collect::<Vec<twitter::ReceivedMessageContext>>();
 
@@ -470,15 +470,147 @@ mod tests {
         rt.block_on(async {
             // Setup manager.
             let manager = EventManager2::new();
-            let (_sender, twitter_child) = manager.child();
+            let (sender, twitter_child) = manager.child();
 
+            // Prepare variables.
             let screen_name = Account::from("@registrar");
+            let my_id = TwitterId::from(111u64);
+
+            let alice = Account::from("@alice");
+            let alice_id = TwitterId::from(222u64);
+
+            let bob = Account::from("@bob");
+            let bob_id = TwitterId::from(333u64);
+
             let inbox_book = vec![
-                (Account::from("@alice"), TwitterId::from(111u64)),
-                (Account::from("@bob"), TwitterId::from(222u64)),
+                (screen_name.clone(), my_id.clone()),
+                (alice.clone(), alice_id.clone()),
+                (bob.clone(), bob_id.clone()),
             ];
 
-            let _mocker = TwitterMocker::new(twitter_child, screen_name, inbox_book);
+            let alice_message1 = twitter::ReceivedMessageContext {
+                sender: alice_id.clone(),
+                message: String::from("from alice one"),
+                created: 22,
+            };
+
+            let alice_message2 = twitter::ReceivedMessageContext {
+                sender: alice_id.clone(),
+                message: String::from("from alice one"),
+                created: 33,
+            };
+
+            let my_message = twitter::ReceivedMessageContext {
+                sender: my_id.clone(),
+                message: String::from("from me one"),
+                created: 44,
+            };
+
+            let bob_message = twitter::ReceivedMessageContext {
+                sender: bob_id.clone(),
+                message: String::from("from bob one"),
+                created: 55,
+            };
+
+            // Init mocker and create events.
+            let mocker = TwitterMocker::new(twitter_child, screen_name.clone(), inbox_book);
+
+            let lookups = mocker
+                .lookup_twitter_id(None, Some(&[mocker.my_screen_name()]))
+                .await
+                .unwrap();
+            assert_eq!(lookups.len(), 1);
+            assert!(lookups.contains(&(screen_name.clone(), my_id.clone())));
+
+            let res = mocker.request_messages(&my_id, 0).await.unwrap();
+            assert_eq!(res.0.len(), 0);
+            assert_eq!(res.1, 0);
+
+            let lookups = mocker
+                .lookup_twitter_id(Some(&[&my_id, &alice_id]), Some(&[&bob]))
+                .await
+                .unwrap();
+
+            assert_eq!(lookups.len(), 3);
+            assert!(lookups.contains(&(screen_name.clone(), my_id.clone())));
+            assert!(lookups.contains(&(alice.clone(), alice_id.clone())));
+            assert!(lookups.contains(&(bob.clone(), bob_id.clone())));
+
+            mocker
+                .send_message(&alice_id, String::from("alice one"))
+                .await
+                .unwrap();
+            mocker
+                .send_message(&bob_id, String::from("bob one"))
+                .await
+                .unwrap();
+
+            // Fill buffer.
+            sender.send_message(alice_message1.clone()).await;
+            sender.send_message(alice_message2.clone()).await;
+            sender.send_message(my_message.clone()).await;
+            sender.send_message(bob_message.clone()).await;
+
+            let (res, watermark) = mocker.request_messages(&my_id, 30).await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert_eq!(watermark, 55);
+            assert!(res.contains(&alice_message2));
+            assert!(res.contains(&bob_message));
+
+            // Verify events;
+            let events = manager.events().await;
+            assert_eq!(events.len(), 6);
+
+            assert_eq!(
+                events[0],
+                Event::Twitter(TwitterEvent::LookupTwitterId {
+                    twitter_ids: None,
+                    accounts: Some(vec![screen_name.clone(),]),
+                    lookups: vec![(screen_name.clone(), my_id.clone())],
+                })
+            );
+            assert_eq!(
+                events[1],
+                Event::Twitter(TwitterEvent::RequestMessages {
+                    exclude: my_id.clone(),
+                    watermark: 0,
+                    messages: vec![],
+                })
+            );
+            assert_eq!(
+                events[2],
+                Event::Twitter(TwitterEvent::LookupTwitterId {
+                    twitter_ids: Some(vec![my_id.clone(), alice_id.clone(),]),
+                    accounts: Some(vec![bob.clone(),]),
+                    lookups: vec![
+                        (screen_name.clone(), my_id.clone()),
+                        (alice.clone(), alice_id.clone()),
+                        (bob.clone(), bob_id.clone()),
+                    ],
+                })
+            );
+            assert_eq!(
+                events[3],
+                Event::Twitter(TwitterEvent::SendMessage {
+                    id: alice_id.clone(),
+                    message: String::from("alice one"),
+                })
+            );
+            assert_eq!(
+                events[4],
+                Event::Twitter(TwitterEvent::SendMessage {
+                    id: bob_id.clone(),
+                    message: String::from("bob one"),
+                })
+            );
+            assert_eq!(
+                events[5],
+                Event::Twitter(TwitterEvent::RequestMessages {
+                    exclude: my_id.clone(),
+                    watermark: 30,
+                    messages: vec![alice_message2, bob_message],
+                })
+            );
         });
     }
 }
