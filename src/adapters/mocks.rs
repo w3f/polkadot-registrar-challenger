@@ -6,6 +6,7 @@ use crate::manager::OnChainIdentity;
 use crate::primitives::{unix_time, AccountType, NetAccount, Result};
 use crate::{Account, Database2};
 use futures::sink::SinkExt;
+use futures::stream::StreamExt;
 use futures::stream::TryStreamExt;
 use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
@@ -55,8 +56,8 @@ enum TwitterEvent {
 }
 
 struct EventManager2 {
-    sender: UnboundedSender<Result<Event>>,
-    receiver: UnboundedReceiver<Result<Event>>,
+    sender: UnboundedSender<Event>,
+    receiver: UnboundedReceiver<Event>,
 }
 
 impl EventManager2 {
@@ -68,7 +69,7 @@ impl EventManager2 {
             receiver: receiver,
         }
     }
-    fn matrix_child(&self) -> (UnboundedSender<Result<()>>, EventChild<()>) {
+    fn matrix_child(&self) -> (UnboundedSender<()>, EventChild<()>) {
         let (sender, receiver) = mpsc::unbounded();
 
         (
@@ -79,31 +80,27 @@ impl EventManager2 {
             }
         )
     }
-    async fn events(&mut self) -> Vec<Event> {
-        let mut events = vec![];
-
-        while let Some(event) = TryStreamExt::try_next(&mut self.receiver).await.unwrap() {
-            println!("> {:?}", event);
-            events.push(event);
-        }
-
-        events
+    fn finalize(self) -> UnboundedReceiver<Event> {
+        self.receiver
     }
 }
 
 struct EventChild<T> {
-    sender: Arc<RwLock<UnboundedSender<Result<Event>>>>,
-    receiver: Arc<RwLock<UnboundedReceiver<Result<T>>>>,
+    sender: Arc<RwLock<UnboundedSender<Event>>>,
+    receiver: Arc<RwLock<UnboundedReceiver<T>>>,
 }
 
 impl<T> EventChild<T> {
     async fn messages(&self) -> Option<T> {
+        /*
         TryStreamExt::try_next(&mut *self.receiver.write().await)
             .await
             .unwrap()
+        */
+        None
     }
     async fn push_event(&self, event: Event) {
-        self.sender.write().await.send(Ok(event)).await.unwrap();
+        self.sender.write().await.send(event).await.unwrap();
     }
 }
 
@@ -306,6 +303,7 @@ impl TwitterTransport for TwitterMocker {
 mod tests {
     use super::*;
     use tokio::runtime::Runtime;
+    use std::mem::drop;
 
     #[test]
     fn matrix_mocker() {
@@ -323,10 +321,8 @@ mod tests {
             let to_invite_list = [to_invite.clone()];
             request.invite = &to_invite_list;
 
-            println!("11");
             mocker.create_room(request).await.unwrap();
 
-            println!("22");
             let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
             mocker
                 .send_message(&room_id, String::from("Hello"))
@@ -337,13 +333,13 @@ mod tests {
                 .await
                 .unwrap();
 
-            println!("33");
             mocker.leave_room(&room_id).await.unwrap();
 
-            println!("44");
-            let events = manager.events().await;
+            drop(mocker);
+
+            let events = manager.finalize().collect::<Vec<Event>>().await;
             assert_eq!(events.len(), 4);
-            println!("55");
+
             assert_eq!(
                 events[0],
                 Event::Matrix(MatrixEvent::CreateRoom {
