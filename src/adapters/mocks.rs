@@ -80,8 +80,9 @@ impl EventManager2 {
             },
         )
     }
-    fn finalize(self) -> UnboundedReceiver<Event> {
-        self.receiver
+    async fn events(mut self) -> Vec<Event> {
+        self.receiver.close();
+        self.receiver.collect().await
     }
 }
 
@@ -334,9 +335,7 @@ mod tests {
 
             mocker.leave_room(&room_id).await.unwrap();
 
-            drop(mocker);
-
-            let events = manager.finalize().collect::<Vec<Event>>().await;
+            let events = manager.events().await;
             assert_eq!(events.len(), 4);
 
             assert_eq!(
