@@ -309,20 +309,24 @@ mod tests {
     fn matrix_mocker() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
+            // Setup manager.
             let mut manager = EventManager2::new();
             let (sender, matrix_child) = manager.child();
 
+            // Prepare variables.
             let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
-            let mocker = MatrixMocker::new(matrix_child, my_user_id.clone());
+            let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
 
             let mut request = Request::new();
             let to_invite = UserId::try_from("@alice:matrix.org").unwrap();
             let to_invite_list = [to_invite.clone()];
             request.invite = &to_invite_list;
 
+            // Init mocker and create events.
+            let mocker = MatrixMocker::new(matrix_child, my_user_id.clone());
+
             mocker.create_room(request).await.unwrap();
 
-            let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
             mocker
                 .send_message(&room_id, String::from("Hello"))
                 .await
@@ -334,6 +338,7 @@ mod tests {
 
             mocker.leave_room(&room_id).await.unwrap();
 
+            // Verify events.
             let events = manager.events().await;
             assert_eq!(events.len(), 4);
 
