@@ -33,8 +33,13 @@ enum MatrixEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum EmailEvent {
-    RequestMessages(Vec<email::ReceivedMessageContext>),
-    SendMessage { account: Account, message: String },
+    RequestMessages {
+        messages: Vec<email::ReceivedMessageContext>,
+    },
+    SendMessage {
+        account: Account,
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,12 +61,11 @@ enum TwitterEvent {
 }
 
 struct EventManager2 {
-    events: Arc<RwLock<Vec<Event>>>
+    events: Arc<RwLock<Vec<Event>>>,
 }
 
 impl EventManager2 {
     fn new() -> Self {
-
         EventManager2 {
             events: Arc::new(RwLock::new(vec![])),
         }
@@ -76,10 +80,7 @@ impl EventManager2 {
             messages: Arc::clone(&sender.messages),
         };
 
-        (
-            sender,
-            child,
-        )
+        (sender, child)
     }
     async fn events(&self) -> Vec<Event> {
         self.events.read().await.clone()
@@ -88,6 +89,12 @@ impl EventManager2 {
 
 struct EventChildSender<T> {
     messages: Arc<RwLock<Vec<T>>>,
+}
+
+impl<T> EventChildSender<T> {
+    async fn send_message(&self, messages: T) {
+        self.messages.write().await.push(messages);
+    }
 }
 
 struct EventChild<T> {
@@ -174,7 +181,9 @@ impl EmailTransport for EmailMocker {
         let mut messages = self.child.messages().await;
 
         self.child
-            .push_event(Event::Email(EmailEvent::RequestMessages(messages.clone())))
+            .push_event(Event::Email(EmailEvent::RequestMessages {
+                messages: messages.clone(),
+            }))
             .await;
 
         Ok(messages)
@@ -302,6 +311,7 @@ impl TwitterTransport for TwitterMocker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::adapters::EmailId;
     use std::mem::drop;
     use tokio::runtime::Runtime;
 
@@ -375,8 +385,89 @@ mod tests {
     fn email_mocker() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
+            // Setup manager
             let mut manager = EventManager2::new();
+            let (sender, email_child) = manager.child();
 
+            // Prepare variables
+            let alice = Account::from("alice@example.com");
+            let bob = Account::from("bob@example.com");
+
+            let alice_message = email::ReceivedMessageContext {
+                id: EmailId::from(11u64),
+                sender: alice.clone(),
+                body: String::from("from alice one"),
+            };
+
+            let bob_message = email::ReceivedMessageContext {
+                id: EmailId::from(33u64),
+                sender: bob.clone(),
+                body: String::from("from bob one"),
+            };
+
+            // Init mocker and create events.
+            let mocker = EmailMocker::new(email_child);
+
+            let res = mocker.request_messages().await.unwrap();
+            assert_eq!(res, vec![]);
+
+            mocker
+                .send_message(&alice, String::from("alice one"))
+                .await
+                .unwrap();
+            mocker
+                .send_message(&alice, String::from("alice two"))
+                .await
+                .unwrap();
+            mocker
+                .send_message(&bob, String::from("bob one"))
+                .await
+                .unwrap();
+
+            // Fill buffer.
+            sender.send_message(alice_message.clone()).await;
+            sender.send_message(bob_message.clone()).await;
+
+            let res = mocker.request_messages().await.unwrap();
+            assert_eq!(res.len(), 2);
+            assert!(res.contains(&alice_message));
+            assert!(res.contains(&bob_message));
+
+            // Verify events.
+            let events = manager.events().await;
+            assert_eq!(events.len(), 5);
+
+            assert_eq!(
+                events[0],
+                Event::Email(EmailEvent::RequestMessages { messages: vec![] })
+            );
+            assert_eq!(
+                events[1],
+                Event::Email(EmailEvent::SendMessage {
+                    account: alice.clone(),
+                    message: String::from("alice one"),
+                })
+            );
+            assert_eq!(
+                events[2],
+                Event::Email(EmailEvent::SendMessage {
+                    account: alice.clone(),
+                    message: String::from("alice two"),
+                })
+            );
+            assert_eq!(
+                events[3],
+                Event::Email(EmailEvent::SendMessage {
+                    account: bob.clone(),
+                    message: String::from("bob one"),
+                })
+            );
+            assert_eq!(
+                events[4],
+                Event::Email(EmailEvent::RequestMessages {
+                    messages: vec![alice_message.clone(), bob_message.clone(),]
+                })
+            );
         });
     }
 }

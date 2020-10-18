@@ -72,10 +72,11 @@ impl ConvertEmailInto<Account> for &str {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+// TODO: Only expose fields to tests.
 pub struct ReceivedMessageContext {
-    id: EmailId,
-    sender: Account,
-    body: String,
+    pub id: EmailId,
+    pub sender: Account,
+    pub body: String,
 }
 
 #[derive(Debug, Fail)]
