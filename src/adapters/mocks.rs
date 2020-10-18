@@ -3,7 +3,7 @@ use super::twitter::{self, TwitterError, TwitterId};
 use super::{EmailTransport, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
 use crate::manager::OnChainIdentity;
-use crate::primitives::{unix_time, NetAccount, Result, AccountType};
+use crate::primitives::{unix_time, AccountType, NetAccount, Result};
 use crate::{Account, Database2};
 use futures::sink::SinkExt;
 use futures::stream::TryStreamExt;
@@ -55,8 +55,8 @@ enum TwitterEvent {
 }
 
 struct EventManager2 {
-    sender: UnboundedSender<Event>,
-    receiver: UnboundedReceiver<Event>,
+    sender: UnboundedSender<Result<Event>>,
+    receiver: UnboundedReceiver<Result<Event>>,
 }
 
 impl EventManager2 {
@@ -68,69 +68,64 @@ impl EventManager2 {
             receiver: receiver,
         }
     }
-    fn new_child<T>(&self, receiver: UnboundedReceiver<Result<T>>) -> EventChild<T> {
-        EventChild {
-            sender: Arc::new(RwLock::new(self.sender.clone())),
-            receiver: Arc::new(RwLock::new(receiver)),
+    fn matrix_child(&self) -> (UnboundedSender<Result<()>>, EventChild<()>) {
+        let (sender, receiver) = mpsc::unbounded();
+
+        (
+            sender,
+            EventChild {
+                sender: Arc::new(RwLock::new(self.sender.clone())),
+                receiver: Arc::new(RwLock::new(receiver)),
+            }
+        )
+    }
+    async fn events(&mut self) -> Vec<Event> {
+        let mut events = vec![];
+
+        while let Some(event) = TryStreamExt::try_next(&mut self.receiver).await.unwrap() {
+            println!("> {:?}", event);
+            events.push(event);
         }
+
+        events
     }
 }
 
 struct EventChild<T> {
-    sender: Arc<RwLock<UnboundedSender<Event>>>,
+    sender: Arc<RwLock<UnboundedSender<Result<Event>>>>,
     receiver: Arc<RwLock<UnboundedReceiver<Result<T>>>>,
 }
 
 impl<T> EventChild<T> {
     async fn messages(&self) -> Option<T> {
-        TryStreamExt::try_next(&mut *self.receiver.write().await).await.unwrap()
+        TryStreamExt::try_next(&mut *self.receiver.write().await)
+            .await
+            .unwrap()
     }
     async fn push_event(&self, event: Event) {
-        self.sender.write().await.send(event).await.unwrap();
-    }
-}
-
-#[derive(Clone, Debug)]
-struct EventManager {
-    events: Arc<RwLock<Vec<Event>>>,
-}
-
-impl EventManager {
-    fn new() -> Self {
-        EventManager {
-            events: Arc::new(RwLock::new(vec![])),
-        }
-    }
-    async fn push(&self, event: Event) {
-        self.events.write().await.push(event);
-    }
-    async fn events(&self) -> Vec<Event> {
-        (*self.events.read().await).clone()
+        self.sender.write().await.send(Ok(event)).await.unwrap();
     }
 }
 
 pub struct MatrixMocker {
-    events: EventManager,
+    child: EventChild<()>,
     user_id: UserId,
 }
 
 impl MatrixMocker {
-    fn new(user_id: UserId) -> Self {
+    fn new(child: EventChild<()>, user_id: UserId) -> Self {
         MatrixMocker {
-            events: EventManager::new(),
+            child: child,
             user_id: user_id,
         }
-    }
-    async fn events(&self) -> Vec<Event> {
-        self.events.events().await
     }
 }
 
 #[async_trait]
 impl MatrixTransport for MatrixMocker {
     async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()> {
-        self.events
-            .push(Event::Matrix(MatrixEvent::SendMessage {
+        self.child
+            .push_event(Event::Matrix(MatrixEvent::SendMessage {
                 room_id: room_id.clone(),
                 message: message,
             }))
@@ -139,8 +134,8 @@ impl MatrixTransport for MatrixMocker {
         Ok(())
     }
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response> {
-        self.events
-            .push(Event::Matrix(MatrixEvent::CreateRoom {
+        self.child
+            .push_event(Event::Matrix(MatrixEvent::CreateRoom {
                 to_invite: request.invite[0].clone(),
             }))
             .await;
@@ -150,8 +145,8 @@ impl MatrixTransport for MatrixMocker {
         ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
-        self.events
-            .push(Event::Matrix(MatrixEvent::LeaveRoom {
+        self.child
+            .push_event(Event::Matrix(MatrixEvent::LeaveRoom {
                 room_id: room_id.clone(),
             }))
             .await;
@@ -167,41 +162,29 @@ impl MatrixTransport for MatrixMocker {
 }
 
 pub struct EmailMocker {
-    events: EventManager,
-    receiver: Arc<RwLock<UnboundedReceiver<Result<Vec<email::ReceivedMessageContext>>>>>,
+    child: EventChild<Vec<email::ReceivedMessageContext>>,
 }
 
 impl EmailMocker {
-    fn new(receiver: UnboundedReceiver<Result<Vec<email::ReceivedMessageContext>>>) -> Self {
-        EmailMocker {
-            events: EventManager::new(),
-            receiver: Arc::new(RwLock::new(receiver)),
-        }
+    fn new(child: EventChild<Vec<email::ReceivedMessageContext>>) -> Self {
+        EmailMocker { child: child }
     }
 }
 
 #[async_trait]
 impl EmailTransport for EmailMocker {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
-        let mut messages = if let Some(messages) =
-            TryStreamExt::try_next(&mut *self.receiver.write().await)
-                .await
-                .unwrap()
-        {
-            messages
-        } else {
-            vec![]
-        };
+        let mut messages = self.child.messages().await.unwrap_or(vec![]);
 
-        self.events
-            .push(Event::Email(EmailEvent::RequestMessages(messages.clone())))
+        self.child
+            .push_event(Event::Email(EmailEvent::RequestMessages(messages.clone())))
             .await;
 
         Ok(messages)
     }
     async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
-        self.events
-            .push(Event::Email(EmailEvent::SendMessage {
+        self.child
+            .push_event(Event::Email(EmailEvent::SendMessage {
                 account: account.clone(),
                 message: msg,
             }))
@@ -212,21 +195,19 @@ impl EmailTransport for EmailMocker {
 }
 
 pub struct TwitterMocker {
-    events: EventManager,
-    receiver: Arc<RwLock<UnboundedReceiver<Result<Vec<twitter::ReceivedMessageContext>>>>>,
+    child: EventChild<Vec<twitter::ReceivedMessageContext>>,
     index_book: Vec<(Account, TwitterId)>,
     screen_name: Account,
 }
 
 impl TwitterMocker {
     fn new(
-        receiver: UnboundedReceiver<Result<Vec<twitter::ReceivedMessageContext>>>,
+        child: EventChild<Vec<twitter::ReceivedMessageContext>>,
         screen_name: Account,
         index_book: Vec<(Account, TwitterId)>,
     ) -> Self {
         TwitterMocker {
-            events: EventManager::new(),
-            receiver: Arc::new(RwLock::new(receiver)),
+            child: child,
             index_book: index_book,
             screen_name: screen_name,
         }
@@ -240,18 +221,11 @@ impl TwitterTransport for TwitterMocker {
         exclude: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<twitter::ReceivedMessageContext>, u64)> {
-        let mut messages = if let Some(messages) =
-            TryStreamExt::try_next(&mut *self.receiver.write().await)
-                .await
-                .unwrap()
-        {
-            messages
-        } else {
-            vec![]
-        };
+        let mut messages = self.child.messages().await.unwrap_or(vec![]);
 
         let mut new_watermark = 0;
-        let messages = messages.into_iter()
+        let messages = messages
+            .into_iter()
             .filter(|message| {
                 if message.created > new_watermark {
                     new_watermark = message.created;
@@ -261,8 +235,8 @@ impl TwitterTransport for TwitterMocker {
             })
             .collect::<Vec<twitter::ReceivedMessageContext>>();
 
-        self.events
-            .push(Event::Twitter(TwitterEvent::RequestMessages {
+        self.child
+            .push_event(Event::Twitter(TwitterEvent::RequestMessages {
                 exclude: exclude.clone(),
                 watermark: watermark,
                 messages: messages.clone(),
@@ -302,8 +276,8 @@ impl TwitterTransport for TwitterMocker {
             }
         }
 
-        self.events
-            .push(Event::Twitter(TwitterEvent::LookupTwitterId {
+        self.child
+            .push_event(Event::Twitter(TwitterEvent::LookupTwitterId {
                 twitter_ids: twitter_ids.map(|ids| ids.iter().map(|&id| id.clone()).collect()),
                 accounts: accounts
                     .map(|accounts| accounts.iter().map(|&account| account.clone()).collect()),
@@ -314,8 +288,8 @@ impl TwitterTransport for TwitterMocker {
         Ok(lookups)
     }
     async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
-        self.events
-            .push(Event::Twitter(TwitterEvent::SendMessage {
+        self.child
+            .push_event(Event::Twitter(TwitterEvent::SendMessage {
                 id: id.clone(),
                 message: message,
             }))
@@ -337,28 +311,65 @@ mod tests {
     fn matrix_mocker() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
+
+            let mut manager = EventManager2::new();
+            let (sender, matrix_child) = manager.matrix_child();
+
             let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
-            let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
+            let mocker = MatrixMocker::new(matrix_child, my_user_id.clone());
 
             let mut request = Request::new();
             let to_invite = UserId::try_from("@alice:matrix.org").unwrap();
             let to_invite_list = [to_invite.clone()];
             request.invite = &to_invite_list;
 
-            let mocker = MatrixMocker::new(my_user_id.clone());
+            println!("11");
             mocker.create_room(request).await.unwrap();
 
-            mocker.send_message(&room_id, String::from("Hello")).await.unwrap();
-            mocker.send_message(&room_id, String::from("World")).await.unwrap();
+            println!("22");
+            let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
+            mocker
+                .send_message(&room_id, String::from("Hello"))
+                .await
+                .unwrap();
+            mocker
+                .send_message(&room_id, String::from("World"))
+                .await
+                .unwrap();
 
+            println!("33");
             mocker.leave_room(&room_id).await.unwrap();
 
-            let events = mocker.events().await;
+            println!("44");
+            let events = manager.events().await;
             assert_eq!(events.len(), 4);
-            assert_eq!(events[0], Event::Matrix(MatrixEvent::CreateRoom { to_invite: to_invite.clone() }));
-            assert_eq!(events[1], Event::Matrix(MatrixEvent::SendMessage { room_id: room_id.clone(), message: String::from("Hello") }));
-            assert_eq!(events[2], Event::Matrix(MatrixEvent::SendMessage { room_id: room_id.clone(), message: String::from("World") }));
-            assert_eq!(events[3], Event::Matrix(MatrixEvent::LeaveRoom { room_id: room_id.clone() }));
+            println!("55");
+            assert_eq!(
+                events[0],
+                Event::Matrix(MatrixEvent::CreateRoom {
+                    to_invite: to_invite.clone()
+                })
+            );
+            assert_eq!(
+                events[1],
+                Event::Matrix(MatrixEvent::SendMessage {
+                    room_id: room_id.clone(),
+                    message: String::from("Hello")
+                })
+            );
+            assert_eq!(
+                events[2],
+                Event::Matrix(MatrixEvent::SendMessage {
+                    room_id: room_id.clone(),
+                    message: String::from("World")
+                })
+            );
+            assert_eq!(
+                events[3],
+                Event::Matrix(MatrixEvent::LeaveRoom {
+                    room_id: room_id.clone()
+                })
+            );
         });
     }
 }
