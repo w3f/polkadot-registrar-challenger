@@ -77,7 +77,7 @@ impl EventManager2 {
             EventChild {
                 sender: Arc::new(RwLock::new(self.sender.clone())),
                 receiver: Arc::new(RwLock::new(receiver)),
-            }
+            },
         )
     }
     fn finalize(self) -> UnboundedReceiver<Event> {
@@ -302,14 +302,13 @@ impl TwitterTransport for TwitterMocker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::runtime::Runtime;
     use std::mem::drop;
+    use tokio::runtime::Runtime;
 
     #[test]
     fn matrix_mocker() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-
             let mut manager = EventManager2::new();
             let (sender, matrix_child) = manager.matrix_child();
 
