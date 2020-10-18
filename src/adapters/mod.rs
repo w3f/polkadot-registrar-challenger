@@ -1,7 +1,7 @@
 mod display_name;
 mod email;
 mod matrix;
-mod mocks;
+pub mod mocks;
 mod twitter;
 
 pub use display_name::{DisplayNameHandler, VIOLATIONS_CAP};

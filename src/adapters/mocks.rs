@@ -2,37 +2,31 @@ use super::email;
 use super::twitter::{self, TwitterError, TwitterId};
 use super::{EmailTransport, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
-use crate::manager::OnChainIdentity;
-use crate::primitives::{unix_time, AccountType, NetAccount, Result};
+use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};
-use futures::sink::SinkExt;
-use futures::stream::StreamExt;
-use futures::stream::TryStreamExt;
-use futures_channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::result::Result as StdResult;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum Event {
+pub enum Event {
     Matrix(MatrixEvent),
     Email(EmailEvent),
     Twitter(TwitterEvent),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum MatrixEvent {
+pub enum MatrixEvent {
     SendMessage { room_id: RoomId, message: String },
     CreateRoom { to_invite: UserId },
     LeaveRoom { room_id: RoomId },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum EmailEvent {
+pub enum EmailEvent {
     RequestMessages {
         messages: Vec<email::ReceivedMessageContext>,
     },
@@ -43,7 +37,7 @@ enum EmailEvent {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum TwitterEvent {
+pub enum TwitterEvent {
     RequestMessages {
         exclude: TwitterId,
         watermark: u64,
@@ -60,17 +54,17 @@ enum TwitterEvent {
     },
 }
 
-struct EventManager2 {
+pub struct EventManager2 {
     events: Arc<RwLock<Vec<Event>>>,
 }
 
 impl EventManager2 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         EventManager2 {
             events: Arc::new(RwLock::new(vec![])),
         }
     }
-    fn child<T>(&self) -> (EventChildSender<T>, EventChild<T>) {
+    pub fn child<T>(&self) -> (EventChildSender<T>, EventChild<T>) {
         let sender = EventChildSender {
             messages: Arc::new(RwLock::new(vec![])),
         };
@@ -82,31 +76,31 @@ impl EventManager2 {
 
         (sender, child)
     }
-    async fn events(&self) -> Vec<Event> {
+    pub async fn events(&self) -> Vec<Event> {
         self.events.read().await.clone()
     }
 }
 
-struct EventChildSender<T> {
+pub struct EventChildSender<T> {
     messages: Arc<RwLock<Vec<T>>>,
 }
 
 impl<T> EventChildSender<T> {
-    async fn send_message(&self, messages: T) {
+    pub async fn send_message(&self, messages: T) {
         self.messages.write().await.push(messages);
     }
 }
 
-struct EventChild<T> {
+pub struct EventChild<T> {
     events: Arc<RwLock<Vec<Event>>>,
     messages: Arc<RwLock<Vec<T>>>,
 }
 
 impl<T: Clone> EventChild<T> {
-    async fn messages(&self) -> Vec<T> {
+    pub async fn messages(&self) -> Vec<T> {
         self.messages.read().await.clone()
     }
-    async fn push_event(&self, event: Event) {
+    pub async fn push_event(&self, event: Event) {
         self.events.write().await.push(event);
     }
 }
@@ -117,7 +111,7 @@ pub struct MatrixMocker {
 }
 
 impl MatrixMocker {
-    fn new(child: EventChild<()>, user_id: UserId) -> Self {
+    pub fn new(child: EventChild<()>, user_id: UserId) -> Self {
         MatrixMocker {
             child: child,
             user_id: user_id,
@@ -160,7 +154,7 @@ impl MatrixTransport for MatrixMocker {
     async fn user_id(&self) -> Result<UserId> {
         Ok(self.user_id.clone())
     }
-    async fn run_emitter(&mut self, db: Database2, comms: CommsVerifier) {
+    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {
         unimplemented!()
     }
 }
@@ -170,7 +164,7 @@ pub struct EmailMocker {
 }
 
 impl EmailMocker {
-    fn new(child: EventChild<email::ReceivedMessageContext>) -> Self {
+    pub fn new(child: EventChild<email::ReceivedMessageContext>) -> Self {
         EmailMocker { child: child }
     }
 }
@@ -178,7 +172,7 @@ impl EmailMocker {
 #[async_trait]
 impl EmailTransport for EmailMocker {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
-        let mut messages = self.child.messages().await;
+        let messages = self.child.messages().await;
 
         self.child
             .push_event(Event::Email(EmailEvent::RequestMessages {
@@ -207,7 +201,7 @@ pub struct TwitterMocker {
 }
 
 impl TwitterMocker {
-    fn new(
+    pub fn new(
         child: EventChild<twitter::ReceivedMessageContext>,
         screen_name: Account,
         index_book: Vec<(Account, TwitterId)>,
@@ -227,7 +221,7 @@ impl TwitterTransport for TwitterMocker {
         exclude: &TwitterId,
         watermark: u64,
     ) -> Result<(Vec<twitter::ReceivedMessageContext>, u64)> {
-        let mut messages = self.child.messages().await;
+        let messages = self.child.messages().await;
 
         let mut new_watermark = 0;
         let messages = messages
@@ -312,7 +306,6 @@ impl TwitterTransport for TwitterMocker {
 mod tests {
     use super::*;
     use crate::adapters::EmailId;
-    use std::mem::drop;
     use tokio::runtime::Runtime;
 
     #[test]
@@ -320,8 +313,8 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             // Setup manager.
-            let mut manager = EventManager2::new();
-            let (sender, matrix_child) = manager.child();
+            let manager = EventManager2::new();
+            let (_sender, matrix_child) = manager.child();
 
             // Prepare variables.
             let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
@@ -386,7 +379,7 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             // Setup manager
-            let mut manager = EventManager2::new();
+            let manager = EventManager2::new();
             let (sender, email_child) = manager.child();
 
             // Prepare variables
@@ -468,6 +461,24 @@ mod tests {
                     messages: vec![alice_message.clone(), bob_message.clone(),]
                 })
             );
+        });
+    }
+
+    #[test]
+    fn twitter_mocker() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            // Setup manager.
+            let manager = EventManager2::new();
+            let (_sender, twitter_child) = manager.child();
+
+            let screen_name = Account::from("@registrar");
+            let inbox_book = vec![
+                (Account::from("@alice"), TwitterId::from(111u64)),
+                (Account::from("@bob"), TwitterId::from(222u64)),
+            ];
+
+            let _mocker = TwitterMocker::new(twitter_child, screen_name, inbox_book);
         });
     }
 }
