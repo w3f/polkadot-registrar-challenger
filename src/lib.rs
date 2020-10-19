@@ -35,9 +35,9 @@ mod db;
 mod health_check;
 mod manager;
 mod primitives;
-mod verifier;
 #[cfg(test)]
 mod tests;
+mod verifier;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
