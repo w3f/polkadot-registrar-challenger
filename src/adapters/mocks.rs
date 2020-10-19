@@ -2,9 +2,11 @@ use super::email;
 use super::twitter::{self, TwitterError, TwitterId};
 use super::{EmailTransport, EventExtract, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
+use crate::connector::{
+    ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, Message,
+};
 use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};
-use crate::connector::{ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, Message};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::convert::TryFrom;
