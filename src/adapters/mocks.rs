@@ -1,6 +1,6 @@
 use super::email;
 use super::twitter::{self, TwitterError, TwitterId};
-use super::{EmailTransport, MatrixTransport, TwitterTransport};
+use super::{EmailTransport, MatrixTransport, TwitterTransport, EventExtract};
 use crate::comms::CommsVerifier;
 use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};
@@ -156,6 +156,25 @@ impl MatrixTransport for MatrixMocker {
     }
     async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {
         unimplemented!()
+    }
+}
+
+pub struct MatrixEventMock {
+    user_id: UserId,
+    message: Result<String>,
+}
+
+impl EventExtract for MatrixEventMock {
+    fn sender(&self) -> &UserId {
+        &self.user_id
+    }
+    fn message(&self) -> Result<String> {
+        // Work around ownership violations.
+        if let Ok(message) = &self.message {
+            Ok(message.clone())
+        } else {
+            Err(failure::err_msg(""))
+        }
     }
 }
 

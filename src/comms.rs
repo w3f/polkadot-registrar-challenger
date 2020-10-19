@@ -1,7 +1,11 @@
 use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
+#[cfg(tests)]
+use crate::adapters::mocks::MatrixEventMock;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 use tokio::time::{self, Duration};
+#[cfg(tests)]
+use matrix_sdk::identifiers::{RoomId, UserId};
 
 pub fn generate_comms(
     sender: Sender<CommsMessage>,
@@ -43,6 +47,14 @@ pub enum CommsMessage {
     ExistingDisplayNames {
         accounts: Vec<Account>,
     },
+    // Only used to manually trigger the event handler in tests, since the
+    // matrix sdk runs the EventEmitter in the background.
+    #[cfg(tests)]
+    TriggerMatrixEmitter {
+        room_id: RoomId,
+        my_user_id: UserId,
+        event: MatrixEventMock,
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -14,10 +14,10 @@ use matrix_sdk::{
     identifiers::{RoomId, UserId},
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
-use std::convert::TryInto;
-use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 use url::Url;
+use std::convert::TryInto;
+use std::result::Result as StdResult;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
@@ -165,7 +165,7 @@ impl MatrixTransport for MatrixClient {
     }
 }
 
-trait EventExtract {
+pub trait EventExtract {
     fn sender(&self) -> &UserId;
     fn message(&self) -> Result<String>;
 }
@@ -242,6 +242,21 @@ impl MatrixHandler {
             } => {
                 self.handle_invalid_account_notification(net_account, accounts)
                     .await?
+            }
+            #[cfg(tests)]
+            MatrixEventMock {
+                room_id,
+                my_user_id,
+                event,
+            } => {
+                use matrix_sdk::{
+                    locks::RwLock,
+                    Room,
+                };
+                use std::sync::Arc;
+
+                let room_state = SyncRoom::Joined(Arc::new(RwLock::new(Room::new(&room_id, &my_user_id))));
+                self.handle_incoming_messages(room_state, &event).await?
             }
             _ => error!("Received unrecognized message type"),
         }
