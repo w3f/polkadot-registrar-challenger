@@ -102,6 +102,11 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 }
 
 #[async_trait]
+trait ConnectorInitTransports<W: ConnectorWriterTransport, R: ConnectorReaderTransport> {
+    async fn init(url: &str) -> Result<(W, R)>;
+}
+
+#[async_trait]
 trait ConnectorReaderTransport {
     async fn read(&mut self) -> Result<Option<String>>;
 }
@@ -109,6 +114,17 @@ trait ConnectorReaderTransport {
 #[async_trait]
 trait ConnectorWriterTransport {
     async fn write(&mut self, message: &Message) -> Result<()>;
+}
+
+pub struct WebSockets {}
+
+#[async_trait]
+impl ConnectorInitTransports<WebSocketWriter, WebSocketReader> for WebSockets {
+    async fn init(url: &str) -> Result<(WebSocketWriter, WebSocketReader)> {
+        let (sink, stream) = connect_async(url).await?.0.split();
+
+        Ok((sink.into(), stream.into()))
+    }
 }
 
 pub struct WebSocketReader {
@@ -155,26 +171,27 @@ impl ConnectorWriterTransport for WebSocketWriter {
     }
 }
 
-pub struct Connector {
-    client: WebSocketStream<TcpStream>,
+pub struct Connector<W, R> {
+    writer: W,
+    reader: R,
     comms: CommsVerifier,
     url: String,
 }
 
-impl Connector {
-    pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
-        let connector = Connector {
-            client: connect_async(url).await?.0,
-            comms: comms,
-            url: url.to_string(),
-        };
+impl<W: 'static + Send + Sync + ConnectorWriterTransport, R: 'static + Send + Sync + ConnectorReaderTransport> Connector<W, R> {
+    pub async fn new<T: ConnectorInitTransports<W, R>>(url: &str, comms: CommsVerifier) -> Result<Self> {
+        let (writer, reader) = T::init(url).await?;
 
-        Ok(connector)
+        Ok(
+            Connector {
+                writer: writer,
+                reader: reader,
+                comms: comms,
+                url: url.to_string(),
+            }
+        )
     }
-    pub async fn start(self) {
-        let (sink, stream) = self.client.split();
-        let (mut writer, mut reader): (WebSocketWriter, WebSocketReader) = (sink.into(), stream.into());
-
+    pub async fn start<T: ConnectorInitTransports<W, R>>(mut self) {
         loop {
             let (mut sender, receiver) = unbounded();
             let exit_token = Arc::new(RwLock::new(false));
@@ -186,14 +203,14 @@ impl Connector {
             ));
 
             tokio::spawn(Self::start_websocket_writer(
-                writer,
+                self.writer,
                 self.comms.clone(),
                 receiver,
                 Arc::clone(&exit_token),
             ));
 
             let handle = tokio::spawn(Self::start_websocket_reader(
-                reader,
+                self.reader,
                 self.comms.clone(),
                 sender.clone(),
                 Arc::clone(&exit_token),
@@ -235,14 +252,10 @@ impl Connector {
             info!("Trying to reconnect to Watcher...");
             loop {
                 interval.tick().await;
-                if let Ok(client) = connect_async(&self.url).await {
+                if let Ok((writer, reader)) = T::init(&self.url).await {
                     info!("Connected successfully to Watcher, spawning tasks");
-
-                    // (Destructuring assignments are currently not supported.
-                    // https://github.com/rust-lang/rfcs/issues/372)
-                    let split = client.0.split();
-                    writer = split.0.into();
-                    reader = split.1.into();
+                    self.writer = writer;
+                    self.reader = reader;
 
                     break;
                 } else {
@@ -347,8 +360,7 @@ impl Connector {
                             }
                         }
                         Ack => {
-                            if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data)
-                            {
+                            if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data) {
                                 info!("Received acknowledgement: {}", msg.result);
                                 comms.notify_ack();
                             } else {
@@ -356,9 +368,7 @@ impl Connector {
                             }
                         }
                         Error => {
-                            if let Ok(msg) =
-                                serde_json::from_value::<ErrorResponse>(msg.data)
-                            {
+                            if let Ok(msg) = serde_json::from_value::<ErrorResponse>(msg.data) {
                                 error!("Received error message: {}", msg.error);
                             } else {
                                 error!("Invalid 'error' message format");
@@ -379,9 +389,7 @@ impl Connector {
                                         comms.notify_new_identity(ident);
                                         sender.send(Message::ack(None)).await.unwrap();
                                     } else {
-                                        error!(
-                                            "Invalid `newJudgementRequest` message format"
-                                        );
+                                        error!("Invalid `newJudgementRequest` message format");
                                         sender.send(Message::error()).await.unwrap();
                                     };
                                 }
@@ -407,14 +415,14 @@ impl Connector {
                     }
                 }
             } else {
-                            warn!("Connection to Watcher closed");
-                            debug!("Closing websocket reader task");
+                warn!("Connection to Watcher closed");
+                debug!("Closing websocket reader task");
 
-                            // Close Comms receiver and client writer tasks.
-                            let mut t = exit_token.write().await;
-                            *t = true;
+                // Close Comms receiver and client writer tasks.
+                let mut t = exit_token.write().await;
+                *t = true;
 
-                            break;
+                break;
             }
         }
     }
