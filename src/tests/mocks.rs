@@ -60,8 +60,12 @@ pub enum TwitterEvent {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConnectorEvent {
-    Writer(Message),
-    Reader(String),
+    Writer {
+        message: Message
+    },
+    Reader {
+        message: Option<String>
+    },
 }
 
 pub struct EventManager2 {
@@ -111,6 +115,14 @@ impl<T: Clone> EventChild<T> {
     pub async fn messages(&self) -> Vec<T> {
         self.messages.read().await.clone()
     }
+    pub async fn fifo_message(&self) -> Option<T> {
+        let mut messages = self.messages.write().await;
+        if !messages.is_empty() {
+            Some(messages.remove(0))
+        } else {
+            None
+        }
+    }
     pub async fn push_event(&self, event: Event) {
         self.events.write().await.push(event);
     }
@@ -146,7 +158,7 @@ pub struct ConnectorWriterMocker {
 #[async_trait]
 impl ConnectorWriterTransport for ConnectorWriterMocker {
     async fn write(&mut self, message: &Message) -> Result<()> {
-        self.child.push_event(Event::Connector(ConnectorEvent::Writer(message.clone())));
+        self.child.push_event(Event::Connector(ConnectorEvent::Writer{ message: message.clone()})).await;
         Ok(())
     }
 }
@@ -165,15 +177,9 @@ impl ConnectorReaderMocker {
 #[async_trait]
 impl ConnectorReaderTransport for ConnectorReaderMocker {
     async fn read(&mut self) -> Result<Option<String>> {
-        let mut messages = self.child.messages().await;
-        if !messages.is_empty() {
-            let msg = messages.remove(0);
-            self.child.push_event(Event::Connector(ConnectorEvent::Reader(msg.to_string())));
-
-            Ok(Some(msg))
-        } else {
-            Ok(None)
-        }
+        let message = self.child.fifo_message().await;
+        self.child.push_event(Event::Connector(ConnectorEvent::Reader { message: message.clone()})).await;
+        Ok(message)
     }
 }
 
@@ -712,6 +718,7 @@ mod tests {
             // Setup manager.
             let manager = Arc::new(EventManager2::new());
 
+            // Init mocker and create events.
             let (mut writer, mut reader) = ConnectorMocker::init(Arc::clone(&manager)).await.unwrap();
             let sender = reader.sender();
 
@@ -720,16 +727,71 @@ mod tests {
 
             writer.write(&Message {
                 event: EventType::Ack,
-                data: serde_json::to_value("First message").unwrap(),
+                data: serde_json::to_value("First message out").unwrap(),
             }).await.unwrap();
 
             writer.write(&Message {
-                event: EventType::Ack,
-                data: serde_json::to_value("First message out").unwrap(),
+                event: EventType::Error,
+                data: serde_json::to_value("Second message out").unwrap(),
             }).await.unwrap();
 
             sender.send_message(String::from("First message in")).await;
             sender.send_message(String::from("Second message in")).await;
+
+            let res = reader.read().await.unwrap().unwrap();
+            assert_eq!(res, String::from("First message in"));
+            let res = reader.read().await.unwrap().unwrap();
+            assert_eq!(res, String::from("Second message in"));
+
+            let res = reader.read().await.unwrap();
+            assert!(res.is_none());
+
+            // Verify events/
+            let events = manager.events().await;
+            assert_eq!(events.len(), 6);
+
+            assert_eq!(
+                events[0],
+                Event::Connector(ConnectorEvent::Reader {
+                    message: None,
+                })
+            );
+            assert_eq!(
+                events[1],
+                Event::Connector(ConnectorEvent::Writer {
+                    message: Message {
+                        event: EventType::Ack,
+                        data: serde_json::to_value("First message out").unwrap(),
+                    },
+                })
+            );
+            assert_eq!(
+                events[2],
+                Event::Connector(ConnectorEvent::Writer {
+                    message: Message {
+                        event: EventType::Error,
+                        data: serde_json::to_value("Second message out").unwrap(),
+                    },
+                })
+            );
+            assert_eq!(
+                events[3],
+                Event::Connector(ConnectorEvent::Reader {
+                    message: Some(String::from("First message in")),
+                })
+            );
+            assert_eq!(
+                events[4],
+                Event::Connector(ConnectorEvent::Reader {
+                    message: Some(String::from("Second message in")),
+                })
+            );
+            assert_eq!(
+                events[5],
+                Event::Connector(ConnectorEvent::Reader {
+                    message: None,
+                })
+            );
         });
     }
 }

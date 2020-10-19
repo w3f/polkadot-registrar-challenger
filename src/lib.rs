@@ -36,6 +36,7 @@ mod health_check;
 mod manager;
 mod primitives;
 mod verifier;
+#[cfg(test)]
 mod tests;
 
 #[derive(Debug, Deserialize)]
