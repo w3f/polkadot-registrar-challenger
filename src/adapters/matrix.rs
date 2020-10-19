@@ -165,6 +165,26 @@ impl MatrixTransport for MatrixClient {
     }
 }
 
+trait EventExtract {
+    fn sender(&self) -> &UserId;
+    fn message(&self) -> Result<String>;
+}
+
+impl EventExtract for SyncMessageEvent<MessageEventContent> {
+    fn sender(&self) -> &UserId {
+        &self.sender
+    }
+    fn message(&self) -> Result<String> {
+        match self {
+            SyncMessageEvent {
+                content: MessageEventContent::Text(TextMessageEventContent { body, .. }),
+                ..
+            } => Ok(body.to_owned()),
+            _ => Err(failure::err_msg("not a string body")),
+        }
+    }
+}
+
 pub struct MatrixHandler {
     db: Database2,
     comms: CommsVerifier,
@@ -308,14 +328,14 @@ impl MatrixHandler {
             .map_err(|err| MatrixError::SendMessage(err.into()).into())
             .map(|_| ())
     }
-    async fn handle_incoming_messages(
+    async fn handle_incoming_messages<T: EventExtract>(
         &self,
         room: SyncRoom,
-        event: &SyncMessageEvent<MessageEventContent>,
+        event: &T,
     ) -> Result<()> {
         // Do not respond to its own messages.
-        if event.sender
-            == self
+        if event.sender()
+            == &self
                 .transport
                 .user_id()
                 .await
@@ -330,7 +350,7 @@ impl MatrixHandler {
             debug!("Search for address based on RoomId");
 
             let room_id = &room.read().await.room_id;
-            let account = Account::from(event.sender.as_str());
+            let account = Account::from(event.sender().as_str());
 
             debug!("Fetching challenge data");
             let challenge_data = self
@@ -346,16 +366,12 @@ impl MatrixHandler {
             let mut verifier = Verifier2::new(&challenge_data);
 
             // Fetch the text message from the event.
-            let msg_body = if let SyncMessageEvent {
-                content: MessageEventContent::Text(TextMessageEventContent { body: msg_body, .. }),
-                ..
-            } = event
-            {
+            let msg_body = if let Ok(msg_body) = event.message() {
                 msg_body
             } else {
                 debug!(
                     "Didn't receive a text message from {}, notifying...",
-                    event.sender.as_str()
+                    event.sender().as_str()
                 );
 
                 self.transport
@@ -370,7 +386,7 @@ impl MatrixHandler {
             };
 
             debug!("Verifying message: {}", msg_body);
-            verifier.verify(msg_body);
+            verifier.verify(&msg_body);
 
             // Update challenge statuses and notify manager
             verification_handler(&verifier, &self.db, &self.comms, &AccountType::Matrix).await?;
@@ -417,7 +433,7 @@ impl MatrixHandler {
 impl EventEmitter for MatrixHandler {
     async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
         let _ = self
-            .handle_incoming_messages(room, event)
+            .handle_incoming_messages::<SyncMessageEvent<MessageEventContent>>(room, event)
             .await
             .map_err(|err| {
                 error!("{}", err);
