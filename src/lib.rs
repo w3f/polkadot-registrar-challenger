@@ -36,6 +36,7 @@ mod health_check;
 mod manager;
 mod primitives;
 mod verifier;
+mod tests;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

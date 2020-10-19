@@ -1,6 +1,6 @@
-use super::email;
-use super::twitter::{self, TwitterError, TwitterId};
-use super::{EmailTransport, EventExtract, MatrixTransport, TwitterTransport};
+use crate::adapters::email;
+use crate::adapters::twitter::{self, TwitterError, TwitterId};
+use crate::adapters::{EmailTransport, EventExtract, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
 use crate::connector::{
     ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, Message,
@@ -85,6 +85,7 @@ impl EventManager2 {
     }
 }
 
+#[derive(Clone)]
 pub struct EventChildSender<T> {
     messages: Arc<RwLock<Vec<T>>>,
 }
@@ -109,15 +110,26 @@ impl<T: Clone> EventChild<T> {
     }
 }
 
-/*
-pub struct ConnectorMocker {
-
-}
+pub struct ConnectorMocker {}
 
 #[async_trait]
 impl ConnectorInitTransports<ConnectorWriterMocker, ConnectorReaderMocker> for ConnectorMocker {
-    async fn init(_url: &str) -> Result<(ConnectorWriterMocker, ConnectorReaderMocker)> {
+    type Endpoint = &'static EventManager2;
 
+    async fn init(endpoint: Self::Endpoint) -> Result<(ConnectorWriterMocker, ConnectorReaderMocker)> {
+        let (sender, child) = endpoint.child();
+
+        Ok(
+            (
+                ConnectorWriterMocker {
+                    child: endpoint.child().1,
+                },
+                ConnectorReaderMocker {
+                    sender: sender,
+                    child: child,
+                }
+            )
+        )
     }
 }
 
@@ -134,22 +146,27 @@ impl ConnectorWriterTransport for ConnectorWriterMocker {
 }
 
 pub struct ConnectorReaderMocker {
-    child: EventChild<String>,
     sender: EventChildSender<String>,
+    child: EventChild<String>,
+}
+
+impl ConnectorReaderMocker {
+    fn sender(&self) -> EventChildSender<String> {
+        self.sender.clone()
+    }
 }
 
 #[async_trait]
 impl ConnectorReaderTransport for ConnectorReaderMocker {
     async fn read(&mut self) -> Result<Option<String>> {
-        let messages = self.child.messages().await;
+        let mut messages = self.child.messages().await;
         if !messages.is_empty() {
-            messages.remove(0)
+            Ok(Some(messages.remove(0)))
         } else {
             Ok(None)
         }
     }
 }
-*/
 
 pub struct MatrixMocker {
     child: EventChild<()>,
