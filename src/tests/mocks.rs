@@ -3,7 +3,7 @@ use crate::adapters::twitter::{self, TwitterError, TwitterId};
 use crate::adapters::{EmailTransport, EventExtract, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
 use crate::connector::{
-    ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, Message,
+    ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, Message, EventType,
 };
 use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};
@@ -19,7 +19,7 @@ pub enum Event {
     Matrix(MatrixEvent),
     Email(EmailEvent),
     Twitter(TwitterEvent),
-    Connector(Message),
+    Connector(ConnectorEvent),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -56,6 +56,12 @@ pub enum TwitterEvent {
         id: TwitterId,
         message: String,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ConnectorEvent {
+    Writer(Message),
+    Reader(String),
 }
 
 pub struct EventManager2 {
@@ -114,7 +120,7 @@ pub struct ConnectorMocker {}
 
 #[async_trait]
 impl ConnectorInitTransports<ConnectorWriterMocker, ConnectorReaderMocker> for ConnectorMocker {
-    type Endpoint = &'static EventManager2;
+    type Endpoint = Arc<EventManager2>;
 
     async fn init(endpoint: Self::Endpoint) -> Result<(ConnectorWriterMocker, ConnectorReaderMocker)> {
         let (sender, child) = endpoint.child();
@@ -140,7 +146,7 @@ pub struct ConnectorWriterMocker {
 #[async_trait]
 impl ConnectorWriterTransport for ConnectorWriterMocker {
     async fn write(&mut self, message: &Message) -> Result<()> {
-        self.child.push_event(Event::Connector(message.clone()));
+        self.child.push_event(Event::Connector(ConnectorEvent::Writer(message.clone())));
         Ok(())
     }
 }
@@ -161,7 +167,10 @@ impl ConnectorReaderTransport for ConnectorReaderMocker {
     async fn read(&mut self) -> Result<Option<String>> {
         let mut messages = self.child.messages().await;
         if !messages.is_empty() {
-            Ok(Some(messages.remove(0)))
+            let msg = messages.remove(0);
+            self.child.push_event(Event::Connector(ConnectorEvent::Reader(msg.to_string())));
+
+            Ok(Some(msg))
         } else {
             Ok(None)
         }
@@ -693,6 +702,34 @@ mod tests {
                     messages: vec![alice_message2, bob_message],
                 })
             );
+        });
+    }
+
+    #[test]
+    fn connector_mocker() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            // Setup manager.
+            let manager = Arc::new(EventManager2::new());
+
+            let (mut writer, mut reader) = ConnectorMocker::init(Arc::clone(&manager)).await.unwrap();
+            let sender = reader.sender();
+
+            let res = reader.read().await.unwrap();
+            assert!(res.is_none());
+
+            writer.write(&Message {
+                event: EventType::Ack,
+                data: serde_json::to_value("First message").unwrap(),
+            }).await.unwrap();
+
+            writer.write(&Message {
+                event: EventType::Ack,
+                data: serde_json::to_value("First message out").unwrap(),
+            }).await.unwrap();
+
+            sender.send_message(String::from("First message in")).await;
+            sender.send_message(String::from("Second message in")).await;
         });
     }
 }

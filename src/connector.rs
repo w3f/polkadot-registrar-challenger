@@ -16,7 +16,7 @@ use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::protocol::Message as TungMessage;
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-enum EventType {
+pub enum EventType {
     #[serde(rename = "ack")]
     Ack,
     #[serde(rename = "error")]
@@ -37,9 +37,9 @@ enum EventType {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Message {
-    event: EventType,
+    pub event: EventType,
     #[serde(skip_serializing_if = "Value::is_null")]
-    data: Value,
+    pub data: Value,
 }
 
 impl Message {
