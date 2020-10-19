@@ -147,6 +147,7 @@ impl TwitterBuilder {
     }
 }
 
+#[derive(Clone)]
 pub struct Twitter {
     client: Client,
     screen_name: Account,
@@ -193,6 +194,7 @@ pub trait TwitterTransport: 'static + Send + Sync {
     fn my_screen_name(&self) -> &Account;
 }
 
+#[derive(Clone)]
 pub struct TwitterHandler {
     db: Database2,
     comms: CommsVerifier,
@@ -205,7 +207,7 @@ impl TwitterHandler {
             comms: comms,
         }
     }
-    pub async fn start<T: TwitterTransport>(self, transport: T) {
+    pub async fn start<T: Clone + TwitterTransport>(self, transport: T) {
         // TODO: Improve error case
         let my_id = transport
             .lookup_twitter_id(None, Some(&[transport.my_screen_name()]))
@@ -214,34 +216,45 @@ impl TwitterHandler {
             .remove(0)
             .1;
 
+        // Start incoming messages handler
+        let l_self = self.clone();
+        let l_transport = transport.clone();
+        tokio::spawn(async move {
+            loop {
+                let _ = l_self
+                    .handle_incoming_messages(&l_transport, &my_id)
+                    .await
+                    .map_err(|err| {
+                        error!("{}", err);
+                    });
+                time::delay_for(Duration::from_secs(65)).await;
+            }
+        });
+
         loop {
-            let _ = self.local(&transport, &my_id).await.map_err(|err| {
+            let _ = self.local(&transport).await.map_err(|err| {
                 error!("{}", err);
             });
         }
     }
-    pub async fn local<T: TwitterTransport>(&self, transport: &T, my_id: &TwitterId) -> Result<()> {
+    pub async fn local<T: TwitterTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
-        match self.comms.try_recv() {
-            Some(AccountToVerify {
+        match self.comms.recv().await {
+            AccountToVerify {
                 net_account: _,
                 account: _,
-            }) => {
+            } => {
                 // The Twitter adapter has to wait for messages, no need to initiate contact.
             }
-            Some(NotifyInvalidAccount {
+            NotifyInvalidAccount {
                 net_account,
                 accounts,
-            }) => {
+            } => {
                 self.handle_invalid_account_notification(transport, net_account, accounts)
                     .await?
             }
-            None => {
-                time::delay_for(Duration::from_secs(65)).await;
-                self.handle_incoming_messages(transport, my_id).await?;
-            }
-            Some(_) => warn!("Received unrecognized message type"),
+            _ => warn!("Received unrecognized message type"),
         }
 
         Ok(())
