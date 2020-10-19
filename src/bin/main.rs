@@ -58,9 +58,9 @@ async fn main() -> Result<(), Error> {
             .email_password(config.email_password)
             .build()?;
 
-        run::<WebSockets, WebSocketWriter, WebSocketReader, _, _, _>(
+        run::<WebSockets, WebSocketWriter, WebSocketReader, _, _, _, _>(
             config.enable_watcher,
-            &config.watcher_url,
+            config.watcher_url,
             db2,
             matrix_transport,
             twitter_transport,

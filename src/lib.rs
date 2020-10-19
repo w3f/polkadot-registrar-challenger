@@ -114,15 +114,16 @@ pub async fn block() {
 }
 
 pub async fn run<
-    C: ConnectorInitTransports<W, R>,
+    C: ConnectorInitTransports<W, R, Endpoint = P>,
     W: 'static + Send + Sync + ConnectorWriterTransport,
     R: 'static + Send + Sync + ConnectorReaderTransport,
+    P: 'static + Send + Sync + Clone,
     M: MatrixTransport,
     T: Clone + TwitterTransport,
     E: Clone + EmailTransport,
 >(
     enable_watcher: bool,
-    watcher_url: &str,
+    watcher_url: P,
     db2: Database2,
     mut matrix_transport: M,
     twitter_transport: T,
@@ -187,7 +188,7 @@ pub async fn run<
         loop {
             interval.tick().await;
 
-            if let Ok(con) = Connector::new::<C>(watcher_url, c_connector.clone()).await {
+            if let Ok(con) = Connector::new::<C>(watcher_url.clone(), c_connector.clone()).await {
                 info!("Connecting to Watcher succeeded");
                 connector = con;
                 break;

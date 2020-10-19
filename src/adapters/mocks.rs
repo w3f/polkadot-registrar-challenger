@@ -4,6 +4,7 @@ use super::{EmailTransport, EventExtract, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
 use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};
+use crate::connector::{ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, Message};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::convert::TryFrom;
@@ -16,6 +17,7 @@ pub enum Event {
     Matrix(MatrixEvent),
     Email(EmailEvent),
     Twitter(TwitterEvent),
+    Connector(Message),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,6 +106,48 @@ impl<T: Clone> EventChild<T> {
         self.events.write().await.push(event);
     }
 }
+
+/*
+pub struct ConnectorMocker {
+
+}
+
+#[async_trait]
+impl ConnectorInitTransports<ConnectorWriterMocker, ConnectorReaderMocker> for ConnectorMocker {
+    async fn init(_url: &str) -> Result<(ConnectorWriterMocker, ConnectorReaderMocker)> {
+
+    }
+}
+
+pub struct ConnectorWriterMocker {
+    child: EventChild<()>,
+}
+
+#[async_trait]
+impl ConnectorWriterTransport for ConnectorWriterMocker {
+    async fn write(&mut self, message: &Message) -> Result<()> {
+        self.child.push_event(Event::Connector(message.clone()));
+        Ok(())
+    }
+}
+
+pub struct ConnectorReaderMocker {
+    child: EventChild<String>,
+    sender: EventChildSender<String>,
+}
+
+#[async_trait]
+impl ConnectorReaderTransport for ConnectorReaderMocker {
+    async fn read(&mut self) -> Result<Option<String>> {
+        let messages = self.child.messages().await;
+        if !messages.is_empty() {
+            messages.remove(0)
+        } else {
+            Ok(None)
+        }
+    }
+}
+*/
 
 pub struct MatrixMocker {
     child: EventChild<()>,

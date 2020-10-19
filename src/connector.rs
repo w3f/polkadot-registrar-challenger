@@ -15,7 +15,7 @@ use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::protocol::Message as TungMessage;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 enum EventType {
     #[serde(rename = "ack")]
     Ack,
@@ -35,7 +35,7 @@ enum EventType {
     DisplayNamesResponse,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Message {
     event: EventType,
     #[serde(skip_serializing_if = "Value::is_null")]
@@ -103,7 +103,9 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 
 #[async_trait]
 pub trait ConnectorInitTransports<W: ConnectorWriterTransport, R: ConnectorReaderTransport> {
-    async fn init(url: &str) -> Result<(W, R)>;
+    type Endpoint;
+
+    async fn init(endpoint: Self::Endpoint) -> Result<(W, R)>;
 }
 
 #[async_trait]
@@ -120,8 +122,10 @@ pub struct WebSockets {}
 
 #[async_trait]
 impl ConnectorInitTransports<WebSocketWriter, WebSocketReader> for WebSockets {
-    async fn init(url: &str) -> Result<(WebSocketWriter, WebSocketReader)> {
-        let (sink, stream) = connect_async(url).await?.0.split();
+    type Endpoint = String;
+
+    async fn init(endpoint: Self::Endpoint) -> Result<(WebSocketWriter, WebSocketReader)> {
+        let (sink, stream) = connect_async(endpoint.as_str()).await?.0.split();
 
         Ok((sink.into(), stream.into()))
     }
@@ -171,32 +175,33 @@ impl ConnectorWriterTransport for WebSocketWriter {
     }
 }
 
-pub struct Connector<W, R> {
+pub struct Connector<W, R, P> {
     writer: W,
     reader: R,
     comms: CommsVerifier,
-    url: String,
+    endpoint: P,
 }
 
 impl<
         W: 'static + Send + Sync + ConnectorWriterTransport,
         R: 'static + Send + Sync + ConnectorReaderTransport,
-    > Connector<W, R>
+        P: 'static + Send + Sync + Clone,
+    > Connector<W, R, P>
 {
-    pub async fn new<T: ConnectorInitTransports<W, R>>(
-        url: &str,
+    pub async fn new<T: ConnectorInitTransports<W, R, Endpoint = P>>(
+        endpoint: P,
         comms: CommsVerifier,
     ) -> Result<Self> {
-        let (writer, reader) = T::init(url).await?;
+        let (writer, reader) = T::init(endpoint.clone()).await?;
 
         Ok(Connector {
             writer: writer,
             reader: reader,
             comms: comms,
-            url: url.to_string(),
+            endpoint: endpoint,
         })
     }
-    pub async fn start<T: ConnectorInitTransports<W, R>>(mut self) {
+    pub async fn start<T: ConnectorInitTransports<W, R, Endpoint = P>>(mut self) {
         loop {
             let (mut sender, receiver) = unbounded();
             let exit_token = Arc::new(RwLock::new(false));
@@ -257,7 +262,7 @@ impl<
             info!("Trying to reconnect to Watcher...");
             loop {
                 interval.tick().await;
-                if let Ok((writer, reader)) = T::init(&self.url).await {
+                if let Ok((writer, reader)) = T::init(self.endpoint.clone()).await {
                     info!("Connected successfully to Watcher, spawning tasks");
                     self.writer = writer;
                     self.reader = reader;
