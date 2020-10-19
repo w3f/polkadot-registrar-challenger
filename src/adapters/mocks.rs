@@ -1,6 +1,6 @@
 use super::email;
 use super::twitter::{self, TwitterError, TwitterId};
-use super::{EmailTransport, MatrixTransport, TwitterTransport, EventExtract};
+use super::{EmailTransport, EventExtract, MatrixTransport, TwitterTransport};
 use crate::comms::CommsVerifier;
 use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};

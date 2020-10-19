@@ -1,11 +1,11 @@
-use crate::manager::OnChainIdentity;
-use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 #[cfg(tests)]
 use crate::adapters::mocks::MatrixEventMock;
+use crate::manager::OnChainIdentity;
+use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 use crossbeam::channel::{unbounded, Receiver, Sender};
-use tokio::time::{self, Duration};
 #[cfg(tests)]
 use matrix_sdk::identifiers::{RoomId, UserId};
+use tokio::time::{self, Duration};
 
 pub fn generate_comms(
     sender: Sender<CommsMessage>,
@@ -54,7 +54,7 @@ pub enum CommsMessage {
         room_id: RoomId,
         my_user_id: UserId,
         event: MatrixEventMock,
-    }
+    },
 }
 
 #[derive(Debug, Clone)]

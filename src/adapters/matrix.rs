@@ -14,10 +14,10 @@ use matrix_sdk::{
     identifiers::{RoomId, UserId},
     Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
 };
-use tokio::time::{self, Duration};
-use url::Url;
 use std::convert::TryInto;
 use std::result::Result as StdResult;
+use tokio::time::{self, Duration};
+use url::Url;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
@@ -249,13 +249,11 @@ impl MatrixHandler {
                 my_user_id,
                 event,
             } => {
-                use matrix_sdk::{
-                    locks::RwLock,
-                    Room,
-                };
+                use matrix_sdk::{locks::RwLock, Room};
                 use std::sync::Arc;
 
-                let room_state = SyncRoom::Joined(Arc::new(RwLock::new(Room::new(&room_id, &my_user_id))));
+                let room_state =
+                    SyncRoom::Joined(Arc::new(RwLock::new(Room::new(&room_id, &my_user_id))));
                 self.handle_incoming_messages(room_state, &event).await?
             }
             _ => error!("Received unrecognized message type"),
