@@ -72,6 +72,8 @@ async fn main() -> Result<(), Error> {
             std::process::exit(1);
         })
         .unwrap();
+    } else {
+        warn!("Accounts disabled. Nothing to do...");
     }
 
     block().await;
