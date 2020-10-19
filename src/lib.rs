@@ -119,7 +119,7 @@ pub async fn run<
     R: 'static + Send + Sync + ConnectorReaderTransport,
     M: MatrixTransport,
     T: Clone + TwitterTransport,
-    E: EmailTransport,
+    E: Clone + EmailTransport,
 >(
     enable_watcher: bool,
     watcher_url: &str,

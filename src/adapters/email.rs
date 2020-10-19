@@ -294,7 +294,24 @@ impl EmailHandler {
 }
 
 impl EmailHandler {
-    pub async fn start<T: 'static + EmailTransport>(self, transport: T) {
+    pub async fn start<T: Clone + EmailTransport>(self, transport: T) {
+        // Start incoming messages handler.
+        let l_self = self.clone();
+        let l_transport = transport.clone();
+        tokio::spawn(async move {
+            loop {
+                let _ = l_self
+                    .handle_incoming_messages(&l_transport)
+                    .await
+                    .map_err(|err| {
+                        error!("{}", err);
+                        err
+                    });
+
+                time::delay_for(Duration::from_secs(3)).await;
+            }
+        });
+
         loop {
             let _ = self.local(&transport).await.map_err(|err| {
                 error!("{}", err);
@@ -305,25 +322,21 @@ impl EmailHandler {
     async fn local<T: EmailTransport>(&self, transport: &T) -> Result<()> {
         use CommsMessage::*;
 
-        match self.comms.try_recv() {
-            Some(AccountToVerify {
+        match self.comms.recv().await {
+            AccountToVerify {
                 net_account: _,
                 account,
-            }) => {
+            } => {
                 self.handle_account_verification(transport, account).await?;
             }
-            Some(NotifyInvalidAccount {
+            NotifyInvalidAccount {
                 net_account,
                 accounts,
-            }) => {
+            } => {
                 self.handle_invalid_account_notification(net_account, accounts, transport)
                     .await?
             }
-            None => {
-                time::delay_for(Duration::from_secs(3)).await;
-                self.handle_incoming_messages(transport).await?;
-            }
-            Some(_) => warn!("Received unrecognized message type"),
+            _ => warn!("Received unrecognized message type"),
         }
 
         Ok(())

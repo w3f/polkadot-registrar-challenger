@@ -216,7 +216,7 @@ impl TwitterHandler {
             .remove(0)
             .1;
 
-        // Start incoming messages handler
+        // Start incoming messages handler.
         let l_self = self.clone();
         let l_transport = transport.clone();
         tokio::spawn(async move {
@@ -227,6 +227,7 @@ impl TwitterHandler {
                     .map_err(|err| {
                         error!("{}", err);
                     });
+
                 time::delay_for(Duration::from_secs(65)).await;
             }
         });
