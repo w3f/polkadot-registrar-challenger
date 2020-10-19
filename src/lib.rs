@@ -12,7 +12,11 @@ use adapters::{
     TwitterHandler, TwitterTransport,
 };
 pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
-pub use connector::Connector;
+use connector::{Connector, ConnectorInitTransports};
+pub use connector::{
+    ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
+    WebSockets,
+};
 pub use db::Database2;
 pub use health_check::HealthCheck;
 use manager::IdentityManager;
@@ -109,7 +113,14 @@ pub async fn block() {
     }
 }
 
-pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
+pub async fn run<
+    C: ConnectorInitTransports<W, R>,
+    W: 'static + Send + Sync + ConnectorWriterTransport,
+    R: 'static + Send + Sync + ConnectorReaderTransport,
+    M: MatrixTransport,
+    T: TwitterTransport,
+    E: EmailTransport,
+>(
     enable_watcher: bool,
     watcher_url: &str,
     db2: Database2,
@@ -176,7 +187,7 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
         loop {
             interval.tick().await;
 
-            if let Ok(con) = Connector::new(watcher_url, c_connector.clone()).await {
+            if let Ok(con) = Connector::new::<C>(watcher_url, c_connector.clone()).await {
                 info!("Connecting to Watcher succeeded");
                 connector = con;
                 break;
@@ -194,7 +205,7 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
 
         info!("Starting Watcher connector task, listening...");
         tokio::spawn(async move {
-            connector.start().await;
+            connector.start::<C>().await;
         });
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");

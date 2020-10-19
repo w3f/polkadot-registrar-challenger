@@ -36,7 +36,7 @@ enum EventType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Message {
+pub struct Message {
     event: EventType,
     #[serde(skip_serializing_if = "Value::is_null")]
     data: Value,
@@ -102,17 +102,17 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 }
 
 #[async_trait]
-trait ConnectorInitTransports<W: ConnectorWriterTransport, R: ConnectorReaderTransport> {
+pub trait ConnectorInitTransports<W: ConnectorWriterTransport, R: ConnectorReaderTransport> {
     async fn init(url: &str) -> Result<(W, R)>;
 }
 
 #[async_trait]
-trait ConnectorReaderTransport {
+pub trait ConnectorReaderTransport {
     async fn read(&mut self) -> Result<Option<String>>;
 }
 
 #[async_trait]
-trait ConnectorWriterTransport {
+pub trait ConnectorWriterTransport {
     async fn write(&mut self, message: &Message) -> Result<()>;
 }
 
@@ -178,18 +178,23 @@ pub struct Connector<W, R> {
     url: String,
 }
 
-impl<W: 'static + Send + Sync + ConnectorWriterTransport, R: 'static + Send + Sync + ConnectorReaderTransport> Connector<W, R> {
-    pub async fn new<T: ConnectorInitTransports<W, R>>(url: &str, comms: CommsVerifier) -> Result<Self> {
+impl<
+        W: 'static + Send + Sync + ConnectorWriterTransport,
+        R: 'static + Send + Sync + ConnectorReaderTransport,
+    > Connector<W, R>
+{
+    pub async fn new<T: ConnectorInitTransports<W, R>>(
+        url: &str,
+        comms: CommsVerifier,
+    ) -> Result<Self> {
         let (writer, reader) = T::init(url).await?;
 
-        Ok(
-            Connector {
-                writer: writer,
-                reader: reader,
-                comms: comms,
-                url: url.to_string(),
-            }
-        )
+        Ok(Connector {
+            writer: writer,
+            reader: reader,
+            comms: comms,
+            url: url.to_string(),
+        })
     }
     pub async fn start<T: ConnectorInitTransports<W, R>>(mut self) {
         loop {
