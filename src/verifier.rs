@@ -59,19 +59,19 @@ impl<'a> Verifier2<'a> {
             }
         }
     }
-    pub fn valid_verifications(&self) -> Vec<&'a NetworkAddress> {
+    fn valid_verifications(&self) -> Vec<&'a NetworkAddress> {
         self.valid
             .iter()
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn invalid_verifications(&self) -> Vec<&'a NetworkAddress> {
+    fn invalid_verifications(&self) -> Vec<&'a NetworkAddress> {
         self.invalid
             .iter()
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn init_message_builder(&self, send_context: bool) -> String {
+    pub fn init_message_builder(&self, send_context: bool) -> VerifierMessage {
         let mut message = String::new();
 
         if send_context {
@@ -100,14 +100,18 @@ impl<'a> Verifier2<'a> {
 
         message.push_str("\n\nRefer to the Polkadot Wiki guide https://wiki.polkadot.network/");
 
-        message
+        if send_context {
+            VerifierMessage::InitMessageWithContext(message)
+        } else {
+            VerifierMessage::InitMessage(message)
+        }
     }
-    pub fn response_message_builder(&self) -> String {
+    pub fn response_message_builder(&self) -> VerifierMessage {
         let mut message = String::new();
 
         if self.valid.is_empty() {
             message.push_str("The signature is invalid. Refer to the Polkadot Wiki guide.");
-            return message;
+            return VerifierMessage::ResponseInvalid(message);
         } else if self.valid.len() == 1 {
             message.push_str("The following address has been verified:\n")
         } else {
@@ -132,7 +136,7 @@ impl<'a> Verifier2<'a> {
             }
         }
 
-        message
+        VerifierMessage::ResponseValid(message)
     }
 }
 
@@ -180,7 +184,7 @@ pub async fn verification_handler<'a>(
 pub fn invalid_accounts_message(
     accounts: &[(AccountType, Account)],
     violations: Option<Vec<Account>>,
-) -> String {
+) -> VerifierMessage {
     let mut message = String::new();
 
     message.push_str("Please note that the following information is invalid:\n\n");
@@ -231,5 +235,5 @@ pub fn invalid_accounts_message(
         `requestJudgement` extrinsic must be issued after the update.",
     );
 
-    message
+    VerifierMessage::NotifyViolation(message)
 }
