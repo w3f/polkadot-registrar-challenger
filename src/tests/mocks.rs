@@ -148,6 +148,7 @@ impl ConnectorInitTransports<ConnectorWriterMocker, ConnectorReaderMocker> for C
     }
 }
 
+#[derive(Clone)]
 pub struct ConnectorWriterMocker {
     child: EventChild<()>,
 }
@@ -164,6 +165,7 @@ impl ConnectorWriterTransport for ConnectorWriterMocker {
     }
 }
 
+#[derive(Clone)]
 pub struct ConnectorReaderMocker {
     sender: EventChildSender<String>,
     child: EventChild<String>,

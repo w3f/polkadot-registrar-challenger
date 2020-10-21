@@ -30,7 +30,7 @@ pub struct OnChainIdentity {
 }
 
 #[derive(Debug, Fail)]
-enum ManagerError {
+pub enum ManagerError {
     #[fail(display = "no handler registered for account type: {:?}", 0)]
     NoHandlerRegistered(AccountType),
     #[fail(display = "failed to find account state of identity")]
@@ -176,7 +176,7 @@ impl IdentityManager {
         self.comms.pairs.insert(account_ty, cm);
         cv
     }
-    fn get_comms(&self, account_ty: &AccountType) -> StdResult<&CommsMain, ManagerError> {
+    pub fn get_comms(&self, account_ty: &AccountType) -> StdResult<&CommsMain, ManagerError> {
         self.comms
             .pairs
             .get(account_ty)

@@ -22,9 +22,9 @@ pub use health_check::HealthCheck;
 use manager::IdentityManager;
 pub use primitives::Account;
 use primitives::{AccountType, Fatal, Result};
-use comms::CommsVerifier;
+use comms::{CommsMain, CommsVerifier};
 #[cfg(test)]
-use tests::mocks::{EventManager2, ConnectorMocker};
+use tests::mocks::{EventManager2, ConnectorMocker, ConnectorWriterMocker, ConnectorReaderMocker};
 #[cfg(test)]
 use std::sync::Arc;
 use std::env;
@@ -136,7 +136,7 @@ pub async fn run<
     twitter_transport: T,
     email_transport: E,
 ) -> Result<()> {
-    let handlers = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
+    let (_, c_connector) = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
 
     if enable_watcher {
         info!("Trying to connect to Watcher");
@@ -147,7 +147,7 @@ pub async fn run<
         loop {
             interval.tick().await;
 
-            if let Ok(con) = Connector::new::<C>(watcher_url.clone(), handlers.connector.clone()).await {
+            if let Ok(con) = Connector::new::<C>(watcher_url.clone(), c_connector.clone()).await {
                 info!("Connecting to Watcher succeeded");
                 connector = con;
                 break;
@@ -185,23 +185,29 @@ pub async fn test_run<
     matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
-) -> Result<()> {
-    let handlers = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
+) -> Result<TestRunReturn> {
+    let (c_matrix, c_connector) = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
 
-    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), CommsVerifier::new()).await.unwrap();
+    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), c_connector).await.unwrap();
     let (writer, reader) = ConnectorMocker::init(event_manager).await.unwrap();
-    connector.set_writer_reader(writer, reader);
+    connector.set_writer_reader(writer.clone(), reader.clone());
 
     tokio::spawn(async move {
         connector.start::<ConnectorMocker>().await;
     });
 
-    Ok(())
+    Ok(TestRunReturn {
+        matrix: c_matrix,
+        writer: writer,
+        reader: reader,
+    })
 }
 
-struct RunReturn {
-    matrix: CommsVerifier,
-    connector: CommsVerifier,
+#[cfg(test)]
+pub struct TestRunReturn {
+    matrix: CommsMain,
+    writer: ConnectorWriterMocker,
+    reader: ConnectorReaderMocker,
 }
 
 async fn run_adapters<
@@ -213,7 +219,7 @@ async fn run_adapters<
     mut matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
-) -> Result<RunReturn> {
+) -> Result<(CommsMain, CommsVerifier)> {
     info!("Setting up manager");
     let mut manager = IdentityManager::new(db2.clone())?;
 
@@ -224,6 +230,12 @@ async fn run_adapters<
     let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_email = manager.register_comms(AccountType::Email);
+
+    // Since the Matrix event emitter runs in the background, the handling of
+    // messages must be tested by using this `CommsVerifier` handle and sending
+    // `TriggerMatrixEmitter` messages.
+    let main_matrix = 
+        manager.get_comms(&AccountType::Matrix)?.clone();
 
     info!("Starting manager task");
     tokio::spawn(async move {
@@ -265,11 +277,8 @@ async fn run_adapters<
             .await;
     });
 
-    // Since the Matrix event emitter runs in the background, the handling of
-    // messages must be tested by using this `CommsVerifier` handle and sending
-    // `TriggerMatrixEmitter` messages.
-    Ok(RunReturn {
-        matrix: c_matrix,
-        connector: c_connector,
-    })
+    Ok((
+        main_matrix,
+        c_connector
+    ))
 }
