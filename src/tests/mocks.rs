@@ -61,7 +61,7 @@ pub enum TwitterEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ConnectorEvent {
     Writer { message: Message },
-    Reader { message: Option<String> },
+    Reader { message: String },
 }
 
 pub struct EventManager2 {
@@ -172,7 +172,7 @@ pub struct ConnectorReaderMocker {
 }
 
 impl ConnectorReaderMocker {
-    fn sender(&self) -> EventChildSender<String> {
+    pub fn injector(&self) -> EventChildSender<String> {
         self.sender.clone()
     }
 }
@@ -180,13 +180,18 @@ impl ConnectorReaderMocker {
 #[async_trait]
 impl ConnectorReaderTransport for ConnectorReaderMocker {
     async fn read(&mut self) -> Result<Option<String>> {
-        let message = self.child.fifo_message().await;
-        self.child
-            .push_event(Event::Connector(ConnectorEvent::Reader {
-                message: message.clone(),
-            }))
-            .await;
-        Ok(message)
+        if let Some(message) = self.child.fifo_message().await {
+            self.child
+                .push_event(Event::Connector(ConnectorEvent::Reader {
+                    message: message.clone(),
+                }))
+                .await;
+
+            Ok(Some(message))
+        } else {
+            Ok(None)
+        }
+
     }
 }
 
@@ -790,7 +795,8 @@ mod tests {
             // Init mocker and create events.
             let (mut writer, mut reader) =
                 ConnectorMocker::init(Arc::clone(&manager)).await.unwrap();
-            let sender = reader.sender();
+
+            let injector = reader.injector();
 
             let res = reader.read().await.unwrap();
             assert!(res.is_none());
@@ -811,8 +817,8 @@ mod tests {
                 .await
                 .unwrap();
 
-            sender.send_message(String::from("First message in")).await;
-            sender.send_message(String::from("Second message in")).await;
+            injector.send_message(String::from("First message in")).await;
+            injector.send_message(String::from("Second message in")).await;
 
             let res = reader.read().await.unwrap().unwrap();
             assert_eq!(res, String::from("First message in"));
@@ -824,14 +830,10 @@ mod tests {
 
             // Verify events/
             let events = manager.events().await;
-            assert_eq!(events.len(), 6);
+            assert_eq!(events.len(), 4);
 
             assert_eq!(
                 events[0],
-                Event::Connector(ConnectorEvent::Reader { message: None })
-            );
-            assert_eq!(
-                events[1],
                 Event::Connector(ConnectorEvent::Writer {
                     message: Message {
                         event: EventType::Ack,
@@ -840,7 +842,7 @@ mod tests {
                 })
             );
             assert_eq!(
-                events[2],
+                events[1],
                 Event::Connector(ConnectorEvent::Writer {
                     message: Message {
                         event: EventType::Error,
@@ -849,20 +851,16 @@ mod tests {
                 })
             );
             assert_eq!(
+                events[2],
+                Event::Connector(ConnectorEvent::Reader {
+                    message: String::from("First message in"),
+                })
+            );
+            assert_eq!(
                 events[3],
                 Event::Connector(ConnectorEvent::Reader {
-                    message: Some(String::from("First message in")),
+                    message: String::from("Second message in"),
                 })
-            );
-            assert_eq!(
-                events[4],
-                Event::Connector(ConnectorEvent::Reader {
-                    message: Some(String::from("Second message in")),
-                })
-            );
-            assert_eq!(
-                events[5],
-                Event::Connector(ConnectorEvent::Reader { message: None })
             );
         });
     }

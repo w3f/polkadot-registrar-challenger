@@ -1,10 +1,9 @@
-use super::db_path;
+use super::{db_path, pause};
 use super::mocks::*;
 use crate::connector::{ConnectorWriterTransport, EventType, JudgementRequest, Message};
 use crate::primitives::{Account, AccountType, NetAccount};
 use crate::{test_run, Database2};
 use matrix_sdk::identifiers::UserId;
-use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -30,25 +29,34 @@ fn verify_matrix() {
         .await
         .unwrap();
 
-        let mut connector = handlers.writer;
-        let matrix = handlers.matrix;
+        pause().await;
 
-        connector
-            .write(&Message {
-                event: EventType::NewJudgementRequest,
-                data: serde_json::to_value(&JudgementRequest {
-                    address: NetAccount::alice(),
-                    accounts: [(
-                        AccountType::Matrix,
-                        Some(Account::from("@alice:matrix.org")),
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                })
-                .unwrap(),
+        let matrix = handlers.matrix;
+        let mut writer = handlers.writer;
+        let injector = handlers.reader.injector();
+
+        let msg = serde_json::to_string(&Message {
+            event: EventType::NewJudgementRequest,
+            data: serde_json::to_value(&JudgementRequest {
+                address: NetAccount::alice(),
+                accounts: [(
+                    AccountType::Matrix,
+                    Some(Account::from("@alice:matrix.org")),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
             })
-            .await
-            .unwrap();
+            .unwrap(),
+        }).unwrap();
+
+        // Send new judgement request.
+        injector.send_message(msg).await;
+
+        tokio::time::delay_for(tokio::time::Duration::from_secs(5)).await;
+
+        let events = manager.events().await;
+        println!("{:?}", events);
+
     });
 }

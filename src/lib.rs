@@ -203,6 +203,7 @@ pub async fn test_run<
     let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), c_connector)
         .await
         .unwrap();
+
     let (writer, reader) = ConnectorMocker::init(event_manager).await.unwrap();
     connector.set_writer_reader(writer.clone(), reader.clone());
 
@@ -213,6 +214,7 @@ pub async fn test_run<
     Ok(TestRunReturn {
         matrix: c_matrix,
         writer: writer,
+        reader: reader,
     })
 }
 
@@ -220,6 +222,7 @@ pub async fn test_run<
 pub struct TestRunReturn {
     matrix: CommsMain,
     writer: ConnectorWriterMocker,
+    reader: ConnectorReaderMocker,
 }
 
 async fn run_adapters<
