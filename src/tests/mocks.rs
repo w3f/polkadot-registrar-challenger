@@ -237,7 +237,7 @@ impl MatrixTransport for DummyTransport {
 #[async_trait]
 impl EmailTransport for DummyTransport {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
-        unimplemented!()
+        Ok(vec![])
     }
     async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
         unimplemented!()
@@ -303,9 +303,7 @@ impl MatrixTransport for MatrixMocker {
     async fn user_id(&self) -> Result<UserId> {
         Ok(self.user_id.clone())
     }
-    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {
-        unimplemented!()
-    }
+    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {}
 }
 
 pub struct MatrixEventMock {

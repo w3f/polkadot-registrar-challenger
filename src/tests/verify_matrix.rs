@@ -1,6 +1,6 @@
 use super::db_path;
 use super::mocks::*;
-use crate::{run, Database2};
+use crate::{test_run, Database2};
 use matrix_sdk::identifiers::UserId;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use tokio::runtime::Runtime;
 fn verify_matrix() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
-        /*
         let db = Database2::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (_, matrix_child) = manager.child();
@@ -18,8 +17,7 @@ fn verify_matrix() {
         let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
         let matrix_transport = MatrixMocker::new(matrix_child, my_user_id);
 
-        let matrix_comms = run::<ConnectorMocker, _, _, _, _, _, _>(
-            true,
+        let handlers = test_run(
             Arc::clone(&manager),
             db,
             matrix_transport,
@@ -28,6 +26,5 @@ fn verify_matrix() {
         )
         .await
         .unwrap();
-        */
     });
 }
