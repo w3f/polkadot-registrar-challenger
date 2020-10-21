@@ -1,13 +1,13 @@
 use super::db_path;
 use super::mocks::*;
+use crate::connector::{ConnectorWriterTransport, EventType, JudgementRequest, Message};
+use crate::primitives::{Account, AccountType, NetAccount};
 use crate::{test_run, Database2};
-use crate::connector::{ConnectorWriterTransport, Message, EventType, JudgementRequest};
-use crate::primitives::{NetAccount, Account, AccountType};
 use matrix_sdk::identifiers::UserId;
-use tokio::runtime::Runtime;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use std::collections::HashMap;
+use tokio::runtime::Runtime;
 
 #[test]
 fn verify_matrix() {
@@ -33,14 +33,22 @@ fn verify_matrix() {
         let mut connector = handlers.writer;
         let matrix = handlers.matrix;
 
-        connector.write(&Message {
-            event: EventType::NewJudgementRequest,
-            data: serde_json::to_value(&JudgementRequest {
-                address: NetAccount::alice(),
-                accounts: [
-                    (AccountType::Matrix, Some(Account::from("@alice:matrix.org")))
-                ].iter().cloned().collect()
-            }).unwrap()
-        }).await.unwrap();
+        connector
+            .write(&Message {
+                event: EventType::NewJudgementRequest,
+                data: serde_json::to_value(&JudgementRequest {
+                    address: NetAccount::alice(),
+                    accounts: [(
+                        AccountType::Matrix,
+                        Some(Account::from("@alice:matrix.org")),
+                    )]
+                    .iter()
+                    .cloned()
+                    .collect(),
+                })
+                .unwrap(),
+            })
+            .await
+            .unwrap();
     });
 }
