@@ -12,6 +12,8 @@ use adapters::{
     TwitterHandler, TwitterTransport,
 };
 pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
+#[cfg(test)]
+use comms::CommsVerifier;
 use connector::{Connector, ConnectorInitTransports};
 pub use connector::{
     ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
@@ -22,8 +24,6 @@ pub use health_check::HealthCheck;
 use manager::IdentityManager;
 pub use primitives::Account;
 use primitives::{AccountType, Fatal, Result};
-#[cfg(test)]
-use comms::CommsVerifier;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;

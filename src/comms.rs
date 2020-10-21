@@ -1,7 +1,7 @@
-#[cfg(test)]
-use crate::tests::mocks::MatrixEventMock;
 use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
+#[cfg(test)]
+use crate::tests::mocks::MatrixEventMock;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 #[cfg(test)]
 use matrix_sdk::identifiers::{RoomId, UserId};
