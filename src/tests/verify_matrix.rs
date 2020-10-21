@@ -57,6 +57,5 @@ fn verify_matrix() {
 
         let events = manager.events().await;
         println!("{:?}", events);
-
     });
 }

@@ -12,6 +12,15 @@ pub enum VerifierError {
     InvalidSignature,
 }
 
+#[derive(Debug, Clone)]
+pub enum VerifierMessage {
+    InitMessage(String),
+    InitMessageWithContext(String),
+    ResponseValid(String),
+    ResponseInvalid(String),
+    NotifyViolation(String),
+}
+
 pub struct Verifier2<'a> {
     challenges: &'a [(NetworkAddress, Challenge)],
     valid: Vec<(&'a NetworkAddress, &'a Challenge)>,
