@@ -243,8 +243,8 @@ impl MatrixHandler {
                 self.handle_invalid_account_notification(net_account, accounts)
                     .await?
             }
-            #[cfg(tests)]
-            MatrixEventMock {
+            #[cfg(test)]
+            TriggerMatrixEmitter {
                 room_id,
                 my_user_id,
                 event,
