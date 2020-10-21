@@ -213,7 +213,6 @@ pub async fn test_run<
     Ok(TestRunReturn {
         matrix: c_matrix,
         writer: writer,
-        reader: reader,
     })
 }
 
@@ -221,7 +220,6 @@ pub async fn test_run<
 pub struct TestRunReturn {
     matrix: CommsMain,
     writer: ConnectorWriterMocker,
-    reader: ConnectorReaderMocker,
 }
 
 async fn run_adapters<

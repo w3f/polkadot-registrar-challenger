@@ -108,6 +108,18 @@ impl NetAccount {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
+    #[cfg(test)]
+    pub fn alice() -> Self {
+        NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
+    }
+    #[cfg(test)]
+    pub fn bob() -> Self {
+        NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
+    }
+    #[cfg(test)]
+    pub fn eve() -> Self {
+        NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ")
+    }
 }
 
 impl From<String> for NetAccount {
