@@ -12,8 +12,6 @@ use adapters::{
     TwitterHandler, TwitterTransport,
 };
 pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
-#[cfg(test)]
-use comms::CommsVerifier;
 use connector::{Connector, ConnectorInitTransports};
 pub use connector::{
     ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
@@ -25,6 +23,10 @@ use manager::IdentityManager;
 pub use primitives::Account;
 use primitives::{AccountType, Fatal, Result};
 use comms::CommsVerifier;
+#[cfg(test)]
+use tests::mocks::{EventManager2, ConnectorMocker};
+#[cfg(test)]
+use std::sync::Arc;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -168,6 +170,31 @@ pub async fn run<
     } else {
         warn!("Watcher connector task is disabled. Cannot process any requests...");
     }
+
+    Ok(())
+}
+
+#[cfg(test)]
+pub async fn test_run<
+    M: MatrixTransport,
+    T: Clone + TwitterTransport,
+    E: Clone + EmailTransport,
+>(
+    event_manager: Arc<EventManager2>,
+    db2: Database2,
+    matrix_transport: M,
+    twitter_transport: T,
+    email_transport: E,
+) -> Result<()> {
+    let handlers = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
+
+    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), CommsVerifier::new()).await.unwrap();
+    let (writer, reader) = ConnectorMocker::init(event_manager).await.unwrap();
+    connector.set_writer_reader(writer, reader);
+
+    tokio::spawn(async move {
+        connector.start::<ConnectorMocker>().await;
+    });
 
     Ok(())
 }

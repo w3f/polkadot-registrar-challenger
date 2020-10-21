@@ -201,6 +201,11 @@ impl<
             endpoint: endpoint,
         })
     }
+    #[cfg(test)]
+    pub fn set_writer_reader(&mut self, writer: W, reader: R) {
+        self.writer = writer;
+        self.reader = reader;
+    }
     pub async fn start<T: ConnectorInitTransports<W, R, Endpoint = P>>(mut self) {
         loop {
             let (mut sender, receiver) = unbounded();
