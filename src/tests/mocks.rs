@@ -432,11 +432,11 @@ mod tests {
             mocker.create_room(request).await.unwrap();
 
             mocker
-                .send_message(&room_id, String::from("Hello"))
+                .send_message(&room_id, String::from("First message out"))
                 .await
                 .unwrap();
             mocker
-                .send_message(&room_id, String::from("World"))
+                .send_message(&room_id, String::from("Second message out"))
                 .await
                 .unwrap();
 
@@ -456,14 +456,14 @@ mod tests {
                 events[1],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: String::from("Hello")
+                    message: String::from("First message out")
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: String::from("World")
+                    message: String::from("Second message out")
                 })
             );
             assert_eq!(

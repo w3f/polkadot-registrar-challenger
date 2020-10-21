@@ -22,6 +22,8 @@ pub use health_check::HealthCheck;
 use manager::IdentityManager;
 pub use primitives::Account;
 use primitives::{AccountType, Fatal, Result};
+#[cfg(test)]
+use comms::CommsVerifier;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -115,6 +117,11 @@ pub async fn block() {
     }
 }
 
+#[cfg(not(test))]
+type RunReturn = ();
+#[cfg(test)]
+type RunReturn = CommsVerifier;
+
 pub async fn run<
     C: ConnectorInitTransports<W, R, Endpoint = P>,
     W: 'static + Send + Sync + ConnectorWriterTransport,
@@ -130,7 +137,7 @@ pub async fn run<
     mut matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
-) -> Result<()> {
+) -> Result<RunReturn> {
     info!("Setting up manager");
     let mut manager = IdentityManager::new(db2.clone())?;
 
@@ -157,10 +164,16 @@ pub async fn run<
 
     info!("Starting Matrix task");
     let l_db = db2.clone();
+
+    #[cfg(not(test))]
+    let l_c_matrix = c_matrix;
+    #[cfg(test)]
+    let l_c_matrix = c_matrix.clone();
+
     tokio::spawn(async move {
         matrix_transport.run_emitter(l_db.clone(), c_emitter).await;
 
-        MatrixHandler::new(l_db, c_matrix, matrix_transport)
+        MatrixHandler::new(l_db, l_c_matrix, matrix_transport)
             .start()
             .await;
     });
@@ -214,5 +227,12 @@ pub async fn run<
         warn!("Watcher connector task is disabled. Cannot process any requests...");
     }
 
-    Ok(())
+    #[cfg(not(test))]
+    return Ok(());
+
+    // Since the Matrix event emitter runs in the background, the handling of
+    // messages must be tested by using this `CommsVerifier` handle and sending
+    // `TriggerMatrixEmitter` messages.
+    #[cfg(test)]
+    Ok(c_matrix)
 }
