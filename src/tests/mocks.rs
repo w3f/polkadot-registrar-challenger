@@ -102,6 +102,7 @@ impl<T> EventChildSender<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct EventChild<T> {
     events: Arc<RwLock<Vec<Event>>>,
     messages: Arc<RwLock<Vec<T>>>,
@@ -198,6 +199,71 @@ impl MatrixMocker {
             child: child,
             user_id: user_id,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct DummyTransport {
+    screen_name: Account,
+}
+
+impl DummyTransport {
+    pub fn new() -> Self {
+        DummyTransport {
+            screen_name: Account::from(""),
+        }
+    }
+}
+
+#[async_trait]
+impl MatrixTransport for DummyTransport {
+    async fn send_message(&self, _room_id: &RoomId, _message: String) -> Result<()> {
+        unimplemented!()
+    }
+    async fn create_room<'a>(&'a self, _request: Request<'a>) -> Result<Response> {
+        unimplemented!()
+    }
+    async fn leave_room(&self, _room_id: &RoomId) -> Result<()> {
+        unimplemented!()
+    }
+    async fn user_id(&self) -> Result<UserId> {
+        unimplemented!()
+    }
+    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {
+    }
+}
+
+#[async_trait]
+impl EmailTransport for DummyTransport {
+    async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
+        unimplemented!()
+    }
+    async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
+        unimplemented!()
+    }
+}
+
+#[async_trait]
+impl TwitterTransport for DummyTransport {
+    async fn request_messages(
+        &self,
+        _exclude: &TwitterId,
+        _watermark: u64,
+    ) -> Result<(Vec<twitter::ReceivedMessageContext>, u64)> {
+        Ok((vec![], 0))
+    }
+    async fn lookup_twitter_id(
+        &self,
+        _twitter_ids: Option<&[&TwitterId]>,
+        _accounts: Option<&[&Account]>,
+    ) -> Result<Vec<(Account, TwitterId)>> {
+        Ok(vec![(Account::from(""), TwitterId::from(0))])
+    }
+    async fn send_message(&self, _id: &TwitterId, _message: String) -> StdResult<(), TwitterError> {
+        unimplemented!()
+    }
+    fn my_screen_name(&self) -> &Account {
+        &self.screen_name
     }
 }
 
