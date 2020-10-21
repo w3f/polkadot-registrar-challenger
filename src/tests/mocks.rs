@@ -229,8 +229,7 @@ impl MatrixTransport for DummyTransport {
     async fn user_id(&self) -> Result<UserId> {
         unimplemented!()
     }
-    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {
-    }
+    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {}
 }
 
 #[async_trait]

@@ -2,9 +2,9 @@ use super::db_path;
 use super::mocks::*;
 use crate::{run, Database2};
 use matrix_sdk::identifiers::UserId;
-use tokio::runtime::Runtime;
-use std::sync::Arc;
 use std::convert::TryFrom;
+use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 #[test]
 fn verify_matrix() {
@@ -24,6 +24,8 @@ fn verify_matrix() {
             matrix_transport,
             DummyTransport::new(),
             DummyTransport::new(),
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
     });
 }
