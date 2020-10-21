@@ -12,6 +12,7 @@ use adapters::{
     TwitterHandler, TwitterTransport,
 };
 pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
+use comms::{CommsMain, CommsVerifier};
 use connector::{Connector, ConnectorInitTransports};
 pub use connector::{
     ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
@@ -22,15 +23,14 @@ pub use health_check::HealthCheck;
 use manager::IdentityManager;
 pub use primitives::Account;
 use primitives::{AccountType, Fatal, Result};
-use comms::{CommsMain, CommsVerifier};
-#[cfg(test)]
-use tests::mocks::{EventManager2, ConnectorMocker, ConnectorWriterMocker, ConnectorReaderMocker};
-#[cfg(test)]
-use std::sync::Arc;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::process::exit;
+#[cfg(test)]
+use std::sync::Arc;
+#[cfg(test)]
+use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, ConnectorWriterMocker, EventManager2};
 use tokio::time::{self, Duration};
 
 pub mod adapters;
@@ -136,7 +136,13 @@ pub async fn run<
     twitter_transport: T,
     email_transport: E,
 ) -> Result<()> {
-    let (_, c_connector) = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
+    let (_, c_connector) = run_adapters(
+        db2.clone(),
+        matrix_transport,
+        twitter_transport,
+        email_transport,
+    )
+    .await?;
 
     if enable_watcher {
         info!("Trying to connect to Watcher");
@@ -186,9 +192,17 @@ pub async fn test_run<
     twitter_transport: T,
     email_transport: E,
 ) -> Result<TestRunReturn> {
-    let (c_matrix, c_connector) = run_adapters(db2.clone(), matrix_transport, twitter_transport, email_transport).await?;
+    let (c_matrix, c_connector) = run_adapters(
+        db2.clone(),
+        matrix_transport,
+        twitter_transport,
+        email_transport,
+    )
+    .await?;
 
-    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), c_connector).await.unwrap();
+    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), c_connector)
+        .await
+        .unwrap();
     let (writer, reader) = ConnectorMocker::init(event_manager).await.unwrap();
     connector.set_writer_reader(writer.clone(), reader.clone());
 
@@ -234,8 +248,7 @@ async fn run_adapters<
     // Since the Matrix event emitter runs in the background, the handling of
     // messages must be tested by using this `CommsVerifier` handle and sending
     // `TriggerMatrixEmitter` messages.
-    let main_matrix = 
-        manager.get_comms(&AccountType::Matrix)?.clone();
+    let main_matrix = manager.get_comms(&AccountType::Matrix)?.clone();
 
     info!("Starting manager task");
     tokio::spawn(async move {
@@ -277,8 +290,5 @@ async fn run_adapters<
             .await;
     });
 
-    Ok((
-        main_matrix,
-        c_connector
-    ))
+    Ok((main_matrix, c_connector))
 }
