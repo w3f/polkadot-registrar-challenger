@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2, VerifierMessage};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::{Request, Response},
@@ -54,7 +54,7 @@ pub enum MatrixError {
 
 #[async_trait]
 pub trait MatrixTransport: 'static + Send + Sync {
-    async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()>;
+    async fn send_message(&self, room_id: &RoomId, message: VerifierMessage) -> Result<()>;
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response>;
     async fn leave_room(&self, room_id: &RoomId) -> Result<()>;
     async fn user_id(&self) -> Result<UserId>;
@@ -125,13 +125,13 @@ impl MatrixClient {
 
 #[async_trait]
 impl MatrixTransport for MatrixClient {
-    async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()> {
+    async fn send_message(&self, room_id: &RoomId, message: VerifierMessage) -> Result<()> {
         self.client
             .room_send(
                 room_id,
                 AnyMessageEventContent::RoomMessage(MessageEventContent::Text(
                     // TODO: Make a proper Message Creator for this
-                    TextMessageEventContent::plain(message),
+                    TextMessageEventContent::plain(message.as_str()),
                 )),
                 None,
             )
@@ -225,7 +225,7 @@ impl MatrixHandler {
             LeaveRoom { net_account } => {
                 if let Some(room_id) = self.db.select_room_id(&net_account).await? {
                     self.transport
-                        .send_message(&room_id, "Bye bye!".to_string())
+                        .send_message(&room_id, VerifierMessage::Goodbye("Bye bye!".to_string()))
                         .await?;
                     debug!("Leaving room: {}", room_id.as_str());
                     let _ = self.transport.leave_room(&room_id).await;
@@ -390,7 +390,7 @@ impl MatrixHandler {
                 self.transport
                     .send_message(
                         room_id,
-                        "Please send the signature directly as a text message.".to_string(),
+                        VerifierMessage::InvalidFormat("Please send the signature directly as a text message.".to_string()),
                     )
                     .await
                     .map_err(|err| MatrixError::SendMessage(err.into()))?;

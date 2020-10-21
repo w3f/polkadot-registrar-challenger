@@ -5,6 +5,7 @@ use crate::primitives::{
 };
 use crate::Database2;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
+use std::fmt;
 
 #[derive(Debug, Fail)]
 pub enum VerifierError {
@@ -19,6 +20,42 @@ pub enum VerifierMessage {
     ResponseValid(String),
     ResponseInvalid(String),
     NotifyViolation(String),
+    InvalidFormat(String),
+    Goodbye(String)
+}
+
+impl VerifierMessage {
+    pub fn as_str(&self) -> &str {
+        // Is there a nicer way to do this?
+        use VerifierMessage::*;
+
+        match self {
+            InitMessage(msg) => &msg,
+            InitMessageWithContext(msg) => &msg,
+            ResponseValid(msg) => &msg,
+            ResponseInvalid(msg) => &msg,
+            NotifyViolation(msg) => &msg,
+            InvalidFormat(msg) => &msg,
+            Goodbye(msg) => &msg,
+        }
+    }
+}
+
+impl fmt::Display for VerifierMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Is there a nicer way to do this?
+        use VerifierMessage::*;
+
+        match self {
+            InitMessage(msg) => write!(f, "{}", msg),
+            InitMessageWithContext(msg) => write!(f, "{}", msg),
+            ResponseValid(msg) => write!(f, "{}", msg),
+            ResponseInvalid(msg) => write!(f, "{}", msg),
+            NotifyViolation(msg) => write!(f, "{}", msg),
+            InvalidFormat(msg) => write!(f, "{}", msg),
+            Goodbye(msg) => write!(f, "{}", msg),
+        }
+    }
 }
 
 pub struct Verifier2<'a> {

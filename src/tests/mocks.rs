@@ -7,6 +7,7 @@ use crate::connector::{
 };
 use crate::primitives::{unix_time, Result};
 use crate::{Account, Database2};
+use crate::verifier::VerifierMessage;
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::convert::TryFrom;
@@ -224,7 +225,7 @@ impl DummyTransport {
 
 #[async_trait]
 impl MatrixTransport for DummyTransport {
-    async fn send_message(&self, _room_id: &RoomId, _message: String) -> Result<()> {
+    async fn send_message(&self, _room_id: &RoomId, _message: VerifierMessage) -> Result<()> {
         unimplemented!()
     }
     async fn create_room<'a>(&'a self, _request: Request<'a>) -> Result<Response> {
@@ -244,7 +245,7 @@ impl EmailTransport for DummyTransport {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
         Ok(vec![])
     }
-    async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
+    async fn send_message(&self, _account: &Account, _msg: VerifierMessage) -> Result<()> {
         unimplemented!()
     }
 }
@@ -265,7 +266,7 @@ impl TwitterTransport for DummyTransport {
     ) -> Result<Vec<(Account, TwitterId)>> {
         Ok(vec![(Account::from(""), TwitterId::from(0))])
     }
-    async fn send_message(&self, _id: &TwitterId, _message: String) -> StdResult<(), TwitterError> {
+    async fn send_message(&self, _id: &TwitterId, _message: VerifierMessage) -> StdResult<(), TwitterError> {
         unimplemented!()
     }
     fn my_screen_name(&self) -> &Account {
@@ -275,7 +276,7 @@ impl TwitterTransport for DummyTransport {
 
 #[async_trait]
 impl MatrixTransport for MatrixMocker {
-    async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()> {
+    async fn send_message(&self, room_id: &RoomId, message: VerifierMessage) -> Result<()> {
         self.child
             .push_event(Event::Matrix(MatrixEvent::SendMessage {
                 room_id: room_id.clone(),
@@ -353,11 +354,11 @@ impl EmailTransport for EmailMocker {
 
         Ok(messages)
     }
-    async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+    async fn send_message(&self, account: &Account, message: VerifierMessage) -> Result<()> {
         self.child
             .push_event(Event::Email(EmailEvent::SendMessage {
                 account: account.clone(),
-                message: msg,
+                message: message.to_string(),
             }))
             .await;
 
@@ -458,11 +459,11 @@ impl TwitterTransport for TwitterMocker {
 
         Ok(lookups)
     }
-    async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
+    async fn send_message(&self, id: &TwitterId, message: VerifierMessage) -> StdResult<(), TwitterError> {
         self.child
             .push_event(Event::Twitter(TwitterEvent::SendMessage {
                 id: id.clone(),
-                message: message,
+                message: message.to_string(),
             }))
             .await;
 
