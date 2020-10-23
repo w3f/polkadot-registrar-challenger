@@ -1,6 +1,10 @@
 use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
+#[cfg(test)]
+use crate::tests::mocks::MatrixEventMock;
 use crossbeam::channel::{unbounded, Receiver, Sender};
+#[cfg(test)]
+use matrix_sdk::identifiers::{RoomId, UserId};
 use tokio::time::{self, Duration};
 
 pub fn generate_comms(
@@ -43,6 +47,14 @@ pub enum CommsMessage {
     ExistingDisplayNames {
         accounts: Vec<Account>,
     },
+    // Only used to manually trigger the event handler in tests, since the
+    // matrix sdk runs the EventEmitter in the background.
+    #[cfg(test)]
+    TriggerMatrixEmitter {
+        room_id: RoomId,
+        my_user_id: UserId,
+        event: MatrixEventMock,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +95,16 @@ impl CommsMain {
             .send(CommsMessage::NotifyInvalidAccount {
                 net_account: net_account,
                 accounts: accounts,
+            })
+            .fatal()
+    }
+    #[cfg(test)]
+    pub fn trigger_matrix_emitter(&self, room_id: RoomId, my_user_id: UserId, event: MatrixEventMock) {
+        self.sender
+            .send(CommsMessage::TriggerMatrixEmitter {
+                room_id: room_id,
+                my_user_id: my_user_id,
+                event: event
             })
             .fatal()
     }

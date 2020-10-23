@@ -12,7 +12,12 @@ use adapters::{
     TwitterHandler, TwitterTransport,
 };
 pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
-pub use connector::Connector;
+use comms::{CommsMain, CommsVerifier};
+use connector::{Connector, ConnectorInitTransports};
+pub use connector::{
+    ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
+    WebSockets,
+};
 pub use db::Database2;
 pub use health_check::HealthCheck;
 use manager::IdentityManager;
@@ -22,15 +27,21 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::process::exit;
+#[cfg(test)]
+use std::sync::Arc;
+#[cfg(test)]
+use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, ConnectorWriterMocker, EventManager2};
 use tokio::time::{self, Duration};
 
-mod adapters;
+pub mod adapters;
 mod comms;
 mod connector;
 mod db;
 mod health_check;
 mod manager;
 mod primitives;
+#[cfg(test)]
+mod tests;
 mod verifier;
 
 #[derive(Debug, Deserialize)]
@@ -109,14 +120,121 @@ pub async fn block() {
     }
 }
 
-pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
+pub async fn run<
+    C: ConnectorInitTransports<W, R, Endpoint = P>,
+    W: 'static + Send + Sync + ConnectorWriterTransport,
+    R: 'static + Send + Sync + ConnectorReaderTransport,
+    P: 'static + Send + Sync + Clone,
+    M: MatrixTransport,
+    T: Clone + TwitterTransport,
+    E: Clone + EmailTransport,
+>(
     enable_watcher: bool,
-    watcher_url: &str,
+    watcher_url: P,
+    db2: Database2,
+    matrix_transport: M,
+    twitter_transport: T,
+    email_transport: E,
+) -> Result<()> {
+    let (_, c_connector) = run_adapters(
+        db2.clone(),
+        matrix_transport,
+        twitter_transport,
+        email_transport,
+    )
+    .await?;
+
+    if enable_watcher {
+        info!("Trying to connect to Watcher");
+        let mut counter = 0;
+        let mut interval = time::interval(Duration::from_secs(5));
+
+        let connector;
+        loop {
+            interval.tick().await;
+
+            if let Ok(con) = Connector::new::<C>(watcher_url.clone(), c_connector.clone()).await {
+                info!("Connecting to Watcher succeeded");
+                connector = con;
+                break;
+            } else {
+                warn!("Connecting to Watcher failed, trying again...");
+            }
+
+            if counter == 2 {
+                error!("Failed connecting to Watcher, exiting...");
+                exit(1);
+            }
+
+            counter += 1;
+        }
+
+        info!("Starting Watcher connector task, listening...");
+        tokio::spawn(async move {
+            connector.start::<C>().await;
+        });
+    } else {
+        warn!("Watcher connector task is disabled. Cannot process any requests...");
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+pub async fn test_run<
+    M: MatrixTransport,
+    T: Clone + TwitterTransport,
+    E: Clone + EmailTransport,
+>(
+    event_manager: Arc<EventManager2>,
+    db2: Database2,
+    matrix_transport: M,
+    twitter_transport: T,
+    email_transport: E,
+) -> Result<TestRunReturn> {
+    let (c_matrix, c_connector) = run_adapters(
+        db2.clone(),
+        matrix_transport,
+        twitter_transport,
+        email_transport,
+    )
+    .await?;
+
+    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), c_connector)
+        .await
+        .unwrap();
+
+    let (writer, reader) = ConnectorMocker::init(event_manager).await.unwrap();
+    connector.set_writer_reader(writer.clone(), reader.clone());
+
+    tokio::spawn(async move {
+        connector.start::<ConnectorMocker>().await;
+    });
+
+    Ok(TestRunReturn {
+        matrix: c_matrix,
+        writer: writer,
+        reader: reader,
+    })
+}
+
+#[cfg(test)]
+pub struct TestRunReturn {
+    matrix: CommsMain,
+    writer: ConnectorWriterMocker,
+    reader: ConnectorReaderMocker,
+}
+
+async fn run_adapters<
+    M: MatrixTransport,
+    T: Clone + TwitterTransport,
+    E: Clone + EmailTransport,
+>(
     db2: Database2,
     mut matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
-) -> Result<()> {
+) -> Result<(CommsMain, CommsVerifier)> {
     info!("Setting up manager");
     let mut manager = IdentityManager::new(db2.clone())?;
 
@@ -127,6 +245,11 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
     let c_matrix = manager.register_comms(AccountType::Matrix);
     let c_twitter = manager.register_comms(AccountType::Twitter);
     let c_email = manager.register_comms(AccountType::Email);
+
+    // Since the Matrix event emitter runs in the background, the handling of
+    // messages must be tested by using this `CommsVerifier` handle and sending
+    // `TriggerMatrixEmitter` messages.
+    let main_matrix = manager.get_comms(&AccountType::Matrix)?.clone();
 
     info!("Starting manager task");
     tokio::spawn(async move {
@@ -143,10 +266,11 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
 
     info!("Starting Matrix task");
     let l_db = db2.clone();
+    let l_c_matrix = c_matrix.clone();
     tokio::spawn(async move {
         matrix_transport.run_emitter(l_db.clone(), c_emitter).await;
 
-        MatrixHandler::new(l_db, c_matrix, matrix_transport)
+        MatrixHandler::new(l_db, l_c_matrix, matrix_transport)
             .start()
             .await;
     });
@@ -167,38 +291,5 @@ pub async fn run<M: MatrixTransport, T: TwitterTransport, E: EmailTransport>(
             .await;
     });
 
-    if enable_watcher {
-        info!("Trying to connect to Watcher");
-        let mut counter = 0;
-        let mut interval = time::interval(Duration::from_secs(5));
-
-        let connector;
-        loop {
-            interval.tick().await;
-
-            if let Ok(con) = Connector::new(watcher_url, c_connector.clone()).await {
-                info!("Connecting to Watcher succeeded");
-                connector = con;
-                break;
-            } else {
-                warn!("Connecting to Watcher failed, trying again...");
-            }
-
-            if counter == 2 {
-                error!("Failed connecting to Watcher, exiting...");
-                exit(1);
-            }
-
-            counter += 1;
-        }
-
-        info!("Starting Watcher connector task, listening...");
-        tokio::spawn(async move {
-            connector.start().await;
-        });
-    } else {
-        warn!("Watcher connector task is disabled. Cannot process any requests...");
-    }
-
-    Ok(())
+    Ok((main_matrix, c_connector))
 }

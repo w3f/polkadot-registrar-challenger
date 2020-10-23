@@ -3,7 +3,7 @@ use crate::manager::OnChainIdentity;
 use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use futures_channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -14,10 +14,9 @@ use tokio::sync::RwLock;
 use tokio::time::{self, Duration};
 use tokio_tungstenite::{connect_async, WebSocketStream};
 use tungstenite::protocol::Message as TungMessage;
-use tungstenite::Error as TungError;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-enum EventType {
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum EventType {
     #[serde(rename = "ack")]
     Ack,
     #[serde(rename = "error")]
@@ -36,11 +35,11 @@ enum EventType {
     DisplayNamesResponse,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Message {
-    event: EventType,
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Message {
+    pub event: EventType,
     #[serde(skip_serializing_if = "Value::is_null")]
-    data: Value,
+    pub data: Value,
 }
 
 impl Message {
@@ -102,25 +101,112 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
     }
 }
 
-pub struct Connector {
-    client: WebSocketStream<TcpStream>,
-    comms: CommsVerifier,
-    url: String,
+#[async_trait]
+pub trait ConnectorInitTransports<W: ConnectorWriterTransport, R: ConnectorReaderTransport> {
+    type Endpoint;
+
+    async fn init(endpoint: Self::Endpoint) -> Result<(W, R)>;
 }
 
-impl Connector {
-    pub async fn new(url: &str, comms: CommsVerifier) -> Result<Self> {
-        let connector = Connector {
-            client: connect_async(url).await?.0,
-            comms: comms,
-            url: url.to_string(),
-        };
+#[async_trait]
+pub trait ConnectorReaderTransport {
+    async fn read(&mut self) -> Result<Option<String>>;
+}
 
-        Ok(connector)
+#[async_trait]
+pub trait ConnectorWriterTransport {
+    async fn write(&mut self, message: &Message) -> Result<()>;
+}
+
+pub struct WebSockets {}
+
+#[async_trait]
+impl ConnectorInitTransports<WebSocketWriter, WebSocketReader> for WebSockets {
+    type Endpoint = String;
+
+    async fn init(endpoint: Self::Endpoint) -> Result<(WebSocketWriter, WebSocketReader)> {
+        let (sink, stream) = connect_async(endpoint.as_str()).await?.0.split();
+
+        Ok((sink.into(), stream.into()))
     }
-    pub async fn start(self) {
-        let (mut writer, mut reader) = self.client.split();
+}
 
+pub struct WebSocketReader {
+    reader: SplitStream<WebSocketStream<TcpStream>>,
+}
+
+impl From<SplitStream<WebSocketStream<TcpStream>>> for WebSocketReader {
+    fn from(reader: SplitStream<WebSocketStream<TcpStream>>) -> Self {
+        WebSocketReader { reader: reader }
+    }
+}
+
+#[async_trait]
+impl ConnectorReaderTransport for WebSocketReader {
+    async fn read(&mut self) -> Result<Option<String>> {
+        if let Some(message) = self.reader.try_next().await? {
+            match message {
+                TungMessage::Text(message) => Ok(Some(message)),
+                _ => Err(failure::err_msg("Not a text message")),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+pub struct WebSocketWriter {
+    writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
+}
+
+impl From<SplitSink<WebSocketStream<TcpStream>, TungMessage>> for WebSocketWriter {
+    fn from(writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>) -> Self {
+        WebSocketWriter { writer: writer }
+    }
+}
+
+#[async_trait]
+impl ConnectorWriterTransport for WebSocketWriter {
+    async fn write(&mut self, message: &Message) -> Result<()> {
+        self.writer
+            .send(TungMessage::Text(serde_json::to_string(message)?))
+            .await
+            .map_err(|err| err.into())
+    }
+}
+
+pub struct Connector<W, R, P> {
+    writer: W,
+    reader: R,
+    comms: CommsVerifier,
+    endpoint: P,
+}
+
+impl<
+        W: 'static + Send + Sync + ConnectorWriterTransport,
+        R: 'static + Send + Sync + ConnectorReaderTransport,
+        P: 'static + Send + Sync + Clone,
+    > Connector<W, R, P>
+{
+    pub async fn new<T: ConnectorInitTransports<W, R, Endpoint = P>>(
+        endpoint: P,
+        comms: CommsVerifier,
+    ) -> Result<Self> {
+        let (writer, reader) = T::init(endpoint.clone()).await?;
+
+        Ok(Connector {
+            writer: writer,
+            reader: reader,
+            comms: comms,
+            endpoint: endpoint,
+        })
+    }
+    #[cfg(test)]
+    pub fn set_writer_reader(&mut self, writer: W, reader: R) {
+        self.writer = writer;
+        self.reader = reader;
+    }
+    pub async fn start<T: ConnectorInitTransports<W, R, Endpoint = P>>(mut self) {
         loop {
             let (mut sender, receiver) = unbounded();
             let exit_token = Arc::new(RwLock::new(false));
@@ -132,14 +218,14 @@ impl Connector {
             ));
 
             tokio::spawn(Self::start_websocket_writer(
-                writer,
+                self.writer,
                 self.comms.clone(),
                 receiver,
                 Arc::clone(&exit_token),
             ));
 
             let handle = tokio::spawn(Self::start_websocket_reader(
-                reader,
+                self.reader,
                 self.comms.clone(),
                 sender.clone(),
                 Arc::clone(&exit_token),
@@ -181,14 +267,10 @@ impl Connector {
             info!("Trying to reconnect to Watcher...");
             loop {
                 interval.tick().await;
-                if let Ok(client) = connect_async(&self.url).await {
+                if let Ok((writer, reader)) = T::init(self.endpoint.clone()).await {
                     info!("Connected successfully to Watcher, spawning tasks");
-
-                    // (Destructuring assignments are currently not supported.
-                    // https://github.com/rust-lang/rfcs/issues/372)
-                    let split = client.0.split();
-                    writer = split.0;
-                    reader = split.1;
+                    self.writer = writer;
+                    self.reader = reader;
 
                     break;
                 } else {
@@ -230,18 +312,19 @@ impl Connector {
             }
         }
     }
-    async fn start_websocket_writer(
-        mut writer: SplitSink<WebSocketStream<TcpStream>, TungMessage>,
+    async fn start_websocket_writer<T: ConnectorWriterTransport>(
+        mut transport: T,
         _comms: CommsVerifier,
         mut receiver: UnboundedReceiver<Message>,
         exit_token: Arc<RwLock<bool>>,
     ) {
         loop {
             if let Ok(msg) = time::timeout(Duration::from_millis(10), receiver.next()).await {
-                writer
-                    .send(TungMessage::Text(serde_json::to_string(&msg).unwrap()))
-                    .await
-                    .unwrap();
+                if let Some(msg) = msg {
+                    let _ = transport.write(&msg).await.map_err(|err| {
+                        error!("{}", err);
+                    });
+                }
             }
 
             let t = exit_token.read().await;
@@ -251,8 +334,8 @@ impl Connector {
             }
         }
     }
-    async fn start_websocket_reader(
-        mut reader: SplitStream<WebSocketStream<TcpStream>>,
+    async fn start_websocket_reader<T: ConnectorReaderTransport>(
+        mut transport: T,
         comms: CommsVerifier,
         mut sender: UnboundedSender<Message>,
         exit_token: Arc<RwLock<bool>>,
@@ -260,123 +343,101 @@ impl Connector {
         use EventType::*;
 
         loop {
-            if let Some(message) = reader.next().await {
-                if let Ok(message) = &message {
+            if let Ok(message) = transport.read().await {
+                if let Some(message) = message {
                     trace!("Received message: {:?}", message);
 
-                    match message {
-                        TungMessage::Text(payload) => {
-                            let try_msg = serde_json::from_str::<Message>(&payload);
-                            let msg = if let Ok(msg) = try_msg {
-                                msg
+                    let try_msg = serde_json::from_str::<Message>(&message);
+                    let msg = if let Ok(msg) = try_msg {
+                        msg
+                    } else {
+                        sender.send(Message::error()).await.unwrap();
+
+                        return;
+                    };
+
+                    match msg.event {
+                        NewJudgementRequest => {
+                            info!("Received a new judgement request");
+                            if let Ok(request) =
+                                serde_json::from_value::<JudgementRequest>(msg.data)
+                            {
+                                if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                    comms.notify_new_identity(ident);
+                                    sender.send(Message::ack(None)).await.unwrap();
+                                } else {
+                                    error!("Invalid `newJudgementRequest` message format");
+                                    sender.send(Message::error()).await.unwrap();
+                                };
                             } else {
+                                error!("Invalid `newJudgementRequest` message format");
                                 sender.send(Message::error()).await.unwrap();
+                            }
+                        }
+                        Ack => {
+                            if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data) {
+                                info!("Received acknowledgement: {}", msg.result);
+                                comms.notify_ack();
+                            } else {
+                                error!("Invalid 'acknowledgement' message format");
+                            }
+                        }
+                        Error => {
+                            if let Ok(msg) = serde_json::from_value::<ErrorResponse>(msg.data) {
+                                error!("Received error message: {}", msg.error);
+                            } else {
+                                error!("Invalid 'error' message format");
+                            }
+                        }
+                        PendingJudgementsResponse => {
+                            info!("Received pending challenges");
+                            if let Ok(requests) =
+                                serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
+                            {
+                                if requests.is_empty() {
+                                    info!("The pending judgement list is empty");
+                                }
 
-                                return;
-                            };
-
-                            match msg.event {
-                                NewJudgementRequest => {
-                                    info!("Received a new judgement request");
-                                    if let Ok(request) =
-                                        serde_json::from_value::<JudgementRequest>(msg.data)
-                                    {
-                                        if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                            comms.notify_new_identity(ident);
-                                            sender.send(Message::ack(None)).await.unwrap();
-                                        } else {
-                                            error!("Invalid `newJudgementRequest` message format");
-                                            sender.send(Message::error()).await.unwrap();
-                                        };
+                                for request in requests {
+                                    if let Ok(ident) = OnChainIdentity::try_from(request) {
+                                        sender.send(Message::ack(None)).await.unwrap();
+                                        comms.notify_new_identity(ident);
+                                        sender.send(Message::ack(None)).await.unwrap();
                                     } else {
                                         error!("Invalid `newJudgementRequest` message format");
                                         sender.send(Message::error()).await.unwrap();
-                                    }
+                                    };
                                 }
-                                Ack => {
-                                    if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data)
-                                    {
-                                        info!("Received acknowledgement: {}", msg.result);
-                                        comms.notify_ack();
-                                    } else {
-                                        error!("Invalid 'acknowledgement' message format");
-                                    }
-                                }
-                                Error => {
-                                    if let Ok(msg) =
-                                        serde_json::from_value::<ErrorResponse>(msg.data)
-                                    {
-                                        error!("Received error message: {}", msg.error);
-                                    } else {
-                                        error!("Invalid 'error' message format");
-                                    }
-                                }
-                                PendingJudgementsResponse => {
-                                    info!("Received pending challenges");
-                                    if let Ok(requests) =
-                                        serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
-                                    {
-                                        if requests.is_empty() {
-                                            info!("The pending judgement list is empty");
-                                        }
+                            } else {
+                                error!("Invalid `pendingChallengesRequest` message format");
+                            }
+                        }
+                        DisplayNamesResponse => {
+                            info!("Received display names response");
+                            debug!("Display names {:?}", msg.data);
 
-                                        for request in requests {
-                                            if let Ok(ident) = OnChainIdentity::try_from(request) {
-                                                sender.send(Message::ack(None)).await.unwrap();
-                                                comms.notify_new_identity(ident);
-                                                sender.send(Message::ack(None)).await.unwrap();
-                                            } else {
-                                                error!(
-                                                    "Invalid `newJudgementRequest` message format"
-                                                );
-                                                sender.send(Message::error()).await.unwrap();
-                                            };
-                                        }
-                                    } else {
-                                        error!("Invalid `pendingChallengesRequest` message format");
-                                    }
-                                }
-                                DisplayNamesResponse => {
-                                    info!("Received display names response");
-                                    debug!("Display names {:?}", msg.data);
-
-                                    if let Ok(display_names) =
-                                        serde_json::from_value::<Vec<Account>>(msg.data)
-                                    {
-                                        comms.notify_existing_display_names(display_names);
-                                    } else {
-                                        error!("Invalid `displayNamesResponse` message format");
-                                    }
-                                }
-                                _ => {
-                                    warn!("Received unrecognized message: '{:?}'", msg);
-                                }
+                            if let Ok(display_names) =
+                                serde_json::from_value::<Vec<Account>>(msg.data)
+                            {
+                                comms.notify_existing_display_names(display_names);
+                            } else {
+                                error!("Invalid `displayNamesResponse` message format");
                             }
                         }
                         _ => {
-                            error!("Failed to convert message");
-                            sender.send(Message::error()).await.unwrap();
+                            warn!("Received unrecognized message: '{:?}'", msg);
                         }
                     }
                 }
+            } else {
+                warn!("Connection to Watcher closed");
+                debug!("Closing websocket reader task");
 
-                if let Err(err) = message {
-                    match err {
-                        TungError::ConnectionClosed | TungError::Protocol(_) => {
-                            warn!("Connection to Watcher closed");
-                            debug!("Closing websocket reader task");
+                // Close Comms receiver and client writer tasks.
+                let mut t = exit_token.write().await;
+                *t = true;
 
-                            // Close Comms receiver and client writer tasks.
-                            let mut t = exit_token.write().await;
-                            *t = true;
-
-                            break;
-                        }
-                        _ => {
-                            error!("Connection error with Watcher: {}", err);
-                        }
-                    }
-                }
+                break;
             }
         }
     }

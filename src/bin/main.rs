@@ -5,6 +5,7 @@ use failure::Error;
 use registrar::{block, init_env, run};
 use registrar::{
     Account, Database2, HealthCheck, MatrixClient, SmtpImapClientBuilder, TwitterBuilder,
+    WebSocketReader, WebSocketWriter, WebSockets,
 };
 
 #[tokio::main]
@@ -57,9 +58,9 @@ async fn main() -> Result<(), Error> {
             .email_password(config.email_password)
             .build()?;
 
-        run(
+        run::<WebSockets, WebSocketWriter, WebSocketReader, _, _, _, _>(
             config.enable_watcher,
-            &config.watcher_url,
+            config.watcher_url,
             db2,
             matrix_transport,
             twitter_transport,
@@ -71,6 +72,8 @@ async fn main() -> Result<(), Error> {
             std::process::exit(1);
         })
         .unwrap();
+    } else {
+        warn!("Accounts disabled. Nothing to do...");
     }
 
     block().await;
