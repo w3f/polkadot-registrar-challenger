@@ -120,9 +120,6 @@ impl DisplayNameHandler {
             jaro_words(&name_str, &account_str, &[" ", "-", "_"]),
         ];
 
-        println!("{} - {}", name_str, account_str);
-        println!("{:?}", similarities);
-
         similarities.iter().any(|&s| s > limit)
     }
 }
