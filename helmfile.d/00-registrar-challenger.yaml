@@ -31,17 +31,17 @@ releases:
   - ./config/registrar-challenger-values.yaml.gotmpl
   - ./config/registrar-test/registrar-challenger-values.yaml.gotmpl  
 
-# - name: kusama-registrar-challenger
-#   namespace: kusama 
-#   chart: w3f/polkadot-registrar-challenger
-#   values:
-#   - ./config/registrar-challenger-values.yaml.gotmpl
-#   - ./config/kusama/registrar-challenger-values.yaml.gotmpl  
+- name: kusama-registrar-challenger
+  namespace: kusama 
+  chart: w3f/polkadot-registrar-challenger
+  values:
+  - ./config/registrar-challenger-values.yaml.gotmpl
+  - ./config/kusama/registrar-challenger-values.yaml.gotmpl  
 
-# - name: polkadot-registrar-challenger
-#   namespace: polkadot 
-#   chart: w3f/polkadot-registrar-challenger
-#   values:
-#   - ./config/registrar-challenger-values.yaml.gotmpl
-#   - ./config/polkadot/registrar-challenger-values.yaml.gotmpl  
+- name: polkadot-registrar-challenger
+  namespace: polkadot 
+  chart: w3f/polkadot-registrar-challenger
+  values:
+  - ./config/registrar-challenger-values.yaml.gotmpl
+  - ./config/polkadot/registrar-challenger-values.yaml.gotmpl  
 {{- end }}
