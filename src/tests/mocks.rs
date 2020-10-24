@@ -25,7 +25,7 @@ pub enum Event {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MatrixEvent {
-    SendMessage { room_id: RoomId, message: String },
+    SendMessage { room_id: RoomId, message: VerifierMessage },
     CreateRoom { to_invite: UserId },
     LeaveRoom { room_id: RoomId },
 }
@@ -37,7 +37,7 @@ pub enum EmailEvent {
     },
     SendMessage {
         account: Account,
-        message: String,
+        message: VerifierMessage,
     },
 }
 
@@ -55,7 +55,7 @@ pub enum TwitterEvent {
     },
     SendMessage {
         id: TwitterId,
-        message: String,
+        message: VerifierMessage,
     },
 }
 
@@ -358,7 +358,7 @@ impl EmailTransport for EmailMocker {
         self.child
             .push_event(Event::Email(EmailEvent::SendMessage {
                 account: account.clone(),
-                message: message.to_string(),
+                message: message,
             }))
             .await;
 
@@ -463,7 +463,7 @@ impl TwitterTransport for TwitterMocker {
         self.child
             .push_event(Event::Twitter(TwitterEvent::SendMessage {
                 id: id.clone(),
-                message: message.to_string(),
+                message: message,
             }))
             .await;
 
@@ -478,7 +478,14 @@ impl TwitterTransport for TwitterMocker {
 mod tests {
     use super::*;
     use crate::adapters::EmailId;
+    use crate::verifier::VerifierMessage;
     use tokio::runtime::Runtime;
+
+    impl From<&str> for VerifierMessage {
+        fn from(val: &str) -> VerifierMessage {
+            VerifierMessage::InitMessage(val.to_string())
+        }
+    }
 
     #[test]
     fn matrix_mocker() {
@@ -503,11 +510,11 @@ mod tests {
             mocker.create_room(request).await.unwrap();
 
             mocker
-                .send_message(&room_id, String::from("First message out"))
+                .send_message(&room_id, "First message out".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&room_id, String::from("Second message out"))
+                .send_message(&room_id, "Second message out".into())
                 .await
                 .unwrap();
 
@@ -527,14 +534,14 @@ mod tests {
                 events[1],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: String::from("First message out")
+                    message: "First message out".into()
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: String::from("Second message out")
+                    message: "Second message out".into()
                 })
             );
             assert_eq!(
@@ -577,15 +584,15 @@ mod tests {
             assert_eq!(res, vec![]);
 
             mocker
-                .send_message(&alice, String::from("alice one"))
+                .send_message(&alice, "alice one".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&alice, String::from("alice two"))
+                .send_message(&alice, "alice two".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&bob, String::from("bob one"))
+                .send_message(&bob, "bob one".into())
                 .await
                 .unwrap();
 
@@ -610,21 +617,21 @@ mod tests {
                 events[1],
                 Event::Email(EmailEvent::SendMessage {
                     account: alice.clone(),
-                    message: String::from("alice one"),
+                    message: "alice one".into(),
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Email(EmailEvent::SendMessage {
                     account: alice.clone(),
-                    message: String::from("alice two"),
+                    message: "alice two".into(),
                 })
             );
             assert_eq!(
                 events[3],
                 Event::Email(EmailEvent::SendMessage {
                     account: bob.clone(),
-                    message: String::from("bob one"),
+                    message: "bob one".into(),
                 })
             );
             assert_eq!(
@@ -709,11 +716,11 @@ mod tests {
             assert!(lookups.contains(&(bob.clone(), bob_id.clone())));
 
             mocker
-                .send_message(&alice_id, String::from("alice one"))
+                .send_message(&alice_id, "alice one".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&bob_id, String::from("bob one"))
+                .send_message(&bob_id, "bob one".into())
                 .await
                 .unwrap();
 
@@ -765,14 +772,14 @@ mod tests {
                 events[3],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: alice_id.clone(),
-                    message: String::from("alice one"),
+                    message: "alice one".into(),
                 })
             );
             assert_eq!(
                 events[4],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: bob_id.clone(),
-                    message: String::from("bob one"),
+                    message: "bob one".into(),
                 })
             );
             assert_eq!(

@@ -13,7 +13,7 @@ pub enum VerifierError {
     InvalidSignature,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum VerifierMessage {
     InitMessage(String),
     InitMessageWithContext(String),
