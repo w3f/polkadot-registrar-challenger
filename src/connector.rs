@@ -64,8 +64,8 @@ impl Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AckResponse {
-    result: String,
+pub(crate) struct AckResponse {
+    pub(crate) result: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -294,7 +294,7 @@ impl MatrixTransport for MatrixMocker {
             .await;
 
         Ok(Response::new(
-            RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap(),
+            RoomId::try_from("!1234:matrix.org").unwrap(),
         ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {

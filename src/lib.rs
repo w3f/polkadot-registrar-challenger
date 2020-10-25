@@ -211,6 +211,8 @@ pub async fn test_run<
         connector.start::<ConnectorMocker>().await;
     });
 
+    time::delay_for(Duration::from_secs(1)).await;
+
     Ok(TestRunReturn {
         matrix: c_matrix,
         writer: writer,

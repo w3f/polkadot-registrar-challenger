@@ -1,9 +1,10 @@
 use super::{db_path, pause};
 use super::mocks::*;
-use crate::connector::{ConnectorWriterTransport, EventType, JudgementRequest, Message};
+use crate::connector::{ConnectorWriterTransport, EventType, JudgementRequest, Message, AckResponse};
 use crate::primitives::{Account, AccountType, NetAccount};
 use crate::{test_run, Database2};
-use matrix_sdk::identifiers::UserId;
+use crate::verifier::VerifierMessage;
+use matrix_sdk::identifiers::{UserId, RoomId};
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -12,6 +13,7 @@ use tokio::runtime::Runtime;
 fn verify_matrix() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
+        // Setup database and manager.
         let db = Database2::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (_, matrix_child) = manager.child();
@@ -19,6 +21,7 @@ fn verify_matrix() {
         let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
         let matrix_transport = MatrixMocker::new(matrix_child, my_user_id);
 
+        // Starts tasks.
         let handlers = test_run(
             Arc::clone(&manager),
             db,
@@ -29,8 +32,7 @@ fn verify_matrix() {
         .await
         .unwrap();
 
-        pause().await;
-
+        // Verify events.
         let matrix = handlers.matrix;
         let mut writer = handlers.writer;
         let injector = handlers.reader.injector();
@@ -51,11 +53,69 @@ fn verify_matrix() {
         }).unwrap();
 
         // Send new judgement request.
-        injector.send_message(msg).await;
-
-        tokio::time::delay_for(tokio::time::Duration::from_secs(5)).await;
+        injector.send_message(msg.clone()).await;
+        pause().await;
 
         let events = manager.events().await;
-        println!("{:?}", events);
+        assert_eq!(events.len(), 6);
+
+        assert_eq!(events[0],
+            Event::Connector(ConnectorEvent::Writer {
+                message: Message {
+                    event: EventType::DisplayNamesRequest,
+                    data: serde_json::to_value(Option::<()>::None).unwrap(),
+                }
+            })
+        );
+
+        assert_eq!(events[1],
+            Event::Connector(ConnectorEvent::Writer {
+                message: Message {
+                    event: EventType::PendingJudgementsRequests,
+                    data: serde_json::to_value(Option::<()>::None).unwrap(),
+                }
+            })
+        );
+
+        assert_eq!(events[2],
+            Event::Connector(ConnectorEvent::Reader {
+                message: msg,
+            })
+        );
+
+        match &events[3] {
+            Event::Connector(e) => {
+                match e {
+                    ConnectorEvent::Writer {
+                        message
+                    } => {
+                        assert_eq!(message.event, EventType::Ack);
+                    }
+                    _ => panic!()
+                }
+            }
+            _ => panic!()
+        }
+
+        assert_eq!(events[4],
+            Event::Matrix(MatrixEvent::CreateRoom {
+                to_invite: UserId::try_from("@alice:matrix.org").unwrap(),
+            })
+        );
+
+        match &events[5] {
+            Event::Matrix(e) => {
+                match e {
+                    MatrixEvent::SendMessage { room_id, message} => {
+                        match message {
+                            VerifierMessage::InitMessageWithContext(_) => {},
+                            _ => panic!(),
+                        }
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
     });
 }
