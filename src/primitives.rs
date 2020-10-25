@@ -1,13 +1,13 @@
 use base58::FromBase58;
 use failure::err_msg;
 
+use base58::ToBase58;
 use rand::{thread_rng, Rng};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use base58::ToBase58;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display};
 use std::result::Result as StdResult;

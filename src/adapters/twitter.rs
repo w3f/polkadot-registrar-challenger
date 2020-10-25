@@ -190,7 +190,11 @@ pub trait TwitterTransport: 'static + Send + Sync {
         twitter_ids: Option<&[&TwitterId]>,
         accounts: Option<&[&Account]>,
     ) -> Result<Vec<(Account, TwitterId)>>;
-    async fn send_message(&self, id: &TwitterId, message: VerifierMessage) -> StdResult<(), TwitterError>;
+    async fn send_message(
+        &self,
+        id: &TwitterId,
+        message: VerifierMessage,
+    ) -> StdResult<(), TwitterError>;
     fn my_screen_name(&self) -> &Account;
 }
 
@@ -651,7 +655,11 @@ impl TwitterTransport for Twitter {
             .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
-    async fn send_message(&self, id: &TwitterId, message: VerifierMessage) -> StdResult<(), TwitterError> {
+    async fn send_message(
+        &self,
+        id: &TwitterId,
+        message: VerifierMessage,
+    ) -> StdResult<(), TwitterError> {
         self.post_request::<ApiMessageSend, _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
             ApiMessageSend::new(id, message.to_string()),

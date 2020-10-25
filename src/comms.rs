@@ -99,12 +99,17 @@ impl CommsMain {
             .fatal()
     }
     #[cfg(test)]
-    pub fn trigger_matrix_emitter(&self, room_id: RoomId, my_user_id: UserId, event: MatrixEventMock) {
+    pub fn trigger_matrix_emitter(
+        &self,
+        room_id: RoomId,
+        my_user_id: UserId,
+        event: MatrixEventMock,
+    ) {
         self.sender
             .send(CommsMessage::TriggerMatrixEmitter {
                 room_id: room_id,
                 my_user_id: my_user_id,
-                event: event
+                event: event,
             })
             .fatal()
     }

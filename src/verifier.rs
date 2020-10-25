@@ -21,7 +21,7 @@ pub enum VerifierMessage {
     ResponseInvalid(String),
     NotifyViolation(String),
     InvalidFormat(String),
-    Goodbye(String)
+    Goodbye(String),
 }
 
 impl VerifierMessage {

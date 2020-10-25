@@ -6,8 +6,8 @@ use crate::connector::{
     ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, EventType, Message,
 };
 use crate::primitives::{unix_time, Result};
-use crate::{Account, Database2};
 use crate::verifier::VerifierMessage;
+use crate::{Account, Database2};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::convert::TryFrom;
@@ -25,9 +25,16 @@ pub enum Event {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MatrixEvent {
-    SendMessage { room_id: RoomId, message: VerifierMessage },
-    CreateRoom { to_invite: UserId },
-    LeaveRoom { room_id: RoomId },
+    SendMessage {
+        room_id: RoomId,
+        message: VerifierMessage,
+    },
+    CreateRoom {
+        to_invite: UserId,
+    },
+    LeaveRoom {
+        room_id: RoomId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -192,7 +199,6 @@ impl ConnectorReaderTransport for ConnectorReaderMocker {
         } else {
             Ok(None)
         }
-
     }
 }
 
@@ -266,7 +272,11 @@ impl TwitterTransport for DummyTransport {
     ) -> Result<Vec<(Account, TwitterId)>> {
         Ok(vec![(Account::from(""), TwitterId::from(0))])
     }
-    async fn send_message(&self, _id: &TwitterId, _message: VerifierMessage) -> StdResult<(), TwitterError> {
+    async fn send_message(
+        &self,
+        _id: &TwitterId,
+        _message: VerifierMessage,
+    ) -> StdResult<(), TwitterError> {
         unimplemented!()
     }
     fn my_screen_name(&self) -> &Account {
@@ -293,9 +303,7 @@ impl MatrixTransport for MatrixMocker {
             }))
             .await;
 
-        Ok(Response::new(
-            RoomId::try_from("!1234:matrix.org").unwrap(),
-        ))
+        Ok(Response::new(RoomId::try_from("!1234:matrix.org").unwrap()))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
         self.child
@@ -455,7 +463,11 @@ impl TwitterTransport for TwitterMocker {
 
         Ok(lookups)
     }
-    async fn send_message(&self, id: &TwitterId, message: VerifierMessage) -> StdResult<(), TwitterError> {
+    async fn send_message(
+        &self,
+        id: &TwitterId,
+        message: VerifierMessage,
+    ) -> StdResult<(), TwitterError> {
         self.child
             .push_event(Event::Twitter(TwitterEvent::SendMessage {
                 id: id.clone(),
@@ -587,10 +599,7 @@ mod tests {
                 .send_message(&alice, "alice two".into())
                 .await
                 .unwrap();
-            mocker
-                .send_message(&bob, "bob one".into())
-                .await
-                .unwrap();
+            mocker.send_message(&bob, "bob one".into()).await.unwrap();
 
             // Fill buffer.
             sender.send_message(alice_message.clone()).await;
@@ -821,8 +830,12 @@ mod tests {
                 .await
                 .unwrap();
 
-            injector.send_message(String::from("First message in")).await;
-            injector.send_message(String::from("Second message in")).await;
+            injector
+                .send_message(String::from("First message in"))
+                .await;
+            injector
+                .send_message(String::from("Second message in"))
+                .await;
 
             let res = reader.read().await.unwrap().unwrap();
             assert_eq!(res, String::from("First message in"));

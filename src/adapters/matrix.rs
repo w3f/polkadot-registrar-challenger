@@ -390,7 +390,9 @@ impl MatrixHandler {
                 self.transport
                     .send_message(
                         room_id,
-                        VerifierMessage::InvalidFormat("Please send the signature directly as a text message.".to_string()),
+                        VerifierMessage::InvalidFormat(
+                            "Please send the signature directly as a text message.".to_string(),
+                        ),
                     )
                     .await
                     .map_err(|err| MatrixError::SendMessage(err.into()))?;
