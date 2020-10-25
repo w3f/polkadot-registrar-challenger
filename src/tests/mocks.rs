@@ -313,8 +313,8 @@ impl MatrixTransport for MatrixMocker {
 }
 
 pub struct MatrixEventMock {
-    user_id: UserId,
-    message: Result<String>,
+    pub user_id: UserId,
+    pub message: String,
 }
 
 impl EventExtract for MatrixEventMock {
@@ -323,11 +323,7 @@ impl EventExtract for MatrixEventMock {
     }
     fn message(&self) -> Result<String> {
         // Work around ownership violations.
-        if let Ok(message) = &self.message {
-            Ok(message.clone())
-        } else {
-            Err(failure::err_msg(""))
-        }
+        Ok(self.message.clone())
     }
 }
 

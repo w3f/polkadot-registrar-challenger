@@ -74,9 +74,9 @@ struct ErrorResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct JudgementResponse {
-    address: NetAccount,
-    judgement: Judgement,
+pub(crate) struct JudgementResponse {
+    pub address: NetAccount,
+    pub judgement: Judgement,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

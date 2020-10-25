@@ -1,16 +1,17 @@
 use super::{db_path, pause};
 use super::mocks::*;
-use crate::connector::{ConnectorWriterTransport, EventType, JudgementRequest, Message, AckResponse};
-use crate::primitives::{Account, AccountType, NetAccount};
+use crate::connector::{ConnectorWriterTransport, EventType, JudgementRequest, Message, AckResponse, JudgementResponse};
+use crate::primitives::{Account, AccountType, NetAccount, Challenge, Judgement};
 use crate::{test_run, Database2};
 use crate::verifier::VerifierMessage;
 use matrix_sdk::identifiers::{UserId, RoomId};
 use std::convert::TryFrom;
-use std::sync::Arc;
 use tokio::runtime::Runtime;
+use schnorrkel::Keypair;
+use std::sync::Arc;
 
 #[test]
-fn verify_matrix() {
+fn matrix_init_message() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         // Setup database and manager.
@@ -32,11 +33,11 @@ fn verify_matrix() {
         .await
         .unwrap();
 
-        // Verify events.
         let matrix = handlers.matrix;
         let mut writer = handlers.writer;
         let injector = handlers.reader.injector();
 
+        // Generate events.
         let msg = serde_json::to_string(&Message {
             event: EventType::NewJudgementRequest,
             data: serde_json::to_value(&JudgementRequest {
@@ -56,8 +57,9 @@ fn verify_matrix() {
         injector.send_message(msg.clone()).await;
         pause().await;
 
+        // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 6);
+        assert_eq!(events.len(), 4);
 
         assert_eq!(events[0],
             Event::Connector(ConnectorEvent::Writer {
@@ -96,6 +98,72 @@ fn verify_matrix() {
             }
             _ => panic!()
         }
+    });
+}
+
+#[test]
+fn matrix_valid_signature_response() {
+    let mut rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        // Setup database and manager.
+        let db = Database2::new(&db_path()).unwrap();
+        let manager = Arc::new(EventManager2::new());
+        let (_, matrix_child) = manager.child();
+
+        let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
+        let matrix_transport = MatrixMocker::new(matrix_child, my_user_id);
+
+        // Starts tasks.
+        let handlers = test_run(
+            Arc::clone(&manager),
+            db,
+            matrix_transport,
+            DummyTransport::new(),
+            DummyTransport::new(),
+        )
+        .await
+        .unwrap();
+
+        let matrix = handlers.matrix;
+        let mut writer = handlers.writer;
+        let injector = handlers.reader.injector();
+
+        let keypair = Keypair::generate();
+
+        // Generate events.
+        let msg = serde_json::to_string(&Message {
+            event: EventType::NewJudgementRequest,
+            data: serde_json::to_value(&JudgementRequest {
+                address: NetAccount::from(&keypair.public),
+                accounts: [(
+                    AccountType::Matrix,
+                    Some(Account::from("@alice:matrix.org")),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+            })
+            .unwrap(),
+        }).unwrap();
+
+        // Send new judgement request.
+        injector.send_message(msg.clone()).await;
+        pause().await;
+
+        // Respond with valid signature.
+        let signature = keypair.sign_simple(b"substrate", Challenge::gen_fixed().as_str().as_bytes());
+
+        matrix.trigger_matrix_emitter(RoomId::try_from("!1234:matrix.org").unwrap(), UserId::try_from("@registrar:matrix.org").unwrap(), MatrixEventMock {
+            user_id: UserId::try_from("@alice:matrix.org").unwrap(),
+            message: hex::encode(signature.to_bytes()),
+        });
+        pause().await;
+
+        // Verify events.
+        let events = manager.events().await;
+        assert_eq!(events.len(), 10);
+
+        // Skip startup events...
 
         assert_eq!(events[4],
             Event::Matrix(MatrixEvent::CreateRoom {
@@ -111,6 +179,67 @@ fn verify_matrix() {
                             VerifierMessage::InitMessageWithContext(_) => {},
                             _ => panic!(),
                         }
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+
+        match &events[6] {
+            Event::Matrix(e) => {
+                match e {
+                    MatrixEvent::SendMessage { room_id, message} => {
+                        match message {
+                            VerifierMessage::ResponseValid(_) => {},
+                            _ => panic!(),
+                        }
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+
+        match &events[7] {
+            Event::Connector(e) => {
+                match e {
+                    ConnectorEvent::Writer { message} => {
+                        match message.event {
+                            EventType::JudgementResult => {},
+                            _ => panic!(),
+                        }
+
+                        assert_eq!(serde_json::from_value::<JudgementResponse>(message.data.clone()).unwrap().judgement,
+                        Judgement::Reasonable
+                    );
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+
+        match &events[8] {
+            Event::Matrix(e) => {
+                match e {
+                    MatrixEvent::SendMessage { room_id, message} => {
+                        match message {
+                            VerifierMessage::Goodbye(_) => {},
+                            _ => panic!(),
+                        }
+                    }
+                    _ => panic!(),
+                }
+            }
+            _ => panic!(),
+        }
+
+        match &events[9] {
+            Event::Matrix(e) => {
+                match e {
+                    MatrixEvent::LeaveRoom { room_id } => {
+
                     }
                     _ => panic!(),
                 }
