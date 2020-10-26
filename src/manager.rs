@@ -212,11 +212,9 @@ impl IdentityManager {
                         self.db2.insert_display_name(account).await?;
                     }
                 }
-                JudgementGivenAck {
-                    net_account
-                } => {
+                JudgementGivenAck { net_account } => {
                     self.db2.delete_identity(&net_account).await?;
-                },
+                }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
@@ -235,7 +233,10 @@ impl IdentityManager {
         let matrix_comms = self.get_comms(&AccountType::Matrix)?;
 
         for net_account in net_accounts {
-            info!("Notifying Watcher about timed-out judgement request from: {}", net_account.as_str());
+            info!(
+                "Notifying Watcher about timed-out judgement request from: {}",
+                net_account.as_str()
+            );
             connector_comms.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
             matrix_comms.leave_matrix_room(net_account);
         }

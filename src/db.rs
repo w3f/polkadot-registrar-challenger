@@ -718,10 +718,11 @@ impl Database2 {
                 pending_judgments
             WHERE
                 net_account = :net_account
-            "
-            , named_params! {
+            ",
+            named_params! {
                 ":net_account": net_account
-            })?;
+            },
+        )?;
 
         Ok(())
     }
