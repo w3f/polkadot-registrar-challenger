@@ -2,7 +2,7 @@ use crate::primitives::Challenge;
 use tokio::time::{self, Duration};
 
 pub mod mocks;
-mod verify_matrix;
+mod matrix_adapter;
 
 // Generate a random db path
 fn db_path() -> String {
@@ -10,5 +10,5 @@ fn db_path() -> String {
 }
 
 async fn pause() {
-    time::delay_for(Duration::from_millis(100)).await;
+    time::delay_for(Duration::from_secs(1)).await;
 }
