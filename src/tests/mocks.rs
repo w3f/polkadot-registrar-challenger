@@ -330,7 +330,7 @@ impl MatrixTransport for MatrixMocker {
             .await;
 
         Ok(Response::new(
-            RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap(),
+            RoomId::try_from(format!("!{}:matrix.org", request.invite[0].as_str().len()).as_str()).unwrap(),
         ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
@@ -379,11 +379,13 @@ impl EmailTransport for EmailMocker {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
         let messages = self.child.messages().await;
 
-        self.child
-            .push_event(Event::Email(EmailEvent::RequestMessages {
-                messages: messages.clone(),
-            }))
-            .await;
+        if !messages.is_empty() {
+            self.child
+                .push_event(Event::Email(EmailEvent::RequestMessages {
+                    messages: messages.clone(),
+                }))
+                .await;
+        }
 
         Ok(messages)
     }
@@ -638,11 +640,14 @@ mod tests {
 
             // Verify events.
             let events = manager.events().await;
-            assert_eq!(events.len(), 5);
+            assert_eq!(events.len(), 4);
 
             assert_eq!(
                 events[0],
-                Event::Email(EmailEvent::RequestMessages { messages: vec![] })
+                Event::Email(EmailEvent::SendMessage {
+                    account: alice.clone(),
+                    message: VerifierMessageBlank::InitMessage,
+                })
             );
             assert_eq!(
                 events[1],
@@ -654,19 +659,12 @@ mod tests {
             assert_eq!(
                 events[2],
                 Event::Email(EmailEvent::SendMessage {
-                    account: alice.clone(),
-                    message: VerifierMessageBlank::InitMessage,
-                })
-            );
-            assert_eq!(
-                events[3],
-                Event::Email(EmailEvent::SendMessage {
                     account: bob.clone(),
                     message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
-                events[4],
+                events[3],
                 Event::Email(EmailEvent::RequestMessages {
                     messages: vec![alice_message.clone(), bob_message.clone(),]
                 })
@@ -769,7 +767,7 @@ mod tests {
 
             // Verify events;
             let events = manager.events().await;
-            assert_eq!(events.len(), 6);
+            assert_eq!(events.len(), 5);
 
             assert_eq!(
                 events[0],
@@ -781,14 +779,6 @@ mod tests {
             );
             assert_eq!(
                 events[1],
-                Event::Twitter(TwitterEvent::RequestMessages {
-                    exclude: my_id.clone(),
-                    watermark: 0,
-                    messages: vec![],
-                })
-            );
-            assert_eq!(
-                events[2],
                 Event::Twitter(TwitterEvent::LookupTwitterId {
                     twitter_ids: Some(vec![my_id.clone(), alice_id.clone(),]),
                     accounts: Some(vec![bob.clone(),]),
@@ -800,21 +790,21 @@ mod tests {
                 })
             );
             assert_eq!(
-                events[3],
+                events[2],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: alice_id.clone(),
                     message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
-                events[4],
+                events[3],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: bob_id.clone(),
                     message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
-                events[5],
+                events[4],
                 Event::Twitter(TwitterEvent::RequestMessages {
                     exclude: my_id.clone(),
                     watermark: 30,

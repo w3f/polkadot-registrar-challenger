@@ -1,6 +1,6 @@
 use super::mocks::*;
 use super::{db_path, pause};
-use crate::connector::{EventType, JudgementRequest, JudgementResponse, Message};
+use crate::connector::{EventType, JudgementRequest, JudgementResponse, Message, AckResponse};
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
 use crate::verifier::VerifierMessage;
 use crate::{test_run, Database2};
@@ -58,63 +58,53 @@ fn matrix_init_message() {
 
         // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 6);
 
-        assert_eq!(
-            events[0],
+        assert!(events.contains(&
             Event::Connector(ConnectorEvent::Writer {
                 message: Message {
                     event: EventType::DisplayNamesRequest,
                     data: serde_json::to_value(Option::<()>::None).unwrap(),
                 }
             })
-        );
+        ));
 
-        assert_eq!(
-            events[1],
+        assert!(events.contains(&
             Event::Connector(ConnectorEvent::Writer {
                 message: Message {
                     event: EventType::PendingJudgementsRequests,
                     data: serde_json::to_value(Option::<()>::None).unwrap(),
                 }
             })
-        );
+        ));
 
-        assert_eq!(
-            events[2],
+        assert!(events.contains(&
             Event::Connector(ConnectorEvent::Reader { message: msg })
-        );
+        ));
 
-        match &events[3] {
-            Event::Connector(e) => match e {
-                ConnectorEvent::Writer { message } => {
-                    assert_eq!(message.event, EventType::Ack);
+        assert!(events.contains(&
+            Event::Connector(ConnectorEvent::Writer {
+                message: Message {
+                    event: EventType::Ack,
+                    data: serde_json::to_value(&AckResponse {
+                        result: String::from("Message acknowledged"),
+                    }
+                    ).unwrap(),
                 }
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+            })
+        ));
 
-        assert_eq!(
-            events[4],
+        assert!(events.contains(&
             Event::Matrix(MatrixEvent::CreateRoom {
                 to_invite: UserId::try_from("@alice:matrix.org").unwrap(),
             })
-        );
+        ));
 
-        match &events[5] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessageBlank::InitMessageWithContext => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::SendMessage {
+                room_id: RoomId::try_from("!17:matrix.org").unwrap(),
+                message: VerifierMessageBlank::InitMessageWithContext,
+            })
+        ));
     });
 }
 
@@ -171,8 +161,9 @@ fn matrix_valid_signature_response() {
         let signature =
             keypair.sign_simple(b"substrate", Challenge::gen_fixed().as_str().as_bytes());
 
+        let room_id = RoomId::try_from("!17:matrix.org").unwrap();
         matrix.trigger_matrix_emitter(
-            RoomId::try_from("!1234:matrix.org").unwrap(),
+            room_id.clone(),
             UserId::try_from("@registrar:matrix.org").unwrap(),
             MatrixEventMock {
                 user_id: UserId::try_from("@alice:matrix.org").unwrap(),
@@ -184,86 +175,53 @@ fn matrix_valid_signature_response() {
 
         // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 10);
 
         // Skip startup events...
 
-        assert_eq!(
-            events[4],
+        assert!(events.contains(&
             Event::Matrix(MatrixEvent::CreateRoom {
                 to_invite: UserId::try_from("@alice:matrix.org").unwrap(),
             })
-        );
+        ));
 
-        match &events[5] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessageBlank::InitMessageWithContext => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::SendMessage {
+                room_id: room_id.clone(),
+                message: VerifierMessageBlank::InitMessageWithContext
+            })
+        ));
 
-        match &events[6] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessageBlank::ResponseValid => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::SendMessage {
+                room_id: room_id.clone(),
+                message: VerifierMessageBlank::ResponseValid,
+            })
+        ));
 
-        match &events[7] {
-            Event::Connector(e) => match e {
-                ConnectorEvent::Writer { message } => {
-                    match message.event {
-                        EventType::JudgementResult => {}
-                        _ => panic!(),
-                    }
-
-                    assert_eq!(
-                        serde_json::from_value::<JudgementResponse>(message.data.clone())
-                            .unwrap()
-                            .judgement,
-                        Judgement::Reasonable
-                    );
+        assert!(events.contains(&
+            Event::Connector(ConnectorEvent::Writer {
+                message: Message {
+                    event: EventType::JudgementResult,
+                    data: serde_json::to_value(&JudgementResponse {
+                        address: NetAccount::from(&keypair.public),
+                        judgement: Judgement::Reasonable,
+                    }).unwrap()
                 }
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+            })
+        ));
 
-        match &events[8] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessageBlank::Goodbye => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::SendMessage {
+                room_id: room_id.clone(),
+                message: VerifierMessageBlank::Goodbye,
+            })
+        ));
 
-        match &events[9] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::LeaveRoom { room_id: _ } => {}
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::LeaveRoom {
+                room_id: room_id,
+            })
+        ));
     });
 }
 
@@ -320,8 +278,9 @@ fn matrix_invalid_signature_response() {
         let signature =
             keypair.sign_simple(b"substrate", Challenge::gen_random().as_str().as_bytes());
 
+        let room_id = RoomId::try_from("!17:matrix.org").unwrap();
         matrix.trigger_matrix_emitter(
-            RoomId::try_from("!1234:matrix.org").unwrap(),
+            room_id.clone(),
             UserId::try_from("@registrar:matrix.org").unwrap(),
             MatrixEventMock {
                 user_id: UserId::try_from("@alice:matrix.org").unwrap(),
@@ -333,43 +292,28 @@ fn matrix_invalid_signature_response() {
 
         // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 7);
+        println!("{:?}", events);
 
         // Skip startup events...
 
-        assert_eq!(
-            events[4],
+        assert!(events.contains(&
             Event::Matrix(MatrixEvent::CreateRoom {
                 to_invite: UserId::try_from("@alice:matrix.org").unwrap(),
             })
-        );
+        ));
 
-        match &events[5] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessageBlank::InitMessageWithContext => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::SendMessage {
+                room_id: room_id.clone(),
+                message: VerifierMessageBlank::InitMessageWithContext,
+            })
+        ));
 
-        match &events[6] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessageBlank::ResponseInvalid => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
+        assert!(events.contains(&
+            Event::Matrix(MatrixEvent::SendMessage {
+                room_id: room_id.clone(),
+                message: VerifierMessageBlank::ResponseInvalid,
+            })
+        ));
     });
 }

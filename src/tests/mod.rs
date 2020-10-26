@@ -12,5 +12,5 @@ fn db_path() -> String {
 }
 
 async fn pause() {
-    time::delay_for(Duration::from_secs(2)).await;
+    time::delay_for(Duration::from_secs(5)).await;
 }

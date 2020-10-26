@@ -71,7 +71,6 @@ fn twitter_init_message() {
 
         // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 8);
 
         assert!(events.contains(&Event::Connector(ConnectorEvent::Writer {
             message: Message {
