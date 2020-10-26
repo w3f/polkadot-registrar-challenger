@@ -316,7 +316,7 @@ fn matrix_invalid_signature_response() {
         injector.send_message(msg.clone()).await;
         pause().await;
 
-        // Respond with valid signature.
+        // Respond with invalid and valid signature.
         let invalid_signature =
             keypair.sign_simple(b"substrate", Challenge::gen_random().as_str().as_bytes());
 
