@@ -241,7 +241,10 @@ impl IdentityManager {
     }
     // TODO: Remove display_name
     async fn handle_verification_timeouts(&self) -> Result<()> {
-        let net_accounts = self.db2.select_timed_out_identities(self.config.judgement_timeout_limit).await?;
+        let net_accounts = self
+            .db2
+            .select_timed_out_identities(self.config.judgement_timeout_limit)
+            .await?;
         let connector_comms = self.get_comms(&AccountType::ReservedConnector)?;
 
         for net_account in net_accounts {
