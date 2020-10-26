@@ -1,7 +1,6 @@
 use base58::FromBase58;
 use failure::err_msg;
 
-use base58::ToBase58;
 use rand::{thread_rng, Rng};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
@@ -88,6 +87,8 @@ pub struct NetAccount(String);
 #[cfg(test)]
 impl From<&SchnorrkelPubKey> for NetAccount {
     fn from(value: &SchnorrkelPubKey) -> Self {
+        use base58::ToBase58;
+
         // The address here is technically invalid, but it contains enough
         // information in order to extract a public key out of it. So for
         // testing this is sufficient.

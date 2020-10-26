@@ -1,7 +1,7 @@
 use super::mocks::*;
 use super::{db_path, pause};
 use crate::connector::{
-    AckResponse, ConnectorWriterTransport, EventType, JudgementRequest, JudgementResponse, Message,
+    EventType, JudgementRequest, JudgementResponse, Message,
 };
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
 use crate::verifier::VerifierMessage;
@@ -35,8 +35,6 @@ fn matrix_init_message() {
         .await
         .unwrap();
 
-        let matrix = handlers.matrix;
-        let mut writer = handlers.writer;
         let injector = handlers.reader.injector();
 
         // Generate events.
@@ -62,7 +60,7 @@ fn matrix_init_message() {
 
         // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 4);
+        assert_eq!(events.len(), 6);
 
         assert_eq!(
             events[0],
@@ -98,6 +96,24 @@ fn matrix_init_message() {
             },
             _ => panic!(),
         }
+
+        assert_eq!(
+            events[4],
+            Event::Matrix(MatrixEvent::CreateRoom {
+                to_invite: UserId::try_from("@alice:matrix.org").unwrap(),
+            })
+        );
+
+        match &events[5] {
+            Event::Matrix(e) => match e {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                    VerifierMessage::InitMessageWithContext(_) => {}
+                    _ => panic!(),
+                },
+                _ => panic!(),
+            },
+            _ => panic!(),
+        }
     });
 }
 
@@ -125,7 +141,6 @@ fn matrix_valid_signature_response() {
         .unwrap();
 
         let matrix = handlers.matrix;
-        let mut writer = handlers.writer;
         let injector = handlers.reader.injector();
 
         let keypair = Keypair::generate();
@@ -181,7 +196,7 @@ fn matrix_valid_signature_response() {
 
         match &events[5] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::InitMessageWithContext(_) => {}
                     _ => panic!(),
                 },
@@ -192,7 +207,7 @@ fn matrix_valid_signature_response() {
 
         match &events[6] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::ResponseValid(_) => {}
                     _ => panic!(),
                 },
@@ -223,7 +238,7 @@ fn matrix_valid_signature_response() {
 
         match &events[8] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::Goodbye(_) => {}
                     _ => panic!(),
                 },
@@ -234,7 +249,7 @@ fn matrix_valid_signature_response() {
 
         match &events[9] {
             Event::Matrix(e) => match e {
-                MatrixEvent::LeaveRoom { room_id } => {}
+                MatrixEvent::LeaveRoom { room_id: _ } => {}
                 _ => panic!(),
             },
             _ => panic!(),
@@ -266,7 +281,6 @@ fn matrix_invalid_signature_response() {
         .unwrap();
 
         let matrix = handlers.matrix;
-        let mut writer = handlers.writer;
         let injector = handlers.reader.injector();
 
         let keypair = Keypair::generate();
@@ -334,7 +348,7 @@ fn matrix_invalid_signature_response() {
 
         match &events[5] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::InitMessageWithContext(_) => {}
                     _ => panic!(),
                 },
@@ -345,7 +359,7 @@ fn matrix_invalid_signature_response() {
 
         match &events[6] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::ResponseInvalid(_) => {}
                     _ => panic!(),
                 },
@@ -356,7 +370,7 @@ fn matrix_invalid_signature_response() {
 
         match &events[7] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::ResponseValid(_) => {}
                     _ => panic!(),
                 },
@@ -387,7 +401,7 @@ fn matrix_invalid_signature_response() {
 
         match &events[9] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id, message } => match message {
+                MatrixEvent::SendMessage { room_id: _, message } => match message {
                     VerifierMessage::Goodbye(_) => {}
                     _ => panic!(),
                 },
@@ -398,7 +412,7 @@ fn matrix_invalid_signature_response() {
 
         match &events[10] {
             Event::Matrix(e) => match e {
-                MatrixEvent::LeaveRoom { room_id } => {}
+                MatrixEvent::LeaveRoom { room_id: _ } => {}
                 _ => panic!(),
             },
             _ => panic!(),
