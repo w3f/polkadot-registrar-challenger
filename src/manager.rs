@@ -214,6 +214,8 @@ impl IdentityManager {
                 }
                 JudgementGivenAck { net_account } => {
                     self.db2.delete_identity(&net_account).await?;
+                    self.get_comms(&AccountType::Matrix)?
+                        .leave_matrix_room(net_account);
                 }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
@@ -228,9 +230,7 @@ impl IdentityManager {
         const TIMEOUT_LIMIT: u64 = 3600;
 
         let net_accounts = self.db2.select_timed_out_identities(TIMEOUT_LIMIT).await?;
-
         let connector_comms = self.get_comms(&AccountType::ReservedConnector)?;
-        let matrix_comms = self.get_comms(&AccountType::Matrix)?;
 
         for net_account in net_accounts {
             info!(
@@ -238,7 +238,6 @@ impl IdentityManager {
                 net_account.as_str()
             );
             connector_comms.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
-            matrix_comms.leave_matrix_room(net_account);
         }
 
         Ok(())
