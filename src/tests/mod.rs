@@ -1,8 +1,9 @@
 use crate::primitives::Challenge;
 use tokio::time::{self, Duration};
 
-pub mod mocks;
+mod email_adapter;
 mod matrix_adapter;
+pub mod mocks;
 
 // Generate a random db path
 fn db_path() -> String {

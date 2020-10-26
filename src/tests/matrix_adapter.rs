@@ -1,8 +1,6 @@
 use super::mocks::*;
 use super::{db_path, pause};
-use crate::connector::{
-    EventType, JudgementRequest, JudgementResponse, Message,
-};
+use crate::connector::{EventType, JudgementRequest, JudgementResponse, Message};
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
 use crate::verifier::VerifierMessage;
 use crate::{test_run, Database2};
@@ -106,7 +104,10 @@ fn matrix_init_message() {
 
         match &events[5] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::InitMessageWithContext(_) => {}
                     _ => panic!(),
                 },
@@ -196,7 +197,10 @@ fn matrix_valid_signature_response() {
 
         match &events[5] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::InitMessageWithContext(_) => {}
                     _ => panic!(),
                 },
@@ -207,7 +211,10 @@ fn matrix_valid_signature_response() {
 
         match &events[6] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::ResponseValid(_) => {}
                     _ => panic!(),
                 },
@@ -238,7 +245,10 @@ fn matrix_valid_signature_response() {
 
         match &events[8] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::Goodbye(_) => {}
                     _ => panic!(),
                 },
@@ -348,7 +358,10 @@ fn matrix_invalid_signature_response() {
 
         match &events[5] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::InitMessageWithContext(_) => {}
                     _ => panic!(),
                 },
@@ -359,7 +372,10 @@ fn matrix_invalid_signature_response() {
 
         match &events[6] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::ResponseInvalid(_) => {}
                     _ => panic!(),
                 },
@@ -370,7 +386,10 @@ fn matrix_invalid_signature_response() {
 
         match &events[7] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::ResponseValid(_) => {}
                     _ => panic!(),
                 },
@@ -401,7 +420,10 @@ fn matrix_invalid_signature_response() {
 
         match &events[9] {
             Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage { room_id: _, message } => match message {
+                MatrixEvent::SendMessage {
+                    room_id: _,
+                    message,
+                } => match message {
                     VerifierMessage::Goodbye(_) => {}
                     _ => panic!(),
                 },

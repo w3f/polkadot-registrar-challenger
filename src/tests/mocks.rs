@@ -303,7 +303,9 @@ impl MatrixTransport for MatrixMocker {
             }))
             .await;
 
-        Ok(Response::new(RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap()))
+        Ok(Response::new(
+            RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap(),
+        ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
         self.child
@@ -335,6 +337,7 @@ impl EventExtract for MatrixEventMock {
     }
 }
 
+#[derive(Clone)]
 pub struct EmailMocker {
     child: EventChild<email::ReceivedMessageContext>,
 }
