@@ -317,27 +317,15 @@ fn matrix_invalid_signature_response() {
         pause().await;
 
         // Respond with invalid and valid signature.
-        let invalid_signature =
+        let signature =
             keypair.sign_simple(b"substrate", Challenge::gen_random().as_str().as_bytes());
 
-        let valid_signature =
-            keypair.sign_simple(b"substrate", Challenge::gen_fixed().as_str().as_bytes());
-
         matrix.trigger_matrix_emitter(
             RoomId::try_from("!1234:matrix.org").unwrap(),
             UserId::try_from("@registrar:matrix.org").unwrap(),
             MatrixEventMock {
                 user_id: UserId::try_from("@alice:matrix.org").unwrap(),
-                message: hex::encode(invalid_signature.to_bytes()),
-            },
-        );
-
-        matrix.trigger_matrix_emitter(
-            RoomId::try_from("!1234:matrix.org").unwrap(),
-            UserId::try_from("@registrar:matrix.org").unwrap(),
-            MatrixEventMock {
-                user_id: UserId::try_from("@alice:matrix.org").unwrap(),
-                message: hex::encode(valid_signature.to_bytes()),
+                message: hex::encode(signature.to_bytes()),
             },
         );
 
@@ -345,7 +333,7 @@ fn matrix_invalid_signature_response() {
 
         // Verify events.
         let events = manager.events().await;
-        assert_eq!(events.len(), 11);
+        assert_eq!(events.len(), 7);
 
         // Skip startup events...
 
@@ -379,62 +367,6 @@ fn matrix_invalid_signature_response() {
                     VerifierMessage::ResponseInvalid(_) => {}
                     _ => panic!(),
                 },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
-
-        match &events[7] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessage::ResponseValid(_) => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
-
-        match &events[8] {
-            Event::Connector(e) => match e {
-                ConnectorEvent::Writer { message } => {
-                    match message.event {
-                        EventType::JudgementResult => {}
-                        _ => panic!(),
-                    }
-
-                    assert_eq!(
-                        serde_json::from_value::<JudgementResponse>(message.data.clone())
-                            .unwrap()
-                            .judgement,
-                        Judgement::Reasonable
-                    );
-                }
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
-
-        match &events[9] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::SendMessage {
-                    room_id: _,
-                    message,
-                } => match message {
-                    VerifierMessage::Goodbye(_) => {}
-                    _ => panic!(),
-                },
-                _ => panic!(),
-            },
-            _ => panic!(),
-        }
-
-        match &events[10] {
-            Event::Matrix(e) => match e {
-                MatrixEvent::LeaveRoom { room_id: _ } => {}
                 _ => panic!(),
             },
             _ => panic!(),
