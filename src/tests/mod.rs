@@ -4,6 +4,7 @@ use tokio::time::{self, Duration};
 mod email_adapter;
 mod matrix_adapter;
 pub mod mocks;
+mod twitter_adapter;
 
 // Generate a random db path
 fn db_path() -> String {
@@ -11,5 +12,5 @@ fn db_path() -> String {
 }
 
 async fn pause() {
-    time::delay_for(Duration::from_secs(1)).await;
+    time::delay_for(Duration::from_secs(2)).await;
 }

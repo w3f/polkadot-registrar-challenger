@@ -11,6 +11,11 @@ use std::convert::{TryFrom, TryInto};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
+#[cfg(not(test))]
+const REQ_MESSAGE_TIMEOUT: u64 = 65;
+#[cfg(test)]
+const REQ_MESSAGE_TIMEOUT: u64 = 1;
+
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct TwitterId(u64);
 
@@ -232,7 +237,7 @@ impl TwitterHandler {
                         error!("{}", err);
                     });
 
-                time::delay_for(Duration::from_secs(65)).await;
+                time::delay_for(Duration::from_secs(REQ_MESSAGE_TIMEOUT)).await;
             }
         });
 

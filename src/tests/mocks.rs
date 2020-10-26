@@ -373,6 +373,7 @@ impl EmailTransport for EmailMocker {
     }
 }
 
+#[derive(Clone)]
 pub struct TwitterMocker {
     child: EventChild<twitter::ReceivedMessageContext>,
     index_book: Vec<(Account, TwitterId)>,
@@ -414,13 +415,15 @@ impl TwitterTransport for TwitterMocker {
             })
             .collect::<Vec<twitter::ReceivedMessageContext>>();
 
-        self.child
-            .push_event(Event::Twitter(TwitterEvent::RequestMessages {
-                exclude: exclude.clone(),
-                watermark: watermark,
-                messages: messages.clone(),
-            }))
-            .await;
+        if !messages.is_empty() {
+            self.child
+                .push_event(Event::Twitter(TwitterEvent::RequestMessages {
+                    exclude: exclude.clone(),
+                    watermark: watermark,
+                    messages: messages.clone(),
+                }))
+                .await;
+        }
 
         Ok((messages, new_watermark))
     }
