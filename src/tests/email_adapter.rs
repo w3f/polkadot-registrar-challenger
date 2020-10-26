@@ -21,6 +21,7 @@ fn email_init_message() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             DummyTransport::new(),
             DummyTransport::new(),
             email_transport,
@@ -97,6 +98,7 @@ fn email_valid_signature_response() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             DummyTransport::new(),
             DummyTransport::new(),
             email_transport,
@@ -190,6 +192,7 @@ fn email_invalid_signature_response() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             DummyTransport::new(),
             DummyTransport::new(),
             email_transport,

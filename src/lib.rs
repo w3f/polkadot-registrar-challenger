@@ -20,7 +20,7 @@ pub use connector::{
 };
 pub use db::Database2;
 pub use health_check::HealthCheck;
-use manager::IdentityManager;
+use manager::{IdentityManager, IdentityManagerConfig};
 pub use primitives::Account;
 use primitives::{AccountType, Fatal, Result};
 use std::env;
@@ -138,6 +138,7 @@ pub async fn run<
 ) -> Result<()> {
     let (_, c_connector) = run_adapters(
         db2.clone(),
+        Default::default(),
         matrix_transport,
         twitter_transport,
         email_transport,
@@ -188,12 +189,14 @@ pub async fn test_run<
 >(
     event_manager: Arc<EventManager2>,
     db2: Database2,
+    identity_manager_config: IdentityManagerConfig,
     matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
 ) -> Result<TestRunReturn> {
     let (c_matrix, c_connector) = run_adapters(
         db2.clone(),
+        identity_manager_config,
         matrix_transport,
         twitter_transport,
         email_transport,
@@ -231,12 +234,13 @@ async fn run_adapters<
     E: Clone + EmailTransport,
 >(
     db2: Database2,
+    identity_manager_config: IdentityManagerConfig,
     mut matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
 ) -> Result<(CommsMain, CommsVerifier)> {
     info!("Setting up manager");
-    let mut manager = IdentityManager::new(db2.clone())?;
+    let mut manager = IdentityManager::new(db2.clone(), identity_manager_config)?;
 
     info!("Setting up communication channels");
     let c_connector = manager.register_comms(AccountType::ReservedConnector);

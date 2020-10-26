@@ -27,6 +27,7 @@ fn twitter_init_message() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             DummyTransport::new(),
             twitter_transport,
             DummyTransport::new(),

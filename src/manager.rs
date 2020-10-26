@@ -153,6 +153,19 @@ impl FromSql for AccountStatus {
 pub struct IdentityManager {
     db2: Database2,
     comms: CommsTable,
+    config: IdentityManagerConfig,
+}
+
+pub struct IdentityManagerConfig {
+    judgement_timeout_limit: u64,
+}
+
+impl Default for IdentityManagerConfig {
+    fn default() -> Self {
+        IdentityManagerConfig {
+            judgement_timeout_limit: 3600,
+        }
+    }
 }
 
 struct CommsTable {
@@ -162,7 +175,7 @@ struct CommsTable {
 }
 
 impl IdentityManager {
-    pub fn new(db2: Database2) -> Result<Self> {
+    pub fn new(db2: Database2, config: IdentityManagerConfig) -> Result<Self> {
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {
@@ -172,6 +185,7 @@ impl IdentityManager {
                 listener: recv1,
                 pairs: HashMap::new(),
             },
+            config: config,
         })
     }
     pub fn register_comms(&mut self, account_ty: AccountType) -> CommsVerifier {
@@ -227,9 +241,7 @@ impl IdentityManager {
     }
     // TODO: Remove display_name
     async fn handle_verification_timeouts(&self) -> Result<()> {
-        const TIMEOUT_LIMIT: u64 = 3600;
-
-        let net_accounts = self.db2.select_timed_out_identities(TIMEOUT_LIMIT).await?;
+        let net_accounts = self.db2.select_timed_out_identities(self.config.judgement_timeout_limit).await?;
         let connector_comms = self.get_comms(&AccountType::ReservedConnector)?;
 
         for net_account in net_accounts {

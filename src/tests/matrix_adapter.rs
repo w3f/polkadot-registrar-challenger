@@ -25,6 +25,7 @@ fn matrix_init_message() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             matrix_transport,
             DummyTransport::new(),
             DummyTransport::new(),
@@ -111,6 +112,7 @@ fn matrix_valid_signature_response() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             matrix_transport,
             DummyTransport::new(),
             DummyTransport::new(),
@@ -215,6 +217,7 @@ fn matrix_invalid_signature_response() {
         let handlers = test_run(
             Arc::clone(&manager),
             db,
+            Default::default(),
             matrix_transport,
             DummyTransport::new(),
             DummyTransport::new(),
