@@ -535,7 +535,8 @@ mod tests {
 
             // Prepare variables.
             let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
-            let room_id = RoomId::try_from("!1234:matrix.org").unwrap();
+            let room_id1 = RoomId::try_from("!1234:matrix.org").unwrap();
+            let room_id2 = RoomId::try_from("!4321:matrix.org").unwrap();
 
             let mut request = Request::new();
             let to_invite = UserId::try_from("@alice:matrix.org").unwrap();
@@ -548,15 +549,16 @@ mod tests {
             mocker.create_room(request).await.unwrap();
 
             mocker
-                .send_message(&room_id, VerifierMessage::InitMessage(String::new()))
-                .await
-                .unwrap();
-            mocker
-                .send_message(&room_id, VerifierMessage::InitMessage(String::new()))
+                .send_message(&room_id1, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
 
-            mocker.leave_room(&room_id).await.unwrap();
+            mocker
+                .send_message(&room_id2, VerifierMessage::InitMessage(String::new()))
+                .await
+                .unwrap();
+
+            mocker.leave_room(&room_id1).await.unwrap();
 
             // Verify events.
             let events = manager.events().await;
@@ -571,21 +573,21 @@ mod tests {
             assert_eq!(
                 events[1],
                 Event::Matrix(MatrixEvent::SendMessage {
-                    room_id: room_id.clone(),
+                    room_id: room_id1.clone(),
                     message: VerifierMessageBlank::InitMessage
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Matrix(MatrixEvent::SendMessage {
-                    room_id: room_id.clone(),
+                    room_id: room_id2.clone(),
                     message: VerifierMessageBlank::InitMessage
                 })
             );
             assert_eq!(
                 events[3],
                 Event::Matrix(MatrixEvent::LeaveRoom {
-                    room_id: room_id.clone()
+                    room_id: room_id1.clone()
                 })
             );
         });
@@ -625,10 +627,7 @@ mod tests {
                 .send_message(&alice, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
-            mocker
-                .send_message(&alice, VerifierMessage::InitMessage(String::new()))
-                .await
-                .unwrap();
+
             mocker
                 .send_message(&bob, VerifierMessage::InitMessage(String::new()))
                 .await
@@ -645,7 +644,7 @@ mod tests {
 
             // Verify events.
             let events = manager.events().await;
-            assert_eq!(events.len(), 4);
+            assert_eq!(events.len(), 3);
 
             assert_eq!(
                 events[0],
@@ -657,19 +656,12 @@ mod tests {
             assert_eq!(
                 events[1],
                 Event::Email(EmailEvent::SendMessage {
-                    account: alice.clone(),
-                    message: VerifierMessageBlank::InitMessage,
-                })
-            );
-            assert_eq!(
-                events[2],
-                Event::Email(EmailEvent::SendMessage {
                     account: bob.clone(),
                     message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
-                events[3],
+                events[2],
                 Event::Email(EmailEvent::RequestMessages {
                     messages: vec![alice_message.clone(), bob_message.clone(),]
                 })
