@@ -710,24 +710,18 @@ impl Database2 {
 
         Ok(net_accounts)
     }
-    pub async fn cleanup_timed_out_identities(&self, timeout_limit: u64) -> Result<()> {
-        let net_accounts = self.select_timed_out_identities(timeout_limit).await?;
+    pub async fn delete_identity(&self, net_account: &NetAccount) -> Result<()> {
         let con = self.con.lock().await;
-
-        let mut stmt = con.prepare(
+        con.execute_named(
             "
             DELETE FROM
                 pending_judgments
             WHERE
                 net_account = :net_account
-        ",
-        )?;
-
-        for net_account in net_accounts {
-            stmt.execute_named(named_params! {
-                ":net_account": net_account,
+            "
+            , named_params! {
+                ":net_account": net_account
             })?;
-        }
 
         Ok(())
     }
@@ -1389,7 +1383,7 @@ mod tests {
     }
 
     #[test]
-    fn select_cleanup_timed_out_identities() {
+    fn select_delete_timed_out_identities() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             let db = Database2::new(&db_path()).unwrap();
@@ -1441,11 +1435,12 @@ mod tests {
             assert!(accounts.contains(&&bob));
             assert!(accounts.contains(&&eve));
 
-            db.cleanup_timed_out_identities(3).await.unwrap();
+            db.delete_identity(&bob).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
             let accounts: Vec<&NetAccount> = res.iter().map(|ident| ident.net_account()).collect();
-            assert_eq!(accounts.len(), 1);
+            assert_eq!(accounts.len(), 2);
+            assert!(accounts.contains(&&alice));
             assert!(accounts.contains(&&eve));
         });
     }
