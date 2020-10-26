@@ -30,7 +30,7 @@ use std::process::exit;
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(test)]
-use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, ConnectorWriterMocker, EventManager2};
+use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, EventManager2};
 use tokio::time::{self, Duration};
 
 pub mod adapters;
@@ -211,9 +211,10 @@ pub async fn test_run<
         connector.start::<ConnectorMocker>().await;
     });
 
+    time::delay_for(Duration::from_secs(1)).await;
+
     Ok(TestRunReturn {
         matrix: c_matrix,
-        writer: writer,
         reader: reader,
     })
 }
@@ -221,7 +222,6 @@ pub async fn test_run<
 #[cfg(test)]
 pub struct TestRunReturn {
     matrix: CommsMain,
-    writer: ConnectorWriterMocker,
     reader: ConnectorReaderMocker,
 }
 

@@ -84,6 +84,18 @@ impl From<SchnorrkelSignature> for Signature {
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NetAccount(String);
 
+#[cfg(test)]
+impl From<&SchnorrkelPubKey> for NetAccount {
+    fn from(value: &SchnorrkelPubKey) -> Self {
+        use base58::ToBase58;
+
+        // The address here is technically invalid, but it contains enough
+        // information in order to extract a public key out of it. So for
+        // testing this is sufficient.
+        NetAccount::from(format!("1{}", value.to_bytes().to_base58()))
+    }
+}
+
 impl ToSql for NetAccount {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         use ToSqlOutput::*;
@@ -347,6 +359,11 @@ impl Challenge {
         let random: [u8; 16] = thread_rng().gen();
         Challenge(hex::encode(random))
     }
+    #[cfg(test)]
+    pub fn gen_fixed() -> Challenge {
+        let data: [u8; 16] = [1; 16];
+        Challenge(hex::encode(data))
+    }
     pub fn verify_challenge(&self, pub_key: &PubKey, sig: &Signature) -> bool {
         pub_key
             .0
@@ -358,7 +375,7 @@ impl Challenge {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Judgement {
     #[serde(rename = "reasonable")]
     Reasonable,

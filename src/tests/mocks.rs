@@ -6,6 +6,7 @@ use crate::connector::{
     ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, EventType, Message,
 };
 use crate::primitives::{unix_time, Result};
+use crate::verifier::VerifierMessage;
 use crate::{Account, Database2};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
@@ -24,9 +25,16 @@ pub enum Event {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MatrixEvent {
-    SendMessage { room_id: RoomId, message: String },
-    CreateRoom { to_invite: UserId },
-    LeaveRoom { room_id: RoomId },
+    SendMessage {
+        room_id: RoomId,
+        message: VerifierMessage,
+    },
+    CreateRoom {
+        to_invite: UserId,
+    },
+    LeaveRoom {
+        room_id: RoomId,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,7 +44,7 @@ pub enum EmailEvent {
     },
     SendMessage {
         account: Account,
-        message: String,
+        message: VerifierMessage,
     },
 }
 
@@ -54,7 +62,7 @@ pub enum TwitterEvent {
     },
     SendMessage {
         id: TwitterId,
-        message: String,
+        message: VerifierMessage,
     },
 }
 
@@ -191,7 +199,6 @@ impl ConnectorReaderTransport for ConnectorReaderMocker {
         } else {
             Ok(None)
         }
-
     }
 }
 
@@ -224,7 +231,7 @@ impl DummyTransport {
 
 #[async_trait]
 impl MatrixTransport for DummyTransport {
-    async fn send_message(&self, _room_id: &RoomId, _message: String) -> Result<()> {
+    async fn send_message(&self, _room_id: &RoomId, _message: VerifierMessage) -> Result<()> {
         unimplemented!()
     }
     async fn create_room<'a>(&'a self, _request: Request<'a>) -> Result<Response> {
@@ -244,7 +251,7 @@ impl EmailTransport for DummyTransport {
     async fn request_messages(&self) -> Result<Vec<email::ReceivedMessageContext>> {
         Ok(vec![])
     }
-    async fn send_message(&self, _account: &Account, _msg: String) -> Result<()> {
+    async fn send_message(&self, _account: &Account, _msg: VerifierMessage) -> Result<()> {
         unimplemented!()
     }
 }
@@ -265,7 +272,11 @@ impl TwitterTransport for DummyTransport {
     ) -> Result<Vec<(Account, TwitterId)>> {
         Ok(vec![(Account::from(""), TwitterId::from(0))])
     }
-    async fn send_message(&self, _id: &TwitterId, _message: String) -> StdResult<(), TwitterError> {
+    async fn send_message(
+        &self,
+        _id: &TwitterId,
+        _message: VerifierMessage,
+    ) -> StdResult<(), TwitterError> {
         unimplemented!()
     }
     fn my_screen_name(&self) -> &Account {
@@ -275,7 +286,7 @@ impl TwitterTransport for DummyTransport {
 
 #[async_trait]
 impl MatrixTransport for MatrixMocker {
-    async fn send_message(&self, room_id: &RoomId, message: String) -> Result<()> {
+    async fn send_message(&self, room_id: &RoomId, message: VerifierMessage) -> Result<()> {
         self.child
             .push_event(Event::Matrix(MatrixEvent::SendMessage {
                 room_id: room_id.clone(),
@@ -292,9 +303,7 @@ impl MatrixTransport for MatrixMocker {
             }))
             .await;
 
-        Ok(Response::new(
-            RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap(),
-        ))
+        Ok(Response::new(RoomId::try_from(format!("!{}:matrix.org", unix_time()).as_str()).unwrap()))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
         self.child
@@ -312,8 +321,8 @@ impl MatrixTransport for MatrixMocker {
 }
 
 pub struct MatrixEventMock {
-    user_id: UserId,
-    message: Result<String>,
+    pub user_id: UserId,
+    pub message: String,
 }
 
 impl EventExtract for MatrixEventMock {
@@ -322,11 +331,7 @@ impl EventExtract for MatrixEventMock {
     }
     fn message(&self) -> Result<String> {
         // Work around ownership violations.
-        if let Ok(message) = &self.message {
-            Ok(message.clone())
-        } else {
-            Err(failure::err_msg(""))
-        }
+        Ok(self.message.clone())
     }
 }
 
@@ -353,11 +358,11 @@ impl EmailTransport for EmailMocker {
 
         Ok(messages)
     }
-    async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+    async fn send_message(&self, account: &Account, message: VerifierMessage) -> Result<()> {
         self.child
             .push_event(Event::Email(EmailEvent::SendMessage {
                 account: account.clone(),
-                message: msg,
+                message: message,
             }))
             .await;
 
@@ -458,7 +463,11 @@ impl TwitterTransport for TwitterMocker {
 
         Ok(lookups)
     }
-    async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
+    async fn send_message(
+        &self,
+        id: &TwitterId,
+        message: VerifierMessage,
+    ) -> StdResult<(), TwitterError> {
         self.child
             .push_event(Event::Twitter(TwitterEvent::SendMessage {
                 id: id.clone(),
@@ -477,7 +486,14 @@ impl TwitterTransport for TwitterMocker {
 mod tests {
     use super::*;
     use crate::adapters::EmailId;
+    use crate::verifier::VerifierMessage;
     use tokio::runtime::Runtime;
+
+    impl From<&str> for VerifierMessage {
+        fn from(val: &str) -> VerifierMessage {
+            VerifierMessage::InitMessage(val.to_string())
+        }
+    }
 
     #[test]
     fn matrix_mocker() {
@@ -502,11 +518,11 @@ mod tests {
             mocker.create_room(request).await.unwrap();
 
             mocker
-                .send_message(&room_id, String::from("First message out"))
+                .send_message(&room_id, "First message out".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&room_id, String::from("Second message out"))
+                .send_message(&room_id, "Second message out".into())
                 .await
                 .unwrap();
 
@@ -526,14 +542,14 @@ mod tests {
                 events[1],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: String::from("First message out")
+                    message: "First message out".into()
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: String::from("Second message out")
+                    message: "Second message out".into()
                 })
             );
             assert_eq!(
@@ -576,17 +592,14 @@ mod tests {
             assert_eq!(res, vec![]);
 
             mocker
-                .send_message(&alice, String::from("alice one"))
+                .send_message(&alice, "alice one".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&alice, String::from("alice two"))
+                .send_message(&alice, "alice two".into())
                 .await
                 .unwrap();
-            mocker
-                .send_message(&bob, String::from("bob one"))
-                .await
-                .unwrap();
+            mocker.send_message(&bob, "bob one".into()).await.unwrap();
 
             // Fill buffer.
             sender.send_message(alice_message.clone()).await;
@@ -609,21 +622,21 @@ mod tests {
                 events[1],
                 Event::Email(EmailEvent::SendMessage {
                     account: alice.clone(),
-                    message: String::from("alice one"),
+                    message: "alice one".into(),
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Email(EmailEvent::SendMessage {
                     account: alice.clone(),
-                    message: String::from("alice two"),
+                    message: "alice two".into(),
                 })
             );
             assert_eq!(
                 events[3],
                 Event::Email(EmailEvent::SendMessage {
                     account: bob.clone(),
-                    message: String::from("bob one"),
+                    message: "bob one".into(),
                 })
             );
             assert_eq!(
@@ -708,11 +721,11 @@ mod tests {
             assert!(lookups.contains(&(bob.clone(), bob_id.clone())));
 
             mocker
-                .send_message(&alice_id, String::from("alice one"))
+                .send_message(&alice_id, "alice one".into())
                 .await
                 .unwrap();
             mocker
-                .send_message(&bob_id, String::from("bob one"))
+                .send_message(&bob_id, "bob one".into())
                 .await
                 .unwrap();
 
@@ -764,14 +777,14 @@ mod tests {
                 events[3],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: alice_id.clone(),
-                    message: String::from("alice one"),
+                    message: "alice one".into(),
                 })
             );
             assert_eq!(
                 events[4],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: bob_id.clone(),
-                    message: String::from("bob one"),
+                    message: "bob one".into(),
                 })
             );
             assert_eq!(
@@ -817,8 +830,12 @@ mod tests {
                 .await
                 .unwrap();
 
-            injector.send_message(String::from("First message in")).await;
-            injector.send_message(String::from("Second message in")).await;
+            injector
+                .send_message(String::from("First message in"))
+                .await;
+            injector
+                .send_message(String::from("Second message in"))
+                .await;
 
             let res = reader.read().await.unwrap().unwrap();
             assert_eq!(res, String::from("First message in"));

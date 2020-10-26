@@ -5,11 +5,57 @@ use crate::primitives::{
 };
 use crate::Database2;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
+use std::fmt;
 
 #[derive(Debug, Fail)]
 pub enum VerifierError {
     #[fail(display = "This is not a valid signature output.")]
     InvalidSignature,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum VerifierMessage {
+    InitMessage(String),
+    InitMessageWithContext(String),
+    ResponseValid(String),
+    ResponseInvalid(String),
+    NotifyViolation(String),
+    InvalidFormat(String),
+    Goodbye(String),
+}
+
+impl VerifierMessage {
+    pub fn as_str(&self) -> &str {
+        // Is there a nicer way to do this?
+        use VerifierMessage::*;
+
+        match self {
+            InitMessage(msg) => &msg,
+            InitMessageWithContext(msg) => &msg,
+            ResponseValid(msg) => &msg,
+            ResponseInvalid(msg) => &msg,
+            NotifyViolation(msg) => &msg,
+            InvalidFormat(msg) => &msg,
+            Goodbye(msg) => &msg,
+        }
+    }
+}
+
+impl fmt::Display for VerifierMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Is there a nicer way to do this?
+        use VerifierMessage::*;
+
+        match self {
+            InitMessage(msg) => write!(f, "{}", msg),
+            InitMessageWithContext(msg) => write!(f, "{}", msg),
+            ResponseValid(msg) => write!(f, "{}", msg),
+            ResponseInvalid(msg) => write!(f, "{}", msg),
+            NotifyViolation(msg) => write!(f, "{}", msg),
+            InvalidFormat(msg) => write!(f, "{}", msg),
+            Goodbye(msg) => write!(f, "{}", msg),
+        }
+    }
 }
 
 pub struct Verifier2<'a> {
@@ -50,19 +96,19 @@ impl<'a> Verifier2<'a> {
             }
         }
     }
-    pub fn valid_verifications(&self) -> Vec<&'a NetworkAddress> {
+    fn valid_verifications(&self) -> Vec<&'a NetworkAddress> {
         self.valid
             .iter()
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn invalid_verifications(&self) -> Vec<&'a NetworkAddress> {
+    fn invalid_verifications(&self) -> Vec<&'a NetworkAddress> {
         self.invalid
             .iter()
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn init_message_builder(&self, send_context: bool) -> String {
+    pub fn init_message_builder(&self, send_context: bool) -> VerifierMessage {
         let mut message = String::new();
 
         if send_context {
@@ -91,14 +137,18 @@ impl<'a> Verifier2<'a> {
 
         message.push_str("\n\nRefer to the Polkadot Wiki guide https://wiki.polkadot.network/");
 
-        message
+        if send_context {
+            VerifierMessage::InitMessageWithContext(message)
+        } else {
+            VerifierMessage::InitMessage(message)
+        }
     }
-    pub fn response_message_builder(&self) -> String {
+    pub fn response_message_builder(&self) -> VerifierMessage {
         let mut message = String::new();
 
         if self.valid.is_empty() {
             message.push_str("The signature is invalid. Refer to the Polkadot Wiki guide.");
-            return message;
+            return VerifierMessage::ResponseInvalid(message);
         } else if self.valid.len() == 1 {
             message.push_str("The following address has been verified:\n")
         } else {
@@ -123,7 +173,7 @@ impl<'a> Verifier2<'a> {
             }
         }
 
-        message
+        VerifierMessage::ResponseValid(message)
     }
 }
 
@@ -171,7 +221,7 @@ pub async fn verification_handler<'a>(
 pub fn invalid_accounts_message(
     accounts: &[(AccountType, Account)],
     violations: Option<Vec<Account>>,
-) -> String {
+) -> VerifierMessage {
     let mut message = String::new();
 
     message.push_str("Please note that the following information is invalid:\n\n");
@@ -222,5 +272,5 @@ pub fn invalid_accounts_message(
         `requestJudgement` extrinsic must be issued after the update.",
     );
 
-    message
+    VerifierMessage::NotifyViolation(message)
 }

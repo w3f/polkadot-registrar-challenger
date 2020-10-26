@@ -98,7 +98,10 @@ impl AccountState {
             account: account,
             account_ty: account_ty,
             account_status: AccountStatus::Unknown,
+            #[cfg(not(test))]
             challenge: Challenge::gen_random(),
+            #[cfg(test)]
+            challenge: Challenge::gen_fixed(),
             challenge_status: ChallengeStatus::Unconfirmed,
             skip_inform: false,
         }

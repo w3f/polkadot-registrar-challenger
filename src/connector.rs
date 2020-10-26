@@ -64,8 +64,8 @@ impl Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AckResponse {
-    result: String,
+pub(crate) struct AckResponse {
+    pub(crate) result: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,9 +74,9 @@ struct ErrorResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct JudgementResponse {
-    address: NetAccount,
-    judgement: Judgement,
+pub(crate) struct JudgementResponse {
+    pub address: NetAccount,
+    pub judgement: Judgement,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
