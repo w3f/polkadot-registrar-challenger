@@ -1,13 +1,9 @@
 use super::mocks::*;
 use super::{db_path, pause};
 use crate::adapters::twitter::{ReceivedMessageContext, TwitterId};
-use crate::connector::{AckResponse, EventType, JudgementRequest, JudgementResponse, Message};
-use crate::primitives::{unix_time, Account, AccountType, Challenge, Judgement, NetAccount};
-use crate::verifier::VerifierMessage;
+use crate::connector::{AckResponse, EventType, JudgementRequest, Message};
+use crate::primitives::{unix_time, Account, AccountType, NetAccount};
 use crate::{test_run, Database2};
-use matrix_sdk::identifiers::{RoomId, UserId};
-use schnorrkel::Keypair;
-use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 

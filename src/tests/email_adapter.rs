@@ -1,9 +1,8 @@
 use super::mocks::*;
 use super::{db_path, pause};
 use crate::adapters::email::{EmailId, ReceivedMessageContext};
-use crate::connector::{AckResponse, EventType, JudgementRequest, JudgementResponse, Message};
-use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
-use crate::verifier::VerifierMessage;
+use crate::connector::{AckResponse, EventType, JudgementRequest, Message};
+use crate::primitives::{Account, AccountType, Challenge, NetAccount};
 use crate::{test_run, Database2};
 use schnorrkel::Keypair;
 use std::sync::Arc;
@@ -15,7 +14,7 @@ fn email_init_message() {
     rt.block_on(async {
         let db = Database2::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
-        let (writer, email_child) = manager.child();
+        let (_, email_child) = manager.child();
 
         let email_transport = EmailMocker::new(email_child);
 

@@ -2,7 +2,6 @@ use super::mocks::*;
 use super::{db_path, pause};
 use crate::connector::{AckResponse, EventType, JudgementRequest, JudgementResponse, Message};
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
-use crate::verifier::VerifierMessage;
 use crate::{test_run, Database2};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use schnorrkel::Keypair;

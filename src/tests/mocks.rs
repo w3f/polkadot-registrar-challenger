@@ -5,7 +5,7 @@ use crate::comms::CommsVerifier;
 use crate::connector::{
     ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, EventType, Message,
 };
-use crate::primitives::{unix_time, AccountType, Result};
+use crate::primitives::Result;
 use crate::verifier::VerifierMessage;
 use crate::{Account, Database2};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
@@ -35,12 +35,11 @@ pub enum VerifierMessageBlank {
 }
 
 impl From<VerifierMessage> for VerifierMessageBlank {
+    #[rustfmt::skip]
     fn from(val: VerifierMessage) -> Self {
         match val {
             VerifierMessage::InitMessage(_) => VerifierMessageBlank::InitMessage,
-            VerifierMessage::InitMessageWithContext(_) => {
-                VerifierMessageBlank::InitMessageWithContext
-            }
+            VerifierMessage::InitMessageWithContext(_) => VerifierMessageBlank::InitMessageWithContext,
             VerifierMessage::ResponseValid(_) => VerifierMessageBlank::ResponseValid,
             VerifierMessage::ResponseInvalid(_) => VerifierMessageBlank::ResponseInvalid,
             VerifierMessage::NotifyViolation(_) => VerifierMessageBlank::NotifyViolation,
