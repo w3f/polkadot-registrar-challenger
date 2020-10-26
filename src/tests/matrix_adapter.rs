@@ -108,7 +108,7 @@ fn matrix_init_message() {
                     room_id: _,
                     message,
                 } => match message {
-                    VerifierMessage::InitMessageWithContext(_) => {}
+                    VerifierMessageBlank::InitMessageWithContext => {}
                     _ => panic!(),
                 },
                 _ => panic!(),
@@ -201,7 +201,7 @@ fn matrix_valid_signature_response() {
                     room_id: _,
                     message,
                 } => match message {
-                    VerifierMessage::InitMessageWithContext(_) => {}
+                    VerifierMessageBlank::InitMessageWithContext => {}
                     _ => panic!(),
                 },
                 _ => panic!(),
@@ -215,7 +215,7 @@ fn matrix_valid_signature_response() {
                     room_id: _,
                     message,
                 } => match message {
-                    VerifierMessage::ResponseValid(_) => {}
+                    VerifierMessageBlank::ResponseValid => {}
                     _ => panic!(),
                 },
                 _ => panic!(),
@@ -249,7 +249,7 @@ fn matrix_valid_signature_response() {
                     room_id: _,
                     message,
                 } => match message {
-                    VerifierMessage::Goodbye(_) => {}
+                    VerifierMessageBlank::Goodbye => {}
                     _ => panic!(),
                 },
                 _ => panic!(),
@@ -350,7 +350,7 @@ fn matrix_invalid_signature_response() {
                     room_id: _,
                     message,
                 } => match message {
-                    VerifierMessage::InitMessageWithContext(_) => {}
+                    VerifierMessageBlank::InitMessageWithContext => {}
                     _ => panic!(),
                 },
                 _ => panic!(),
@@ -364,7 +364,7 @@ fn matrix_invalid_signature_response() {
                     room_id: _,
                     message,
                 } => match message {
-                    VerifierMessage::ResponseInvalid(_) => {}
+                    VerifierMessageBlank::ResponseInvalid => {}
                     _ => panic!(),
                 },
                 _ => panic!(),

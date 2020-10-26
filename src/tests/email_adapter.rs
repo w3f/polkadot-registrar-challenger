@@ -92,7 +92,7 @@ fn email_init_message() {
                     assert_eq!(account, &Account::from("alice@email.com"));
 
                     match message {
-                        VerifierMessage::InitMessageWithContext(_) => {}
+                        VerifierMessageBlank::InitMessageWithContext => {}
                         _ => panic!(),
                     }
                 }
@@ -185,7 +185,7 @@ fn email_valid_signature_response() {
                     assert_eq!(account, &Account::from("alice@email.com"));
 
                     match message {
-                        VerifierMessage::InitMessageWithContext(_) => {}
+                        VerifierMessageBlank::InitMessageWithContext => {}
                         _ => panic!(),
                     }
                 }
@@ -211,7 +211,7 @@ fn email_valid_signature_response() {
                     assert_eq!(account, &Account::from("alice@email.com"));
 
                     match message {
-                        VerifierMessage::ResponseValid(_) => {}
+                        VerifierMessageBlank::ResponseValid => {}
                         _ => panic!(),
                     }
                 }
@@ -304,7 +304,7 @@ fn email_invalid_signature_response() {
                     assert_eq!(account, &Account::from("alice@email.com"));
 
                     match message {
-                        VerifierMessage::InitMessageWithContext(_) => {}
+                        VerifierMessageBlank::InitMessageWithContext => {}
                         _ => panic!(),
                     }
                 }
@@ -330,7 +330,7 @@ fn email_invalid_signature_response() {
                     assert_eq!(account, &Account::from("alice@email.com"));
 
                     match message {
-                        VerifierMessage::ResponseInvalid(_) => {}
+                        VerifierMessageBlank::ResponseInvalid => {}
                         _ => panic!(),
                     }
                 }

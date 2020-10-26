@@ -5,7 +5,7 @@ use crate::comms::CommsVerifier;
 use crate::connector::{
     ConnectorInitTransports, ConnectorReaderTransport, ConnectorWriterTransport, EventType, Message,
 };
-use crate::primitives::{unix_time, Result};
+use crate::primitives::{unix_time, AccountType, Result};
 use crate::verifier::VerifierMessage;
 use crate::{Account, Database2};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
@@ -24,10 +24,35 @@ pub enum Event {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VerifierMessageBlank {
+    InitMessage,
+    InitMessageWithContext,
+    ResponseValid,
+    ResponseInvalid,
+    NotifyViolation,
+    InvalidFormat,
+    Goodbye,
+}
+
+impl From<VerifierMessage> for VerifierMessageBlank {
+    fn from(val: VerifierMessage) -> Self {
+        match val {
+            VerifierMessage::InitMessage(_) => VerifierMessageBlank::InitMessage,
+            VerifierMessage::InitMessageWithContext(_) => VerifierMessageBlank::InitMessageWithContext,
+            VerifierMessage::ResponseValid(_) => VerifierMessageBlank::ResponseValid,
+            VerifierMessage::ResponseInvalid(_) => VerifierMessageBlank::ResponseInvalid,
+            VerifierMessage::NotifyViolation(_) => VerifierMessageBlank::NotifyViolation,
+            VerifierMessage::InvalidFormat(_) => VerifierMessageBlank::InvalidFormat,
+            VerifierMessage::Goodbye(_) => VerifierMessageBlank::Goodbye,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MatrixEvent {
     SendMessage {
         room_id: RoomId,
-        message: VerifierMessage,
+        message: VerifierMessageBlank,
     },
     CreateRoom {
         to_invite: UserId,
@@ -44,7 +69,7 @@ pub enum EmailEvent {
     },
     SendMessage {
         account: Account,
-        message: VerifierMessage,
+        message: VerifierMessageBlank,
     },
 }
 
@@ -62,7 +87,7 @@ pub enum TwitterEvent {
     },
     SendMessage {
         id: TwitterId,
-        message: VerifierMessage,
+        message: VerifierMessageBlank,
     },
 }
 
@@ -98,6 +123,7 @@ impl EventManager2 {
         self.events.read().await.clone()
     }
 }
+
 
 #[derive(Clone)]
 pub struct EventChildSender<T> {
@@ -290,7 +316,7 @@ impl MatrixTransport for MatrixMocker {
         self.child
             .push_event(Event::Matrix(MatrixEvent::SendMessage {
                 room_id: room_id.clone(),
-                message: message,
+                message: message.into(),
             }))
             .await;
 
@@ -365,7 +391,7 @@ impl EmailTransport for EmailMocker {
         self.child
             .push_event(Event::Email(EmailEvent::SendMessage {
                 account: account.clone(),
-                message: message,
+                message: message.into(),
             }))
             .await;
 
@@ -477,7 +503,7 @@ impl TwitterTransport for TwitterMocker {
         self.child
             .push_event(Event::Twitter(TwitterEvent::SendMessage {
                 id: id.clone(),
-                message: message,
+                message: message.into(),
             }))
             .await;
 
@@ -494,12 +520,6 @@ mod tests {
     use crate::adapters::EmailId;
     use crate::verifier::VerifierMessage;
     use tokio::runtime::Runtime;
-
-    impl From<&str> for VerifierMessage {
-        fn from(val: &str) -> VerifierMessage {
-            VerifierMessage::InitMessage(val.to_string())
-        }
-    }
 
     #[test]
     fn matrix_mocker() {
@@ -524,11 +544,11 @@ mod tests {
             mocker.create_room(request).await.unwrap();
 
             mocker
-                .send_message(&room_id, "First message out".into())
+                .send_message(&room_id, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
             mocker
-                .send_message(&room_id, "Second message out".into())
+                .send_message(&room_id, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
 
@@ -548,14 +568,14 @@ mod tests {
                 events[1],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: "First message out".into()
+                    message: VerifierMessageBlank::InitMessage
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Matrix(MatrixEvent::SendMessage {
                     room_id: room_id.clone(),
-                    message: "Second message out".into()
+                    message: VerifierMessageBlank::InitMessage
                 })
             );
             assert_eq!(
@@ -598,14 +618,14 @@ mod tests {
             assert_eq!(res, vec![]);
 
             mocker
-                .send_message(&alice, "alice one".into())
+                .send_message(&alice, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
             mocker
-                .send_message(&alice, "alice two".into())
+                .send_message(&alice, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
-            mocker.send_message(&bob, "bob one".into()).await.unwrap();
+            mocker.send_message(&bob,VerifierMessage::InitMessage(String::new())).await.unwrap();
 
             // Fill buffer.
             sender.send_message(alice_message.clone()).await;
@@ -628,21 +648,21 @@ mod tests {
                 events[1],
                 Event::Email(EmailEvent::SendMessage {
                     account: alice.clone(),
-                    message: "alice one".into(),
+                    message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
                 events[2],
                 Event::Email(EmailEvent::SendMessage {
                     account: alice.clone(),
-                    message: "alice two".into(),
+                    message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
                 events[3],
                 Event::Email(EmailEvent::SendMessage {
                     account: bob.clone(),
-                    message: "bob one".into(),
+                    message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
@@ -727,11 +747,11 @@ mod tests {
             assert!(lookups.contains(&(bob.clone(), bob_id.clone())));
 
             mocker
-                .send_message(&alice_id, "alice one".into())
+                .send_message(&alice_id, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
             mocker
-                .send_message(&bob_id, "bob one".into())
+                .send_message(&bob_id, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
 
@@ -783,14 +803,14 @@ mod tests {
                 events[3],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: alice_id.clone(),
-                    message: "alice one".into(),
+                    message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
                 events[4],
                 Event::Twitter(TwitterEvent::SendMessage {
                     id: bob_id.clone(),
-                    message: "bob one".into(),
+                    message: VerifierMessageBlank::InitMessage,
                 })
             );
             assert_eq!(
