@@ -1,13 +1,13 @@
 use super::mocks::*;
 use super::{db_path, pause};
+use crate::adapters::email::{EmailId, ReceivedMessageContext};
 use crate::connector::{EventType, JudgementRequest, JudgementResponse, Message};
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
-use crate::adapters::email::{ReceivedMessageContext, EmailId};
 use crate::verifier::VerifierMessage;
 use crate::{test_run, Database2};
 use schnorrkel::Keypair;
-use tokio::runtime::Runtime;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 
 #[test]
 fn email_init_message() {
@@ -148,11 +148,13 @@ fn email_valid_signature_response() {
         let signature =
             keypair.sign_simple(b"substrate", Challenge::gen_fixed().as_str().as_bytes());
 
-        writer.send_message(ReceivedMessageContext {
-            id: EmailId::from(111u32),
-            sender: Account::from("alice@email.com"),
-            body: hex::encode(signature.to_bytes()),
-        }).await;
+        writer
+            .send_message(ReceivedMessageContext {
+                id: EmailId::from(111u32),
+                sender: Account::from("alice@email.com"),
+                body: hex::encode(signature.to_bytes()),
+            })
+            .await;
 
         pause().await;
 
@@ -192,15 +194,14 @@ fn email_valid_signature_response() {
             _ => panic!(),
         }
 
-        assert_eq!(events[6],
+        assert_eq!(
+            events[6],
             Event::Email(EmailEvent::RequestMessages {
-                messages: vec![
-                    ReceivedMessageContext {
-                        id: EmailId::from(111u32),
-                        sender: Account::from("alice@email.com"),
-                        body: hex::encode(signature.to_bytes()),
-                    }
-                ]
+                messages: vec![ReceivedMessageContext {
+                    id: EmailId::from(111u32),
+                    sender: Account::from("alice@email.com"),
+                    body: hex::encode(signature.to_bytes()),
+                }]
             })
         );
 
@@ -266,11 +267,13 @@ fn email_invalid_signature_response() {
         let signature =
             keypair.sign_simple(b"substrate", Challenge::gen_random().as_str().as_bytes());
 
-        writer.send_message(ReceivedMessageContext {
-            id: EmailId::from(111u32),
-            sender: Account::from("alice@email.com"),
-            body: hex::encode(signature.to_bytes()),
-        }).await;
+        writer
+            .send_message(ReceivedMessageContext {
+                id: EmailId::from(111u32),
+                sender: Account::from("alice@email.com"),
+                body: hex::encode(signature.to_bytes()),
+            })
+            .await;
 
         pause().await;
 
@@ -310,15 +313,14 @@ fn email_invalid_signature_response() {
             _ => panic!(),
         }
 
-        assert_eq!(events[6],
+        assert_eq!(
+            events[6],
             Event::Email(EmailEvent::RequestMessages {
-                messages: vec![
-                    ReceivedMessageContext {
-                        id: EmailId::from(111u32),
-                        sender: Account::from("alice@email.com"),
-                        body: hex::encode(signature.to_bytes()),
-                    },
-                ]
+                messages: vec![ReceivedMessageContext {
+                    id: EmailId::from(111u32),
+                    sender: Account::from("alice@email.com"),
+                    body: hex::encode(signature.to_bytes()),
+                },]
             })
         );
 
