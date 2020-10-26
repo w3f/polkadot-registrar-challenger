@@ -38,7 +38,9 @@ impl From<VerifierMessage> for VerifierMessageBlank {
     fn from(val: VerifierMessage) -> Self {
         match val {
             VerifierMessage::InitMessage(_) => VerifierMessageBlank::InitMessage,
-            VerifierMessage::InitMessageWithContext(_) => VerifierMessageBlank::InitMessageWithContext,
+            VerifierMessage::InitMessageWithContext(_) => {
+                VerifierMessageBlank::InitMessageWithContext
+            }
             VerifierMessage::ResponseValid(_) => VerifierMessageBlank::ResponseValid,
             VerifierMessage::ResponseInvalid(_) => VerifierMessageBlank::ResponseInvalid,
             VerifierMessage::NotifyViolation(_) => VerifierMessageBlank::NotifyViolation,
@@ -123,7 +125,6 @@ impl EventManager2 {
         self.events.read().await.clone()
     }
 }
-
 
 #[derive(Clone)]
 pub struct EventChildSender<T> {
@@ -330,7 +331,8 @@ impl MatrixTransport for MatrixMocker {
             .await;
 
         Ok(Response::new(
-            RoomId::try_from(format!("!{}:matrix.org", request.invite[0].as_str().len()).as_str()).unwrap(),
+            RoomId::try_from(format!("!{}:matrix.org", request.invite[0].as_str().len()).as_str())
+                .unwrap(),
         ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
@@ -627,7 +629,10 @@ mod tests {
                 .send_message(&alice, VerifierMessage::InitMessage(String::new()))
                 .await
                 .unwrap();
-            mocker.send_message(&bob,VerifierMessage::InitMessage(String::new())).await.unwrap();
+            mocker
+                .send_message(&bob, VerifierMessage::InitMessage(String::new()))
+                .await
+                .unwrap();
 
             // Fill buffer.
             sender.send_message(alice_message.clone()).await;

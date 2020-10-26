@@ -1,7 +1,7 @@
 use super::mocks::*;
 use super::{db_path, pause};
 use crate::adapters::email::{EmailId, ReceivedMessageContext};
-use crate::connector::{EventType, JudgementRequest, JudgementResponse, Message, AckResponse};
+use crate::connector::{AckResponse, EventType, JudgementRequest, JudgementResponse, Message};
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
 use crate::verifier::VerifierMessage;
 use crate::{test_run, Database2};
@@ -66,27 +66,22 @@ fn email_init_message() {
             }
         })));
 
-        assert!(events.contains(&
-            Event::Connector(ConnectorEvent::Reader { message: msg })
-        ));
+        assert!(events.contains(&Event::Connector(ConnectorEvent::Reader { message: msg })));
 
-        assert!(events.contains(&
-            Event::Connector(ConnectorEvent::Writer {
-                message: Message {
-                    event: EventType::Ack,
-                    data: serde_json::to_value(&AckResponse {
-                        result: String::from("Message acknowledged"),
-                    }).unwrap(),
-                }
-            })
-        ));
+        assert!(events.contains(&Event::Connector(ConnectorEvent::Writer {
+            message: Message {
+                event: EventType::Ack,
+                data: serde_json::to_value(&AckResponse {
+                    result: String::from("Message acknowledged"),
+                })
+                .unwrap(),
+            }
+        })));
 
-        assert!(events.contains(&
-            Event::Email(EmailEvent::SendMessage {
-                account: Account::from("alice@email.com"),
-                message: VerifierMessageBlank::InitMessageWithContext,
-            })
-        ));
+        assert!(events.contains(&Event::Email(EmailEvent::SendMessage {
+            account: Account::from("alice@email.com"),
+            message: VerifierMessageBlank::InitMessageWithContext,
+        })));
     });
 }
 
@@ -153,38 +148,33 @@ fn email_valid_signature_response() {
 
         assert!(events.contains(&Event::Connector(ConnectorEvent::Reader { message: msg })));
 
-        assert!(events.contains(&
-            Event::Connector(ConnectorEvent::Writer {
-                message: Message {
-                    event: EventType::Ack,
-                    data: serde_json::to_value(&AckResponse {
-                        result: String::from("Message acknowledged"),
-                    }).unwrap()
-                }
-            })
-        ));
+        assert!(events.contains(&Event::Connector(ConnectorEvent::Writer {
+            message: Message {
+                event: EventType::Ack,
+                data: serde_json::to_value(&AckResponse {
+                    result: String::from("Message acknowledged"),
+                })
+                .unwrap()
+            }
+        })));
 
         assert!(events.contains(&Event::Email(EmailEvent::SendMessage {
             account: Account::from("alice@email.com"),
             message: VerifierMessageBlank::InitMessageWithContext
         })));
 
-        assert!(events.contains(&
-            Event::Email(EmailEvent::RequestMessages {
-                messages: vec![ReceivedMessageContext {
-                    id: EmailId::from(111u32),
-                    sender: Account::from("alice@email.com"),
-                    body: hex::encode(signature.to_bytes()),
-                }]
-            })
-        ));
+        assert!(events.contains(&Event::Email(EmailEvent::RequestMessages {
+            messages: vec![ReceivedMessageContext {
+                id: EmailId::from(111u32),
+                sender: Account::from("alice@email.com"),
+                body: hex::encode(signature.to_bytes()),
+            }]
+        })));
 
-        assert!(events.contains(&
-            Event::Email(EmailEvent::SendMessage {
-                account: Account::from("alice@email.com"),
-                message: VerifierMessageBlank::ResponseValid,
-            })
-        ));
+        assert!(events.contains(&Event::Email(EmailEvent::SendMessage {
+            account: Account::from("alice@email.com"),
+            message: VerifierMessageBlank::ResponseValid,
+        })));
     });
 }
 
@@ -248,43 +238,34 @@ fn email_invalid_signature_response() {
 
         // Skip startup events...
 
-        assert!(events.contains(&
-            Event::Connector(ConnectorEvent::Reader { message: msg })
-        ));
+        assert!(events.contains(&Event::Connector(ConnectorEvent::Reader { message: msg })));
 
-        assert!(events.contains(&
-            Event::Connector(ConnectorEvent::Writer {
-                message: Message {
-                    event: EventType::Ack,
-                    data: serde_json::to_value(&AckResponse {
-                        result: String::from("Message acknowledged"),
-                    }).unwrap()
-                }
-            })
-        ));
+        assert!(events.contains(&Event::Connector(ConnectorEvent::Writer {
+            message: Message {
+                event: EventType::Ack,
+                data: serde_json::to_value(&AckResponse {
+                    result: String::from("Message acknowledged"),
+                })
+                .unwrap()
+            }
+        })));
 
-        assert!(events.contains(&
-            Event::Email(EmailEvent::SendMessage {
-                account: Account::from("alice@email.com"),
-                message: VerifierMessageBlank::InitMessageWithContext,
-            })
-        ));
+        assert!(events.contains(&Event::Email(EmailEvent::SendMessage {
+            account: Account::from("alice@email.com"),
+            message: VerifierMessageBlank::InitMessageWithContext,
+        })));
 
-        assert!(events.contains(&
-            Event::Email(EmailEvent::RequestMessages {
-                messages: vec![ReceivedMessageContext {
-                    id: EmailId::from(111u32),
-                    sender: Account::from("alice@email.com"),
-                    body: hex::encode(signature.to_bytes()),
-                },]
-            })
-        ));
+        assert!(events.contains(&Event::Email(EmailEvent::RequestMessages {
+            messages: vec![ReceivedMessageContext {
+                id: EmailId::from(111u32),
+                sender: Account::from("alice@email.com"),
+                body: hex::encode(signature.to_bytes()),
+            },]
+        })));
 
-        assert!(events.contains(&
-            Event::Email(EmailEvent::SendMessage {
-                account: Account::from("alice@email.com"),
-                message: VerifierMessageBlank::ResponseInvalid,
-            })
-        ));
+        assert!(events.contains(&Event::Email(EmailEvent::SendMessage {
+            account: Account::from("alice@email.com"),
+            message: VerifierMessageBlank::ResponseInvalid,
+        })));
     });
 }
