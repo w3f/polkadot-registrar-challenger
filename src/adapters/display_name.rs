@@ -68,7 +68,9 @@ impl DisplayNameHandler {
         // treat it as any other "account".
         if violations.is_empty() {
             // Keep track of display names for future matching.
-            self.db.insert_display_name(Some(&net_account), &account).await?;
+            self.db
+                .insert_display_name(Some(&net_account), &account)
+                .await?;
 
             self.db
                 .set_account_status(

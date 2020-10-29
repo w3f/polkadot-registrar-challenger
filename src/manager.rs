@@ -319,6 +319,8 @@ impl IdentityManager {
         );
 
         if self.db2.is_fully_verified(&net_account).await? {
+            self.db2.persist_display_name(&net_account).await?;
+
             self.get_comms(&AccountType::ReservedConnector)
                 .map(|comms| {
                     info!(

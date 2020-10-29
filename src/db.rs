@@ -1039,7 +1039,11 @@ impl Database2 {
 
         Ok(untracked_email_ids)
     }
-    pub async fn insert_display_name(&self, net_account: Option<&NetAccount>, account: &Account) -> Result<()> {
+    pub async fn insert_display_name(
+        &self,
+        net_account: Option<&NetAccount>,
+        account: &Account,
+    ) -> Result<()> {
         let con = self.con.lock().await;
 
         con.execute_named(
@@ -1061,6 +1065,32 @@ impl Database2 {
         ",
             named_params! {
                 ":account": account,
+                ":net_account": net_account,
+            },
+        )?;
+
+        Ok(())
+    }
+    pub async fn persist_display_name(&self, net_account: &NetAccount) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            UPDATE
+                display_names
+            SET
+                net_account_id = NULL
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+        ",
+            named_params! {
                 ":net_account": net_account,
             },
         )?;
@@ -1938,23 +1968,36 @@ mod tests {
         rt.block_on(async {
             let db = Database2::new(&db_path()).unwrap();
 
+            // Prepare addresses.
             let alice_net = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let eve_net = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
 
             // Create and insert identity into storage.
             let ident = OnChainIdentity::new(alice_net.clone()).unwrap();
             db.insert_identity(&ident).await.unwrap();
 
+            let ident = OnChainIdentity::new(eve_net.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
             let alice = Account::from("alice");
             let bob = Account::from("bob");
+            let eve = Account::from("eve");
 
-            db.insert_display_name(Some(&alice_net), &alice).await.unwrap();
+            db.insert_display_name(Some(&alice_net), &alice)
+                .await
+                .unwrap();
             db.insert_display_name(None, &bob).await.unwrap();
+            db.insert_display_name(Some(&eve_net), &eve).await.unwrap();
+
+            db.persist_display_name(&eve_net).await.unwrap();
 
             db.remove_identity(&alice_net).await.unwrap();
+            db.remove_identity(&eve_net).await.unwrap();
 
             let res = db.select_display_names().await.unwrap();
-            assert_eq!(res.len(), 1);
+            assert_eq!(res.len(), 2);
             assert!(res.contains(&bob));
+            assert!(res.contains(&eve));
         });
     }
 
