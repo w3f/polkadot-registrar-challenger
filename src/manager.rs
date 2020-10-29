@@ -252,6 +252,11 @@ impl IdentityManager {
                 net_account.as_str()
             );
             connector_comms.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
+
+            // TODO: Should be done after Watcher confirmation.
+            self.db2.delete_identity(&net_account).await?;
+            self.get_comms(&AccountType::Matrix)?
+                .leave_matrix_room(net_account);
         }
 
         Ok(())
