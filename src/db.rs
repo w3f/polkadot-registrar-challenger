@@ -1930,6 +1930,22 @@ mod tests {
     }
 
     #[test]
+    fn select_insert_twitter_id_invalid() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            let alice = Account::from("Alice");
+            let alice_id = TwitterId::from(1000);
+
+            db.insert_twitter_id(&alice, &alice_id).await.unwrap();
+
+            let res = db.select_account_from_twitter_id(&alice_id).await.unwrap();
+            assert!(res.is_none());
+        });
+    }
+
+    #[test]
     fn email_id_tracking() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
