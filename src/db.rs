@@ -211,8 +211,13 @@ impl Database2 {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS display_names (
-                id    INTEGER PRIMARY KEY,
-                name  TEXT NOT NULL UNIQUE
+                id              INTEGER PRIMARY KEY,
+                name            TEXT NOT NULL UNIQUE,
+                net_account_id  INTEGER,
+
+                FOREIGN KEY (net_account_id)
+                    REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
             )
         ",
             params![],
@@ -710,24 +715,19 @@ impl Database2 {
 
         Ok(net_accounts)
     }
-    pub async fn cleanup_timed_out_identities(&self, timeout_limit: u64) -> Result<()> {
-        let net_accounts = self.select_timed_out_identities(timeout_limit).await?;
+    pub async fn delete_identity(&self, net_account: &NetAccount) -> Result<()> {
         let con = self.con.lock().await;
-
-        let mut stmt = con.prepare(
+        con.execute_named(
             "
             DELETE FROM
                 pending_judgments
             WHERE
                 net_account = :net_account
-        ",
+            ",
+            named_params! {
+                ":net_account": net_account
+            },
         )?;
-
-        for net_account in net_accounts {
-            stmt.execute_named(named_params! {
-                ":net_account": net_account,
-            })?;
-        }
 
         Ok(())
     }
@@ -1039,19 +1039,29 @@ impl Database2 {
 
         Ok(untracked_email_ids)
     }
-    pub async fn insert_display_name(&self, account: &Account) -> Result<()> {
+    pub async fn insert_display_name(&self, net_account: Option<&NetAccount>, account: &Account) -> Result<()> {
         let con = self.con.lock().await;
 
         con.execute_named(
             "
             INSERT OR IGNORE INTO display_names (
-                name
+                name,
+                net_account_id
             ) VALUES (
-                :account
+                :account,
+                (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
             )
         ",
             named_params! {
                 ":account": account,
+                ":net_account": net_account,
             },
         )?;
 
@@ -1389,7 +1399,7 @@ mod tests {
     }
 
     #[test]
-    fn select_cleanup_timed_out_identities() {
+    fn select_delete_timed_out_identities() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             let db = Database2::new(&db_path()).unwrap();
@@ -1441,11 +1451,12 @@ mod tests {
             assert!(accounts.contains(&&bob));
             assert!(accounts.contains(&&eve));
 
-            db.cleanup_timed_out_identities(3).await.unwrap();
+            db.delete_identity(&bob).await.unwrap();
 
             let res = db.select_identities().await.unwrap();
             let accounts: Vec<&NetAccount> = res.iter().map(|ident| ident.net_account()).collect();
-            assert_eq!(accounts.len(), 1);
+            assert_eq!(accounts.len(), 2);
+            assert!(accounts.contains(&&alice));
             assert!(accounts.contains(&&eve));
         });
     }
@@ -1907,17 +1918,43 @@ mod tests {
             let bob = Account::from("bob");
             let eve = Account::from("eve");
 
-            db.insert_display_name(&alice).await.unwrap();
-            db.insert_display_name(&bob).await.unwrap();
+            db.insert_display_name(None, &alice).await.unwrap();
+            db.insert_display_name(None, &bob).await.unwrap();
             // Multiple inserts of the same value.
-            db.insert_display_name(&eve).await.unwrap();
-            db.insert_display_name(&eve).await.unwrap();
+            db.insert_display_name(None, &eve).await.unwrap();
+            db.insert_display_name(None, &eve).await.unwrap();
 
             let res = db.select_display_names().await.unwrap();
             assert_eq!(res.len(), 3);
             assert!(res.contains(&alice));
             assert!(res.contains(&bob));
             assert!(res.contains(&eve));
+        });
+    }
+
+    #[test]
+    fn insert_select_display_names_with_net_account() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            let alice_net = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+
+            // Create and insert identity into storage.
+            let ident = OnChainIdentity::new(alice_net.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
+            let alice = Account::from("alice");
+            let bob = Account::from("bob");
+
+            db.insert_display_name(Some(&alice_net), &alice).await.unwrap();
+            db.insert_display_name(None, &bob).await.unwrap();
+
+            db.remove_identity(&alice_net).await.unwrap();
+
+            let res = db.select_display_names().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert!(res.contains(&bob));
         });
     }
 

@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2, VerifierMessage};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
@@ -142,7 +142,7 @@ impl SmtpImapClientBuilder {
 #[async_trait]
 pub trait EmailTransport: 'static + Send + Sync {
     async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>>;
-    async fn send_message(&self, account: &Account, msg: String) -> Result<()>;
+    async fn send_message(&self, account: &Account, msg: VerifierMessage) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -254,7 +254,7 @@ impl EmailTransport for SmtpImapClient {
 
         Ok(parsed_messages)
     }
-    async fn send_message(&self, account: &Account, msg: String) -> Result<()> {
+    async fn send_message(&self, account: &Account, message: VerifierMessage) -> Result<()> {
         // SMTP transport
         let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
             .credentials(Credentials::new(
@@ -268,7 +268,7 @@ impl EmailTransport for SmtpImapClient {
             .to(account.as_str())
             .from(self.user.as_str())
             .subject("W3F Registrar Verification Service")
-            .text(msg)
+            .text(message.as_str())
             .build()
             .unwrap();
 

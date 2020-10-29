@@ -64,8 +64,8 @@ impl Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AckResponse {
-    result: String,
+pub(crate) struct AckResponse {
+    pub result: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,9 +74,9 @@ struct ErrorResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct JudgementResponse {
-    address: NetAccount,
-    judgement: Judgement,
+pub(crate) struct JudgementResponse {
+    pub address: NetAccount,
+    pub judgement: Judgement,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +99,12 @@ impl TryFrom<JudgementRequest> for OnChainIdentity {
 
         Ok(ident)
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) struct JudgementGiven {
+    address: NetAccount,
+    result: String,
 }
 
 #[async_trait]
@@ -375,9 +381,22 @@ impl<
                             }
                         }
                         Ack => {
-                            if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data) {
+                            if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data.clone())
+                            {
                                 info!("Received acknowledgement: {}", msg.result);
                                 comms.notify_ack();
+                            } else if let Ok(msg) =
+                                serde_json::from_value::<JudgementGiven>(msg.data)
+                            {
+                                if msg.result.to_lowercase() == "judgement given" {
+                                    info!(
+                                        "Received judgement acknowledgement for address: {}",
+                                        msg.address.as_str()
+                                    );
+                                    comms.notify_judgement_given_ack(msg.address)
+                                } else {
+                                    error!("Invalid 'acknowledgement' message format");
+                                }
                             } else {
                                 error!("Invalid 'acknowledgement' message format");
                             }

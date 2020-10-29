@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::primitives::{unix_time, Account, AccountType, Challenge, NetAccount, Result};
-use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2, VerifierMessage};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
@@ -10,6 +10,11 @@ use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
+
+#[cfg(not(test))]
+const REQ_MESSAGE_TIMEOUT: u64 = 65;
+#[cfg(test)]
+const REQ_MESSAGE_TIMEOUT: u64 = 1;
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct TwitterId(u64);
@@ -190,7 +195,11 @@ pub trait TwitterTransport: 'static + Send + Sync {
         twitter_ids: Option<&[&TwitterId]>,
         accounts: Option<&[&Account]>,
     ) -> Result<Vec<(Account, TwitterId)>>;
-    async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError>;
+    async fn send_message(
+        &self,
+        id: &TwitterId,
+        message: VerifierMessage,
+    ) -> StdResult<(), TwitterError>;
     fn my_screen_name(&self) -> &Account;
 }
 
@@ -228,7 +237,7 @@ impl TwitterHandler {
                         error!("{}", err);
                     });
 
-                time::delay_for(Duration::from_secs(65)).await;
+                time::delay_for(Duration::from_secs(REQ_MESSAGE_TIMEOUT)).await;
             }
         });
 
@@ -651,10 +660,14 @@ impl TwitterTransport for Twitter {
             .map(|obj| (Account::from(format!("@{}", obj.screen_name)), obj.id))
             .collect())
     }
-    async fn send_message(&self, id: &TwitterId, message: String) -> StdResult<(), TwitterError> {
+    async fn send_message(
+        &self,
+        id: &TwitterId,
+        message: VerifierMessage,
+    ) -> StdResult<(), TwitterError> {
         self.post_request::<ApiMessageSend, _>(
             "https://api.twitter.com/1.1/direct_messages/events/new.json",
-            ApiMessageSend::new(id, message),
+            ApiMessageSend::new(id, message.to_string()),
         )
         .await
         .map(|_| ())

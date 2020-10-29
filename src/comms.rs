@@ -47,6 +47,9 @@ pub enum CommsMessage {
     ExistingDisplayNames {
         accounts: Vec<Account>,
     },
+    JudgementGivenAck {
+        net_account: NetAccount,
+    },
     // Only used to manually trigger the event handler in tests, since the
     // matrix sdk runs the EventEmitter in the background.
     #[cfg(test)]
@@ -99,12 +102,17 @@ impl CommsMain {
             .fatal()
     }
     #[cfg(test)]
-    pub fn trigger_matrix_emitter(&self, room_id: RoomId, my_user_id: UserId, event: MatrixEventMock) {
+    pub fn trigger_matrix_emitter(
+        &self,
+        room_id: RoomId,
+        my_user_id: UserId,
+        event: MatrixEventMock,
+    ) {
         self.sender
             .send(CommsMessage::TriggerMatrixEmitter {
                 room_id: room_id,
                 my_user_id: my_user_id,
-                event: event
+                event: event,
             })
             .fatal()
     }
@@ -159,6 +167,13 @@ impl CommsVerifier {
     }
     pub fn notify_ack(&self) {
         self.sender.send(CommsMessage::MessageAcknowledged).fatal();
+    }
+    pub fn notify_judgement_given_ack(&self, net_account: NetAccount) {
+        self.sender
+            .send(CommsMessage::JudgementGivenAck {
+                net_account: net_account,
+            })
+            .fatal()
     }
     pub fn notify_existing_display_names(&self, accounts: Vec<Account>) {
         self.sender

@@ -1,8 +1,11 @@
 use crate::primitives::Challenge;
 use tokio::time::{self, Duration};
 
+mod connector_transport;
+mod email_adapter;
+mod matrix_adapter;
 pub mod mocks;
-mod verify_matrix;
+mod twitter_adapter;
 
 // Generate a random db path
 fn db_path() -> String {
@@ -10,5 +13,5 @@ fn db_path() -> String {
 }
 
 async fn pause() {
-    time::delay_for(Duration::from_millis(50));
+    time::delay_for(Duration::from_secs(5)).await;
 }
