@@ -793,6 +793,17 @@ impl Database2 {
     }
     pub async fn insert_twitter_ids(&self, pair: &[(&Account, &TwitterId)]) -> Result<()> {
         let con = self.con.lock().await;
+
+        let mut lookup_stmt = con.prepare(
+            "SELECT
+                    id
+                FROM
+                    account_states
+                WHERE
+                    account = :account
+                ",
+        )?;
+
         let mut stmt = con.prepare(
             "
             INSERT OR REPLACE INTO
@@ -803,14 +814,7 @@ impl Database2 {
                     timestamp
                 )
             VALUES (
-                (
-                    SELECT
-                        id
-                    FROM
-                        account_states
-                    WHERE
-                        account = :account
-                ),
+                :account_id,
                 :twitter_id,
                 '0',
                 :timestamp
@@ -819,11 +823,25 @@ impl Database2 {
         )?;
 
         for (account, twitter_id) in pair {
-            stmt.execute_named(named_params! {
-                    ":account": account,
-                    ":twitter_id": twitter_id,
-                    ":timestamp": unix_time() as i64,
-            })?;
+            let account_id = lookup_stmt
+                .query_row_named(
+                    named_params! {
+                        ":account": account
+                    },
+                    |row| row.get::<_, i32>(0),
+                )
+                .optional()
+                .map_err(|err| failure::Error::from(err))?;
+
+            if let Some(account_id) = account_id {
+                stmt.execute_named(named_params! {
+                        ":account_id": account_id,
+                        ":twitter_id": twitter_id,
+                        ":timestamp": unix_time() as i64,
+                })?;
+            } else {
+                debug!("No match found for account: {}", account.as_str());
+            }
         }
 
         Ok(())
