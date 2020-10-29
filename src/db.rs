@@ -211,8 +211,13 @@ impl Database2 {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS display_names (
-                id    INTEGER PRIMARY KEY,
-                name  TEXT NOT NULL UNIQUE
+                id              INTEGER PRIMARY KEY,
+                name            TEXT NOT NULL UNIQUE,
+                net_account_id  INTEGER,
+
+                FOREIGN KEY (net_account_id)
+                    REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
             )
         ",
             params![],
@@ -1034,19 +1039,29 @@ impl Database2 {
 
         Ok(untracked_email_ids)
     }
-    pub async fn insert_display_name(&self, account: &Account) -> Result<()> {
+    pub async fn insert_display_name(&self, net_account: Option<&NetAccount>, account: &Account) -> Result<()> {
         let con = self.con.lock().await;
 
         con.execute_named(
             "
             INSERT OR IGNORE INTO display_names (
-                name
+                name,
+                net_account_id
             ) VALUES (
-                :account
+                :account,
+                (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
             )
         ",
             named_params! {
                 ":account": account,
+                ":net_account": net_account,
             },
         )?;
 
@@ -1903,17 +1918,43 @@ mod tests {
             let bob = Account::from("bob");
             let eve = Account::from("eve");
 
-            db.insert_display_name(&alice).await.unwrap();
-            db.insert_display_name(&bob).await.unwrap();
+            db.insert_display_name(None, &alice).await.unwrap();
+            db.insert_display_name(None, &bob).await.unwrap();
             // Multiple inserts of the same value.
-            db.insert_display_name(&eve).await.unwrap();
-            db.insert_display_name(&eve).await.unwrap();
+            db.insert_display_name(None, &eve).await.unwrap();
+            db.insert_display_name(None, &eve).await.unwrap();
 
             let res = db.select_display_names().await.unwrap();
             assert_eq!(res.len(), 3);
             assert!(res.contains(&alice));
             assert!(res.contains(&bob));
             assert!(res.contains(&eve));
+        });
+    }
+
+    #[test]
+    fn insert_select_display_names_with_net_account() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database2::new(&db_path()).unwrap();
+
+            let alice_net = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+
+            // Create and insert identity into storage.
+            let ident = OnChainIdentity::new(alice_net.clone()).unwrap();
+            db.insert_identity(&ident).await.unwrap();
+
+            let alice = Account::from("alice");
+            let bob = Account::from("bob");
+
+            db.insert_display_name(Some(&alice_net), &alice).await.unwrap();
+            db.insert_display_name(None, &bob).await.unwrap();
+
+            db.remove_identity(&alice_net).await.unwrap();
+
+            let res = db.select_display_names().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert!(res.contains(&bob));
         });
     }
 

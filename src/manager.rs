@@ -223,7 +223,7 @@ impl IdentityManager {
                 ExistingDisplayNames { accounts } => {
                     for account in &accounts {
                         // TODO: Create a function for batch insert
-                        self.db2.insert_display_name(account).await?;
+                        self.db2.insert_display_name(None, account).await?;
                     }
                 }
                 JudgementGivenAck { net_account } => {
@@ -239,7 +239,6 @@ impl IdentityManager {
 
         Ok(())
     }
-    // TODO: Remove display_name
     async fn handle_verification_timeouts(&self) -> Result<()> {
         let net_accounts = self
             .db2
