@@ -24,12 +24,12 @@ releases:
 {{- end }}
 
 {{- if eq .Environment.Name "production" }}  
-- name: test-registrar-challenger
-  namespace: registrar-test 
-  chart: w3f/polkadot-registrar-challenger
-  values:
-  - ./config/registrar-challenger-values.yaml.gotmpl
-  - ./config/registrar-test/registrar-challenger-values.yaml.gotmpl  
+# - name: test-registrar-challenger
+#   namespace: registrar-test 
+#   chart: w3f/polkadot-registrar-challenger
+#   values:
+#   - ./config/registrar-challenger-values.yaml.gotmpl
+#   - ./config/registrar-test/registrar-challenger-values.yaml.gotmpl  
 
 - name: kusama-registrar-challenger
   namespace: kusama 
@@ -38,10 +38,10 @@ releases:
   - ./config/registrar-challenger-values.yaml.gotmpl
   - ./config/kusama/registrar-challenger-values.yaml.gotmpl  
 
-- name: polkadot-registrar-challenger
-  namespace: polkadot 
-  chart: w3f/polkadot-registrar-challenger
-  values:
-  - ./config/registrar-challenger-values.yaml.gotmpl
-  - ./config/polkadot/registrar-challenger-values.yaml.gotmpl  
+# - name: polkadot-registrar-challenger
+#   namespace: polkadot 
+#   chart: w3f/polkadot-registrar-challenger
+#   values:
+#   - ./config/registrar-challenger-values.yaml.gotmpl
+#   - ./config/polkadot/registrar-challenger-values.yaml.gotmpl  
 {{- end }}
