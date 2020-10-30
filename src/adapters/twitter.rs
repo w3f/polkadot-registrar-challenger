@@ -12,7 +12,7 @@ use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
 #[cfg(not(test))]
-const REQ_MESSAGE_TIMEOUT: u64 = 65;
+const REQ_MESSAGE_TIMEOUT: u64 = 120;
 #[cfg(test)]
 const REQ_MESSAGE_TIMEOUT: u64 = 1;
 
