@@ -63,6 +63,8 @@ impl DisplayNameHandler {
             }
         }
 
+        self.db.delete_display_name_violations(&net_account).await?;
+
         // The display name does obviously not need to be verified by
         // signing a challenge or having to contact an address. But we just
         // treat it as any other "account".
@@ -116,6 +118,16 @@ impl DisplayNameHandler {
     fn is_too_similar(display_name: &Account, account: &Account, limit: f64) -> bool {
         let name_str = display_name.as_str().to_lowercase();
         let account_str = account.as_str().to_lowercase();
+
+        #[cfg(test)]
+        {
+            let jwinkler = jaro_winkler(&name_str, &account_str);
+            let jwords = jaro_words(&name_str, &account_str, &[" ", "-", "_"]);
+
+            println!("{} == {} (?)", account, display_name);
+            println!("  - jaro_winkler: {}", jwinkler);
+            println!("  - jaro_words: {}", jwords);
+        }
 
         let similarities = [
             jaro_winkler(&name_str, &account_str),

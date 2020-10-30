@@ -231,7 +231,7 @@ impl Database2 {
                 name            TEXT NOT NULL,
                 net_account_id  INTEGER NOT NULL,
 
-                UNIQUE (name, net_account_id)
+                UNIQUE (net_account_id, name)
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
@@ -1210,6 +1210,30 @@ impl Database2 {
             Ok(Some(violations))
         }
     }
+    pub async fn delete_display_name_violations(&self, net_account: &NetAccount) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            DELETE FROM
+                display_name_violations
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+        ",
+            named_params! {
+                ":net_account": net_account,
+            },
+        )
+        .map_err(|err| err.into())
+        .map(|_| ())
+    }
 }
 
 #[cfg(test)]
@@ -2098,6 +2122,11 @@ mod tests {
             assert!(res.contains(&Account::from("bobby")));
 
             let res = db.select_display_name_violations(&eve).await.unwrap();
+            assert!(res.is_none());
+
+            db.delete_display_name_violations(&alice).await.unwrap();
+
+            let res = db.select_display_name_violations(&alice).await.unwrap();
             assert!(res.is_none());
         });
     }
