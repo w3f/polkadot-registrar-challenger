@@ -1,6 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::manager::OnChainIdentity;
-use crate::primitives::{Account, AccountType, Judgement, NetAccount, Result};
+use crate::primitives::{unix_time, Account, AccountType, Judgement, NetAccount, Result};
 use futures::sink::SinkExt;
 use futures::stream::{SplitSink, SplitStream};
 use futures::{StreamExt, TryStreamExt};
@@ -324,6 +324,8 @@ impl<
         mut receiver: UnboundedReceiver<Message>,
         exit_token: Arc<RwLock<bool>>,
     ) {
+        let mut last_check = unix_time();
+
         loop {
             if let Ok(msg) = time::timeout(Duration::from_millis(10), receiver.next()).await {
                 if let Some(msg) = msg {
@@ -331,6 +333,22 @@ impl<
                         error!("{}", err);
                     });
                 }
+            }
+
+            // Ping the Watcher every minute. Serves as a keep-alive mechanism.
+            let now = unix_time();
+            if now >= last_check + 60 {
+                let _ = transport
+                    .write(&Message {
+                        event: EventType::DisplayNamesRequest,
+                        data: serde_json::to_value(Option::<()>::None).unwrap(),
+                    })
+                    .await
+                    .map_err(|err| {
+                        error!("{}", err);
+                    });
+
+                last_check = now;
             }
 
             let t = exit_token.read().await;
@@ -414,7 +432,7 @@ impl<
                                 serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
                             {
                                 if requests.is_empty() {
-                                    info!("The pending judgement list is empty");
+                                    info!("The pending judgement list is empty. Waiting...");
                                 }
 
                                 for request in requests {
