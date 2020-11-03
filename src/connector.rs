@@ -340,7 +340,7 @@ impl<
             if now >= last_check + 60 {
                 let _ = transport
                     .write(&Message {
-                        event: EventType::DisplayNamesRequest,
+                        event: EventType::PendingJudgementsRequests,
                         data: serde_json::to_value(Option::<()>::None).unwrap(),
                     })
                     .await
@@ -427,12 +427,12 @@ impl<
                             }
                         }
                         PendingJudgementsResponse => {
-                            info!("Received pending challenges");
+                            debug!("Received pending challenges");
                             if let Ok(requests) =
                                 serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
                             {
                                 if requests.is_empty() {
-                                    info!("The pending judgement list is empty. Waiting...");
+                                    debug!("The pending judgement list is empty. Waiting...");
                                 }
 
                                 for request in requests {
