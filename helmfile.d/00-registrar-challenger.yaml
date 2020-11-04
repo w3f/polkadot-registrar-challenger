@@ -32,14 +32,14 @@ releases:
 #   - ./config/registrar-test/registrar-challenger-values.yaml.gotmpl  
 
 - name: kusama-registrar-challenger
-  namespace: kusama 
+  namespace: registrar-kusama 
   chart: w3f/polkadot-registrar-challenger
   values:
   - ./config/registrar-challenger-values.yaml.gotmpl
   - ./config/kusama/registrar-challenger-values.yaml.gotmpl  
 
 # - name: polkadot-registrar-challenger
-#   namespace: polkadot 
+#   namespace: registrar-polkadot 
 #   chart: w3f/polkadot-registrar-challenger
 #   values:
 #   - ./config/registrar-challenger-values.yaml.gotmpl
