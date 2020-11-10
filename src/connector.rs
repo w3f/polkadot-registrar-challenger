@@ -401,7 +401,7 @@ impl<
                         Ack => {
                             if let Ok(msg) = serde_json::from_value::<AckResponse>(msg.data.clone())
                             {
-                                info!("Received acknowledgement: {}", msg.result);
+                                trace!("Received acknowledgement: {}", msg.result);
                                 comms.notify_ack();
                             } else if let Ok(msg) =
                                 serde_json::from_value::<JudgementGiven>(msg.data)
@@ -427,12 +427,14 @@ impl<
                             }
                         }
                         PendingJudgementsResponse => {
-                            debug!("Received pending challenges");
+                            trace!("Received pending challenges");
                             if let Ok(requests) =
                                 serde_json::from_value::<Vec<JudgementRequest>>(msg.data)
                             {
                                 if requests.is_empty() {
-                                    debug!("The pending judgement list is empty. Waiting...");
+                                    trace!("The pending judgement list is empty. Waiting...");
+                                } else {
+                                    info!("Pending judgement requests: {:?}", requests);
                                 }
 
                                 for request in requests {
