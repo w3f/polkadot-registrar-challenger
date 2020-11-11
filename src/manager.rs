@@ -163,7 +163,7 @@ pub struct IdentityManagerConfig {
 impl Default for IdentityManagerConfig {
     fn default() -> Self {
         IdentityManagerConfig {
-            judgement_timeout_limit: 3600,
+            judgement_timeout_limit: 28800, // 8h
         }
     }
 }
