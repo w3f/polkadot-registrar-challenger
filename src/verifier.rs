@@ -116,7 +116,7 @@ impl<'a> Verifier2<'a> {
                 "\
                 [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
                 This contact address was discovered in the Polkadot on-chain naming system and \
-                the issuer has requested the Web3 Registrar service to judge this account.\
+                the issuer has requested the Web3 Registrar service to judge this account. \
                 If you did not issue this request then just ignore this message.\n\n\
             ",
             );

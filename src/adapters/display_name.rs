@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
 use crate::Database2;
-use strsim::jaro_winkler;
+use strsim::jaro;
 
 pub const VIOLATIONS_CAP: usize = 5;
 
@@ -121,16 +121,16 @@ impl DisplayNameHandler {
 
         #[cfg(test)]
         {
-            let jwinkler = jaro_winkler(&name_str, &account_str);
+            let jwinkler = jaro(&name_str, &account_str);
             let jwords = jaro_words(&name_str, &account_str, &[" ", "-", "_"]);
 
             println!("{} == {} (?)", account, display_name);
-            println!("  - jaro_winkler: {}", jwinkler);
+            println!("  - jaro: {}", jwinkler);
             println!("  - jaro_words: {}", jwords);
         }
 
         let similarities = [
-            jaro_winkler(&name_str, &account_str),
+            jaro(&name_str, &account_str),
             jaro_words(&name_str, &account_str, &[" ", "-", "_"]),
         ];
 
@@ -164,7 +164,7 @@ fn jaro_words(left: &str, right: &str, delimiter: &[&str]) -> f64 {
         let mut temp = 0.0;
 
         for right_word in &right_words {
-            let sim = jaro_winkler(left_word, right_word);
+            let sim = jaro(left_word, right_word);
 
             if sim > temp {
                 temp = sim;
