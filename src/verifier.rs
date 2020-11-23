@@ -136,7 +136,7 @@ impl<'a> Verifier<'a> {
             message.push_str(challenge.as_str());
         }
 
-        message.push_str("\n\nRefer to the Polkadot Wiki guide https://wiki.polkadot.network/");
+        message.push_str("\n\nRefer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar");
 
         if send_context {
             VerifierMessage::InitMessageWithContext(message)
@@ -261,12 +261,13 @@ pub fn invalid_accounts_message(
             }
         } else if status == &AccountStatus::Unsupported {
             message.push_str(&format!(
-                "* {} judgement is not supported by the registrar.",
-                account_ty.to_string()
+                "* {} judgement (\"{}\") is not supported by the registrar.\n",
+                account_ty.to_string(),
+                account.as_str(),
             ));
         } else {
             message.push_str(&format!(
-                "* \"{}\" ({}), could not be reached.\n",
+                "* \"{}\" ({}) could not be reached.\n",
                 account.as_str(),
                 account_ty.to_string()
             ));
@@ -275,7 +276,8 @@ pub fn invalid_accounts_message(
 
     message.push_str(
         "\nPlease update the on-chain identity data. Note that you DO NOT \
-        have to issue a new `requestJudgement` extrinsic after the update.",
+        have to issue a new `requestJudgement` extrinsic after the update.\n\n\
+        Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar",
     );
 
     VerifierMessage::NotifyViolation(message)
@@ -306,14 +308,49 @@ mod tests {
             _ => panic!(),
         };
 
+        assert_eq!(txt, "\
+            Please note that the following information is invalid:\n\
+            \n\
+            * \"@alice:matrix.org\" (Matrix) could not be reached.\n\
+            * \"alice@example.com\" (Email) could not be reached.\n\
+            \n\
+            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
+            \n\
+            Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
+        ");
+    }
+
+    #[test]
+    fn invalid_accounts_message_status_unsupported() {
+        let accounts = [
+            (
+                AccountType::LegalName,
+                Account::from("Alice Doe"),
+                AccountStatus::Unsupported,
+            ),
+            (
+                AccountType::Web,
+                Account::from("alice.com"),
+                AccountStatus::Unsupported,
+            ),
+        ];
+
+        let res = invalid_accounts_message(&accounts, None);
+        let txt = match res {
+            VerifierMessage::NotifyViolation(txt) => txt,
+            _ => panic!(),
+        };
+
         println!("{}", txt);
         assert_eq!(txt, "\
             Please note that the following information is invalid:\n\
             \n\
-            * \"@alice:matrix.org\" (Matrix), could not be reached.\n\
-            * \"alice@example.com\" (Email), could not be reached.\n\
+            * Legal Name judgement (\"Alice Doe\") is not supported by the registrar.\n\
+            * Web judgement (\"alice.com\") is not supported by the registrar.\n\
             \n\
-            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\
+            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
+            \n\
+            Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
         ");
     }
 }
