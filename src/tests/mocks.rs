@@ -125,7 +125,7 @@ impl EventManager {
     }
 }
 
-/// Used to mock user input (messages sent to registrar).
+/// Used to mock user input (messages sent to registrar service).
 #[derive(Clone)]
 pub struct EventChildSender<T> {
     messages: Arc<RwLock<Vec<T>>>,
@@ -137,7 +137,7 @@ impl<T> EventChildSender<T> {
     }
 }
 
-// Tracks the events/messages created/received by the account type tasks.
+// Tracks the events/messages created/received by the account type task.
 #[derive(Clone)]
 pub struct EventChild<T> {
     events: Arc<RwLock<Vec<Event>>>,
@@ -161,7 +161,7 @@ impl<T: Clone> EventChild<T> {
     }
 }
 
-pub struct ConnectorMocker {}
+pub struct ConnectorMocker;
 
 #[async_trait]
 impl ConnectorInitTransports<ConnectorWriterMocker, ConnectorReaderMocker> for ConnectorMocker {
@@ -208,6 +208,9 @@ pub struct ConnectorReaderMocker {
 }
 
 impl ConnectorReaderMocker {
+    /// A special method to acquire an `EventChildSender` from the connector,
+    /// since it cannot be easily created with `EventManager::child()` and
+    /// passed on to it.
     pub fn injector(&self) -> EventChildSender<String> {
         self.sender.clone()
     }
