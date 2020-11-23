@@ -317,9 +317,7 @@ mod tests {
 
     #[test]
     fn is_too_similar_unicode() {
-        let current = [
-            Account::from("👻🥺👌 Alice"),
-        ];
+        let current = [Account::from("👻🥺👌 Alice")];
 
         let new = Account::from("👻🥺👌 Alice");
 

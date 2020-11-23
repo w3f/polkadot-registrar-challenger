@@ -2036,7 +2036,9 @@ mod tests {
             db.insert_identity(&ident).await.unwrap();
 
             // Insert display names.
-            db.insert_display_name(Some(&alice_net), &alice).await.unwrap();
+            db.insert_display_name(Some(&alice_net), &alice)
+                .await
+                .unwrap();
             db.insert_display_name(Some(&bob_net), &bob).await.unwrap();
             // Multiple inserts of the same value.
             db.insert_display_name(None, &eve).await.unwrap();
