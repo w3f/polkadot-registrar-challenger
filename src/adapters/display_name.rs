@@ -49,7 +49,7 @@ impl DisplayNameHandler {
         net_account: NetAccount,
         account: Account,
     ) -> Result<()> {
-        let display_names = self.db.select_display_names().await?;
+        let display_names = self.db.select_display_names(&net_account).await?;
         let mut violations = vec![];
 
         for display_name in &display_names {
@@ -201,6 +201,7 @@ mod tests {
         }
 
         let current = [
+            Account::from("David"),
             Account::from("alice"),
             Account::from("Alice"),
             Account::from("bob"),
