@@ -193,21 +193,11 @@ impl fmt::Display for Account {
     }
 }
 
+/// The Polkadot/Kusama address including the extracted public key.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NetworkAddress {
     address: NetAccount,
-    algo: Algorithm,
     pub_key: PubKey,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Algorithm {
-    #[serde(rename = "schnorr")]
-    Schnorr,
-    #[serde(rename = "edwards")]
-    Edwards,
-    #[serde(rename = "ecdsa")]
-    ECDSA,
 }
 
 impl NetworkAddress {
@@ -234,7 +224,6 @@ impl TryFrom<NetAccount> for NetworkAddress {
 
         Ok(NetworkAddress {
             address: value,
-            algo: Algorithm::Schnorr,
             pub_key: PubKey::try_from(bytes[1..33].to_vec())?,
         })
     }

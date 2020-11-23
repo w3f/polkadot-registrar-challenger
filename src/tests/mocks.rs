@@ -7,7 +7,7 @@ use crate::connector::{
 };
 use crate::primitives::Result;
 use crate::verifier::VerifierMessage;
-use crate::{Account, Database2};
+use crate::{Account, Database};
 use matrix_sdk::api::r0::room::create_room::{Request, Response};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use std::convert::TryFrom;
@@ -269,7 +269,7 @@ impl MatrixTransport for DummyTransport {
     async fn user_id(&self) -> Result<UserId> {
         unimplemented!()
     }
-    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {}
+    async fn run_emitter(&mut self, _db: Database, _comms: CommsVerifier) {}
 }
 
 #[async_trait]
@@ -346,7 +346,7 @@ impl MatrixTransport for MatrixMocker {
     async fn user_id(&self) -> Result<UserId> {
         Ok(self.user_id.clone())
     }
-    async fn run_emitter(&mut self, _db: Database2, _comms: CommsVerifier) {}
+    async fn run_emitter(&mut self, _db: Database, _comms: CommsVerifier) {}
 }
 
 pub struct MatrixEventMock {

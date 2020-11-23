@@ -1,8 +1,8 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::db::Database2;
+use crate::db::Database;
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2, VerifierMessage};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::{Request, Response},
@@ -58,7 +58,7 @@ pub trait MatrixTransport: 'static + Send + Sync {
     async fn create_room<'a>(&'a self, request: Request<'a>) -> Result<Response>;
     async fn leave_room(&self, room_id: &RoomId) -> Result<()>;
     async fn user_id(&self) -> Result<UserId>;
-    async fn run_emitter(&mut self, db: Database2, comms: CommsVerifier);
+    async fn run_emitter(&mut self, db: Database, comms: CommsVerifier);
 }
 
 #[derive(Clone)]
@@ -72,7 +72,7 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
-        db: Database2,
+        db: Database,
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
@@ -157,7 +157,7 @@ impl MatrixTransport for MatrixClient {
         // TODO
         Ok(self.client.user_id().await.unwrap())
     }
-    async fn run_emitter(&mut self, db: Database2, comms: CommsVerifier) {
+    async fn run_emitter(&mut self, db: Database, comms: CommsVerifier) {
         // Add event emitter
         self.client
             .add_event_emitter(Box::new(MatrixHandler::new(db, comms, self.clone())))
@@ -186,14 +186,14 @@ impl EventExtract for SyncMessageEvent<MessageEventContent> {
 }
 
 pub struct MatrixHandler {
-    db: Database2,
+    db: Database,
     comms: CommsVerifier,
     transport: Box<dyn MatrixTransport>,
 }
 
 impl MatrixHandler {
     pub fn new<T: 'static + MatrixTransport>(
-        db: Database2,
+        db: Database,
         comms: CommsVerifier,
         transport: T,
     ) -> Self {
@@ -334,7 +334,7 @@ impl MatrixHandler {
             .await?;
 
         debug!("Sending instructions to user");
-        let verifier = Verifier2::new(&challenge_data);
+        let verifier = Verifier::new(&challenge_data);
         self.transport
             .send_message(&room_id, verifier.init_message_builder(true))
             .await
@@ -376,7 +376,7 @@ impl MatrixHandler {
                 return Err(MatrixError::ChallengeDataNotFound(account.clone()).into());
             }
 
-            let mut verifier = Verifier2::new(&challenge_data);
+            let mut verifier = Verifier::new(&challenge_data);
 
             // Fetch the text message from the event.
             let msg_body = if let Ok(msg_body) = event.message() {

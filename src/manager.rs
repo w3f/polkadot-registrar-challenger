@@ -1,5 +1,5 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
-use crate::db::Database2;
+use crate::db::Database;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress, Result,
 };
@@ -10,6 +10,8 @@ use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
+/// Identity info fields which are currently allowed to be judged. If there is
+/// any other field present, the identity is immediately rejected.
 static WHITELIST: [AccountType; 4] = [
     AccountType::DisplayName,
     AccountType::Matrix,
@@ -17,12 +19,15 @@ static WHITELIST: [AccountType; 4] = [
     AccountType::Twitter,
 ];
 
+/// The ordering of account types in which the user is informed about invalid
+/// display names: first, try Matrix, then Email, etc.
 static NOTIFY_QUEUE: [AccountType; 3] = [
     AccountType::Matrix,
     AccountType::Email,
     AccountType::Twitter,
 ];
 
+/// The on-chain identity itself.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OnChainIdentity {
     network_address: NetworkAddress,
@@ -151,7 +156,7 @@ impl FromSql for AccountStatus {
 }
 
 pub struct IdentityManager {
-    db2: Database2,
+    db: Database,
     comms: CommsTable,
     config: IdentityManagerConfig,
 }
@@ -169,17 +174,21 @@ impl Default for IdentityManagerConfig {
 }
 
 struct CommsTable {
+    // A Sender to the Manager. Cloned when registering new communication
+    // channels (see `IdentityManager::register_comms()`).
     to_main: Sender<CommsMessage>,
+    // Listener for incoming messages from tasks.
     listener: Receiver<CommsMessage>,
+    // Lookup table for channels to the requested tasks.
     pairs: HashMap<AccountType, CommsMain>,
 }
 
 impl IdentityManager {
-    pub fn new(db2: Database2, config: IdentityManagerConfig) -> Result<Self> {
+    pub fn new(db: Database, config: IdentityManagerConfig) -> Result<Self> {
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {
-            db2: db2,
+            db: db,
             comms: CommsTable {
                 to_main: tx1.clone(),
                 listener: recv1,
@@ -223,11 +232,11 @@ impl IdentityManager {
                 ExistingDisplayNames { accounts } => {
                     for account in &accounts {
                         // TODO: Create a function for batch insert
-                        self.db2.insert_display_name(None, account).await?;
+                        self.db.insert_display_name(None, account).await?;
                     }
                 }
                 JudgementGivenAck { net_account } => {
-                    self.db2.delete_identity(&net_account).await?;
+                    self.db.delete_identity(&net_account).await?;
                     self.get_comms(&AccountType::Matrix)?
                         .leave_matrix_room(net_account);
                 }
@@ -241,7 +250,7 @@ impl IdentityManager {
     }
     async fn handle_verification_timeouts(&self) -> Result<()> {
         let net_accounts = self
-            .db2
+            .db
             .select_timed_out_identities(self.config.judgement_timeout_limit)
             .await?;
         let connector_comms = self.get_comms(&AccountType::ReservedConnector)?;
@@ -254,7 +263,7 @@ impl IdentityManager {
             connector_comms.notify_identity_judgment(net_account.clone(), Judgement::Erroneous);
 
             // TODO: Should be done after Watcher confirmation.
-            self.db2.delete_identity(&net_account).await?;
+            self.db.delete_identity(&net_account).await?;
             self.get_comms(&AccountType::Matrix)?
                 .leave_matrix_room(net_account);
         }
@@ -268,7 +277,7 @@ impl IdentityManager {
         );
 
         // Check the current, associated addresses of the identity, if any.
-        let accounts = self.db2.select_addresses(&ident.net_account()).await?;
+        let accounts = self.db.select_addresses(&ident.net_account()).await?;
         let mut to_delete = vec![];
 
         // Find duplicates.
@@ -302,11 +311,11 @@ impl IdentityManager {
         }
 
         // Insert identity into storage, notify tasks for verification.
-        self.db2.insert_identity(&ident).await?;
+        self.db.insert_identity(&ident).await?;
 
         for state in ident.account_states() {
             if state.account_ty == AccountType::Twitter {
-                self.db2.reset_init_message(&state.account).await?;
+                self.db.reset_init_message(&state.account).await?;
             }
 
             self.get_comms(&state.account_ty).map(|comms| {
@@ -323,8 +332,8 @@ impl IdentityManager {
             net_account.as_str()
         );
 
-        if self.db2.is_fully_verified(&net_account).await? {
-            self.db2.persist_display_name(&net_account).await?;
+        if self.db.is_fully_verified(&net_account).await? {
+            self.db.persist_display_name(&net_account).await?;
 
             self.get_comms(&AccountType::ReservedConnector)
                 .map(|comms| {
@@ -345,7 +354,7 @@ impl IdentityManager {
             // Not really a problem if that does not happen.
             time::delay_for(Duration::from_secs(3)).await;
 
-            self.db2.remove_identity(&net_account).await?;
+            self.db.remove_identity(&net_account).await?;
 
             return Ok(());
         }
@@ -390,7 +399,7 @@ impl IdentityManager {
                 .collect::<Vec<(AccountType, Account)>>()
         }
 
-        let account_statuses = self.db2.select_account_statuses(&net_account).await?;
+        let account_statuses = self.db.select_account_statuses(&net_account).await?;
 
         // If invalid accounts were found, attempt to contact the user in order
         // to inform that person about the current state of invalid accounts.

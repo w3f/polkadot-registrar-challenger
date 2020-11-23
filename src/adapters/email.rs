@@ -1,7 +1,7 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::db::Database2;
+use crate::db::Database;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2, VerifierMessage};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
@@ -280,12 +280,12 @@ impl EmailTransport for SmtpImapClient {
 
 #[derive(Clone)]
 pub struct EmailHandler {
-    db: Database2,
+    db: Database,
     comms: CommsVerifier,
 }
 
 impl EmailHandler {
-    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+    pub fn new(db: Database, comms: CommsVerifier) -> Self {
         EmailHandler {
             db: db,
             comms: comms,
@@ -354,7 +354,7 @@ impl EmailHandler {
         debug!("Sending initial message to {}", account.as_str());
 
         // Only require the verifier to send the initial message
-        let verifier = Verifier2::new(&challenge_data);
+        let verifier = Verifier::new(&challenge_data);
         transport
             .send_message(&account, verifier.init_message_builder(true))
             .await?;
@@ -399,7 +399,7 @@ impl EmailHandler {
                 continue;
             }
 
-            let mut verifier = Verifier2::new(&challenge_data);
+            let mut verifier = Verifier::new(&challenge_data);
 
             for message in &user_messages {
                 debug!("Verifying message: {}", message.body);

@@ -18,7 +18,7 @@ pub use connector::{
     ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
     WebSockets,
 };
-pub use db::Database2;
+pub use db::Database;
 pub use health_check::HealthCheck;
 use manager::{IdentityManager, IdentityManagerConfig};
 pub use primitives::Account;
@@ -131,7 +131,7 @@ pub async fn run<
 >(
     enable_watcher: bool,
     watcher_url: P,
-    db2: Database2,
+    db2: Database,
     matrix_transport: M,
     twitter_transport: T,
     email_transport: E,
@@ -188,7 +188,7 @@ pub async fn test_run<
     E: Clone + EmailTransport,
 >(
     event_manager: Arc<EventManager2>,
-    db2: Database2,
+    db2: Database,
     identity_manager_config: IdentityManagerConfig,
     matrix_transport: M,
     twitter_transport: T,
@@ -233,7 +233,7 @@ async fn run_adapters<
     T: Clone + TwitterTransport,
     E: Clone + EmailTransport,
 >(
-    db2: Database2,
+    db2: Database,
     identity_manager_config: IdentityManagerConfig,
     mut matrix_transport: M,
     twitter_transport: T,

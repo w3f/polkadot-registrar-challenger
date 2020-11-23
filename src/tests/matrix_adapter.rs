@@ -2,7 +2,7 @@ use super::mocks::*;
 use super::{db_path, pause};
 use crate::connector::{AckResponse, EventType, JudgementRequest, JudgementResponse, Message};
 use crate::primitives::{Account, AccountType, Challenge, Judgement, NetAccount};
-use crate::{test_run, Database2};
+use crate::{test_run, Database};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use schnorrkel::Keypair;
 use std::convert::TryFrom;
@@ -14,7 +14,7 @@ fn matrix_init_message() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         // Setup database and manager.
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (_, matrix_child) = manager.child();
 
@@ -101,7 +101,7 @@ fn matrix_valid_signature_response() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         // Setup database and manager.
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (_, matrix_child) = manager.child();
 
@@ -206,7 +206,7 @@ fn matrix_invalid_signature_response() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         // Setup database and manager.
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (_, matrix_child) = manager.child();
 
