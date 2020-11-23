@@ -329,39 +329,6 @@ impl Database {
 
         Ok(())
     }
-    // TODO: Should return AccountType, too.
-    pub async fn select_addresses(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
-        let con = self.con.lock().await;
-
-        let mut stmt = con.prepare(
-            "
-            SELECT
-                account
-            FROM
-                account_states
-            WHERE
-                net_account_id = (
-                    SELECT
-                        id
-                    FROM
-                        pending_judgments
-                    WHERE
-                        net_account = :net_account
-                )
-        ",
-        )?;
-
-        let mut rows = stmt.query_named(named_params! {
-            ":net_account": net_account,
-        })?;
-
-        let mut net_accounts = vec![];
-        while let Some(row) = rows.next()? {
-            net_accounts.push(row.get::<_, Account>(0)?);
-        }
-
-        Ok(net_accounts)
-    }
     pub async fn select_account_from_net_account(
         &self,
         net_account: &NetAccount,
@@ -1401,41 +1368,6 @@ mod tests {
                     .account,
                 Account::from("@alice_second:matrix.org")
             );
-        });
-    }
-
-    #[test]
-    fn select_addresses() {
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            let db = Database::new(&db_path()).unwrap();
-
-            // Create identity.
-            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
-            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
-
-            let res = db.select_addresses(&alice).await.unwrap();
-            assert_eq!(res.len(), 0);
-
-            alice_ident
-                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
-                .unwrap();
-
-            alice_ident
-                .push_account(AccountType::Email, Account::from("alice@example.com"))
-                .unwrap();
-
-            alice_ident
-                .push_account(AccountType::Twitter, Account::from("@alice"))
-                .unwrap();
-
-            db.insert_identity(&alice_ident).await.unwrap();
-
-            let res = db.select_addresses(&alice).await.unwrap();
-            assert_eq!(res.len(), 3);
-            assert!(res.contains(&Account::from("@alice:matrix.org")));
-            assert!(res.contains(&Account::from("alice@example.com")));
-            assert!(res.contains(&Account::from("@alice")));
         });
     }
 

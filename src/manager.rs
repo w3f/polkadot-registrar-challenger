@@ -280,10 +280,15 @@ impl IdentityManager {
         );
 
         // Check the current, associated addresses of the identity, if any.
-        let accounts = self.db.select_addresses(&ident.net_account()).await?;
+        let existing_accounts = self
+            .db
+            .select_account_statuses(&ident.net_account())
+            .await?;
+
         let mut to_delete = vec![];
 
         // Find duplicates.
+        let mut contains_non_whitelisted = false;
         for state in ident.account_states() {
             // Reject the entire judgment request if a non-white listed account type is specified.
             if !WHITELIST.contains(&state.account_ty) {
@@ -293,20 +298,36 @@ impl IdentityManager {
                     state.account_ty
                 );
 
-                self.get_comms(&AccountType::ReservedConnector)?
-                    .notify_identity_judgment(ident.net_account().clone(), Judgement::Erroneous);
+                contains_non_whitelisted = true;
 
-                return Ok(());
+                self.db
+                    .set_account_status(
+                        ident.net_account(),
+                        &state.account_ty,
+                        &AccountStatus::Invalid,
+                    )
+                    .await?;
             }
 
             // If the same account already exists in storage, remove it (and avoid replacement).
-            if accounts
+            if existing_accounts
                 .iter()
-                .find(|&account| account == &state.account)
+                .find(|&(account_ty, _, status)| {
+                    account_ty == &state.account_ty
+                        && (status == &AccountStatus::Invalid || status == &AccountStatus::Notified)
+                })
                 .is_some()
             {
                 to_delete.push(state.account_ty.clone());
             }
+        }
+
+        // If the identity contains unallowed fields, notify the user about it
+        // and prevent accepting the identity.
+        if contains_non_whitelisted {
+            self.handle_status_change(ident.net_account().clone())
+                .await?;
+            return Ok(());
         }
 
         for ty in to_delete {
@@ -415,7 +436,9 @@ impl IdentityManager {
 
                 // Mark invalid accounts as notified.
                 for (account_ty, _) in &invalid_accounts {
-                    self.db.set_account_status(&net_account, &account_ty, &AccountStatus::Notified).await?;
+                    self.db
+                        .set_account_status(&net_account, &account_ty, &AccountStatus::Notified)
+                        .await?;
                 }
             } else {
                 warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());
