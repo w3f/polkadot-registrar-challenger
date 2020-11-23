@@ -125,6 +125,7 @@ impl EventManager {
     }
 }
 
+/// Used to mock user input (messages sent to registrar).
 #[derive(Clone)]
 pub struct EventChildSender<T> {
     messages: Arc<RwLock<Vec<T>>>,
@@ -136,6 +137,7 @@ impl<T> EventChildSender<T> {
     }
 }
 
+// Tracks the events/messages created/received by the account type tasks.
 #[derive(Clone)]
 pub struct EventChild<T> {
     events: Arc<RwLock<Vec<Event>>>,
