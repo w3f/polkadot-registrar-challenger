@@ -191,7 +191,6 @@ mod tests {
             Account::from("Dave"),
             Account::from("daev"),
             Account::from("Daev"),
-            Account::from("David"),
         ];
 
         let new = Account::from("dave");
@@ -202,6 +201,7 @@ mod tests {
         }
 
         let current = [
+            Account::from("David"),
             Account::from("alice"),
             Account::from("Alice"),
             Account::from("bob"),
@@ -317,9 +317,7 @@ mod tests {
     #[test]
     fn is_too_similar_unicode() {
         let current = [
-            Account::from("👻🥺👌 Bob"),
             Account::from("👻🥺👌 Alice"),
-            Account::from("👻🥺👌 Eve"),
         ];
 
         let new = Account::from("👻🥺👌 Alice");
@@ -333,6 +331,8 @@ mod tests {
             Account::from("Alice"),
             Account::from("👻🥺👌 Johnny 💀"),
             Account::from("🤖👈👈 Alice"),
+            Account::from("👻🥺👌 Bob"),
+            Account::from("👻🥺👌 Eve"),
         ];
 
         for account in &current {
