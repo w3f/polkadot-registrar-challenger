@@ -227,7 +227,7 @@ pub fn invalid_accounts_message(
 
     message.push_str("Please note that the following information is invalid:\n\n");
 
-    for (account_ty, account, _) in accounts {
+    for (account_ty, account, status) in accounts {
         if account_ty == &AccountType::DisplayName {
             if let Some(violations) = violations.as_ref() {
                 message.push_str(&format!(
@@ -259,18 +259,23 @@ pub fn invalid_accounts_message(
 
                 continue;
             }
+        } else if status == &AccountStatus::Unsupported {
+            message.push_str(&format!(
+                "* {} judgement is not supported by the registrar.",
+                account_ty.to_string()
+            ));
+        } else {
+            message.push_str(&format!(
+                "* \"{}\" ({}), could not be reached\n",
+                account.as_str(),
+                account_ty.to_string()
+            ));
         }
-
-        message.push_str(&format!(
-            "* \"{}\" ({}), could not be reached\n",
-            account.as_str(),
-            account_ty.to_string()
-        ));
     }
 
     message.push_str(
-        "\nPlease update the on-chain identity data. No new \
-        `requestJudgement` extrinsic must be issued after the update.",
+        "\nPlease update the on-chain identity data. Note that you DO NOT \
+        have to issue a new `requestJudgement` extrinsic after the update.",
     );
 
     VerifierMessage::NotifyViolation(message)
