@@ -193,6 +193,7 @@ impl fmt::Display for Account {
     }
 }
 
+/// The Polkadot/Kusama address including the extracted public key.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NetworkAddress {
     address: NetAccount,

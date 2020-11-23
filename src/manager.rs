@@ -10,6 +10,8 @@ use std::convert::TryInto;
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
 
+/// Identity info fields which are currently allowed to be judged. If there is
+/// any other field present, the identity is immediately rejected.
 static WHITELIST: [AccountType; 4] = [
     AccountType::DisplayName,
     AccountType::Matrix,
@@ -17,12 +19,15 @@ static WHITELIST: [AccountType; 4] = [
     AccountType::Twitter,
 ];
 
+/// The ordering of account types in which the user is informed about invalid
+/// display names: first, try Matrix, then Email, etc.
 static NOTIFY_QUEUE: [AccountType; 3] = [
     AccountType::Matrix,
     AccountType::Email,
     AccountType::Twitter,
 ];
 
+/// The on-chain identity itself.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct OnChainIdentity {
     network_address: NetworkAddress,
