@@ -20,7 +20,10 @@ static WHITELIST: [AccountType; 4] = [
 ];
 
 /// The ordering of account types in which the user is informed about invalid
-/// display names: first, try Matrix, then Email, etc.
+/// fields (or the display name is too similar to an existing one): first, try
+/// Matrix, then Email, etc.
+///
+/// See `IdentityManager::handle_status_change` for more.
 static NOTIFY_QUEUE: [AccountType; 3] = [
     AccountType::Matrix,
     AccountType::Email,
@@ -407,8 +410,13 @@ impl IdentityManager {
         if !invalid_accounts.is_empty() {
             if let Some(to_notify) = find_valid(&account_statuses) {
                 self.get_comms(to_notify).map(|comms| {
-                    comms.notify_invalid_accounts(net_account.clone(), invalid_accounts);
+                    comms.notify_invalid_accounts(net_account.clone(), invalid_accounts.clone());
                 })?;
+
+                // Mark invalid accounts as notified.
+                for (account_ty, _) in &invalid_accounts {
+                    self.db.set_account_status(&net_account, &account_ty, &AccountStatus::Notified).await?;
+                }
             } else {
                 warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());
             }

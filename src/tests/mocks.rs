@@ -209,8 +209,8 @@ pub struct ConnectorReaderMocker {
 
 impl ConnectorReaderMocker {
     /// A special method to acquire an `EventChildSender` from the connector,
-    /// since it cannot be easily created with `EventManager::child()` and
-    /// passed on to it.
+    /// since it cannot be easily created with `EventManager::child` and passed
+    /// on to it.
     pub fn injector(&self) -> EventChildSender<String> {
         self.sender.clone()
     }
