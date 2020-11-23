@@ -1115,7 +1115,7 @@ impl Database2 {
 
         Ok(())
     }
-    pub async fn select_display_names(&self) -> Result<Vec<Account>> {
+    pub async fn select_display_names(&self, exclude_me: &NetAccount) -> Result<Vec<Account>> {
         let con = self.con.lock().await;
 
         let mut stmt = con.prepare(
@@ -1124,10 +1124,21 @@ impl Database2 {
                 name
             FROM
                 display_names
+            WHERE
+                net_account_id != (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
         ",
         )?;
 
-        let mut rows = stmt.query(params![])?;
+        let mut rows = stmt.query_named(named_params! {
+            ":net_account": exclude_me,
+        })?;
 
         let mut accounts = vec![];
         while let Some(row) = rows.next()? {
