@@ -419,7 +419,7 @@ impl MatrixHandler {
         &self,
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account)>,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) -> Result<()> {
         let room_id = self.init_room_id(&net_account, &account).await?;
 

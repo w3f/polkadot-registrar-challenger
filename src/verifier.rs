@@ -1,5 +1,6 @@
 use crate::adapters::VIOLATIONS_CAP;
 use crate::comms::CommsVerifier;
+use crate::manager::AccountStatus;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
 };
@@ -219,14 +220,14 @@ pub async fn verification_handler<'a>(
 }
 
 pub fn invalid_accounts_message(
-    accounts: &[(AccountType, Account)],
+    accounts: &[(AccountType, Account, AccountStatus)],
     violations: Option<Vec<Account>>,
 ) -> VerifierMessage {
     let mut message = String::new();
 
     message.push_str("Please note that the following information is invalid:\n\n");
 
-    for (account_ty, account) in accounts {
+    for (account_ty, account, _) in accounts {
         if account_ty == &AccountType::DisplayName {
             if let Some(violations) = violations.as_ref() {
                 message.push_str(&format!(

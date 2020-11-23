@@ -1,5 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database;
+use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
 use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use lettre::smtp::authentication::Credentials;
@@ -421,7 +422,7 @@ impl EmailHandler {
         &self,
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account)>,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
         transport: &T,
     ) -> Result<()> {
         // Check for any display name violations (optional).

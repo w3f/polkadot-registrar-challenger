@@ -419,13 +419,12 @@ impl IdentityManager {
         /// Find invalid accounts.
         fn find_invalid<'a>(
             account_statuses: &[(AccountType, Account, AccountStatus)],
-        ) -> Vec<(AccountType, Account)> {
+        ) -> Vec<(AccountType, Account, AccountStatus)> {
             account_statuses
                 .iter()
                 .cloned()
-                .filter(|(_, _, status)| status == &AccountStatus::Invalid)
-                .map(|(account_ty, account, _)| (account_ty, account))
-                .collect::<Vec<(AccountType, Account)>>()
+                .filter(|(_, _, status)| status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported)
+                .collect::<Vec<(AccountType, Account, AccountStatus)>>()
         }
 
         let account_statuses = self.db.select_account_statuses(&net_account).await?;
@@ -440,7 +439,7 @@ impl IdentityManager {
                 })?;
 
                 // Mark invalid accounts as notified.
-                for (account_ty, _) in &invalid_accounts {
+                for (account_ty, _, _) in &invalid_accounts {
                     self.db
                         .set_account_status(&net_account, &account_ty, &AccountStatus::Notified)
                         .await?;

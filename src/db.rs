@@ -68,7 +68,8 @@ impl Database {
                     ('unknown'),
                     ('valid'),
                     ('invalid'),
-                    ('notified')
+                    ('notified'),
+                    ('unsupported')
             ",
             params![],
         )?;

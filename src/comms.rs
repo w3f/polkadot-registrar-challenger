@@ -1,4 +1,4 @@
-use crate::manager::OnChainIdentity;
+use crate::manager::{OnChainIdentity, AccountStatus};
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 #[cfg(test)]
 use crate::tests::mocks::MatrixEventMock;
@@ -43,7 +43,7 @@ pub enum CommsMessage {
     NotifyInvalidAccount {
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account)>,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
     },
     ExistingDisplayNames {
         accounts: Vec<Account>,
@@ -94,7 +94,7 @@ impl CommsMain {
         &self,
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account)>,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) {
         self.sender
             .send(CommsMessage::NotifyInvalidAccount {

@@ -1,5 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database;
+use crate::manager::AccountStatus;
 use crate::primitives::{unix_time, Account, AccountType, Challenge, NetAccount, Result};
 use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use reqwest::header::{self, HeaderValue};
@@ -275,7 +276,7 @@ impl TwitterHandler {
         transport: &T,
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account)>,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) -> Result<()> {
         let twitter_id =
             self.db
