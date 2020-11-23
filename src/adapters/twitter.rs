@@ -259,9 +259,10 @@ impl TwitterHandler {
             }
             NotifyInvalidAccount {
                 net_account,
+                account,
                 accounts,
             } => {
-                self.handle_invalid_account_notification(transport, net_account, accounts)
+                self.handle_invalid_account_notification(transport, net_account, account, accounts)
                     .await?
             }
             _ => warn!("Received unrecognized message type"),
@@ -273,16 +274,9 @@ impl TwitterHandler {
         &self,
         transport: &T,
         net_account: NetAccount,
+        account: Account,
         accounts: Vec<(AccountType, Account)>,
     ) -> Result<()> {
-        let account = self
-            .db
-            .select_account_from_net_account(&net_account, &AccountType::Twitter)
-            .await?
-            .ok_or(TwitterError::NoTwitterAccount(
-                net_account.as_str().to_string(),
-            ))?;
-
         let twitter_id =
             self.db
                 .select_twitter_id(&account)

@@ -47,9 +47,6 @@ pub enum MatrixError {
         0
     )]
     ChallengeDataNotFound(Account),
-    #[fail(display = "No Matrix account found for user: {}", 0)]
-    // TODO: Should be `NetAccount`
-    NoMatrixAccount(String),
 }
 
 #[async_trait]
@@ -238,9 +235,10 @@ impl MatrixHandler {
             }
             NotifyInvalidAccount {
                 net_account,
+                account,
                 accounts,
             } => {
-                self.handle_invalid_account_notification(net_account, accounts)
+                self.handle_invalid_account_notification(net_account, account, accounts)
                     .await?
             }
             #[cfg(test)]
@@ -420,16 +418,9 @@ impl MatrixHandler {
     async fn handle_invalid_account_notification(
         &self,
         net_account: NetAccount,
+        account: Account,
         accounts: Vec<(AccountType, Account)>,
     ) -> Result<()> {
-        let account = self
-            .db
-            .select_account_from_net_account(&net_account, &AccountType::Matrix)
-            .await?
-            .ok_or(MatrixError::NoMatrixAccount(
-                net_account.as_str().to_string(),
-            ))?;
-
         let room_id = self.init_room_id(&net_account, &account).await?;
 
         // Check for any display name violations (optional).

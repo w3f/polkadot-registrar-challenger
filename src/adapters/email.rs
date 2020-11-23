@@ -85,9 +85,6 @@ pub enum ClientError {
     IncompleteBuilder,
     #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
-    #[fail(display = "No Email account found for user: {}", 0)]
-    // TODO: Should be `NetAccount`
-    NoEmailAccount(String),
 }
 
 pub struct SmtpImapClientBuilder {
@@ -331,9 +328,10 @@ impl EmailHandler {
             }
             NotifyInvalidAccount {
                 net_account,
+                account,
                 accounts,
             } => {
-                self.handle_invalid_account_notification(net_account, accounts, transport)
+                self.handle_invalid_account_notification(net_account, account, accounts, transport)
                     .await?
             }
             _ => warn!("Received unrecognized message type"),
@@ -422,17 +420,10 @@ impl EmailHandler {
     async fn handle_invalid_account_notification<T: EmailTransport>(
         &self,
         net_account: NetAccount,
+        account: Account,
         accounts: Vec<(AccountType, Account)>,
         transport: &T,
     ) -> Result<()> {
-        let account = self
-            .db
-            .select_account_from_net_account(&net_account, &AccountType::Email)
-            .await?
-            .ok_or(ClientError::NoEmailAccount(
-                net_account.as_str().to_string(),
-            ))?;
-
         // Check for any display name violations (optional).
         let violations = self.db.select_display_name_violations(&net_account).await?;
 

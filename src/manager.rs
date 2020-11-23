@@ -126,6 +126,8 @@ pub enum AccountStatus {
     Invalid,
     #[serde(rename = "notified")]
     Notified,
+    #[serde(rename = "unsupported")]
+    Unsupported,
 }
 
 impl ToSql for AccountStatus {
@@ -139,6 +141,7 @@ impl ToSql for AccountStatus {
             Valid => Ok(Borrowed(Text(b"valid"))),
             Invalid => Ok(Borrowed(Text(b"invalid"))),
             Notified => Ok(Borrowed(Text(b"notified"))),
+            Unsupported => Ok(Borrowed(Text(b"unsupported"))),
         }
     }
 }
@@ -304,7 +307,7 @@ impl IdentityManager {
                     .set_account_status(
                         ident.net_account(),
                         &state.account_ty,
-                        &AccountStatus::Invalid,
+                        &AccountStatus::Unsupported,
                     )
                     .await?;
             }
@@ -393,18 +396,20 @@ impl IdentityManager {
         /// Find a valid account of the identity which can be notified about an
         /// other account's invalidity. Preference for Matrix, since it's
         /// instant, followed by Email then Twitter.
-        fn find_valid(
-            account_statuses: &[(AccountType, Account, AccountStatus)],
-        ) -> Option<&'static AccountType> {
+        fn find_valid<'a>(
+            account_statuses: &'a [(AccountType, Account, AccountStatus)],
+        ) -> Option<(&'a AccountType, &'a Account)> {
             let filtered = account_statuses
                 .iter()
                 .filter(|(_, _, status)| status == &AccountStatus::Valid)
-                .map(|(account_ty, _, _)| account_ty)
-                .collect::<Vec<&AccountType>>();
+                .map(|(account_ty, account, _)| (account_ty, account))
+                .collect::<Vec<(&AccountType, &Account)>>();
 
             for to_notify in &NOTIFY_QUEUE {
-                if filtered.contains(&to_notify) {
-                    return Some(to_notify);
+                for (account_ty, account) in &filtered {
+                    if &to_notify == account_ty {
+                        return Some((account_ty, account))
+                    }
                 }
             }
 
@@ -429,9 +434,9 @@ impl IdentityManager {
         // to inform that person about the current state of invalid accounts.
         let invalid_accounts = find_invalid(&account_statuses);
         if !invalid_accounts.is_empty() {
-            if let Some(to_notify) = find_valid(&account_statuses) {
+            if let Some((to_notify, account)) = find_valid(&account_statuses) {
                 self.get_comms(to_notify).map(|comms| {
-                    comms.notify_invalid_accounts(net_account.clone(), invalid_accounts.clone());
+                    comms.notify_invalid_accounts(net_account.clone(), account.clone(), invalid_accounts.clone());
                 })?;
 
                 // Mark invalid accounts as notified.
