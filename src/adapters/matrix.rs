@@ -2,7 +2,7 @@ use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database2;
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
-use crate::verifier::{invalid_accounts_message, verification_handler, Verifier2, VerifierMessage};
+use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use matrix_sdk::{
     self,
     api::r0::room::create_room::{Request, Response},
@@ -334,7 +334,7 @@ impl MatrixHandler {
             .await?;
 
         debug!("Sending instructions to user");
-        let verifier = Verifier2::new(&challenge_data);
+        let verifier = Verifier::new(&challenge_data);
         self.transport
             .send_message(&room_id, verifier.init_message_builder(true))
             .await
@@ -376,7 +376,7 @@ impl MatrixHandler {
                 return Err(MatrixError::ChallengeDataNotFound(account.clone()).into());
             }
 
-            let mut verifier = Verifier2::new(&challenge_data);
+            let mut verifier = Verifier::new(&challenge_data);
 
             // Fetch the text message from the event.
             let msg_body = if let Ok(msg_body) = event.message() {

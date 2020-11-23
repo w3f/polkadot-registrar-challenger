@@ -58,15 +58,15 @@ impl fmt::Display for VerifierMessage {
     }
 }
 
-pub struct Verifier2<'a> {
+pub struct Verifier<'a> {
     challenges: &'a [(NetworkAddress, Challenge)],
     valid: Vec<(&'a NetworkAddress, &'a Challenge)>,
     invalid: Vec<(&'a NetworkAddress, &'a Challenge)>,
 }
 
-impl<'a> Verifier2<'a> {
+impl<'a> Verifier<'a> {
     pub fn new(challenges: &'a [(NetworkAddress, Challenge)]) -> Self {
-        Verifier2 {
+        Verifier {
             challenges: challenges,
             valid: vec![],
             invalid: vec![],
@@ -178,7 +178,7 @@ impl<'a> Verifier2<'a> {
 }
 
 pub async fn verification_handler<'a>(
-    verifier: &Verifier2<'a>,
+    verifier: &Verifier<'a>,
     db: &Database2,
     comms: &CommsVerifier,
     account_ty: &AccountType,
