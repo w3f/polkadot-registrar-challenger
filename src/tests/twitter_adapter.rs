@@ -12,7 +12,7 @@ fn twitter_init_message() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (writer, twitter_child) = manager.child();
 
         let my_screen_name = Account::from("@registrar");

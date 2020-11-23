@@ -15,7 +15,7 @@ fn matrix_init_message() {
     rt.block_on(async {
         // Setup database and manager.
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (_, matrix_child) = manager.child();
 
         let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
@@ -102,7 +102,7 @@ fn matrix_valid_signature_response() {
     rt.block_on(async {
         // Setup database and manager.
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (_, matrix_child) = manager.child();
 
         let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();
@@ -207,7 +207,7 @@ fn matrix_invalid_signature_response() {
     rt.block_on(async {
         // Setup database and manager.
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (_, matrix_child) = manager.child();
 
         let my_user_id = UserId::try_from("@registrar:matrix.org").unwrap();

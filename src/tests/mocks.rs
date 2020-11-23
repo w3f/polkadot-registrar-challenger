@@ -98,13 +98,13 @@ pub enum ConnectorEvent {
     Reader { message: String },
 }
 
-pub struct EventManager2 {
+pub struct EventManager {
     events: Arc<RwLock<Vec<Event>>>,
 }
 
-impl EventManager2 {
+impl EventManager {
     pub fn new() -> Self {
-        EventManager2 {
+        EventManager {
             events: Arc::new(RwLock::new(vec![])),
         }
     }
@@ -163,7 +163,7 @@ pub struct ConnectorMocker {}
 
 #[async_trait]
 impl ConnectorInitTransports<ConnectorWriterMocker, ConnectorReaderMocker> for ConnectorMocker {
-    type Endpoint = Arc<EventManager2>;
+    type Endpoint = Arc<EventManager>;
 
     async fn init(
         endpoint: Self::Endpoint,
@@ -529,7 +529,7 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             // Setup manager.
-            let manager = EventManager2::new();
+            let manager = EventManager::new();
             let (_sender, matrix_child) = manager.child();
 
             // Prepare variables.
@@ -597,7 +597,7 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             // Setup manager
-            let manager = EventManager2::new();
+            let manager = EventManager::new();
             let (sender, email_child) = manager.child();
 
             // Prepare variables
@@ -673,7 +673,7 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             // Setup manager.
-            let manager = EventManager2::new();
+            let manager = EventManager::new();
             let (sender, twitter_child) = manager.child();
 
             // Prepare variables.
@@ -815,7 +815,7 @@ mod tests {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             // Setup manager.
-            let manager = Arc::new(EventManager2::new());
+            let manager = Arc::new(EventManager::new());
 
             // Init mocker and create events.
             let (mut writer, mut reader) =
