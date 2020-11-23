@@ -3,7 +3,7 @@ use super::{db_path, pause};
 use crate::adapters::twitter::{ReceivedMessageContext, TwitterId};
 use crate::connector::{AckResponse, EventType, JudgementRequest, Message};
 use crate::primitives::{unix_time, Account, AccountType, NetAccount};
-use crate::{test_run, Database2};
+use crate::{test_run, Database};
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -11,7 +11,7 @@ use tokio::runtime::Runtime;
 fn twitter_init_message() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (writer, twitter_child) = manager.child();
 

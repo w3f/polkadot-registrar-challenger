@@ -3,7 +3,7 @@ use super::{db_path, pause};
 use crate::adapters::email::{EmailId, ReceivedMessageContext};
 use crate::connector::{AckResponse, EventType, JudgementRequest, Message};
 use crate::primitives::{Account, AccountType, Challenge, NetAccount};
-use crate::{test_run, Database2};
+use crate::{test_run, Database};
 use schnorrkel::Keypair;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -12,7 +12,7 @@ use tokio::runtime::Runtime;
 fn email_init_message() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (_, email_child) = manager.child();
 
@@ -89,7 +89,7 @@ fn email_init_message() {
 fn email_valid_signature_response() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (writer, email_child) = manager.child();
 
@@ -183,7 +183,7 @@ fn email_valid_signature_response() {
 fn email_invalid_signature_response() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
-        let db = Database2::new(&db_path()).unwrap();
+        let db = Database::new(&db_path()).unwrap();
         let manager = Arc::new(EventManager2::new());
         let (writer, email_child) = manager.child();
 

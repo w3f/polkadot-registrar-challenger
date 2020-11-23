@@ -4,7 +4,7 @@ extern crate log;
 use failure::Error;
 use registrar::{block, init_env, run};
 use registrar::{
-    Account, Database2, HealthCheck, MatrixClient, SmtpImapClientBuilder, TwitterBuilder,
+    Account, Database, HealthCheck, MatrixClient, SmtpImapClientBuilder, TwitterBuilder,
     WebSocketReader, WebSocketWriter, WebSockets,
 };
 
@@ -13,7 +13,7 @@ async fn main() -> Result<(), Error> {
     let config = init_env()?;
 
     info!("Setting up database");
-    let db2 = Database2::new(&config.registrar_db_path)?;
+    let db2 = Database::new(&config.registrar_db_path)?;
 
     info!("Starting health check thread");
     if config.enable_health_check {

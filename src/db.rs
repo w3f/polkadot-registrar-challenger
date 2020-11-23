@@ -30,11 +30,11 @@ impl From<rusqlite::Error> for DatabaseError {
 }
 
 #[derive(Clone)]
-pub struct Database2 {
+pub struct Database {
     con: Arc<Mutex<Connection>>,
 }
 
-impl Database2 {
+impl Database {
     pub fn new(path: &str) -> Result<Self> {
         let con = Connection::open(path).map_err(|err| DatabaseError::Open(err.into()))?;
         if !con.is_autocommit() {
@@ -241,7 +241,7 @@ impl Database2 {
             params![],
         )?;
 
-        Ok(Database2 {
+        Ok(Database {
             con: Arc::new(Mutex::new(con)),
         })
     }
@@ -1268,15 +1268,15 @@ mod tests {
         let path = db_path();
 
         // Test repeated initialization.
-        let _db = Database2::new(&path).unwrap();
-        let _db = Database2::new(&path).unwrap();
+        let _db = Database::new(&path).unwrap();
+        let _db = Database::new(&path).unwrap();
     }
 
     #[test]
     fn insert_identity() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let mut ident = OnChainIdentity::new(NetAccount::from(
                 "14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU",
@@ -1408,7 +1408,7 @@ mod tests {
     fn select_addresses() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Create identity.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1443,7 +1443,7 @@ mod tests {
     fn select_account_from_net_account() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Create identity.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1488,7 +1488,7 @@ mod tests {
     fn select_delete_timed_out_identities() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1551,7 +1551,7 @@ mod tests {
     fn insert_identity_batch() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let idents = vec![
                 // Two identical identities with the same values.
@@ -1656,7 +1656,7 @@ mod tests {
     fn insert_select_room_id() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1712,7 +1712,7 @@ mod tests {
     fn set_challenge_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
@@ -1755,7 +1755,7 @@ mod tests {
     fn select_challenge_data() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -1799,7 +1799,7 @@ mod tests {
     fn set_account_status() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
 
@@ -1838,7 +1838,7 @@ mod tests {
     fn select_confirm_watermark() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let res = db.select_watermark(&AccountType::Twitter).await.unwrap();
             assert!(res.is_none());
@@ -1868,7 +1868,7 @@ mod tests {
     fn select_insert_twitter_id() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let alice = Account::from("Alice");
             let bob = Account::from("Bob");
@@ -1971,7 +1971,7 @@ mod tests {
     fn select_insert_twitter_id_invalid() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let alice = Account::from("Alice");
             let alice_id = TwitterId::from(1000);
@@ -1987,7 +1987,7 @@ mod tests {
     fn email_id_tracking() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             let id_1 = EmailId::from(11u32);
             let id_2 = EmailId::from(22u32);
@@ -2014,7 +2014,7 @@ mod tests {
     fn insert_select_display_names() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Prepare accounts.
             let alice = Account::from("alice");
@@ -2066,7 +2066,7 @@ mod tests {
     fn insert_select_display_names_with_net_account() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice_net = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
@@ -2110,7 +2110,7 @@ mod tests {
     fn insert_select_display_name_violations() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
-            let db = Database2::new(&db_path()).unwrap();
+            let db = Database::new(&db_path()).unwrap();
 
             // Prepare addresses.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");

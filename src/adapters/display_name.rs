@@ -1,19 +1,19 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, ChallengeStatus, NetAccount, Result};
-use crate::Database2;
+use crate::Database;
 use strsim::jaro;
 
 pub const VIOLATIONS_CAP: usize = 5;
 
 pub struct DisplayNameHandler {
-    db: Database2,
+    db: Database,
     comms: CommsVerifier,
     limit: f64,
 }
 
 impl DisplayNameHandler {
-    pub fn new(db: Database2, comms: CommsVerifier, limit: f64) -> Self {
+    pub fn new(db: Database, comms: CommsVerifier, limit: f64) -> Self {
         DisplayNameHandler {
             db: db,
             comms: comms,

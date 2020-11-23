@@ -1,5 +1,5 @@
 use crate::comms::{generate_comms, CommsMain, CommsMessage, CommsVerifier};
-use crate::db::Database2;
+use crate::db::Database;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, Judgement, NetAccount, NetworkAddress, Result,
 };
@@ -151,7 +151,7 @@ impl FromSql for AccountStatus {
 }
 
 pub struct IdentityManager {
-    db: Database2,
+    db: Database,
     comms: CommsTable,
     config: IdentityManagerConfig,
 }
@@ -169,13 +169,17 @@ impl Default for IdentityManagerConfig {
 }
 
 struct CommsTable {
+    // A Sender to the Manager. Cloned when registering new communication
+    // channels (see `IdentityManager::register_comms()`).
     to_main: Sender<CommsMessage>,
+    // Listener for incoming messages from tasks.
     listener: Receiver<CommsMessage>,
+    // Lookup table for channels to the requested tasks.
     pairs: HashMap<AccountType, CommsMain>,
 }
 
 impl IdentityManager {
-    pub fn new(db: Database2, config: IdentityManagerConfig) -> Result<Self> {
+    pub fn new(db: Database, config: IdentityManagerConfig) -> Result<Self> {
         let (tx1, recv1) = unbounded();
 
         Ok(IdentityManager {

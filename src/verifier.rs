@@ -3,7 +3,7 @@ use crate::comms::CommsVerifier;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
 };
-use crate::Database2;
+use crate::Database;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use std::fmt;
 
@@ -179,7 +179,7 @@ impl<'a> Verifier<'a> {
 
 pub async fn verification_handler<'a>(
     verifier: &Verifier<'a>,
-    db: &Database2,
+    db: &Database,
     comms: &CommsVerifier,
     account_ty: &AccountType,
 ) -> Result<()> {

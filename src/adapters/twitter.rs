@@ -1,5 +1,5 @@
 use crate::comms::{CommsMessage, CommsVerifier};
-use crate::db::Database2;
+use crate::db::Database;
 use crate::primitives::{unix_time, Account, AccountType, Challenge, NetAccount, Result};
 use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use reqwest::header::{self, HeaderValue};
@@ -205,12 +205,12 @@ pub trait TwitterTransport: 'static + Send + Sync {
 
 #[derive(Clone)]
 pub struct TwitterHandler {
-    db: Database2,
+    db: Database,
     comms: CommsVerifier,
 }
 
 impl TwitterHandler {
-    pub fn new(db: Database2, comms: CommsVerifier) -> Self {
+    pub fn new(db: Database, comms: CommsVerifier) -> Self {
         TwitterHandler {
             db: db,
             comms: comms,
