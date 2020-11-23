@@ -1,4 +1,4 @@
-use crate::manager::{OnChainIdentity, AccountStatus};
+use crate::manager::{AccountStatus, OnChainIdentity};
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 #[cfg(test)]
 use crate::tests::mocks::MatrixEventMock;

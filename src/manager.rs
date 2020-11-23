@@ -408,7 +408,7 @@ impl IdentityManager {
             for to_notify in &NOTIFY_QUEUE {
                 for (account_ty, account) in &filtered {
                     if &to_notify == account_ty {
-                        return Some((account_ty, account))
+                        return Some((account_ty, account));
                     }
                 }
             }
@@ -423,7 +423,9 @@ impl IdentityManager {
             account_statuses
                 .iter()
                 .cloned()
-                .filter(|(_, _, status)| status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported)
+                .filter(|(_, _, status)| {
+                    status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+                })
                 .collect::<Vec<(AccountType, Account, AccountStatus)>>()
         }
 
@@ -435,7 +437,11 @@ impl IdentityManager {
         if !invalid_accounts.is_empty() {
             if let Some((to_notify, account)) = find_valid(&account_statuses) {
                 self.get_comms(to_notify).map(|comms| {
-                    comms.notify_invalid_accounts(net_account.clone(), account.clone(), invalid_accounts.clone());
+                    comms.notify_invalid_accounts(
+                        net_account.clone(),
+                        account.clone(),
+                        invalid_accounts.clone(),
+                    );
                 })?;
 
                 // Mark invalid accounts as notified.
