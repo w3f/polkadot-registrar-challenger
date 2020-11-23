@@ -263,7 +263,7 @@ async fn run_adapters<
     info!("Starting display name handler");
     let l_db = db2.clone();
     tokio::spawn(async move {
-        DisplayNameHandler::new(l_db, c_display_name, 0.8)
+        DisplayNameHandler::new(l_db, c_display_name, 0.85)
             .start()
             .await;
     });

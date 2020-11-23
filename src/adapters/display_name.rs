@@ -182,7 +182,7 @@ mod tests {
     use super::*;
     use crate::primitives::Account;
 
-    const LIMIT: f64 = 0.8;
+    const LIMIT: f64 = 0.85;
 
     #[test]
     fn is_too_similar() {
@@ -191,7 +191,6 @@ mod tests {
             Account::from("Dave"),
             Account::from("daev"),
             Account::from("Daev"),
-            Account::from("David"),
         ];
 
         let new = Account::from("dave");
@@ -208,6 +207,7 @@ mod tests {
             Account::from("Bob"),
             Account::from("eve"),
             Account::from("Eve"),
+            Account::from("David"),
         ];
 
         for account in &current {
@@ -317,9 +317,7 @@ mod tests {
     #[test]
     fn is_too_similar_unicode() {
         let current = [
-            Account::from("👻🥺👌 Bob"),
             Account::from("👻🥺👌 Alice"),
-            Account::from("👻🥺👌 Eve"),
         ];
 
         let new = Account::from("👻🥺👌 Alice");
@@ -333,6 +331,8 @@ mod tests {
             Account::from("Alice"),
             Account::from("👻🥺👌 Johnny 💀"),
             Account::from("🤖👈👈 Alice"),
+            Account::from("👻🥺👌 Bob"),
+            Account::from("👻🥺👌 Eve"),
         ];
 
         for account in &current {
