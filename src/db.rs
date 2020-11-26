@@ -214,7 +214,7 @@ impl Database {
             CREATE TABLE IF NOT EXISTS display_names (
                 id              INTEGER PRIMARY KEY,
                 name            TEXT NOT NULL UNIQUE,
-                net_account_id  INTEGER,
+                net_account_id  INTEGER UNIQUE,
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)

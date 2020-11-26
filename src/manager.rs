@@ -84,6 +84,7 @@ impl OnChainIdentity {
             .iter()
             .position(|state| &state.account_ty == account_ty)
             .ok_or(ManagerError::NoAccountState)?;
+
         self.accounts.remove(pos);
 
         Ok(())
@@ -330,6 +331,7 @@ impl IdentityManager {
         if contains_non_whitelisted {
             self.handle_status_change(ident.net_account().clone())
                 .await?;
+
             return Ok(());
         }
 
@@ -393,15 +395,17 @@ impl IdentityManager {
         // case of `display_name` which can be deemed invalid if it is too
         // similar to another, existing `display_name` in the identity system.
 
-        /// Find a valid account of the identity which can be notified about an
-        /// other account's invalidity. Preference for Matrix, since it's
-        /// instant, followed by Email then Twitter.
+        /// Find a valid account (or attempt unconfirmed) of the identity which
+        /// can be notified about an other account's invalidity. Preference for
+        /// Matrix, since it's instant, followed by Email then Twitter.
         fn find_valid<'a>(
             account_statuses: &'a [(AccountType, Account, AccountStatus)],
         ) -> Option<(&'a AccountType, &'a Account)> {
             let filtered = account_statuses
                 .iter()
-                .filter(|(_, _, status)| status == &AccountStatus::Valid)
+                .filter(|(_, _, status)| {
+                    status == &AccountStatus::Valid || status == &AccountStatus::Unknown
+                })
                 .map(|(account_ty, account, _)| (account_ty, account))
                 .collect::<Vec<(&AccountType, &Account)>>();
 
