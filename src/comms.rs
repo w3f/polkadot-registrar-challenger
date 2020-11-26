@@ -5,7 +5,6 @@ use crate::tests::mocks::MatrixEventMock;
 use crossbeam::channel::{unbounded, Receiver, Sender};
 #[cfg(test)]
 use matrix_sdk::identifiers::{RoomId, UserId};
-use tokio::time::{self, Duration};
 
 pub fn generate_comms(
     sender: Sender<CommsMessage>,
@@ -142,14 +141,9 @@ impl CommsVerifier {
         }
     }
     pub async fn recv(&self) -> CommsMessage {
-        // No async support for `recv` (it blocks and chokes tokio), so we
-        // `try_recv` and just loop over it with a short pause.
-        let mut interval = time::interval(Duration::from_millis(10));
         loop {
             if let Ok(msg) = self.recv.try_recv() {
                 return msg;
-            } else {
-                interval.tick().await;
             }
         }
     }

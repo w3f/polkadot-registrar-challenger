@@ -216,11 +216,7 @@ impl IdentityManager {
             .ok_or(ManagerError::NoHandlerRegistered(account_ty.clone()))
     }
     pub async fn start(mut self) {
-        // No async support for `recv` (it blocks and chokes tokio), so we
-        // `try_recv` and just loop over it with a short pause.
-        let mut interval = time::interval(Duration::from_millis(10));
         loop {
-            interval.tick().await;
             let _ = self.local().await.map_err(|err| {
                 error!("{}", err);
             });
