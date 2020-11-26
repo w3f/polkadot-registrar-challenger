@@ -289,6 +289,8 @@ impl IdentityManager {
             .select_account_statuses(&ident.net_account())
             .await?;
 
+        // Account types to delete **from the identity info** before it gets
+        // inserted into the database and therefore prevents replacement.
         let mut to_delete = vec![];
 
         // Find duplicates.
@@ -313,12 +315,13 @@ impl IdentityManager {
                     .await?;
             }
 
-            // If the same account already exists in storage, remove it (and avoid replacement).
+            // If the same account already exists in storage and is valid or
+            // unconfirmed, remove it (and avoid replacement).
             if existing_accounts
                 .iter()
                 .find(|&(account_ty, _, status)| {
                     account_ty == &state.account_ty
-                        && (status == &AccountStatus::Invalid || status == &AccountStatus::Notified)
+                        && (status == &AccountStatus::Valid || status == &AccountStatus::Unknown)
                 })
                 .is_some()
             {

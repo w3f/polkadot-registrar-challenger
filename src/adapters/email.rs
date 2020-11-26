@@ -398,6 +398,15 @@ impl EmailHandler {
                 continue;
             }
 
+            // Set email as valid.
+            self.db
+                .set_account_status(
+                    challenge_data.get(0).unwrap().0.address(),
+                    &AccountType::Email,
+                    &AccountStatus::Valid,
+                )
+                .await?;
+
             let mut verifier = Verifier::new(&challenge_data);
 
             for message in &user_messages {
