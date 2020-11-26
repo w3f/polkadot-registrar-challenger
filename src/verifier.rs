@@ -353,4 +353,38 @@ mod tests {
             Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
         ");
     }
+
+    #[test]
+    fn invalid_accounts_message_status_both() {
+        let accounts = [
+            (
+                AccountType::LegalName,
+                Account::from("Alice Doe"),
+                AccountStatus::Unsupported,
+            ),
+            (
+                AccountType::Email,
+                Account::from("alice@example.com"),
+                AccountStatus::Invalid,
+            ),
+        ];
+
+        let res = invalid_accounts_message(&accounts, None);
+        let txt = match res {
+            VerifierMessage::NotifyViolation(txt) => txt,
+            _ => panic!(),
+        };
+
+        println!("{}", txt);
+        assert_eq!(txt, "\
+            Please note that the following information is invalid:\n\
+            \n\
+            * Legal Name judgement (\"Alice Doe\") is not supported by the registrar.\n\
+            * \"alice@example.com\" (Email) could not be reached.\n\
+            \n\
+            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
+            \n\
+            Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
+        ");
+    }
 }
