@@ -43,7 +43,7 @@ pub enum MatrixError {
     // TODO: Use `DatabaseError`
     Database(failure::Error),
     #[fail(
-        display = "Failed to fetch challenge data from database for account: {:?}",
+        display = "failed to fetch challenge data from database for account: {:?}",
         0
     )]
     ChallengeDataNotFound(Account),

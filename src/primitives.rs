@@ -262,7 +262,8 @@ impl Display for AccountType {
             Web => write!(f, "Web"),
             Twitter => write!(f, "Twitter"),
             Matrix => write!(f, "Matrix"),
-            _ => Err(fmt::Error),
+            ReservedConnector => Err(fmt::Error),
+            ReservedEmitter => Err(fmt::Error),
         }
     }
 }
@@ -280,7 +281,8 @@ impl ToSql for AccountType {
             Web => Ok(Borrowed(Text(b"web"))),
             Twitter => Ok(Borrowed(Text(b"twitter"))),
             Matrix => Ok(Borrowed(Text(b"matrix"))),
-            _ => Err(rusqlite::Error::InvalidQuery),
+            ReservedConnector => Err(rusqlite::Error::InvalidQuery),
+            ReservedEmitter => Err(rusqlite::Error::InvalidQuery),
         }
     }
 }

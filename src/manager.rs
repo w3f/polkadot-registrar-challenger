@@ -78,6 +78,9 @@ impl OnChainIdentity {
     pub fn account_states(&self) -> &Vec<AccountState> {
         &self.accounts
     }
+    pub fn account_states_mut(&mut self) -> &mut Vec<AccountState> {
+        &mut self.accounts
+    }
     pub fn remove_account_state(&mut self, account_ty: &AccountType) -> Result<()> {
         let pos = self
             .accounts
@@ -155,6 +158,7 @@ impl FromSql for AccountStatus {
                 b"valid" => Ok(AccountStatus::Valid),
                 b"invalid" => Ok(AccountStatus::Invalid),
                 b"notified" => Ok(AccountStatus::Notified),
+                b"unsupported" => Ok(AccountStatus::Unsupported),
                 _ => Err(FromSqlError::InvalidType),
             },
             _ => Err(FromSqlError::InvalidType),
@@ -292,25 +296,18 @@ impl IdentityManager {
         let mut to_delete = vec![];
 
         // Find duplicates.
-        let mut contains_non_whitelisted = false;
-        for state in ident.account_states() {
+        let mut contains_unsupported = false;
+        let address = ident.net_account().as_str().to_string();
+        for state in ident.account_states_mut() {
             // Reject the entire judgment request if a non-white listed account type is specified.
             if !WHITELIST.contains(&state.account_ty) {
                 warn!(
                     "Reject identity {}, use of unacceptable account type: {:?}",
-                    ident.net_account().as_str(),
-                    state.account_ty
+                    address, state.account_ty
                 );
 
-                contains_non_whitelisted = true;
-
-                self.db
-                    .set_account_status(
-                        ident.net_account(),
-                        &state.account_ty,
-                        &AccountStatus::Unsupported,
-                    )
-                    .await?;
+                contains_unsupported = true;
+                state.account_status = AccountStatus::Unsupported;
             }
 
             // If the same account already exists in storage and is valid or
@@ -319,6 +316,7 @@ impl IdentityManager {
                 .iter()
                 .find(|&(account_ty, _, status)| {
                     account_ty == &state.account_ty
+                        // TODO: Maybe check ChallangeStatus instead of AccountStatus?
                         && (status == &AccountStatus::Valid || status == &AccountStatus::Unknown)
                 })
                 .is_some()
@@ -327,21 +325,19 @@ impl IdentityManager {
             }
         }
 
-        // If the identity contains unallowed fields, notify the user about it
-        // and prevent accepting the identity.
-        if contains_non_whitelisted {
-            self.handle_status_change(ident.net_account().clone())
-                .await?;
-
-            return Ok(());
-        }
-
         for ty in to_delete {
+            info!("Keeping current state of {}", ty);
             ident.remove_account_state(&ty)?;
         }
 
-        // Insert identity into storage, notify tasks for verification.
+        // Insert identity into storage.
         self.db.insert_identity(&ident).await?;
+
+        // If the identity contains unallowed fields, notify the user about it
+        // and prevent accepting the identity.
+        if contains_unsupported {
+            return self.handle_status_change(ident.net_account().clone()).await;
+        }
 
         for state in ident.account_states() {
             if state.account_ty == AccountType::Twitter {
