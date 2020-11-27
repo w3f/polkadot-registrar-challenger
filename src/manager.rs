@@ -301,13 +301,22 @@ impl IdentityManager {
         for state in ident.account_states_mut() {
             // Reject the entire judgment request if a non-white listed account type is specified.
             if !WHITELIST.contains(&state.account_ty) {
-                warn!(
-                    "Reject identity {}, use of unacceptable account type: {:?}",
-                    address, state.account_ty
-                );
+                // If the user was already notified about the invalidity, then just ignore this.
+                if !existing_accounts
+                    .iter()
+                    .find(|(account_ty, _, status)| {
+                        account_ty == &state.account_ty && status == &AccountStatus::Notified
+                    })
+                    .is_some()
+                {
+                    warn!(
+                        "Reject identity {}, use of unacceptable account type: {:?}",
+                        address, state.account_ty
+                    );
 
-                contains_unsupported = true;
-                state.account_status = AccountStatus::Unsupported;
+                    contains_unsupported = true;
+                    state.account_status = AccountStatus::Unsupported;
+                }
             }
 
             // If the same account already exists in storage and is valid or
@@ -316,7 +325,7 @@ impl IdentityManager {
                 .iter()
                 .find(|&(account_ty, _, status)| {
                     account_ty == &state.account_ty
-                        // TODO: Maybe check ChallangeStatus instead of AccountStatus?
+                        // TODO: Maybe check ChallengeStatus instead of AccountStatus?
                         && (status == &AccountStatus::Valid || status == &AccountStatus::Unknown)
                 })
                 .is_some()
