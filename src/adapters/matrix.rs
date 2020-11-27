@@ -267,7 +267,7 @@ impl MatrixHandler {
             // When the UserId is invalid, even though it can be successfully
             // converted, creating a room seems to block forever here. So we
             // just set a timeout and abort if exceeded.
-            if let Ok(room_id) = time::timeout(Duration::from_secs(20), async {
+            if let Ok(room_id) = time::timeout(Duration::from_millis(10_000), async {
                 debug!("Connecting to {}", account.as_str());
 
                 let to_invite = [account
