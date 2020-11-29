@@ -342,6 +342,20 @@ impl IdentityManager {
         // Insert identity into storage.
         self.db.insert_identity(&ident).await?;
 
+        // Delete deprecated accounts, if any.
+        for (account_ty, account, _) in &existing_accounts {
+            if ident
+                .account_states()
+                .iter()
+                .find(|state| account_ty == &state.account_ty && account == &state.account)
+                .is_none()
+            {
+                self.db
+                    .delete_account(ident.net_account(), account, account_ty)
+                    .await?;
+            }
+        }
+
         // If the identity contains unallowed fields, notify the user about it
         // and prevent accepting the identity.
         if contains_unsupported {

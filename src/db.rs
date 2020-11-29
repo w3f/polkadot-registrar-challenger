@@ -751,10 +751,16 @@ impl Database {
 
         Ok(())
     }
-    pub async fn delete_account(&self, net_account: &NetAccount, account: &Account, account_ty: &AccountType) -> Result<()> {
+    pub async fn delete_account(
+        &self,
+        net_account: &NetAccount,
+        account: &Account,
+        account_ty: &AccountType,
+    ) -> Result<()> {
         let con = self.con.lock().await;
 
-        con.execute_named("
+        con.execute_named(
+            "
             DELETE FROM
                 account_states
             WHERE
@@ -777,11 +783,13 @@ impl Database {
                     WHERE
                         account_ty = :account_ty
                 )
-        ", named_params! {
-            ":net_account": net_account,
-            ":account": account,
-            ":account_ty": account_ty,
-        })?;
+        ",
+            named_params! {
+                ":net_account": net_account,
+                ":account": account,
+                ":account_ty": account_ty,
+            },
+        )?;
 
         Ok(())
     }
@@ -1496,7 +1504,13 @@ mod tests {
                 Account::from("@alice:matrix.org")
             );
 
-            db.delete_account(&alice, &Account::from("@alice:matrix.org"), &AccountType::Matrix).await.unwrap();
+            db.delete_account(
+                &alice,
+                &Account::from("@alice:matrix.org"),
+                &AccountType::Matrix,
+            )
+            .await
+            .unwrap();
 
             let res = db.select_identities().await.unwrap();
             assert_eq!(res.len(), 1);
