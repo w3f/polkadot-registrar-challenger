@@ -375,12 +375,12 @@ impl TwitterHandler {
         for (account, twitter_id, init_msg) in &idents {
             debug!("Starting verification process for {}", account.as_str());
 
-            let challenge_data = self
+            let (challenge_data, intro_sent) = self
                 .db
                 .select_challenge_data(&account, &AccountType::Twitter)
                 .await?;
 
-            // TODO: `select_challenge_data` should return an error.
+            // TODO: `select_challenge_data` should return `None` if it's empty.
             if challenge_data.is_empty() {
                 warn!(
                     "No challenge data found for account {}. Ignoring.",
@@ -401,8 +401,9 @@ impl TwitterHandler {
 
             if !*init_msg {
                 transport
-                    .send_message(&twitter_id, verifier.init_message_builder(false))
+                    .send_message(&twitter_id, verifier.init_message_builder(!intro_sent))
                     .await?;
+
                 self.db.confirm_init_message(&account).await?;
                 continue;
             }

@@ -129,6 +129,7 @@ impl Database {
                 account_status_id    INTEGER NOT NULL,
                 challenge            TEXT NOT NULL,
                 challenge_status_id  INTEGER NOT NULL,
+                intro_sent           INTEGER NOT NULL,
 
                 UNIQUE (net_account_id, account_ty_id)
 
@@ -280,7 +281,8 @@ impl Database {
                     account_ty_id,
                     account_status_id,
                     challenge,
-                    challenge_status_id
+                    challenge_status_id,
+                    intro_sent
                 ) VALUES (
                     (SELECT id FROM pending_judgments
                         WHERE net_account = :net_account),
@@ -291,7 +293,8 @@ impl Database {
                         WHERE status = :account_status),
                     :challenge,
                     (SELECT id FROM challenge_status
-                        WHERE status = :challenge_status)
+                        WHERE status = :challenge_status),
+                    '0'
                 )",
             )?;
 
@@ -542,14 +545,14 @@ impl Database {
         &self,
         account: &Account,
         account_ty: &AccountType,
-    ) -> Result<Vec<(NetworkAddress, Challenge)>> {
+    ) -> Result<(Vec<(NetworkAddress, Challenge)>, bool)> {
         let con = self.con.lock().await;
 
         // TODO: Figure out why `IN` does not work here...
         let mut stmt = con.prepare(
             "
             SELECT
-                net_account, challenge
+                net_account, challenge, intro_sent
             FROM
                 pending_judgments
             INNER JOIN
@@ -593,15 +596,22 @@ impl Database {
             ":account_ty": account_ty
         })?;
 
+        let mut intro_sent = false;
         let mut challenge_set = vec![];
         while let Some(row) = rows.next()? {
             challenge_set.push((
                 NetworkAddress::try_from(row.get::<_, NetAccount>(0)?)?,
                 Challenge(row.get::<_, String>(1)?),
             ));
+
+            // If the introduction message was already sent to the **account**,
+            // then avoid sending it again.
+            if row.get::<_, bool>(2)? {
+                intro_sent = true;
+            }
         }
 
-        Ok(challenge_set)
+        Ok((challenge_set, intro_sent))
     }
     // Check whether the identity is fully verified.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
@@ -1729,13 +1739,14 @@ mod tests {
             // Insert and check return value.
             let _ = db.insert_identity(&ident).await.unwrap();
 
-            let res = db
+            let (res, intro_sent) = db
                 .select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
                 .await
                 .unwrap();
             assert_eq!(res.len(), 2);
             assert_eq!(res[0].0, NetworkAddress::try_from(alice).unwrap());
             assert_eq!(res[1].0, NetworkAddress::try_from(bob).unwrap());
+            assert!(!intro_sent);
         });
     }
 

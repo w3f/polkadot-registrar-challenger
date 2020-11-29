@@ -130,7 +130,7 @@ fn twitter_init_message() {
                     assert_eq!(id, &TwitterId::from(222u64));
 
                     match message {
-                        VerifierMessageBlank::InitMessage => {}
+                        VerifierMessageBlank::InitMessageWithContext => {}
                         _ => panic!(),
                     }
                 }

@@ -345,7 +345,7 @@ impl EmailHandler {
         transport: &T,
         account: Account,
     ) -> Result<()> {
-        let challenge_data = self
+        let (challenge_data, intro_sent) = self
             .db
             .select_challenge_data(&account, &AccountType::Email)
             .await?;
@@ -355,7 +355,7 @@ impl EmailHandler {
         // Only require the verifier to send the initial message
         let verifier = Verifier::new(&challenge_data);
         transport
-            .send_message(&account, verifier.init_message_builder(true))
+            .send_message(&account, verifier.init_message_builder(!intro_sent))
             .await?;
 
         Ok(())
@@ -386,7 +386,7 @@ impl EmailHandler {
             debug!("New message from {}", sender.as_str());
 
             debug!("Fetching challenge data");
-            let challenge_data = self
+            let (challenge_data, _) = self
                 .db
                 .select_challenge_data(sender, &AccountType::Email)
                 .await?;

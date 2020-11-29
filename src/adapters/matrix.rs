@@ -326,7 +326,7 @@ impl MatrixHandler {
     ) -> Result<()> {
         let room_id = self.init_room_id(&net_account, &account).await?;
 
-        let challenge_data = self
+        let (challenge_data, intro_sent) = self
             .db
             .select_challenge_data(&account, &AccountType::Matrix)
             .await?;
@@ -334,7 +334,7 @@ impl MatrixHandler {
         debug!("Sending instructions to user");
         let verifier = Verifier::new(&challenge_data);
         self.transport
-            .send_message(&room_id, verifier.init_message_builder(true))
+            .send_message(&room_id, verifier.init_message_builder(!intro_sent))
             .await
             .map_err(|err| MatrixError::SendMessage(err.into()).into())
             .map(|_| ())
@@ -364,7 +364,7 @@ impl MatrixHandler {
             let account = Account::from(event.sender().as_str());
 
             debug!("Fetching challenge data");
-            let challenge_data = self
+            let (challenge_data, _) = self
                 .db
                 .select_challenge_data(&account, &AccountType::Matrix)
                 .await?;
