@@ -702,7 +702,7 @@ impl Database {
 
         // If the introduction message was already sent to the **account**,
         // then avoid sending it again.
-        let intro_sent = con.query_row_named(
+        let try_intro_sent = con.query_row_named(
             "
             SELECT
                 intro_sent
@@ -724,7 +724,16 @@ impl Database {
                 ":account_ty": account_ty,
             },
             |row| row.get::<_, bool>(0),
-        )?;
+        );
+
+        // `QueryReturnedNoRows` can occure on messages where no challenge data
+        // is found (and the message is therefore ignored). Just use `false` as
+        // a filler.
+        let intro_sent = match try_intro_sent {
+            Ok(b) => b,
+            Err(rusqlite::Error::QueryReturnedNoRows) => false,
+            Err(err) => return Err(err.into()),
+        };
 
         Ok((challenge_set, intro_sent))
     }
