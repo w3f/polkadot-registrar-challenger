@@ -31,6 +31,11 @@ impl From<rusqlite::Error> for DatabaseError {
 
 #[derive(Clone)]
 pub struct Database {
+    // Locking the connection is not ideal for performance, but since this
+    // project is not meant to handle thounsands of connections per seconds, but
+    // rather **one** request every few minutes/hours this is ok. It certainly
+    // simplyfies database management instead of setting up a connection pool
+    // with Postegres, for example.
     con: Arc<Mutex<Connection>>,
 }
 
@@ -129,7 +134,6 @@ impl Database {
                 account_status_id    INTEGER NOT NULL,
                 challenge            TEXT NOT NULL,
                 challenge_status_id  INTEGER NOT NULL,
-                intro_sent           INTEGER NOT NULL,
 
                 UNIQUE (net_account_id, account_ty_id)
 
@@ -243,6 +247,30 @@ impl Database {
             params![],
         )?;
 
+        // Table for tracking whether the introduction message was sent.
+        //
+        // NOTE: The field `net_account` is not linked by a foreign key, since
+        // insertions into the table `account_states` will replace old records.
+        // The information in this table must "survive" replacements and must
+        // therefore be removed manually.
+        con.execute(
+            "
+            CREATE TABLE IF NOT EXISTS intro_msg_sent (
+                id             INTEGER PRIMARY KEY,
+                account        TEXT NOT NULL,
+                account_ty_id  INTEGER NOT NULL,
+                intro_sent     INTEGER NOT NULL,
+
+                UNIQUE (account, account_ty_id)
+
+                FOREIGN KEY (account_ty_id)
+                    REFERENCES account_types (id)
+                        ON DELETE CASCADE
+            )
+        ",
+            params![],
+        )?;
+
         Ok(Database {
             con: Arc::new(Mutex::new(con)),
         })
@@ -281,21 +309,64 @@ impl Database {
                     account_ty_id,
                     account_status_id,
                     challenge,
-                    challenge_status_id,
+                    challenge_status_id
+                ) VALUES (
+                    (
+                        SELECT
+                            id
+                        FROM
+                            pending_judgments
+                        WHERE
+                            net_account = :net_account
+                    ),
+                    :account,
+                    (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty = :account_ty
+                    ),
+                    (
+                        SELECT
+                            id
+                        FROM
+                            account_status
+                        WHERE
+                            status = :account_status
+                    ),
+                    :challenge,
+                    (
+                        SELECT
+                            id
+                        FROM
+                            challenge_status
+                        WHERE
+                            status = :challenge_status
+                    )
+                )",
+            )?;
+
+            let mut stmt_intro = transaction.prepare(
+                "
+                INSERT OR IGNORE INTO intro_msg_sent (
+                    account,
+                    account_ty_id,
                     intro_sent
                 ) VALUES (
-                    (SELECT id FROM pending_judgments
-                        WHERE net_account = :net_account),
                     :account,
-                    (SELECT id FROM account_types
-                        WHERE account_ty = :account_ty),
-                    (SELECT id FROM account_status
-                        WHERE status = :account_status),
-                    :challenge,
-                    (SELECT id FROM challenge_status
-                        WHERE status = :challenge_status),
+                    (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty = :account_ty
+                    ),
                     '0'
-                )",
+                )
+            ",
             )?;
 
             for ident in idents {
@@ -308,6 +379,11 @@ impl Database {
                         ":challenge": &state.challenge.as_str(),
                         ":challenge_status": &state.challenge_status,
                     })?;
+
+                    stmt_intro.execute_named(named_params! {
+                        ":account": &state.account,
+                        ":account_ty": &state.account_ty,
+                    })?;
                 }
             }
         }
@@ -317,9 +393,10 @@ impl Database {
         Ok(())
     }
     pub async fn remove_identity(&self, net_account: &NetAccount) -> Result<()> {
-        let con = self.con.lock().await;
+        let mut con = self.con.lock().await;
+        let transaction = con.transaction()?;
 
-        con.execute_named(
+        transaction.execute_named(
             "
             DELETE FROM
                 pending_judgments
@@ -330,6 +407,26 @@ impl Database {
                 ":net_account": net_account,
             },
         )?;
+
+        // Cleanup unused introduction message tracking.
+        transaction.execute(
+            "
+            DELETE FROM
+                intro_msg_sent
+            WHERE
+                (account, account_ty_id)
+            NOT IN (
+                SELECT
+                    account, account_ty_id
+                FROM
+                    account_states
+            )
+
+        ",
+            params![],
+        )?;
+
+        transaction.commit()?;
 
         Ok(())
     }
@@ -548,11 +645,10 @@ impl Database {
     ) -> Result<(Vec<(NetworkAddress, Challenge)>, bool)> {
         let con = self.con.lock().await;
 
-        // TODO: Figure out why `IN` does not work here...
         let mut stmt = con.prepare(
             "
             SELECT
-                net_account, challenge, intro_sent
+                net_account, challenge
             FROM
                 pending_judgments
             INNER JOIN
@@ -596,20 +692,39 @@ impl Database {
             ":account_ty": account_ty
         })?;
 
-        let mut intro_sent = false;
         let mut challenge_set = vec![];
         while let Some(row) = rows.next()? {
             challenge_set.push((
                 NetworkAddress::try_from(row.get::<_, NetAccount>(0)?)?,
                 Challenge(row.get::<_, String>(1)?),
             ));
-
-            // If the introduction message was already sent to the **account**,
-            // then avoid sending it again.
-            if row.get::<_, bool>(2)? {
-                intro_sent = true;
-            }
         }
+
+        // If the introduction message was already sent to the **account**,
+        // then avoid sending it again.
+        let intro_sent = con.query_row_named(
+            "
+            SELECT
+                intro_sent
+            FROM
+                intro_msg_sent
+            WHERE
+                account = :account
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )",
+            named_params! {
+                ":account": account,
+                ":account_ty": account_ty,
+            },
+            |row| row.get::<_, bool>(0),
+        )?;
 
         Ok((challenge_set, intro_sent))
     }
@@ -623,7 +738,7 @@ impl Database {
         con.execute_named(
             "
             UPDATE
-                account_states
+                intro_msg_sent
             SET
                 intro_sent = '1'
             WHERE
