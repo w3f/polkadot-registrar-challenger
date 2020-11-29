@@ -306,13 +306,18 @@ mod tests {
             ),
         ];
 
-        let res = invalid_accounts_message(&accounts, None);
+        let res = invalid_accounts_message(&accounts, None, true);
         let txt = match res {
             VerifierMessage::NotifyViolation(txt) => txt,
             _ => panic!(),
         };
 
         assert_eq!(txt, "\
+            [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
+            This contact address was discovered in the Polkadot on-chain naming system and \
+            the issuer has requested the Web3 Registrar service to judge this account. \
+            If you did not issue this request then just ignore this message.\n\
+            \n\
             Please note that the following information is invalid:\n\
             \n\
             * \"@alice:matrix.org\" (Matrix) could not be reached.\n\
@@ -339,7 +344,7 @@ mod tests {
             ),
         ];
 
-        let res = invalid_accounts_message(&accounts, None);
+        let res = invalid_accounts_message(&accounts, None, false);
         let txt = match res {
             VerifierMessage::NotifyViolation(txt) => txt,
             _ => panic!(),
@@ -373,7 +378,7 @@ mod tests {
             ),
         ];
 
-        let res = invalid_accounts_message(&accounts, None);
+        let res = invalid_accounts_message(&accounts, None, false);
         let txt = match res {
             VerifierMessage::NotifyViolation(txt) => txt,
             _ => panic!(),

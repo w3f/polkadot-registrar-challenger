@@ -751,6 +751,40 @@ impl Database {
 
         Ok(())
     }
+    pub async fn delete_account(&self, net_account: &NetAccount, account: &Account, account_ty: &AccountType) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named("
+            DELETE FROM
+                account_states
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            AND
+                account = :account
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ", named_params! {
+            ":net_account": net_account,
+            ":account": account,
+            ":account_ty": account_ty,
+        })?;
+
+        Ok(())
+    }
     pub async fn select_account_statuses(
         &self,
         net_account: &NetAccount,
@@ -1420,6 +1454,59 @@ mod tests {
                     .unwrap()
                     .account,
                 Account::from("@alice_second:matrix.org")
+            );
+        });
+    }
+
+    #[test]
+    fn delete_account() {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(async {
+            let db = Database::new(&db_path()).unwrap();
+
+            // Create identity.
+            let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
+            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
+
+            ident
+                .push_account(AccountType::DisplayName, Account::from("Alice"))
+                .unwrap();
+            ident
+                .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
+                .unwrap();
+
+            db.insert_identity(&ident).await.unwrap();
+
+            // Verify storage.
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res[0].account_states().len(), 2);
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::DisplayName)
+                    .unwrap()
+                    .account,
+                Account::from("Alice")
+            );
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .unwrap()
+                    .account,
+                Account::from("@alice:matrix.org")
+            );
+
+            db.delete_account(&alice, &Account::from("@alice:matrix.org"), &AccountType::Matrix).await.unwrap();
+
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res[0].account_states().len(), 1);
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::DisplayName)
+                    .unwrap()
+                    .account,
+                Account::from("Alice")
             );
         });
     }
