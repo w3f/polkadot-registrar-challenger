@@ -166,11 +166,11 @@ impl Database {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
-                id              INTEGER PRIMARY KEY,
-                account_id      INTEGER NOT NULL UNIQUE,
-                twitter_id      INTEGER NOT NULL,
-                init_msg        INTEGER NOT NULL,
-                timestamp       INTEGER NOT NULL,
+                id          INTEGER PRIMARY KEY,
+                account_id  INTEGER NOT NULL UNIQUE,
+                twitter_id  INTEGER NOT NULL,
+                init_msg    INTEGER NOT NULL,
+                timestamp   INTEGER NOT NULL,
 
                 FOREIGN KEY (account_id)
                     REFERENCES account_states (id)
@@ -200,9 +200,9 @@ impl Database {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS email_processed_ids (
-                id          INTEGER PRIMARY KEY,
-                email_id    INTEGER NOT NULL UNIQUE,
-                timestamp   INTEGER NOT NULL
+                id         INTEGER PRIMARY KEY,
+                email_id   INTEGER NOT NULL UNIQUE,
+                timestamp  INTEGER NOT NULL
             )
         ",
             params![],
@@ -566,6 +566,15 @@ impl Database {
                         challenge_status
                     WHERE
                         status = 'accepted'
+                )
+            AND
+                account_states.account_status_id != (
+                    SELECT
+                        id
+                    FROM
+                        account_status
+                    WHERE
+                        status = 'notified'
                 )
             AND
                 account_states.account_ty_id = (
@@ -1685,6 +1694,8 @@ mod tests {
     }
 
     #[test]
+    // TODO: Check for unaccepted challenges.
+    // TODO: Check for account status.
     fn select_challenge_data() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {

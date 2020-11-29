@@ -8,6 +8,12 @@ use crate::Database;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use std::fmt;
 
+const INTRODUCTION_STR: &'static str = "\
+    [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
+    This contact address was discovered in the Polkadot on-chain naming system and \
+    the issuer has requested the Web3 Registrar service to judge this account. \
+    If you did not issue this request then just ignore this message.\n\n";
+
 #[derive(Debug, Fail)]
 pub enum VerifierError {
     #[fail(display = "This is not a valid signature output.")]
@@ -109,18 +115,11 @@ impl<'a> Verifier<'a> {
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn init_message_builder(&self, send_context: bool) -> VerifierMessage {
+    pub fn init_message_builder(&self, send_introduction: bool) -> VerifierMessage {
         let mut message = String::new();
 
-        if send_context {
-            message.push_str(
-                "\
-                [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
-                This contact address was discovered in the Polkadot on-chain naming system and \
-                the issuer has requested the Web3 Registrar service to judge this account. \
-                If you did not issue this request then just ignore this message.\n\n\
-            ",
-            );
+        if send_introduction {
+            message.push_str(INTRODUCTION_STR);
         }
 
         if self.challenges.len() > 1 {
@@ -138,7 +137,7 @@ impl<'a> Verifier<'a> {
 
         message.push_str("\n\nRefer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar");
 
-        if send_context {
+        if send_introduction {
             VerifierMessage::InitMessageWithContext(message)
         } else {
             VerifierMessage::InitMessage(message)
