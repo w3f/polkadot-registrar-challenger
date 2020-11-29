@@ -336,8 +336,11 @@ impl MatrixHandler {
         self.transport
             .send_message(&room_id, verifier.init_message_builder(!intro_sent))
             .await
-            .map_err(|err| MatrixError::SendMessage(err.into()).into())
-            .map(|_| ())
+            .map_err(|err| failure::Error::from(MatrixError::SendMessage(err.into())))?;
+
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Matrix)
+            .await
     }
     async fn handle_incoming_messages<T: EventExtract>(
         &self,

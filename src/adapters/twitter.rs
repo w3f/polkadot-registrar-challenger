@@ -405,6 +405,10 @@ impl TwitterHandler {
                     .await?;
 
                 self.db.confirm_init_message(&account).await?;
+                self.db
+                    .confirm_intro_sent(&account, &AccountType::Twitter)
+                    .await?;
+
                 continue;
             }
 

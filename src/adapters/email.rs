@@ -358,6 +358,10 @@ impl EmailHandler {
             .send_message(&account, verifier.init_message_builder(!intro_sent))
             .await?;
 
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Email)
+            .await?;
+
         Ok(())
     }
     async fn handle_incoming_messages<T: EmailTransport>(&self, transport: &T) -> Result<()> {
