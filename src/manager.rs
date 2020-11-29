@@ -305,7 +305,7 @@ impl IdentityManager {
                 if !existing_accounts
                     .iter()
                     .find(|(account_ty, _, status)| {
-                        account_ty == &state.account_ty && status == &AccountStatus::Notified
+                        account_ty == &state.account_ty && status == &AccountStatus::Unsupported
                     })
                     .is_some()
                 {
@@ -315,18 +315,19 @@ impl IdentityManager {
                     );
 
                     contains_unsupported = true;
-                    state.account_status = AccountStatus::Unsupported;
                 }
+
+                state.account_status = AccountStatus::Unsupported;
+                continue;
             }
 
-            // If the same account already exists in storage and is valid or
-            // unconfirmed, remove it (and avoid replacement).
+            // If the same account already exists in storage and the challenge
+            // is already accepted, remove it (and avoid replacement).
             if existing_accounts
                 .iter()
-                .find(|&(account_ty, _, status)| {
+                .find(|&(account_ty, _, _)| {
                     account_ty == &state.account_ty
-                        // TODO: Maybe check ChallengeStatus instead of AccountStatus?
-                        && (status == &AccountStatus::Valid || status == &AccountStatus::Unknown)
+                        && state.challenge_status == ChallengeStatus::Accepted
                 })
                 .is_some()
             {
@@ -338,6 +339,8 @@ impl IdentityManager {
             info!("Keeping current state of {}", ty);
             ident.remove_account_state(&ty)?;
         }
+
+        println!(">>>>>> {:?}", ident);
 
         // Insert identity into storage.
         self.db.insert_identity(&ident).await?;
@@ -424,7 +427,9 @@ impl IdentityManager {
             let filtered = account_statuses
                 .iter()
                 .filter(|(_, _, status)| {
-                    status == &AccountStatus::Valid || status == &AccountStatus::Unknown
+                    status == &AccountStatus::Valid
+                        || status == &AccountStatus::Notified
+                        || status == &AccountStatus::Unknown
                 })
                 .map(|(account_ty, account, _)| (account_ty, account))
                 .collect::<Vec<(&AccountType, &Account)>>();
@@ -467,13 +472,6 @@ impl IdentityManager {
                         invalid_accounts.clone(),
                     );
                 })?;
-
-                // Mark invalid accounts as notified.
-                for (account_ty, _, _) in &invalid_accounts {
-                    self.db
-                        .set_account_status(&net_account, &account_ty, &AccountStatus::Notified)
-                        .await?;
-                }
             } else {
                 warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());
             }

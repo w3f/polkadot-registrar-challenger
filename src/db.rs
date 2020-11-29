@@ -252,7 +252,7 @@ impl Database {
         // NOTE: The field `net_account` is not linked by a foreign key, since
         // insertions into the table `account_states` will replace old records.
         // The information in this table must "survive" replacements and must
-        // therefore be removed manually.
+        // therefore be removed manually (see Database::remove_identity).
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS intro_msg_sent (
@@ -568,9 +568,10 @@ impl Database {
 
         Ok(room_ids)
     }
+    // TODO: Should not require `NetAccount`.
     pub async fn set_account_status(
         &self,
-        net_account: &NetAccount,
+        _net_account: &NetAccount,
         account_ty: &AccountType,
         status: &AccountStatus,
     ) -> StdResult<(), DatabaseError> {
@@ -583,17 +584,12 @@ impl Database {
                     (SELECT id FROM account_status
                         WHERE status = :account_status)
                 WHERE
-                    net_account_id =
-                        (SELECT id FROM pending_judgments
-                            WHERE net_account = :net_account)
-                AND
                     account_ty_id =
                         (SELECT id FROM account_types
                             WHERE account_ty = :account_ty)
             ",
             named_params! {
                 ":account_status": status,
-                ":net_account": net_account,
                 ":account_ty": account_ty,
             },
         )
@@ -667,12 +663,14 @@ impl Database {
                         status = 'accepted'
                 )
             AND
-                account_states.account_status_id != (
+                account_states.account_status_id NOT IN (
                     SELECT
                         id
                     FROM
                         account_status
                     WHERE
+                        status = 'unsupported'
+                    OR
                         status = 'notified'
                 )
             AND
@@ -813,13 +811,18 @@ impl Database {
             ":net_account": net_account,
         })?;
 
+        let mut verified = false;
         while let Some(row) = rows.next()? {
-            if row.get::<_, ChallengeStatus>(0)? != ChallengeStatus::Accepted {
+            let challenge_status = row.get::<_, ChallengeStatus>(0)?;
+            if challenge_status == ChallengeStatus::Accepted {
+                // Enusere **all** accounts have an accepted challenge.
+                verified = true;
+            } else {
                 return Ok(false);
             }
         }
 
-        Ok(true)
+        Ok(verified)
     }
     pub async fn select_timed_out_identities(&self, timeout_limit: u64) -> Result<Vec<NetAccount>> {
         let con = self.con.lock().await;

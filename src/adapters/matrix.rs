@@ -442,6 +442,10 @@ impl MatrixHandler {
             .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
         self.db
+            .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Notified)
+            .await?;
+
+        self.db
             .confirm_intro_sent(&account, &AccountType::Matrix)
             .await?;
 
