@@ -115,10 +115,10 @@ impl<'a> Verifier<'a> {
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn init_message_builder(&self, send_introduction: bool) -> VerifierMessage {
+    pub fn init_message_builder(&self, send_intro: bool) -> VerifierMessage {
         let mut message = String::new();
 
-        if send_introduction {
+        if send_intro {
             message.push_str(INTRODUCTION_STR);
         }
 
@@ -137,7 +137,7 @@ impl<'a> Verifier<'a> {
 
         message.push_str("\n\nRefer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar");
 
-        if send_introduction {
+        if send_intro {
             VerifierMessage::InitMessageWithContext(message)
         } else {
             VerifierMessage::InitMessage(message)
@@ -221,8 +221,13 @@ pub async fn verification_handler<'a>(
 pub fn invalid_accounts_message(
     accounts: &[(AccountType, Account, AccountStatus)],
     violations: Option<Vec<Account>>,
+    send_intro: bool,
 ) -> VerifierMessage {
-    let mut message = String::new();
+    let mut message = if send_intro {
+        String::from(INTRODUCTION_STR)
+    } else {
+        String::new()
+    };
 
     message.push_str("Please note that the following information is invalid:\n\n");
 

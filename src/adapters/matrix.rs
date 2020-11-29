@@ -428,9 +428,16 @@ impl MatrixHandler {
 
         // Check for any display name violations (optional).
         let violations = self.db.select_display_name_violations(&net_account).await?;
+        let (_, intro_sent) = self
+            .db
+            .select_challenge_data(&account, &AccountType::Matrix)
+            .await?;
 
         self.transport
-            .send_message(&room_id, invalid_accounts_message(&accounts, violations))
+            .send_message(
+                &room_id,
+                invalid_accounts_message(&accounts, violations, !intro_sent),
+            )
             .await
             .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
