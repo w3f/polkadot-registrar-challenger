@@ -613,6 +613,39 @@ impl Database {
 
         Ok((challenge_set, intro_sent))
     }
+    pub async fn confirm_intro_sent(
+        &self,
+        account: &Account,
+        account_ty: &AccountType,
+    ) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            UPDATE
+                account_states
+            SET
+                intro_sent = '1'
+            WHERE
+                account = :account
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ",
+            named_params! {
+                ":account": account,
+                ":account_ty": account_ty,
+            },
+        )?;
+
+        Ok(())
+    }
     // Check whether the identity is fully verified.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
         let con = self.con.lock().await;
@@ -1747,6 +1780,17 @@ mod tests {
             assert_eq!(res[0].0, NetworkAddress::try_from(alice).unwrap());
             assert_eq!(res[1].0, NetworkAddress::try_from(bob).unwrap());
             assert!(!intro_sent);
+
+            db.confirm_intro_sent(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
+                .await
+                .unwrap();
+
+            let (_, intro_sent) = db
+                .select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
+                .await
+                .unwrap();
+
+            assert!(intro_sent);
         });
     }
 
