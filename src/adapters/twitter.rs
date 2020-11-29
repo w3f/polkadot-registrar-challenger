@@ -300,6 +300,10 @@ impl TwitterHandler {
             )
             .await?;
 
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Twitter)
+            .await?;
+
         Ok(())
     }
     pub async fn handle_incoming_messages<T: TwitterTransport>(

@@ -452,6 +452,10 @@ impl EmailHandler {
             )
             .await?;
 
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Email)
+            .await?;
+
         Ok(())
     }
 }
