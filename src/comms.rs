@@ -46,7 +46,7 @@ pub enum CommsMessage {
         accounts: Vec<(AccountType, Account, AccountStatus)>,
     },
     ExistingDisplayNames {
-        accounts: Vec<Account>,
+        accounts: Vec<(Account, NetAccount)>,
     },
     JudgementGivenAck {
         net_account: NetAccount,
@@ -176,7 +176,7 @@ impl CommsVerifier {
             })
             .fatal()
     }
-    pub fn notify_existing_display_names(&self, accounts: Vec<Account>) {
+    pub fn notify_existing_display_names(&self, accounts: Vec<(Account, NetAccount)>) {
         self.sender
             .send(CommsMessage::ExistingDisplayNames { accounts: accounts })
             .fatal()

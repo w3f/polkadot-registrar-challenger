@@ -239,11 +239,9 @@ impl IdentityManager {
                 }
                 MessageAcknowledged => {}
                 ExistingDisplayNames { accounts } => {
-                    for account in &accounts {
+                    for (account, net_account) in &accounts {
                         // TODO: Create a function for batch insert
-                        self.db
-                            .insert_display_name(&NetAccount::from("TODO"), account)
-                            .await?;
+                        self.db.insert_display_name(&net_account, account).await?;
                     }
                 }
                 JudgementGivenAck { net_account } => {

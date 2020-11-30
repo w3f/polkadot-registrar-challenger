@@ -107,6 +107,13 @@ pub(crate) struct JudgementGiven {
     result: String,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DisplayNamesEntry {
+    display_name: Account,
+    address: NetAccount,
+}
+
 #[async_trait]
 pub trait ConnectorInitTransports<W: ConnectorWriterTransport, R: ConnectorReaderTransport> {
     type Endpoint;
@@ -456,9 +463,14 @@ impl<
                             debug!("Display names {:?}", msg.data);
 
                             if let Ok(display_names) =
-                                serde_json::from_value::<Vec<Account>>(msg.data)
+                                serde_json::from_value::<Vec<DisplayNamesEntry>>(msg.data)
                             {
-                                comms.notify_existing_display_names(display_names);
+                                comms.notify_existing_display_names(
+                                    display_names
+                                        .into_iter()
+                                        .map(|e| (e.display_name, e.address))
+                                        .collect(),
+                                );
                             } else {
                                 error!("Invalid `displayNamesResponse` message format");
                             }
