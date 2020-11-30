@@ -463,6 +463,12 @@ impl EmailHandler {
             )
             .await?;
 
+        for (account_ty, account, _) in &accounts {
+            self.db
+                .set_account_status(account, account_ty, &AccountStatus::Notified)
+                .await?;
+        }
+
         self.db
             .confirm_intro_sent(&account, &AccountType::Email)
             .await?;
