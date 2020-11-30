@@ -115,10 +115,6 @@ impl DisplayNameHandler {
         {
             let jwinkler = jaro(&name_str, &account_str);
             let jwords = jaro_words(&name_str, &account_str, &[" ", "-", "_"]);
-
-            println!("{} == {} (?)", account, display_name);
-            println!("  - jaro: {}", jwinkler);
-            println!("  - jaro_words: {}", jwords);
         }
 
         let similarities = [
