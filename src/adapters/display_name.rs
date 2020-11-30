@@ -111,12 +111,6 @@ impl DisplayNameHandler {
         let name_str = display_name.as_str().to_lowercase();
         let account_str = account.as_str().to_lowercase();
 
-        #[cfg(test)]
-        {
-            let jwinkler = jaro(&name_str, &account_str);
-            let jwords = jaro_words(&name_str, &account_str, &[" ", "-", "_"]);
-        }
-
         let similarities = [
             jaro(&name_str, &account_str),
             jaro_words(&name_str, &account_str, &[" ", "-", "_"]),
