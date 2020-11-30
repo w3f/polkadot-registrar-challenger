@@ -571,7 +571,7 @@ impl Database {
     // TODO: Should not require `NetAccount`.
     pub async fn set_account_status(
         &self,
-        _net_account: &NetAccount,
+        account: &Account,
         account_ty: &AccountType,
         status: &AccountStatus,
     ) -> StdResult<(), DatabaseError> {
@@ -580,15 +580,29 @@ impl Database {
         con.execute_named(
             "UPDATE
                     account_states
-                SET account_status_id =
-                    (SELECT id FROM account_status
-                        WHERE status = :account_status)
+                SET
+                    account_status_id = (
+                        SELECT
+                            id
+                        FROM
+                            account_status
+                        WHERE
+                            status = :account_status
+                    )
                 WHERE
-                    account_ty_id =
-                        (SELECT id FROM account_types
-                            WHERE account_ty = :account_ty)
+                    account = :account
+                AND
+                    account_ty_id = (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                        account_ty = :account_ty
+                    )
             ",
             named_params! {
+                ":account": account,
                 ":account_status": status,
                 ":account_ty": account_ty,
             },
@@ -613,17 +627,33 @@ impl Database {
         self.con.lock().await.execute_named(
             "UPDATE
                     account_states
-                SET challenge_status_id =
-                    (SELECT id FROM challenge_status
-                        WHERE status = :challenge_status)
+                SET
+                    challenge_status_id = (
+                        SELECT
+                            id
+                        FROM
+                            challenge_status
+                        WHERE
+                            status = :challenge_status
+                    )
                 WHERE
-                    net_account_id =
-                        (SELECT id FROM pending_judgments
-                            WHERE net_account = :net_account)
+                    net_account_id = (
+                        SELECT
+                            id
+                        FROM
+                            pending_judgments
+                        WHERE
+                            net_account = :net_account
+                    )
                 AND
-                    account_ty_id =
-                        (SELECT id FROM account_types
-                            WHERE account_ty = :account_ty)
+                    account_ty_id = (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty = :account_ty
+                    )
             ",
             named_params! {
                 ":challenge_status": status,
@@ -2042,9 +2072,13 @@ mod tests {
             db.insert_identity(&ident).await.unwrap();
 
             // Set account status to valid
-            db.set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
-                .await
-                .unwrap();
+            db.set_account_status(
+                &Account::from("@alice:matrix.org"),
+                &AccountType::Matrix,
+                &AccountStatus::Valid,
+            )
+            .await
+            .unwrap();
 
             let res = db.select_account_statuses(&alice).await.unwrap();
             assert_eq!(res.len(), 2);

@@ -75,11 +75,7 @@ impl DisplayNameHandler {
                 .await?;
 
             self.db
-                .set_account_status(
-                    &net_account,
-                    &AccountType::DisplayName,
-                    &AccountStatus::Valid,
-                )
+                .set_account_status(&account, &AccountType::DisplayName, &AccountStatus::Valid)
                 .await?;
 
             self.db
@@ -95,11 +91,7 @@ impl DisplayNameHandler {
                 .await?;
 
             self.db
-                .set_account_status(
-                    &net_account,
-                    &AccountType::DisplayName,
-                    &AccountStatus::Invalid,
-                )
+                .set_account_status(&account, &AccountType::DisplayName, &AccountStatus::Invalid)
                 .await?;
 
             self.db

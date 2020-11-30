@@ -305,7 +305,7 @@ impl IdentityManager {
                 if !existing_accounts
                     .iter()
                     .find(|(account_ty, _, status)| {
-                        account_ty == &state.account_ty && status == &AccountStatus::Unsupported
+                        account_ty == &state.account_ty && status == &AccountStatus::Notified
                     })
                     .is_some()
                 {
@@ -321,13 +321,12 @@ impl IdentityManager {
                 continue;
             }
 
-            // If the same account already exists in storage and the challenge
-            // is already accepted, remove it (and avoid replacement).
+            // If the same account already exists in storage then remove it (and
+            // avoid replacement).
             if existing_accounts
                 .iter()
-                .find(|&(account_ty, _, _)| {
-                    account_ty == &state.account_ty
-                        && state.challenge_status == ChallengeStatus::Accepted
+                .find(|&(account_ty, account, _)| {
+                    account == &state.account && account_ty == &state.account_ty
                 })
                 .is_some()
             {

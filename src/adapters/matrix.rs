@@ -301,7 +301,7 @@ impl MatrixHandler {
             {
                 // Mark the account as valid.
                 self.db
-                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Valid)
+                    .set_account_status(&account, &AccountType::Matrix, &AccountStatus::Valid)
                     .await?;
 
                 room_id?
@@ -310,7 +310,7 @@ impl MatrixHandler {
 
                 // Mark the account as invalid.
                 self.db
-                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Invalid)
+                    .set_account_status(&account, &AccountType::Matrix, &AccountStatus::Invalid)
                     .await?;
 
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
@@ -442,7 +442,7 @@ impl MatrixHandler {
             .map_err(|err| MatrixError::SendMessage(err.into()))?;
 
         self.db
-            .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Notified)
+            .set_account_status(&account, &AccountType::Matrix, &AccountStatus::Notified)
             .await?;
 
         self.db
