@@ -302,12 +302,12 @@ impl IdentityManager {
             // Reject the entire judgment request if a non-white listed account type is specified.
             if !WHITELIST.contains(&state.account_ty) {
                 // If the user was already notified about the invalidity, then just ignore this.
-                if !existing_accounts
+                if existing_accounts
                     .iter()
                     .find(|(account_ty, _, status)| {
-                        account_ty == &state.account_ty && status == &AccountStatus::Notified
+                        account_ty == &state.account_ty && (status == &AccountStatus::Notified || status == &AccountStatus::Unsupported)
                     })
-                    .is_some()
+                    .is_none()
                 {
                     warn!(
                         "Reject identity {}, use of unacceptable account type: {:?}",
@@ -315,10 +315,8 @@ impl IdentityManager {
                     );
 
                     contains_unsupported = true;
+                    state.account_status = AccountStatus::Unsupported;
                 }
-
-                state.account_status = AccountStatus::Unsupported;
-                continue;
             }
 
             // If the same account already exists in storage then remove it (and
@@ -334,17 +332,7 @@ impl IdentityManager {
             }
         }
 
-        for ty in to_delete {
-            info!("Keeping current state of {}", ty);
-            ident.remove_account_state(&ty)?;
-        }
-
-        println!(">>>>>> {:?}", ident);
-
-        // Insert identity into storage.
-        self.db.insert_identity(&ident).await?;
-
-        // Delete deprecated accounts, if any.
+        // Delete deprecated accounts from storage, if any.
         for (account_ty, account, _) in &existing_accounts {
             if ident
                 .account_states()
@@ -352,21 +340,36 @@ impl IdentityManager {
                 .find(|state| account_ty == &state.account_ty && account == &state.account)
                 .is_none()
             {
+                debug!("Deleting deprecated account type: {}", account_ty);
                 self.db
                     .delete_account(ident.net_account(), account, account_ty)
                     .await?;
             }
         }
 
+        // Cleanup current identity file.
+        for account_ty in &to_delete {
+            debug!("Keeping current state of {}", account_ty);
+            ident.remove_account_state(account_ty)?;
+        }
+
+        // Insert identity into storage.
+        self.db.insert_identity(&ident).await?;
+
         // If the identity contains unallowed fields, notify the user about it
         // and prevent accepting the identity.
         if contains_unsupported {
-            return self.handle_status_change(ident.net_account().clone()).await;
+            self.handle_status_change(ident.net_account().clone())
+                .await?;
         }
 
         for state in ident.account_states() {
             if state.account_ty == AccountType::Twitter {
                 self.db.reset_init_message(&state.account).await?;
+            }
+
+            if state.account_status == AccountStatus::Unsupported {
+                continue;
             }
 
             self.get_comms(&state.account_ty).map(|comms| {
@@ -417,7 +420,7 @@ impl IdentityManager {
         // case of `display_name` which can be deemed invalid if it is too
         // similar to another, existing `display_name` in the identity system.
 
-        /// Find a valid account (or attempt unconfirmed) of the identity which
+        /// Find a valid account (or attempt 'unknown') of the identity which
         /// can be notified about an other account's invalidity. Preference for
         /// Matrix, since it's instant, followed by Email then Twitter.
         fn find_valid<'a>(
@@ -426,9 +429,7 @@ impl IdentityManager {
             let filtered = account_statuses
                 .iter()
                 .filter(|(_, _, status)| {
-                    status == &AccountStatus::Valid
-                        || status == &AccountStatus::Notified
-                        || status == &AccountStatus::Unknown
+                    status == &AccountStatus::Valid || status == &AccountStatus::Unknown
                 })
                 .map(|(account_ty, account, _)| (account_ty, account))
                 .collect::<Vec<(&AccountType, &Account)>>();

@@ -820,20 +820,6 @@ impl Database {
                             WHERE
                                 net_account = :net_account
                         )
-                    AND account_ty_id
-                        IN (
-                            SELECT
-                                id
-                            FROM
-                                account_types
-                            WHERE
-                                account_ty IN (
-                                    'display_name',
-                                    'matrix',
-                                    'email',
-                                    'twitter'
-                                )
-                        )
                     ",
         )?;
 
