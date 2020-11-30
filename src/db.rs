@@ -214,16 +214,13 @@ impl Database {
         )?;
 
         // Table for all display names.
-        //
-        // NOTE: This stores the net account directly, since it also contains
-        // entries of net accounts which do/did not use the service (i.e.
-        // **all** display names currently registered).
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS display_names (
                 id              INTEGER PRIMARY KEY,
                 name            TEXT NOT NULL,
-                net_account     TEXT UNIQUE
+                net_account     TEXT NOT NULL UNIQUE,
+                persist         INTEGER NOT NULL
             )
         ",
             params![],
@@ -434,6 +431,8 @@ impl Database {
                 display_names
             WHERE
                 net_account = :net_account
+            AND
+                persist = '0'
         ",
             named_params! {
                 ":net_account": net_account,
@@ -1278,7 +1277,7 @@ impl Database {
     }
     pub async fn insert_display_name(
         &self,
-        net_account: Option<&NetAccount>,
+        net_account: &NetAccount,
         account: &Account,
     ) -> Result<()> {
         let con = self.con.lock().await;
@@ -1287,10 +1286,12 @@ impl Database {
             "
             INSERT OR REPLACE INTO display_names (
                 name,
-                net_account
+                net_account,
+                persist
             ) VALUES (
                 :account,
-                :net_account
+                :net_account,
+                '0'
             )
         ",
             named_params! {
@@ -1309,7 +1310,7 @@ impl Database {
             UPDATE
                 display_names
             SET
-                net_account = NULL
+                persist = '1'
             WHERE
                 net_account = :net_account
         ",
@@ -1331,8 +1332,6 @@ impl Database {
                 display_names
             WHERE
                 net_account != :net_account
-            OR
-                net_account IS NULL
         ",
         )?;
 
@@ -2255,58 +2254,6 @@ mod tests {
         rt.block_on(async {
             let db = Database::new(&db_path()).unwrap();
 
-            // Prepare accounts.
-            let alice = Account::from("alice");
-            let bob = Account::from("bob");
-            let eve = Account::from("eve");
-
-            // Prepare net_accounts.
-            let alice_net = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
-            let bob_net = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
-            let eve_net = NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ");
-
-            let ident = OnChainIdentity::new(alice_net.clone()).unwrap();
-            db.insert_identity(&ident).await.unwrap();
-
-            let ident = OnChainIdentity::new(bob_net.clone()).unwrap();
-            db.insert_identity(&ident).await.unwrap();
-
-            let ident = OnChainIdentity::new(eve_net.clone()).unwrap();
-            db.insert_identity(&ident).await.unwrap();
-
-            // Insert display names.
-            db.insert_display_name(Some(&alice_net), &alice)
-                .await
-                .unwrap();
-            db.insert_display_name(Some(&bob_net), &bob).await.unwrap();
-            db.insert_display_name(None, &eve).await.unwrap();
-
-            // Select display names.
-            let res = db.select_display_names(&alice_net).await.unwrap();
-            assert_eq!(res.len(), 2);
-            assert!(res.contains(&bob));
-            assert!(res.contains(&eve));
-
-            let res = db.select_display_names(&bob_net).await.unwrap();
-            assert_eq!(res.len(), 2);
-            assert!(res.contains(&alice));
-            assert!(res.contains(&eve));
-
-            // Wil return all, since the net address is not tied to the display name.
-            let res = db.select_display_names(&eve_net).await.unwrap();
-            assert_eq!(res.len(), 3);
-            assert!(res.contains(&alice));
-            assert!(res.contains(&bob));
-            assert!(res.contains(&eve));
-        });
-    }
-
-    #[test]
-    fn insert_select_display_names_with_net_account() {
-        let mut rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            let db = Database::new(&db_path()).unwrap();
-
             // Prepare addresses.
             let alice_net = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
             let bob_net = NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C");
@@ -2327,11 +2274,9 @@ mod tests {
             let eve = Account::from("eve");
 
             // Insert display names.
-            db.insert_display_name(Some(&alice_net), &alice)
-                .await
-                .unwrap();
-            db.insert_display_name(Some(&bob_net), &bob).await.unwrap();
-            db.insert_display_name(Some(&eve_net), &eve).await.unwrap();
+            db.insert_display_name(&alice_net, &alice).await.unwrap();
+            db.insert_display_name(&bob_net, &bob).await.unwrap();
+            db.insert_display_name(&eve_net, &eve).await.unwrap();
 
             // Persist display name, then remove identities.
             db.persist_display_name(&eve_net).await.unwrap();
@@ -2342,6 +2287,14 @@ mod tests {
             let res = db.select_display_names(&bob_net).await.unwrap();
             assert_eq!(res.len(), 1);
             assert!(res.contains(&eve));
+
+            // Replace.
+            let eve_new = &Account::from("eve new");
+            db.insert_display_name(&eve_net, &eve_new).await.unwrap();
+
+            let res = db.select_display_names(&bob_net).await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert!(res.contains(&eve_new));
         });
     }
 
