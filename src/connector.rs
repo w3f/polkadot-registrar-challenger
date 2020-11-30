@@ -459,8 +459,8 @@ impl<
                             }
                         }
                         DisplayNamesResponse => {
-                            info!("Received display names response");
-                            debug!("Display names {:?}", msg.data);
+                            trace!("Received display names response");
+                            trace!("Display names {:?}", msg.data);
 
                             if let Ok(display_names) =
                                 serde_json::from_value::<Vec<DisplayNamesEntry>>(msg.data)

@@ -102,8 +102,9 @@ impl MatrixClient {
         let rooms = rooms.read().await;
         for (room_id, _) in rooms.iter() {
             if pending_room_ids.iter().find(|&id| id == room_id).is_none() {
-                warn!("Leaving dead room: {}", room_id.as_str());
-                let _ = client.leave_room(room_id).await;
+                // TODO: Leave room after 1 day.
+                //warn!("Leaving dead room: {}", room_id.as_str());
+                //let _ = client.leave_room(room_id).await;
             }
         }
 
