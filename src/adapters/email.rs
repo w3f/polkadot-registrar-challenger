@@ -431,7 +431,7 @@ impl EmailHandler {
         &self,
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account, AccountStatus)>,
+        _accounts: Vec<(AccountType, Account, AccountStatus)>,
         transport: &T,
     ) -> Result<()> {
         // Check for any display name violations (optional).
@@ -440,6 +440,21 @@ impl EmailHandler {
             .db
             .select_challenge_data(&account, &AccountType::Email)
             .await?;
+
+        // Check current account statuses and filter for invalid or unsupported accounts.
+        let accounts = self
+            .db
+            .select_account_statuses(&net_account)
+            .await?
+            .into_iter()
+            .filter(|(_, _, status)| {
+                status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+            })
+            .collect::<Vec<(AccountType, Account, AccountStatus)>>();
+
+        if accounts.is_empty() && violations.is_none() {
+            return Ok(());
+        }
 
         transport
             .send_message(

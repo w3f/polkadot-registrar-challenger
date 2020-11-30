@@ -422,7 +422,7 @@ impl MatrixHandler {
         &self,
         net_account: NetAccount,
         account: Account,
-        accounts: Vec<(AccountType, Account, AccountStatus)>,
+        _accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) -> Result<()> {
         let room_id = self.init_room_id(&net_account, &account).await?;
 
@@ -432,6 +432,21 @@ impl MatrixHandler {
             .db
             .select_challenge_data(&account, &AccountType::Matrix)
             .await?;
+
+        // Check current account statuses and filter for invalid or unsupported accounts.
+        let accounts = self
+            .db
+            .select_account_statuses(&net_account)
+            .await?
+            .into_iter()
+            .filter(|(_, _, status)| {
+                status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+            })
+            .collect::<Vec<(AccountType, Account, AccountStatus)>>();
+
+        if accounts.is_empty() && violations.is_none() {
+            return Ok(());
+        }
 
         self.transport
             .send_message(

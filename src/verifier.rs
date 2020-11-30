@@ -123,16 +123,16 @@ impl<'a> Verifier<'a> {
         }
 
         if self.challenges.len() > 1 {
-            message.push_str("Please sign each challenge with the corresponding address:\n");
+            message.push_str("Please sign each challenge with the corresponding address in order to verify this account:\n");
         } else {
-            message.push_str("Please sign the challenge with the corresponding address:\n");
+            message.push_str("Please sign the challenge with the corresponding address in order to verify this account:\n");
         }
 
         for (network_address, challenge) in self.challenges {
-            message.push_str("\n- Address:\n");
-            message.push_str(network_address.address().as_str());
-            message.push_str("\n- Challenge:\n");
-            message.push_str(challenge.as_str());
+            message.push_str("\nADDRESS:\n");
+            message.push_str(&format!("> {}", network_address.address().as_str()));
+            message.push_str("\nCHALLENGE:\n");
+            message.push_str(&format!("> {}", challenge.as_str()));
         }
 
         message.push_str("\n\nRefer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar");
@@ -155,11 +155,9 @@ impl<'a> Verifier<'a> {
             message.push_str("The following addresses have been verified:\n")
         }
 
-        for (network_address, challenge) in &self.valid {
-            message.push_str("\n- Address:\n");
-            message.push_str(network_address.address().as_str());
-            message.push_str("\n- Challenge:\n");
-            message.push_str(challenge.as_str());
+        for (network_address, _) in &self.valid {
+            message.push_str("\nADDRESS:\n");
+            message.push_str(&format!("> {}", network_address.address().as_str()));
         }
 
         if !self.invalid.is_empty() {
@@ -265,7 +263,7 @@ pub fn invalid_accounts_message(
             }
         } else if status == &AccountStatus::Unsupported {
             message.push_str(&format!(
-                "* {} judgement (\"{}\") is not supported by the registrar.\n",
+                "* {} judgements (\"{}\") are not supported by the registrar.\n",
                 account_ty.to_string(),
                 account.as_str(),
             ));

@@ -296,7 +296,6 @@ impl IdentityManager {
         let mut to_delete = vec![];
 
         // Find duplicates.
-        let mut contains_unsupported = false;
         let address = ident.net_account().as_str().to_string();
         for state in ident.account_states_mut() {
             // Reject the entire judgment request if a non-white listed account type is specified.
@@ -305,7 +304,9 @@ impl IdentityManager {
                 if existing_accounts
                     .iter()
                     .find(|(account_ty, _, status)| {
-                        account_ty == &state.account_ty && (status == &AccountStatus::Notified || status == &AccountStatus::Unsupported)
+                        account_ty == &state.account_ty
+                            && (status == &AccountStatus::Notified
+                                || status == &AccountStatus::Unsupported)
                     })
                     .is_none()
                 {
@@ -314,7 +315,6 @@ impl IdentityManager {
                         address, state.account_ty
                     );
 
-                    contains_unsupported = true;
                     state.account_status = AccountStatus::Unsupported;
                 }
             }
@@ -356,12 +356,7 @@ impl IdentityManager {
         // Insert identity into storage.
         self.db.insert_identity(&ident).await?;
 
-        // If the identity contains unallowed fields, notify the user about it
-        // and prevent accepting the identity.
-        if contains_unsupported {
-            self.handle_status_change(ident.net_account().clone())
-                .await?;
-        }
+        self.handle_status_change(ident.net_account().clone()).await?;
 
         for state in ident.account_states() {
             if state.account_ty == AccountType::Twitter {
