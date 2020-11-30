@@ -243,6 +243,12 @@ pub enum AccountType {
     Twitter,
     #[serde(rename = "matrix")]
     Matrix,
+    #[serde(rename = "pgpFingerprint")]
+    PGPFingerprint,
+    #[serde(rename = "image")]
+    Image,
+    #[serde(rename = "additional")]
+    Additional,
     // Reserved types for internal communication.
     //
     // Websocket connection to Watcher
@@ -262,6 +268,9 @@ impl Display for AccountType {
             Web => write!(f, "Web"),
             Twitter => write!(f, "Twitter"),
             Matrix => write!(f, "Matrix"),
+            PGPFingerprint => write!(f, "PGP Fingerprint"),
+            Image => write!(f, "Image"),
+            Additional => write!(f, "Additional"),
             ReservedConnector => Err(fmt::Error),
             ReservedEmitter => Err(fmt::Error),
         }
@@ -281,6 +290,9 @@ impl ToSql for AccountType {
             Web => Ok(Borrowed(Text(b"web"))),
             Twitter => Ok(Borrowed(Text(b"twitter"))),
             Matrix => Ok(Borrowed(Text(b"matrix"))),
+            PGPFingerprint => Ok(Borrowed(Text(b"pgp_fingerprint"))),
+            Image => Ok(Borrowed(Text(b"image"))),
+            Additional => Ok(Borrowed(Text(b"additional"))),
             ReservedConnector => Err(rusqlite::Error::InvalidQuery),
             ReservedEmitter => Err(rusqlite::Error::InvalidQuery),
         }
@@ -297,6 +309,9 @@ impl FromSql for AccountType {
                 b"web" => Ok(AccountType::Web),
                 b"twitter" => Ok(AccountType::Twitter),
                 b"matrix" => Ok(AccountType::Matrix),
+                b"pgp_fingerprint" => Ok(AccountType::PGPFingerprint),
+                b"image" => Ok(AccountType::Image),
+                b"additional" => Ok(AccountType::Additional),
                 _ => Err(FromSqlError::InvalidType),
             },
             _ => Err(FromSqlError::InvalidType),
