@@ -214,16 +214,16 @@ impl Database {
         )?;
 
         // Table for all display names.
+        //
+        // NOTE: This stores the net account directly, since it also contains
+        // entries of net accounts which do/did not use the service (i.e.
+        // **all** display names currently registered).
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS display_names (
                 id              INTEGER PRIMARY KEY,
-                name            TEXT NOT NULL UNIQUE,
-                net_account_id  INTEGER UNIQUE,
-
-                FOREIGN KEY (net_account_id)
-                    REFERENCES pending_judgments (id)
-                        ON DELETE CASCADE
+                name            TEXT NOT NULL,
+                net_account     TEXT UNIQUE
             )
         ",
             params![],
@@ -424,6 +424,20 @@ impl Database {
 
         ",
             params![],
+        )?;
+
+        // Cleanup display name entry. Display names must be persisted manually
+        // (see `Database::persist_display_name()`).
+        transaction.execute_named(
+            "
+            DELETE FROM
+                display_names
+            WHERE
+                net_account = :net_account
+        ",
+            named_params! {
+                ":net_account": net_account,
+            },
         )?;
 
         transaction.commit()?;
@@ -1271,19 +1285,12 @@ impl Database {
 
         con.execute_named(
             "
-            INSERT OR IGNORE INTO display_names (
+            INSERT OR REPLACE INTO display_names (
                 name,
-                net_account_id
+                net_account
             ) VALUES (
                 :account,
-                (
-                    SELECT
-                        id
-                    FROM
-                        pending_judgments
-                    WHERE
-                        net_account = :net_account
-                )
+                :net_account
             )
         ",
             named_params! {
@@ -1302,16 +1309,9 @@ impl Database {
             UPDATE
                 display_names
             SET
-                net_account_id = NULL
+                net_account = NULL
             WHERE
-                net_account_id = (
-                    SELECT
-                        id
-                    FROM
-                        pending_judgments
-                    WHERE
-                        net_account = :net_account
-                )
+                net_account = :net_account
         ",
             named_params! {
                 ":net_account": net_account,
@@ -1320,7 +1320,6 @@ impl Database {
 
         Ok(())
     }
-    // TODO: How should this behave when the net account is no longer available in the db?
     pub async fn select_display_names(&self, exclude_me: &NetAccount) -> Result<Vec<Account>> {
         let con = self.con.lock().await;
 
@@ -1331,16 +1330,9 @@ impl Database {
             FROM
                 display_names
             WHERE
-                net_account_id != (
-                    SELECT
-                        id
-                    FROM
-                        pending_judgments
-                    WHERE
-                        net_account = :net_account
-                )
+                net_account != :net_account
             OR
-                net_account_id IS NULL
+                net_account IS NULL
         ",
         )?;
 
@@ -2287,8 +2279,6 @@ mod tests {
                 .await
                 .unwrap();
             db.insert_display_name(Some(&bob_net), &bob).await.unwrap();
-            // Multiple inserts of the same value.
-            db.insert_display_name(None, &eve).await.unwrap();
             db.insert_display_name(None, &eve).await.unwrap();
 
             // Select display names.
