@@ -356,7 +356,8 @@ impl IdentityManager {
         // Insert identity into storage.
         self.db.insert_identity(&ident).await?;
 
-        self.handle_status_change(ident.net_account().clone()).await?;
+        self.handle_status_change(ident.net_account().clone())
+            .await?;
 
         for state in ident.account_states() {
             if state.account_ty == AccountType::Twitter {
