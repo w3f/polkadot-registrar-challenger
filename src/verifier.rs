@@ -352,8 +352,8 @@ mod tests {
         assert_eq!(txt, "\
             Please note that the following information is invalid:\n\
             \n\
-            * Legal Name judgement (\"Alice Doe\") is not supported by the registrar.\n\
-            * Web judgement (\"alice.com\") is not supported by the registrar.\n\
+            * Legal Name judgements (\"Alice Doe\") are not supported by the registrar.\n\
+            * Web judgements (\"alice.com\") are not supported by the registrar.\n\
             \n\
             Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
             \n\
@@ -386,7 +386,7 @@ mod tests {
         assert_eq!(txt, "\
             Please note that the following information is invalid:\n\
             \n\
-            * Legal Name judgement (\"Alice Doe\") is not supported by the registrar.\n\
+            * Legal Name judgements (\"Alice Doe\") are not supported by the registrar.\n\
             * \"alice@example.com\" (Email) could not be reached.\n\
             \n\
             Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
