@@ -38,10 +38,10 @@ releases:
   - ./config/registrar-challenger-values.yaml.gotmpl
   - ./config/kusama/registrar-challenger-values.yaml.gotmpl  
 
-# - name: polkadot-registrar-challenger
-#   namespace: registrar-polkadot 
-#   chart: w3f/polkadot-registrar-challenger
-#   values:
-#   - ./config/registrar-challenger-values.yaml.gotmpl
-#   - ./config/polkadot/registrar-challenger-values.yaml.gotmpl  
+- name: polkadot-registrar-challenger
+  namespace: registrar-polkadot 
+  chart: w3f/polkadot-registrar-challenger
+  values:
+  - ./config/registrar-challenger-values.yaml.gotmpl
+  - ./config/polkadot/registrar-challenger-values.yaml.gotmpl  
 {{- end }}
