@@ -1,5 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database;
+use crate::manager::AccountStatus;
 use crate::primitives::{Account, AccountType, NetAccount, Result};
 use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use lettre::smtp::authentication::Credentials;
@@ -85,9 +86,6 @@ pub enum ClientError {
     IncompleteBuilder,
     #[fail(display = "Unrecognized data returned from the Gmail API")]
     UnrecognizedData,
-    #[fail(display = "No Email account found for user: {}", 0)]
-    // TODO: Should be `NetAccount`
-    NoEmailAccount(String),
 }
 
 pub struct SmtpImapClientBuilder {
@@ -331,9 +329,10 @@ impl EmailHandler {
             }
             NotifyInvalidAccount {
                 net_account,
+                account,
                 accounts,
             } => {
-                self.handle_invalid_account_notification(net_account, accounts, transport)
+                self.handle_invalid_account_notification(net_account, account, accounts, transport)
                     .await?
             }
             _ => warn!("Received unrecognized message type"),
@@ -346,7 +345,7 @@ impl EmailHandler {
         transport: &T,
         account: Account,
     ) -> Result<()> {
-        let challenge_data = self
+        let (challenge_data, intro_sent) = self
             .db
             .select_challenge_data(&account, &AccountType::Email)
             .await?;
@@ -356,7 +355,11 @@ impl EmailHandler {
         // Only require the verifier to send the initial message
         let verifier = Verifier::new(&challenge_data);
         transport
-            .send_message(&account, verifier.init_message_builder(true))
+            .send_message(&account, verifier.init_message_builder(!intro_sent))
+            .await?;
+
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Email)
             .await?;
 
         Ok(())
@@ -387,7 +390,7 @@ impl EmailHandler {
             debug!("New message from {}", sender.as_str());
 
             debug!("Fetching challenge data");
-            let challenge_data = self
+            let (challenge_data, _) = self
                 .db
                 .select_challenge_data(sender, &AccountType::Email)
                 .await?;
@@ -398,6 +401,11 @@ impl EmailHandler {
                 self.db.track_email_id(email_id).await?;
                 continue;
             }
+
+            // Set email as valid.
+            self.db
+                .set_account_status(sender, &AccountType::Email, &AccountStatus::Valid)
+                .await?;
 
             let mut verifier = Verifier::new(&challenge_data);
 
@@ -422,22 +430,47 @@ impl EmailHandler {
     async fn handle_invalid_account_notification<T: EmailTransport>(
         &self,
         net_account: NetAccount,
-        accounts: Vec<(AccountType, Account)>,
+        account: Account,
+        _accounts: Vec<(AccountType, Account, AccountStatus)>,
         transport: &T,
     ) -> Result<()> {
-        let account = self
-            .db
-            .select_account_from_net_account(&net_account, &AccountType::Email)
-            .await?
-            .ok_or(ClientError::NoEmailAccount(
-                net_account.as_str().to_string(),
-            ))?;
-
         // Check for any display name violations (optional).
         let violations = self.db.select_display_name_violations(&net_account).await?;
+        let (_, intro_sent) = self
+            .db
+            .select_challenge_data(&account, &AccountType::Email)
+            .await?;
+
+        // Check current account statuses and filter for invalid or unsupported accounts.
+        let accounts = self
+            .db
+            .select_account_statuses(&net_account)
+            .await?
+            .into_iter()
+            .filter(|(_, _, status)| {
+                status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+            })
+            .collect::<Vec<(AccountType, Account, AccountStatus)>>();
+
+        if accounts.is_empty() && violations.is_none() {
+            return Ok(());
+        }
 
         transport
-            .send_message(&account, invalid_accounts_message(&accounts, violations))
+            .send_message(
+                &account,
+                invalid_accounts_message(&accounts, violations, !intro_sent),
+            )
+            .await?;
+
+        for (account_ty, account, _) in &accounts {
+            self.db
+                .set_account_status(account, account_ty, &AccountStatus::Notified)
+                .await?;
+        }
+
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Email)
             .await?;
 
         Ok(())

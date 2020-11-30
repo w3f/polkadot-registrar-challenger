@@ -20,7 +20,10 @@ static WHITELIST: [AccountType; 4] = [
 ];
 
 /// The ordering of account types in which the user is informed about invalid
-/// display names: first, try Matrix, then Email, etc.
+/// fields (or the display name is too similar to an existing one): first, try
+/// Matrix, then Email, etc.
+///
+/// See `IdentityManager::handle_status_change` for more.
 static NOTIFY_QUEUE: [AccountType; 3] = [
     AccountType::Matrix,
     AccountType::Email,
@@ -75,12 +78,16 @@ impl OnChainIdentity {
     pub fn account_states(&self) -> &Vec<AccountState> {
         &self.accounts
     }
+    pub fn account_states_mut(&mut self) -> &mut Vec<AccountState> {
+        &mut self.accounts
+    }
     pub fn remove_account_state(&mut self, account_ty: &AccountType) -> Result<()> {
         let pos = self
             .accounts
             .iter()
             .position(|state| &state.account_ty == account_ty)
             .ok_or(ManagerError::NoAccountState)?;
+
         self.accounts.remove(pos);
 
         Ok(())
@@ -123,6 +130,8 @@ pub enum AccountStatus {
     Invalid,
     #[serde(rename = "notified")]
     Notified,
+    #[serde(rename = "unsupported")]
+    Unsupported,
 }
 
 impl ToSql for AccountStatus {
@@ -136,6 +145,7 @@ impl ToSql for AccountStatus {
             Valid => Ok(Borrowed(Text(b"valid"))),
             Invalid => Ok(Borrowed(Text(b"invalid"))),
             Notified => Ok(Borrowed(Text(b"notified"))),
+            Unsupported => Ok(Borrowed(Text(b"unsupported"))),
         }
     }
 }
@@ -148,6 +158,7 @@ impl FromSql for AccountStatus {
                 b"valid" => Ok(AccountStatus::Valid),
                 b"invalid" => Ok(AccountStatus::Invalid),
                 b"notified" => Ok(AccountStatus::Notified),
+                b"unsupported" => Ok(AccountStatus::Unsupported),
                 _ => Err(FromSqlError::InvalidType),
             },
             _ => Err(FromSqlError::InvalidType),
@@ -209,8 +220,6 @@ impl IdentityManager {
             .ok_or(ManagerError::NoHandlerRegistered(account_ty.clone()))
     }
     pub async fn start(mut self) {
-        // No async support for `recv` (it blocks and chokes tokio), so we
-        // `try_recv` and just loop over it with a short pause.
         let mut interval = time::interval(Duration::from_millis(10));
         loop {
             interval.tick().await;
@@ -277,45 +286,86 @@ impl IdentityManager {
         );
 
         // Check the current, associated addresses of the identity, if any.
-        let accounts = self.db.select_addresses(&ident.net_account()).await?;
+        let existing_accounts = self
+            .db
+            .select_account_statuses(&ident.net_account())
+            .await?;
+
+        // Account types to delete **from the identity info** before it gets
+        // inserted into the database and therefore prevents replacement.
         let mut to_delete = vec![];
 
         // Find duplicates.
-        for state in ident.account_states() {
+        let address = ident.net_account().as_str().to_string();
+        for state in ident.account_states_mut() {
             // Reject the entire judgment request if a non-white listed account type is specified.
             if !WHITELIST.contains(&state.account_ty) {
-                warn!(
-                    "Reject identity {}, use of unacceptable account type: {:?}",
-                    ident.net_account().as_str(),
-                    state.account_ty
-                );
+                // If the user was already notified about the invalidity, then just ignore this.
+                if existing_accounts
+                    .iter()
+                    .find(|(account_ty, _, status)| {
+                        account_ty == &state.account_ty
+                            && (status == &AccountStatus::Notified
+                                || status == &AccountStatus::Unsupported)
+                    })
+                    .is_none()
+                {
+                    warn!(
+                        "Reject identity {}, use of unacceptable account type: {:?}",
+                        address, state.account_ty
+                    );
 
-                self.get_comms(&AccountType::ReservedConnector)?
-                    .notify_identity_judgment(ident.net_account().clone(), Judgement::Erroneous);
-
-                return Ok(());
+                    state.account_status = AccountStatus::Unsupported;
+                }
             }
 
-            // If the same account already exists in storage, remove it (and avoid replacement).
-            if accounts
+            // If the same account already exists in storage then remove it (and
+            // avoid replacement).
+            if existing_accounts
                 .iter()
-                .find(|&account| account == &state.account)
+                .find(|&(account_ty, account, _)| {
+                    account == &state.account && account_ty == &state.account_ty
+                })
                 .is_some()
             {
                 to_delete.push(state.account_ty.clone());
             }
         }
 
-        for ty in to_delete {
-            ident.remove_account_state(&ty)?;
+        // Delete deprecated accounts from storage, if any.
+        for (account_ty, account, _) in &existing_accounts {
+            if ident
+                .account_states()
+                .iter()
+                .find(|state| account_ty == &state.account_ty && account == &state.account)
+                .is_none()
+            {
+                debug!("Deleting deprecated account type: {}", account_ty);
+                self.db
+                    .delete_account(ident.net_account(), account, account_ty)
+                    .await?;
+            }
         }
 
-        // Insert identity into storage, notify tasks for verification.
+        // Cleanup current identity file.
+        for account_ty in &to_delete {
+            debug!("Keeping current state of {}", account_ty);
+            ident.remove_account_state(account_ty)?;
+        }
+
+        // Insert identity into storage.
         self.db.insert_identity(&ident).await?;
+
+        self.handle_status_change(ident.net_account().clone())
+            .await?;
 
         for state in ident.account_states() {
             if state.account_ty == AccountType::Twitter {
                 self.db.reset_init_message(&state.account).await?;
+            }
+
+            if state.account_status == AccountStatus::Unsupported {
+                continue;
             }
 
             self.get_comms(&state.account_ty).map(|comms| {
@@ -366,21 +416,25 @@ impl IdentityManager {
         // case of `display_name` which can be deemed invalid if it is too
         // similar to another, existing `display_name` in the identity system.
 
-        /// Find a valid account of the identity which can be notified about an
-        /// other account's invalidity. Preference for Matrix, since it's
-        /// instant, followed by Email then Twitter.
-        fn find_valid(
-            account_statuses: &[(AccountType, Account, AccountStatus)],
-        ) -> Option<&'static AccountType> {
+        /// Find a valid account (or attempt 'unknown') of the identity which
+        /// can be notified about an other account's invalidity. Preference for
+        /// Matrix, since it's instant, followed by Email then Twitter.
+        fn find_valid<'a>(
+            account_statuses: &'a [(AccountType, Account, AccountStatus)],
+        ) -> Option<(&'a AccountType, &'a Account)> {
             let filtered = account_statuses
                 .iter()
-                .filter(|(_, _, status)| status == &AccountStatus::Valid)
-                .map(|(account_ty, _, _)| account_ty)
-                .collect::<Vec<&AccountType>>();
+                .filter(|(_, _, status)| {
+                    status == &AccountStatus::Valid || status == &AccountStatus::Unknown
+                })
+                .map(|(account_ty, account, _)| (account_ty, account))
+                .collect::<Vec<(&AccountType, &Account)>>();
 
             for to_notify in &NOTIFY_QUEUE {
-                if filtered.contains(&to_notify) {
-                    return Some(to_notify);
+                for (account_ty, account) in &filtered {
+                    if &to_notify == account_ty {
+                        return Some((account_ty, account));
+                    }
                 }
             }
 
@@ -390,13 +444,14 @@ impl IdentityManager {
         /// Find invalid accounts.
         fn find_invalid<'a>(
             account_statuses: &[(AccountType, Account, AccountStatus)],
-        ) -> Vec<(AccountType, Account)> {
+        ) -> Vec<(AccountType, Account, AccountStatus)> {
             account_statuses
                 .iter()
                 .cloned()
-                .filter(|(_, _, status)| status == &AccountStatus::Invalid)
-                .map(|(account_ty, account, _)| (account_ty, account))
-                .collect::<Vec<(AccountType, Account)>>()
+                .filter(|(_, _, status)| {
+                    status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+                })
+                .collect::<Vec<(AccountType, Account, AccountStatus)>>()
         }
 
         let account_statuses = self.db.select_account_statuses(&net_account).await?;
@@ -405,9 +460,13 @@ impl IdentityManager {
         // to inform that person about the current state of invalid accounts.
         let invalid_accounts = find_invalid(&account_statuses);
         if !invalid_accounts.is_empty() {
-            if let Some(to_notify) = find_valid(&account_statuses) {
+            if let Some((to_notify, account)) = find_valid(&account_statuses) {
                 self.get_comms(to_notify).map(|comms| {
-                    comms.notify_invalid_accounts(net_account.clone(), invalid_accounts);
+                    comms.notify_invalid_accounts(
+                        net_account.clone(),
+                        account.clone(),
+                        invalid_accounts.clone(),
+                    );
                 })?;
             } else {
                 warn!("Identity {} could not be informed about invalid accounts (no valid accounts yet)", net_account.as_str());

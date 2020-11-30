@@ -31,6 +31,11 @@ impl From<rusqlite::Error> for DatabaseError {
 
 #[derive(Clone)]
 pub struct Database {
+    // Locking the connection is not ideal for performance, but since this
+    // project is not meant to handle thounsands of connections per seconds, but
+    // rather **one** request every few minutes/hours this is ok. It certainly
+    // simplyfies database management instead of setting up a connection pool
+    // with Postegres, for example.
     con: Arc<Mutex<Connection>>,
 }
 
@@ -68,7 +73,8 @@ impl Database {
                     ('unknown'),
                     ('valid'),
                     ('invalid'),
-                    ('notified')
+                    ('notified'),
+                    ('unsupported')
             ",
             params![],
         )?;
@@ -165,11 +171,11 @@ impl Database {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS known_twitter_ids (
-                id              INTEGER PRIMARY KEY,
-                account_id      INTEGER NOT NULL UNIQUE,
-                twitter_id      INTEGER NOT NULL,
-                init_msg        INTEGER NOT NULL,
-                timestamp       INTEGER NOT NULL,
+                id          INTEGER PRIMARY KEY,
+                account_id  INTEGER NOT NULL UNIQUE,
+                twitter_id  INTEGER NOT NULL,
+                init_msg    INTEGER NOT NULL,
+                timestamp   INTEGER NOT NULL,
 
                 FOREIGN KEY (account_id)
                     REFERENCES account_states (id)
@@ -199,9 +205,9 @@ impl Database {
         con.execute(
             "
             CREATE TABLE IF NOT EXISTS email_processed_ids (
-                id          INTEGER PRIMARY KEY,
-                email_id    INTEGER NOT NULL UNIQUE,
-                timestamp   INTEGER NOT NULL
+                id         INTEGER PRIMARY KEY,
+                email_id   INTEGER NOT NULL UNIQUE,
+                timestamp  INTEGER NOT NULL
             )
         ",
             params![],
@@ -213,7 +219,7 @@ impl Database {
             CREATE TABLE IF NOT EXISTS display_names (
                 id              INTEGER PRIMARY KEY,
                 name            TEXT NOT NULL UNIQUE,
-                net_account_id  INTEGER,
+                net_account_id  INTEGER UNIQUE,
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
@@ -235,6 +241,30 @@ impl Database {
 
                 FOREIGN KEY (net_account_id)
                     REFERENCES pending_judgments (id)
+                        ON DELETE CASCADE
+            )
+        ",
+            params![],
+        )?;
+
+        // Table for tracking whether the introduction message was sent.
+        //
+        // NOTE: The field `net_account` is not linked by a foreign key, since
+        // insertions into the table `account_states` will replace old records.
+        // The information in this table must "survive" replacements and must
+        // therefore be removed manually (see Database::remove_identity).
+        con.execute(
+            "
+            CREATE TABLE IF NOT EXISTS intro_msg_sent (
+                id             INTEGER PRIMARY KEY,
+                account        TEXT NOT NULL,
+                account_ty_id  INTEGER NOT NULL,
+                intro_sent     INTEGER NOT NULL,
+
+                UNIQUE (account, account_ty_id)
+
+                FOREIGN KEY (account_ty_id)
+                    REFERENCES account_types (id)
                         ON DELETE CASCADE
             )
         ",
@@ -281,17 +311,62 @@ impl Database {
                     challenge,
                     challenge_status_id
                 ) VALUES (
-                    (SELECT id FROM pending_judgments
-                        WHERE net_account = :net_account),
+                    (
+                        SELECT
+                            id
+                        FROM
+                            pending_judgments
+                        WHERE
+                            net_account = :net_account
+                    ),
                     :account,
-                    (SELECT id FROM account_types
-                        WHERE account_ty = :account_ty),
-                    (SELECT id FROM account_status
-                        WHERE status = :account_status),
+                    (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty = :account_ty
+                    ),
+                    (
+                        SELECT
+                            id
+                        FROM
+                            account_status
+                        WHERE
+                            status = :account_status
+                    ),
                     :challenge,
-                    (SELECT id FROM challenge_status
-                        WHERE status = :challenge_status)
+                    (
+                        SELECT
+                            id
+                        FROM
+                            challenge_status
+                        WHERE
+                            status = :challenge_status
+                    )
                 )",
+            )?;
+
+            let mut stmt_intro = transaction.prepare(
+                "
+                INSERT OR IGNORE INTO intro_msg_sent (
+                    account,
+                    account_ty_id,
+                    intro_sent
+                ) VALUES (
+                    :account,
+                    (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty = :account_ty
+                    ),
+                    '0'
+                )
+            ",
             )?;
 
             for ident in idents {
@@ -304,6 +379,11 @@ impl Database {
                         ":challenge": &state.challenge.as_str(),
                         ":challenge_status": &state.challenge_status,
                     })?;
+
+                    stmt_intro.execute_named(named_params! {
+                        ":account": &state.account,
+                        ":account_ty": &state.account_ty,
+                    })?;
                 }
             }
         }
@@ -313,9 +393,10 @@ impl Database {
         Ok(())
     }
     pub async fn remove_identity(&self, net_account: &NetAccount) -> Result<()> {
-        let con = self.con.lock().await;
+        let mut con = self.con.lock().await;
+        let transaction = con.transaction()?;
 
-        con.execute_named(
+        transaction.execute_named(
             "
             DELETE FROM
                 pending_judgments
@@ -327,40 +408,27 @@ impl Database {
             },
         )?;
 
-        Ok(())
-    }
-    // TODO: Should return AccountType, too.
-    pub async fn select_addresses(&self, net_account: &NetAccount) -> Result<Vec<Account>> {
-        let con = self.con.lock().await;
-
-        let mut stmt = con.prepare(
+        // Cleanup unused introduction message tracking.
+        transaction.execute(
             "
-            SELECT
-                account
-            FROM
-                account_states
+            DELETE FROM
+                intro_msg_sent
             WHERE
-                net_account_id = (
-                    SELECT
-                        id
-                    FROM
-                        pending_judgments
-                    WHERE
-                        net_account = :net_account
-                )
+                (account, account_ty_id)
+            NOT IN (
+                SELECT
+                    account, account_ty_id
+                FROM
+                    account_states
+            )
+
         ",
+            params![],
         )?;
 
-        let mut rows = stmt.query_named(named_params! {
-            ":net_account": net_account,
-        })?;
+        transaction.commit()?;
 
-        let mut net_accounts = vec![];
-        while let Some(row) = rows.next()? {
-            net_accounts.push(row.get::<_, Account>(0)?);
-        }
-
-        Ok(net_accounts)
+        Ok(())
     }
     pub async fn select_account_from_net_account(
         &self,
@@ -500,9 +568,10 @@ impl Database {
 
         Ok(room_ids)
     }
+    // TODO: Should not require `NetAccount`.
     pub async fn set_account_status(
         &self,
-        net_account: &NetAccount,
+        account: &Account,
         account_ty: &AccountType,
         status: &AccountStatus,
     ) -> StdResult<(), DatabaseError> {
@@ -511,21 +580,30 @@ impl Database {
         con.execute_named(
             "UPDATE
                     account_states
-                SET account_status_id =
-                    (SELECT id FROM account_status
-                        WHERE status = :account_status)
+                SET
+                    account_status_id = (
+                        SELECT
+                            id
+                        FROM
+                            account_status
+                        WHERE
+                            status = :account_status
+                    )
                 WHERE
-                    net_account_id =
-                        (SELECT id FROM pending_judgments
-                            WHERE net_account = :net_account)
+                    account = :account
                 AND
-                    account_ty_id =
-                        (SELECT id FROM account_types
-                            WHERE account_ty = :account_ty)
+                    account_ty_id = (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                        account_ty = :account_ty
+                    )
             ",
             named_params! {
+                ":account": account,
                 ":account_status": status,
-                ":net_account": net_account,
                 ":account_ty": account_ty,
             },
         )
@@ -549,17 +627,33 @@ impl Database {
         self.con.lock().await.execute_named(
             "UPDATE
                     account_states
-                SET challenge_status_id =
-                    (SELECT id FROM challenge_status
-                        WHERE status = :challenge_status)
+                SET
+                    challenge_status_id = (
+                        SELECT
+                            id
+                        FROM
+                            challenge_status
+                        WHERE
+                            status = :challenge_status
+                    )
                 WHERE
-                    net_account_id =
-                        (SELECT id FROM pending_judgments
-                            WHERE net_account = :net_account)
+                    net_account_id = (
+                        SELECT
+                            id
+                        FROM
+                            pending_judgments
+                        WHERE
+                            net_account = :net_account
+                    )
                 AND
-                    account_ty_id =
-                        (SELECT id FROM account_types
-                            WHERE account_ty = :account_ty)
+                    account_ty_id = (
+                        SELECT
+                            id
+                        FROM
+                            account_types
+                        WHERE
+                            account_ty = :account_ty
+                    )
             ",
             named_params! {
                 ":challenge_status": status,
@@ -574,10 +668,9 @@ impl Database {
         &self,
         account: &Account,
         account_ty: &AccountType,
-    ) -> Result<Vec<(NetworkAddress, Challenge)>> {
+    ) -> Result<(Vec<(NetworkAddress, Challenge)>, bool)> {
         let con = self.con.lock().await;
 
-        // TODO: Figure out why `IN` does not work here...
         let mut stmt = con.prepare(
             "
             SELECT
@@ -598,6 +691,17 @@ impl Database {
                         challenge_status
                     WHERE
                         status = 'accepted'
+                )
+            AND
+                account_states.account_status_id NOT IN (
+                    SELECT
+                        id
+                    FROM
+                        account_status
+                    WHERE
+                        status = 'unsupported'
+                    OR
+                        status = 'notified'
                 )
             AND
                 account_states.account_ty_id = (
@@ -624,7 +728,75 @@ impl Database {
             ));
         }
 
-        Ok(challenge_set)
+        // If the introduction message was already sent to the **account**,
+        // then avoid sending it again.
+        let try_intro_sent = con.query_row_named(
+            "
+            SELECT
+                intro_sent
+            FROM
+                intro_msg_sent
+            WHERE
+                account = :account
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )",
+            named_params! {
+                ":account": account,
+                ":account_ty": account_ty,
+            },
+            |row| row.get::<_, bool>(0),
+        );
+
+        // `QueryReturnedNoRows` can occure on messages where no challenge data
+        // is found (and the message is therefore ignored). Just use `false` as
+        // a filler.
+        let intro_sent = match try_intro_sent {
+            Ok(b) => b,
+            Err(rusqlite::Error::QueryReturnedNoRows) => false,
+            Err(err) => return Err(err.into()),
+        };
+
+        Ok((challenge_set, intro_sent))
+    }
+    pub async fn confirm_intro_sent(
+        &self,
+        account: &Account,
+        account_ty: &AccountType,
+    ) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            UPDATE
+                intro_msg_sent
+            SET
+                intro_sent = '1'
+            WHERE
+                account = :account
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ",
+            named_params! {
+                ":account": account,
+                ":account_ty": account_ty,
+            },
+        )?;
+
+        Ok(())
     }
     // Check whether the identity is fully verified.
     pub async fn is_fully_verified(&self, net_account: &NetAccount) -> Result<bool> {
@@ -648,20 +820,6 @@ impl Database {
                             WHERE
                                 net_account = :net_account
                         )
-                    AND account_ty_id
-                        IN (
-                            SELECT
-                                id
-                            FROM
-                                account_types
-                            WHERE
-                                account_ty IN (
-                                    'display_name',
-                                    'matrix',
-                                    'email',
-                                    'twitter'
-                                )
-                        )
                     ",
         )?;
 
@@ -669,13 +827,18 @@ impl Database {
             ":net_account": net_account,
         })?;
 
+        let mut verified = false;
         while let Some(row) = rows.next()? {
-            if row.get::<_, ChallengeStatus>(0)? != ChallengeStatus::Accepted {
+            let challenge_status = row.get::<_, ChallengeStatus>(0)?;
+            if challenge_status == ChallengeStatus::Accepted {
+                // Enusere **all** accounts have an accepted challenge.
+                verified = true;
+            } else {
                 return Ok(false);
             }
         }
 
-        Ok(true)
+        Ok(verified)
     }
     pub async fn select_timed_out_identities(&self, timeout_limit: u64) -> Result<Vec<NetAccount>> {
         let con = self.con.lock().await;
@@ -726,6 +889,48 @@ impl Database {
             ",
             named_params! {
                 ":net_account": net_account
+            },
+        )?;
+
+        Ok(())
+    }
+    pub async fn delete_account(
+        &self,
+        net_account: &NetAccount,
+        account: &Account,
+        account_ty: &AccountType,
+    ) -> Result<()> {
+        let con = self.con.lock().await;
+
+        con.execute_named(
+            "
+            DELETE FROM
+                account_states
+            WHERE
+                net_account_id = (
+                    SELECT
+                        id
+                    FROM
+                        pending_judgments
+                    WHERE
+                        net_account = :net_account
+                )
+            AND
+                account = :account
+            AND
+                account_ty_id = (
+                    SELECT
+                        id
+                    FROM
+                        account_types
+                    WHERE
+                        account_ty = :account_ty
+                )
+        ",
+            named_params! {
+                ":net_account": net_account,
+                ":account": account,
+                ":account_ty": account_ty,
             },
         )?;
 
@@ -1405,37 +1610,61 @@ mod tests {
     }
 
     #[test]
-    fn select_addresses() {
+    fn delete_account() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
             let db = Database::new(&db_path()).unwrap();
 
             // Create identity.
             let alice = NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU");
-            let mut alice_ident = OnChainIdentity::new(alice.clone()).unwrap();
+            let mut ident = OnChainIdentity::new(alice.clone()).unwrap();
 
-            let res = db.select_addresses(&alice).await.unwrap();
-            assert_eq!(res.len(), 0);
-
-            alice_ident
+            ident
+                .push_account(AccountType::DisplayName, Account::from("Alice"))
+                .unwrap();
+            ident
                 .push_account(AccountType::Matrix, Account::from("@alice:matrix.org"))
                 .unwrap();
 
-            alice_ident
-                .push_account(AccountType::Email, Account::from("alice@example.com"))
-                .unwrap();
+            db.insert_identity(&ident).await.unwrap();
 
-            alice_ident
-                .push_account(AccountType::Twitter, Account::from("@alice"))
-                .unwrap();
+            // Verify storage.
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res[0].account_states().len(), 2);
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::DisplayName)
+                    .unwrap()
+                    .account,
+                Account::from("Alice")
+            );
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::Matrix)
+                    .unwrap()
+                    .account,
+                Account::from("@alice:matrix.org")
+            );
 
-            db.insert_identity(&alice_ident).await.unwrap();
+            db.delete_account(
+                &alice,
+                &Account::from("@alice:matrix.org"),
+                &AccountType::Matrix,
+            )
+            .await
+            .unwrap();
 
-            let res = db.select_addresses(&alice).await.unwrap();
-            assert_eq!(res.len(), 3);
-            assert!(res.contains(&Account::from("@alice:matrix.org")));
-            assert!(res.contains(&Account::from("alice@example.com")));
-            assert!(res.contains(&Account::from("@alice")));
+            let res = db.select_identities().await.unwrap();
+            assert_eq!(res.len(), 1);
+            assert_eq!(res[0].account_states().len(), 1);
+            assert_eq!(
+                res[0]
+                    .get_account_state(&AccountType::DisplayName)
+                    .unwrap()
+                    .account,
+                Account::from("Alice")
+            );
         });
     }
 
@@ -1752,6 +1981,8 @@ mod tests {
     }
 
     #[test]
+    // TODO: Check for unaccepted challenges.
+    // TODO: Check for account status.
     fn select_challenge_data() {
         let mut rt = Runtime::new().unwrap();
         rt.block_on(async {
@@ -1785,13 +2016,25 @@ mod tests {
             // Insert and check return value.
             let _ = db.insert_identity(&ident).await.unwrap();
 
-            let res = db
+            let (res, intro_sent) = db
                 .select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
                 .await
                 .unwrap();
             assert_eq!(res.len(), 2);
             assert_eq!(res[0].0, NetworkAddress::try_from(alice).unwrap());
             assert_eq!(res[1].0, NetworkAddress::try_from(bob).unwrap());
+            assert!(!intro_sent);
+
+            db.confirm_intro_sent(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
+                .await
+                .unwrap();
+
+            let (_, intro_sent) = db
+                .select_challenge_data(&Account::from("@alice:matrix.org"), &AccountType::Matrix)
+                .await
+                .unwrap();
+
+            assert!(intro_sent);
         });
     }
 
@@ -1815,9 +2058,13 @@ mod tests {
             db.insert_identity(&ident).await.unwrap();
 
             // Set account status to valid
-            db.set_account_status(&alice, &AccountType::Matrix, &AccountStatus::Valid)
-                .await
-                .unwrap();
+            db.set_account_status(
+                &Account::from("@alice:matrix.org"),
+                &AccountType::Matrix,
+                &AccountStatus::Valid,
+            )
+            .await
+            .unwrap();
 
             let res = db.select_account_statuses(&alice).await.unwrap();
             assert_eq!(res.len(), 2);

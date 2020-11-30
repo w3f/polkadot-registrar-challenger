@@ -1,11 +1,18 @@
 use crate::adapters::VIOLATIONS_CAP;
 use crate::comms::CommsVerifier;
+use crate::manager::AccountStatus;
 use crate::primitives::{
     Account, AccountType, Challenge, ChallengeStatus, NetworkAddress, Result, Signature,
 };
 use crate::Database;
 use schnorrkel::sign::Signature as SchnorrkelSignature;
 use std::fmt;
+
+const INTRODUCTION_STR: &'static str = "\
+    [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
+    This contact address was discovered in the Polkadot on-chain naming system and \
+    the issuer has requested the Web3 Registrar service to judge this account. \
+    If you did not issue this request then just ignore this message.\n\n";
 
 #[derive(Debug, Fail)]
 pub enum VerifierError {
@@ -108,36 +115,29 @@ impl<'a> Verifier<'a> {
             .map(|(account_address, _)| *account_address)
             .collect()
     }
-    pub fn init_message_builder(&self, send_context: bool) -> VerifierMessage {
+    pub fn init_message_builder(&self, send_intro: bool) -> VerifierMessage {
         let mut message = String::new();
 
-        if send_context {
-            message.push_str(
-                "\
-                [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
-                This contact address was discovered in the Polkadot on-chain naming system and \
-                the issuer has requested the Web3 Registrar service to judge this account. \
-                If you did not issue this request then just ignore this message.\n\n\
-            ",
-            );
+        if send_intro {
+            message.push_str(INTRODUCTION_STR);
         }
 
         if self.challenges.len() > 1 {
-            message.push_str("Please sign each challenge with the corresponding address:\n");
+            message.push_str("Please sign each challenge with the corresponding address in order to verify this account:\n");
         } else {
-            message.push_str("Please sign the challenge with the corresponding address:\n");
+            message.push_str("Please sign the challenge with the corresponding address in order to verify this account:\n");
         }
 
         for (network_address, challenge) in self.challenges {
-            message.push_str("\n- Address:\n");
-            message.push_str(network_address.address().as_str());
-            message.push_str("\n- Challenge:\n");
-            message.push_str(challenge.as_str());
+            message.push_str("\nADDRESS:\n");
+            message.push_str(&format!("> {}", network_address.address().as_str()));
+            message.push_str("\nCHALLENGE:\n");
+            message.push_str(&format!("> {}", challenge.as_str()));
         }
 
-        message.push_str("\n\nRefer to the Polkadot Wiki guide https://wiki.polkadot.network/");
+        message.push_str("\n\nRefer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar");
 
-        if send_context {
+        if send_intro {
             VerifierMessage::InitMessageWithContext(message)
         } else {
             VerifierMessage::InitMessage(message)
@@ -155,11 +155,9 @@ impl<'a> Verifier<'a> {
             message.push_str("The following addresses have been verified:\n")
         }
 
-        for (network_address, challenge) in &self.valid {
-            message.push_str("\n- Address:\n");
-            message.push_str(network_address.address().as_str());
-            message.push_str("\n- Challenge:\n");
-            message.push_str(challenge.as_str());
+        for (network_address, _) in &self.valid {
+            message.push_str("\nADDRESS:\n");
+            message.push_str(&format!("> {}", network_address.address().as_str()));
         }
 
         if !self.invalid.is_empty() {
@@ -219,14 +217,19 @@ pub async fn verification_handler<'a>(
 }
 
 pub fn invalid_accounts_message(
-    accounts: &[(AccountType, Account)],
+    accounts: &[(AccountType, Account, AccountStatus)],
     violations: Option<Vec<Account>>,
+    send_intro: bool,
 ) -> VerifierMessage {
-    let mut message = String::new();
+    let mut message = if send_intro {
+        String::from(INTRODUCTION_STR)
+    } else {
+        String::new()
+    };
 
     message.push_str("Please note that the following information is invalid:\n\n");
 
-    for (account_ty, account) in accounts {
+    for (account_ty, account, status) in accounts {
         if account_ty == &AccountType::DisplayName {
             if let Some(violations) = violations.as_ref() {
                 message.push_str(&format!(
@@ -258,19 +261,137 @@ pub fn invalid_accounts_message(
 
                 continue;
             }
+        } else if status == &AccountStatus::Unsupported {
+            message.push_str(&format!(
+                "* {} judgements (\"{}\") are not supported by the registrar.\n",
+                account_ty.to_string(),
+                account.as_str(),
+            ));
+        } else {
+            message.push_str(&format!(
+                "* \"{}\" ({}) could not be reached.\n",
+                account.as_str(),
+                account_ty.to_string()
+            ));
         }
-
-        message.push_str(&format!(
-            "* \"{}\" ({}), could not be reached\n",
-            account.as_str(),
-            account_ty.to_string()
-        ));
     }
 
     message.push_str(
-        "\nPlease update the on-chain identity data. No new \
-        `requestJudgement` extrinsic must be issued after the update.",
+        "\nPlease update the on-chain identity data. Note that you DO NOT \
+        have to issue a new `requestJudgement` extrinsic after the update.\n\n\
+        Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar",
     );
 
     VerifierMessage::NotifyViolation(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_accounts_message_status_invalid() {
+        let accounts = [
+            (
+                AccountType::Matrix,
+                Account::from("@alice:matrix.org"),
+                AccountStatus::Invalid,
+            ),
+            (
+                AccountType::Email,
+                Account::from("alice@example.com"),
+                AccountStatus::Invalid,
+            ),
+        ];
+
+        let res = invalid_accounts_message(&accounts, None, true);
+        let txt = match res {
+            VerifierMessage::NotifyViolation(txt) => txt,
+            _ => panic!(),
+        };
+
+        assert_eq!(txt, "\
+            [!!] NEVER EXPOSE YOUR PRIVATE KEYS TO ANYONE [!!]\n\n\
+            This contact address was discovered in the Polkadot on-chain naming system and \
+            the issuer has requested the Web3 Registrar service to judge this account. \
+            If you did not issue this request then just ignore this message.\n\
+            \n\
+            Please note that the following information is invalid:\n\
+            \n\
+            * \"@alice:matrix.org\" (Matrix) could not be reached.\n\
+            * \"alice@example.com\" (Email) could not be reached.\n\
+            \n\
+            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
+            \n\
+            Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
+        ");
+    }
+
+    #[test]
+    fn invalid_accounts_message_status_unsupported() {
+        let accounts = [
+            (
+                AccountType::LegalName,
+                Account::from("Alice Doe"),
+                AccountStatus::Unsupported,
+            ),
+            (
+                AccountType::Web,
+                Account::from("alice.com"),
+                AccountStatus::Unsupported,
+            ),
+        ];
+
+        let res = invalid_accounts_message(&accounts, None, false);
+        let txt = match res {
+            VerifierMessage::NotifyViolation(txt) => txt,
+            _ => panic!(),
+        };
+
+        println!("{}", txt);
+        assert_eq!(txt, "\
+            Please note that the following information is invalid:\n\
+            \n\
+            * Legal Name judgement (\"Alice Doe\") is not supported by the registrar.\n\
+            * Web judgement (\"alice.com\") is not supported by the registrar.\n\
+            \n\
+            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
+            \n\
+            Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
+        ");
+    }
+
+    #[test]
+    fn invalid_accounts_message_status_both() {
+        let accounts = [
+            (
+                AccountType::LegalName,
+                Account::from("Alice Doe"),
+                AccountStatus::Unsupported,
+            ),
+            (
+                AccountType::Email,
+                Account::from("alice@example.com"),
+                AccountStatus::Invalid,
+            ),
+        ];
+
+        let res = invalid_accounts_message(&accounts, None, false);
+        let txt = match res {
+            VerifierMessage::NotifyViolation(txt) => txt,
+            _ => panic!(),
+        };
+
+        println!("{}", txt);
+        assert_eq!(txt, "\
+            Please note that the following information is invalid:\n\
+            \n\
+            * Legal Name judgement (\"Alice Doe\") is not supported by the registrar.\n\
+            * \"alice@example.com\" (Email) could not be reached.\n\
+            \n\
+            Please update the on-chain identity data. Note that you DO NOT have to issue a new `requestJudgement` extrinsic after the update.\n\
+            \n\
+            Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar\
+        ");
+    }
 }

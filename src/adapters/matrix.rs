@@ -43,13 +43,10 @@ pub enum MatrixError {
     // TODO: Use `DatabaseError`
     Database(failure::Error),
     #[fail(
-        display = "Failed to fetch challenge data from database for account: {:?}",
+        display = "failed to fetch challenge data from database for account: {:?}",
         0
     )]
     ChallengeDataNotFound(Account),
-    #[fail(display = "No Matrix account found for user: {}", 0)]
-    // TODO: Should be `NetAccount`
-    NoMatrixAccount(String),
 }
 
 #[async_trait]
@@ -238,9 +235,10 @@ impl MatrixHandler {
             }
             NotifyInvalidAccount {
                 net_account,
+                account,
                 accounts,
             } => {
-                self.handle_invalid_account_notification(net_account, accounts)
+                self.handle_invalid_account_notification(net_account, account, accounts)
                     .await?
             }
             #[cfg(test)]
@@ -268,8 +266,8 @@ impl MatrixHandler {
         } else {
             // When the UserId is invalid, even though it can be successfully
             // converted, creating a room seems to block forever here. So we
-            // just set a timeout and abort if exceeded.
-            if let Ok(room_id) = time::timeout(Duration::from_secs(20), async {
+            // just set a timeout and abort if the limit is exceeded.
+            if let Ok(room_id) = time::timeout(Duration::from_millis(10_000), async {
                 debug!("Connecting to {}", account.as_str());
 
                 let to_invite = [account
@@ -303,7 +301,7 @@ impl MatrixHandler {
             {
                 // Mark the account as valid.
                 self.db
-                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Valid)
+                    .set_account_status(&account, &AccountType::Matrix, &AccountStatus::Valid)
                     .await?;
 
                 room_id?
@@ -312,7 +310,7 @@ impl MatrixHandler {
 
                 // Mark the account as invalid.
                 self.db
-                    .set_account_status(&net_account, &AccountType::Matrix, &AccountStatus::Invalid)
+                    .set_account_status(&account, &AccountType::Matrix, &AccountStatus::Invalid)
                     .await?;
 
                 return Err(MatrixError::JoinRoomTimeout(account.clone()))?;
@@ -328,7 +326,7 @@ impl MatrixHandler {
     ) -> Result<()> {
         let room_id = self.init_room_id(&net_account, &account).await?;
 
-        let challenge_data = self
+        let (challenge_data, intro_sent) = self
             .db
             .select_challenge_data(&account, &AccountType::Matrix)
             .await?;
@@ -336,10 +334,13 @@ impl MatrixHandler {
         debug!("Sending instructions to user");
         let verifier = Verifier::new(&challenge_data);
         self.transport
-            .send_message(&room_id, verifier.init_message_builder(true))
+            .send_message(&room_id, verifier.init_message_builder(!intro_sent))
             .await
-            .map_err(|err| MatrixError::SendMessage(err.into()).into())
-            .map(|_| ())
+            .map_err(|err| failure::Error::from(MatrixError::SendMessage(err.into())))?;
+
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Matrix)
+            .await
     }
     async fn handle_incoming_messages<T: EventExtract>(
         &self,
@@ -366,7 +367,7 @@ impl MatrixHandler {
             let account = Account::from(event.sender().as_str());
 
             debug!("Fetching challenge data");
-            let challenge_data = self
+            let (challenge_data, _) = self
                 .db
                 .select_challenge_data(&account, &AccountType::Matrix)
                 .await?;
@@ -420,25 +421,50 @@ impl MatrixHandler {
     async fn handle_invalid_account_notification(
         &self,
         net_account: NetAccount,
-        accounts: Vec<(AccountType, Account)>,
+        account: Account,
+        _accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) -> Result<()> {
-        let account = self
-            .db
-            .select_account_from_net_account(&net_account, &AccountType::Matrix)
-            .await?
-            .ok_or(MatrixError::NoMatrixAccount(
-                net_account.as_str().to_string(),
-            ))?;
-
         let room_id = self.init_room_id(&net_account, &account).await?;
 
         // Check for any display name violations (optional).
         let violations = self.db.select_display_name_violations(&net_account).await?;
+        let (_, intro_sent) = self
+            .db
+            .select_challenge_data(&account, &AccountType::Matrix)
+            .await?;
+
+        // Check current account statuses and filter for invalid or unsupported accounts.
+        let accounts = self
+            .db
+            .select_account_statuses(&net_account)
+            .await?
+            .into_iter()
+            .filter(|(_, _, status)| {
+                status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+            })
+            .collect::<Vec<(AccountType, Account, AccountStatus)>>();
+
+        if accounts.is_empty() && violations.is_none() {
+            return Ok(());
+        }
 
         self.transport
-            .send_message(&room_id, invalid_accounts_message(&accounts, violations))
+            .send_message(
+                &room_id,
+                invalid_accounts_message(&accounts, violations, !intro_sent),
+            )
             .await
             .map_err(|err| MatrixError::SendMessage(err.into()))?;
+
+        for (account_ty, account, _) in &accounts {
+            self.db
+                .set_account_status(account, account_ty, &AccountStatus::Notified)
+                .await?;
+        }
+
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Matrix)
+            .await?;
 
         Ok(())
     }

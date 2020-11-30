@@ -1,5 +1,6 @@
 use crate::comms::{CommsMessage, CommsVerifier};
 use crate::db::Database;
+use crate::manager::AccountStatus;
 use crate::primitives::{unix_time, Account, AccountType, Challenge, NetAccount, Result};
 use crate::verifier::{invalid_accounts_message, verification_handler, Verifier, VerifierMessage};
 use reqwest::header::{self, HeaderValue};
@@ -259,9 +260,10 @@ impl TwitterHandler {
             }
             NotifyInvalidAccount {
                 net_account,
+                account,
                 accounts,
             } => {
-                self.handle_invalid_account_notification(transport, net_account, accounts)
+                self.handle_invalid_account_notification(transport, net_account, account, accounts)
                     .await?
             }
             _ => warn!("Received unrecognized message type"),
@@ -273,16 +275,9 @@ impl TwitterHandler {
         &self,
         transport: &T,
         net_account: NetAccount,
-        accounts: Vec<(AccountType, Account)>,
+        account: Account,
+        _accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) -> Result<()> {
-        let account = self
-            .db
-            .select_account_from_net_account(&net_account, &AccountType::Twitter)
-            .await?
-            .ok_or(TwitterError::NoTwitterAccount(
-                net_account.as_str().to_string(),
-            ))?;
-
         let twitter_id =
             self.db
                 .select_twitter_id(&account)
@@ -293,9 +288,41 @@ impl TwitterHandler {
 
         // Check for any display name violations (optional).
         let violations = self.db.select_display_name_violations(&net_account).await?;
+        let (_, intro_sent) = self
+            .db
+            .select_challenge_data(&account, &AccountType::Twitter)
+            .await?;
+
+        // Check current account statuses and filter for invalid or unsupported accounts.
+        let accounts = self
+            .db
+            .select_account_statuses(&net_account)
+            .await?
+            .into_iter()
+            .filter(|(_, _, status)| {
+                status == &AccountStatus::Invalid || status == &AccountStatus::Unsupported
+            })
+            .collect::<Vec<(AccountType, Account, AccountStatus)>>();
+
+        if accounts.is_empty() && violations.is_none() {
+            return Ok(());
+        }
 
         transport
-            .send_message(&twitter_id, invalid_accounts_message(&accounts, violations))
+            .send_message(
+                &twitter_id,
+                invalid_accounts_message(&accounts, violations, !intro_sent),
+            )
+            .await?;
+
+        for (account_ty, account, _) in &accounts {
+            self.db
+                .set_account_status(account, account_ty, &AccountStatus::Notified)
+                .await?;
+        }
+
+        self.db
+            .confirm_intro_sent(&account, &AccountType::Twitter)
             .await?;
 
         Ok(())
@@ -380,12 +407,12 @@ impl TwitterHandler {
         for (account, twitter_id, init_msg) in &idents {
             debug!("Starting verification process for {}", account.as_str());
 
-            let challenge_data = self
+            let (challenge_data, intro_sent) = self
                 .db
                 .select_challenge_data(&account, &AccountType::Twitter)
                 .await?;
 
-            // TODO: `select_challenge_data` should return an error.
+            // TODO: `select_challenge_data` should return `None` if it's empty.
             if challenge_data.is_empty() {
                 warn!(
                     "No challenge data found for account {}. Ignoring.",
@@ -394,13 +421,22 @@ impl TwitterHandler {
                 continue;
             }
 
+            self.db
+                .set_account_status(&account, &AccountType::Twitter, &AccountStatus::Valid)
+                .await?;
+
             let mut verifier = Verifier::new(&challenge_data);
 
             if !*init_msg {
                 transport
-                    .send_message(&twitter_id, verifier.init_message_builder(false))
+                    .send_message(&twitter_id, verifier.init_message_builder(!intro_sent))
                     .await?;
+
                 self.db.confirm_init_message(&account).await?;
+                self.db
+                    .confirm_intro_sent(&account, &AccountType::Twitter)
+                    .await?;
+
                 continue;
             }
 

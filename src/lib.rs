@@ -30,7 +30,7 @@ use std::process::exit;
 #[cfg(test)]
 use std::sync::Arc;
 #[cfg(test)]
-use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, EventManager2};
+use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, EventManager};
 use tokio::time::{self, Duration};
 
 pub mod adapters;
@@ -187,7 +187,7 @@ pub async fn test_run<
     T: Clone + TwitterTransport,
     E: Clone + EmailTransport,
 >(
-    event_manager: Arc<EventManager2>,
+    event_manager: Arc<EventManager>,
     db2: Database,
     identity_manager_config: IdentityManagerConfig,
     matrix_transport: M,

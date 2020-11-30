@@ -1,7 +1,6 @@
 use crate::primitives::Challenge;
 use tokio::time::{self, Duration};
 
-mod connector_transport;
 mod email_adapter;
 mod matrix_adapter;
 pub mod mocks;

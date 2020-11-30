@@ -13,7 +13,7 @@ fn email_init_message() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (_, email_child) = manager.child();
 
         let email_transport = EmailMocker::new(email_child);
@@ -90,7 +90,7 @@ fn email_valid_signature_response() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (writer, email_child) = manager.child();
 
         let email_transport = EmailMocker::new(email_child);
@@ -184,7 +184,7 @@ fn email_invalid_signature_response() {
     let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let db = Database::new(&db_path()).unwrap();
-        let manager = Arc::new(EventManager2::new());
+        let manager = Arc::new(EventManager::new());
         let (writer, email_child) = manager.child();
 
         let email_transport = EmailMocker::new(email_child);

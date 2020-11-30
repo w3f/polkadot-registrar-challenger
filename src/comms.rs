@@ -1,4 +1,4 @@
-use crate::manager::OnChainIdentity;
+use crate::manager::{AccountStatus, OnChainIdentity};
 use crate::primitives::{Account, AccountType, Fatal, Judgement, NetAccount};
 #[cfg(test)]
 use crate::tests::mocks::MatrixEventMock;
@@ -42,7 +42,8 @@ pub enum CommsMessage {
     MessageAcknowledged,
     NotifyInvalidAccount {
         net_account: NetAccount,
-        accounts: Vec<(AccountType, Account)>,
+        account: Account,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
     },
     ExistingDisplayNames {
         accounts: Vec<Account>,
@@ -92,11 +93,13 @@ impl CommsMain {
     pub fn notify_invalid_accounts(
         &self,
         net_account: NetAccount,
-        accounts: Vec<(AccountType, Account)>,
+        account: Account,
+        accounts: Vec<(AccountType, Account, AccountStatus)>,
     ) {
         self.sender
             .send(CommsMessage::NotifyInvalidAccount {
                 net_account: net_account,
+                account: account,
                 accounts: accounts,
             })
             .fatal()
@@ -139,8 +142,6 @@ impl CommsVerifier {
         }
     }
     pub async fn recv(&self) -> CommsMessage {
-        // No async support for `recv` (it blocks and chokes tokio), so we
-        // `try_recv` and just loop over it with a short pause.
         let mut interval = time::interval(Duration::from_millis(10));
         loop {
             if let Ok(msg) = self.recv.try_recv() {
