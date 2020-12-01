@@ -119,7 +119,10 @@ impl Database {
                     ('email'),
                     ('web'),
                     ('twitter'),
-                    ('matrix')
+                    ('matrix'),
+                    ('pgp_fingerprint'),
+                    ('image'),
+                    ('additional')
             ",
             params![],
         )?;
