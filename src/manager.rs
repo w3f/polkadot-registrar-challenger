@@ -349,7 +349,7 @@ impl IdentityManager {
 
         // Cleanup current identity file.
         for account_ty in &to_delete {
-            debug!("Keeping current state of {}", account_ty);
+            trace!("Keeping current state of {}", account_ty);
             ident.remove_account_state(account_ty)?;
         }
 

@@ -706,17 +706,6 @@ impl Database {
                         status = 'accepted'
                 )
             AND
-                account_states.account_status_id NOT IN (
-                    SELECT
-                        id
-                    FROM
-                        account_status
-                    WHERE
-                        status = 'unsupported'
-                    OR
-                        status = 'notified'
-                )
-            AND
                 account_states.account_ty_id = (
                     SELECT
                         id
