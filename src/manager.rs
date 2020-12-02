@@ -169,17 +169,17 @@ impl FromSql for AccountStatus {
 pub struct IdentityManager {
     db: Database,
     comms: CommsTable,
-    config: IdentityManagerConfig,
+    _config: IdentityManagerConfig,
 }
 
 pub struct IdentityManagerConfig {
-    judgement_timeout_limit: u64,
+    _judgement_timeout_limit: u64,
 }
 
 impl Default for IdentityManagerConfig {
     fn default() -> Self {
         IdentityManagerConfig {
-            judgement_timeout_limit: 28800, // 8h
+            _judgement_timeout_limit: 28800, // 8h
         }
     }
 }
@@ -205,7 +205,7 @@ impl IdentityManager {
                 listener: recv1,
                 pairs: HashMap::new(),
             },
-            config: config,
+            _config: config,
         })
     }
     pub fn register_comms(&mut self, account_ty: AccountType) -> CommsVerifier {
@@ -244,19 +244,22 @@ impl IdentityManager {
                         self.db.insert_display_name(&net_account, account).await?;
                     }
                 }
-                JudgementGivenAck { net_account } => {
-                    self.db.delete_identity(&net_account).await?;
+                JudgementGivenAck { net_account: _ } => {
+                    /*
+                    self.db.remove_identity(&net_account).await?;
                     self.get_comms(&AccountType::Matrix)?
                         .leave_matrix_room(net_account);
+                    */
                 }
                 _ => panic!("Received unrecognized message type. Report as a bug"),
             }
         }
 
-        self.handle_verification_timeouts().await?;
+        //self.handle_verification_timeouts().await?;
 
         Ok(())
     }
+    /*
     async fn handle_verification_timeouts(&self) -> Result<()> {
         let net_accounts = self
             .db
@@ -279,6 +282,7 @@ impl IdentityManager {
 
         Ok(())
     }
+    */
     async fn handle_new_judgment_request(&mut self, mut ident: OnChainIdentity) -> Result<()> {
         debug!(
             "Handling new judgment request for account: {}",

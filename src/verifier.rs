@@ -123,9 +123,15 @@ impl<'a> Verifier<'a> {
         }
 
         if self.challenges.len() > 1 {
-            message.push_str("Please sign each challenge with the corresponding address in order to verify this account:\n");
+            message.push_str(
+                "Please sign each challenge with the corresponding address and send \
+            back the signature in order to verify this account:\n",
+            );
         } else {
-            message.push_str("Please sign the challenge with the corresponding address in order to verify this account:\n");
+            message.push_str(
+                "Please sign the challenge with the corresponding address and send \
+            back the signature in order to verify this account:\n",
+            );
         }
 
         for (network_address, challenge) in self.challenges {
@@ -135,7 +141,11 @@ impl<'a> Verifier<'a> {
             message.push_str(&format!("> {}", challenge.as_str()));
         }
 
-        message.push_str("\n\nRefer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar");
+        message.push_str(
+            "\n\nPlease note that each account you specified (Matrix, Email, etc.) \
+        has it's own challenge which you need to sign and send back via the corresponding channel. \
+        Refer to the Polkadot Wiki guide: https://wiki.polkadot.network/docs/en/learn-registrar",
+        );
 
         if send_intro {
             VerifierMessage::InitMessageWithContext(message)
