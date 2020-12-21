@@ -345,6 +345,7 @@ impl<
             // Ping the Watcher every minute. Serves as a keep-alive mechanism.
             let now = unix_time();
             if now >= last_check + 60 {
+                debug!("Keep-alive ping");
                 let _ = transport
                     .write(&Message {
                         event: EventType::PendingJudgementsRequests,
