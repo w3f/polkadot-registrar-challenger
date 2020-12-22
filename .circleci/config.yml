@@ -66,12 +66,6 @@ workflows:
           filters:
             tags:
               only: /.*/
-      - integrationTests:
-          filters:
-            tags:
-              only: /.*/   
-          requires:
-            - buildImage
       - publishImage:
           context: dockerhub-bot
           filters:
@@ -79,8 +73,6 @@ workflows:
               ignore: /.*/
             tags:
               only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-          requires:
-            - integrationTests
       - publishChart:
           context: github-bot
           filters:
@@ -88,8 +80,6 @@ workflows:
               ignore: /.*/
             tags:
               only: /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/
-          requires:
-            - integrationTests
       - deploy:
           context: 
             - engineering-access-registrar
