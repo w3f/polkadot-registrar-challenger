@@ -33,6 +33,18 @@ jobs:
           command: |
             /scripts/publish-chart.sh
 
+  integrationTests:
+    docker:
+      - image: web3f/ci-commons:v2.4.4
+    resource_class: large    
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          description: run integration tests
+          command: |
+            /scripts/integration-tests.sh          
+
   deploy:
       docker:
         - image: web3f/ci-commons:v2.4.4
@@ -54,6 +66,12 @@ workflows:
           filters:
             tags:
               only: /.*/
+      - integrationTests:
+          filters:
+            tags:
+              only: /.*/   
+          requires:
+            - buildImage        
       - publishImage:
           context: dockerhub-bot
           filters:
