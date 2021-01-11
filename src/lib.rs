@@ -42,6 +42,7 @@ pub struct AccountsConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct MatrixConfig {
+    pub enabled: bool,
     pub homeserver: String,
     pub username: String,
     pub password: String,
@@ -49,6 +50,7 @@ pub struct MatrixConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct TwitterConfig {
+    pub enabled: bool,
     pub screen_name: String,
     pub api_key: String,
     pub api_secret: String,
@@ -58,6 +60,7 @@ pub struct TwitterConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct EmailConfig {
+    pub enabled: bool,
     pub stmp_server: String,
     pub imap_server: String,
     pub inbox: String,
