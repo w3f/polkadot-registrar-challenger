@@ -4,7 +4,7 @@ jobs:
 
   buildImage:
     docker:
-      - image: web3f/ci-commons:v2.4.0
+      - image: web3f/ci-commons:v2.4.4
     resource_class: xlarge  
     steps:
       - checkout
@@ -16,7 +16,7 @@ jobs:
 
   publishImage:
     docker:
-      - image: web3f/ci-commons:v2.4.0
+      - image: web3f/ci-commons:v2.4.4
     steps:
       - checkout
       - setup_remote_docker
@@ -26,16 +26,28 @@ jobs:
 
   publishChart:
     docker:
-      - image: web3f/ci-commons:v2.4.0
+      - image: web3f/ci-commons:v2.4.4
     steps:
       - checkout
       - run:
           command: |
             /scripts/publish-chart.sh
 
+  integrationTests:
+    docker:
+      - image: web3f/ci-commons:v2.4.4
+    resource_class: large    
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          description: run integration tests
+          command: |
+            /scripts/integration-tests.sh          
+
   deploy:
       docker:
-        - image: web3f/ci-commons:v2.4.0
+        - image: web3f/ci-commons:v2.4.4
       steps:
         - checkout
         - run:
@@ -54,6 +66,12 @@ workflows:
           filters:
             tags:
               only: /.*/
+      - integrationTests:
+          filters:
+            tags:
+              only: /.*/   
+          requires:
+            - buildImage        
       - publishImage:
           context: dockerhub-bot
           filters:
