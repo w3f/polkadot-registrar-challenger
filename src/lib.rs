@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate serde;
+#[macro_use]
+extern crate actix_web;
 
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use std::env;
 use std::fs;
 
@@ -85,4 +88,31 @@ pub fn init_env() -> Result<Config> {
     println!("Logger initiated");
 
     Ok(config)
+}
+
+#[get("/")]
+async fn hello() -> impl Responder {
+    HttpResponse::Ok().body("Hello world!")
+}
+
+#[get("/healthcheck")]
+async fn healthcheck() -> impl Responder {
+    HttpResponse::Ok().body("Ok")
+}
+
+#[rustfmt::skip]
+pub async fn run(_config: Config) -> Result<()> {
+    HttpServer::new(|| {
+        App::new()
+            .service(
+                web::scope("/admin")
+                    .service(hello)
+            )
+            .service(healthcheck)
+        })
+        .bind("127.0.0.1:8080")?
+        .run()
+        .await?;
+
+    Ok(())
 }
