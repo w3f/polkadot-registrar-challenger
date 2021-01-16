@@ -2,33 +2,6 @@
 extern crate serde;
 
 #[derive(Debug, Deserialize)]
-pub struct OLDConfig {
-    pub registrar_db_path: String,
-    pub matrix_db_path: String,
-    pub log_level: log::LevelFilter,
-    pub watcher_url: String,
-    pub enable_watcher: bool,
-    pub enable_accounts: bool,
-    pub enable_health_check: bool,
-    //
-    pub matrix_homeserver: String,
-    pub matrix_username: String,
-    pub matrix_password: String,
-    //
-    pub twitter_screen_name: String,
-    pub twitter_api_key: String,
-    pub twitter_api_secret: String,
-    pub twitter_token: String,
-    pub twitter_token_secret: String,
-    //
-    pub email_server: String,
-    pub imap_server: String,
-    pub email_inbox: String,
-    pub email_user: String,
-    pub email_password: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct Config {
     accounts: AccountsConfig,
 }
