@@ -1,9 +1,15 @@
 #[macro_use]
 extern crate serde;
 
+use std::env;
+use std::fs;
+
+pub type Result<T> = std::result::Result<T, failure::Error>;
+
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    accounts: AccountsConfig,
+    pub accounts: AccountsConfig,
+    pub log_level: log::LevelFilter,
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,4 +45,44 @@ pub struct EmailConfig {
     pub inbox: String,
     pub user: String,
     pub password: String,
+}
+
+fn open_config() -> Result<Config> {
+    // Open config file.
+    let content = fs::read_to_string("config.json")
+        .or_else(|_| fs::read_to_string("/etc/registrar/config.json"))
+        .map_err(|_| {
+            eprintln!("Failed to open config at 'config.json' or '/etc/registrar/config.json'.");
+            std::process::exit(1);
+        })
+        .unwrap();
+
+    // Parse config file as JSON.
+    let config = serde_yaml::from_str::<Config>(&content)
+        .map_err(|err| {
+            eprintln!("Failed to parse config: {}", err);
+            std::process::exit(1);
+        })
+        .unwrap();
+
+    Ok(config)
+}
+
+pub fn init_env() -> Result<Config> {
+    let config = open_config()?;
+
+    // Env variables for log level overwrites config.
+    if let Ok(_) = env::var("RUST_LOG") {
+        println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
+        env_logger::init();
+    } else {
+        println!("Setting log level to '{}' from config.", config.log_level);
+        env_logger::builder()
+            .filter_module("registrar", config.log_level)
+            .init();
+    }
+
+    println!("Logger initiated");
+
+    Ok(config)
 }
