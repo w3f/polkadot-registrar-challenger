@@ -1,30 +1,43 @@
-use std::collections::HashMap;
+use eventually::Aggregate;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-pub type IdentityStateProjection<'a> = Arc<RwLock<IdentityState<'a>>>;
-
 pub struct IdentityState<'a> {
     identities: HashMap<IdentityAddress, Identity>,
-    identity_fields: Vec<&'a Vec<FieldStatus>>,
+    lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a IdentityAddress>>,
 }
 
 impl<'a> IdentityState<'a> {
     pub fn new() -> Self {
         IdentityState {
             identities: HashMap::new(),
-            identity_fields: vec![],
+            lookup_addresses: HashMap::new(),
         }
     }
     pub fn insert_identity(&'a mut self, identity: Identity) {
         let address = identity.address.clone();
 
-        self.identities.insert(identity.address.clone(), identity);
-        self.identity_fields
-            // Unwrapping here is safe since the entry was just inserted
-            .push(&self.identities.get(&address).unwrap().fields);
+        self.identities.insert(address.clone(), identity);
+        // Unwrapping is fine here since the value was just inserted.
+        let (address, identity) = self.identities.get_key_value(&address).unwrap();
+
+        for field in &identity.fields {
+            self.lookup_addresses
+                .entry(&field.field)
+                .and_modify(|active_addresses| {
+                    active_addresses.insert(address);
+                })
+                .or_insert({
+                    let mut active_addresses = HashSet::new();
+                    active_addresses.insert(address);
+                    active_addresses
+                });
+        }
     }
-    pub fn get_valid_verifications(&self, field: &IdentityField) {}
+    pub fn lookup_addresses(&self, field: &IdentityField) {
+
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
@@ -42,6 +55,9 @@ pub struct IdentityPubkey(Vec<u32>);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct IdentityChallenge(Vec<u32>);
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct IdentitySignature(Vec<u32>);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct FieldStatus {

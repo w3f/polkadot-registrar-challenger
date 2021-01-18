@@ -20,6 +20,8 @@ env_logger = "0.7.1"
 tokio = { version = "0.2.22", features = ["macros"] }
 futures = "0.3.5"
 serde_yaml = "0.8.15"
+eventually = { path = "../eventually-rs/eventually" }
+eventually-event-store-db = { path = "../eventually-rs/eventually-event-store-db" }
 async-trait = "0.1.40"
 tungstenite = "0.11.1"
 tokio-tungstenite = "0.11.0"
