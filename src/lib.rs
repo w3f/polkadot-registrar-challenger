@@ -12,6 +12,8 @@ use std::fs;
 
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
+mod state_projection;
+
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub accounts: AccountsConfig,
