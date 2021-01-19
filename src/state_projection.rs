@@ -43,23 +43,33 @@ impl<'a> IdentityState<'a> {
             .get_mut(address)
             .map(|statuses| statuses.iter_mut().find(|status| &status.field == field))
             // Unpack `Option<Option<T>>` to `Option<T>`
-            .and_then(|status| match status {
-                Some(inner) => Some(inner),
-                None => None,
-            })
+            .and_then(|status| status)
     }
+    // Lookup all addresses which contain the specified field.
     fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&IdentityAddress>> {
         self.lookup_addresses
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
+    // Lookup all addresses which contain the specified field (*owned*). This
+    // method is used to get around Rust's borrow checker.
     fn lookup_addresses_owned(&self, field: &IdentityField) -> Option<Vec<IdentityAddress>> {
         self.lookup_addresses
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).cloned().collect())
     }
-    fn verify_message(&'a mut self, field: &IdentityField, message: &ExpectedMessage) {
+    fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
+        self.identities
+            .get(address)
+            .map(|field_statuses| field_statuses.iter().any(|status| status.is_verified))
+    }
+    fn verify_message(
+        &mut self,
+        field: &IdentityField,
+        message: &ExpectedMessage,
+    ) -> Vec<IdentityAddress> {
         // TODO: Log if None?
+        let mut address_changes = vec![];
 
         // Lookup all addresses which contain the field.
         if let Some(addresses) = self.lookup_addresses_owned(field) {
@@ -68,11 +78,14 @@ impl<'a> IdentityState<'a> {
                 if let Some(field_status) = self.lookup_field_status_mut(&address, field) {
                     // Set as verified if valid.
                     if field_status.expected_message.contains(message) {
+                        address_changes.push(address);
                         field_status.is_verified = true;
                     }
                 }
             }
         };
+
+        address_changes
     }
 }
 
@@ -109,7 +122,7 @@ pub struct ExpectedMessage(String);
 
 impl ExpectedMessage {
     fn contains(&self, message: &ExpectedMessage) -> bool {
-        false
+        self.0.contains(&message.0)
     }
 }
 
