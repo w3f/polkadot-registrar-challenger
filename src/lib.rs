@@ -12,6 +12,7 @@ use std::fs;
 
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
+mod aggregate;
 mod state_projection;
 
 #[derive(Debug, Deserialize)]
