@@ -4,26 +4,28 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub struct IdentityState<'a> {
-    identities: HashMap<IdentityAddress, Identity>,
+    identities: HashMap<IdentityAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a IdentityAddress>>,
 }
 
 impl<'a> IdentityState<'a> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         IdentityState {
             identities: HashMap::new(),
             lookup_addresses: HashMap::new(),
         }
     }
-    pub fn insert_identity(&'a mut self, identity: Identity) {
-        let address = identity.address.clone();
+    fn insert_identity(&'a mut self, identity: IdentityInfo) {
+        // Insert identity.
+        let (address, fields) = (identity.address, identity.fields);
+        self.identities.insert(address.clone(), fields);
 
-        self.identities.insert(address.clone(), identity);
         // Acquire references to the key/value from within the map. Unwrapping
         // is fine here since the value was just inserted.
-        let (address, identity) = self.identities.get_key_value(&address).unwrap();
+        let (address, fields) = self.identities.get_key_value(&address).unwrap();
 
-        for field in &identity.fields {
+        // Create fast lookup tables.
+        for field in fields {
             self.lookup_addresses
                 .entry(&field.field)
                 .and_modify(|active_addresses| {
@@ -32,47 +34,51 @@ impl<'a> IdentityState<'a> {
                 .or_insert(vec![address].into_iter().collect());
         }
     }
-    pub fn lookup_addresses(&'a self, field: &IdentityField) -> Option<Vec<&'a IdentityAddress>> {
+    fn lookup_field_status_mut(
+        &mut self,
+        address: &IdentityAddress,
+        field: &IdentityField,
+    ) -> Option<&mut FieldStatus> {
+        self.identities
+            .get_mut(address)
+            .map(|statuses| statuses.iter_mut().find(|status| &status.field == field))
+            // Unpack `Option<Option<T>>` to `Option<T>`
+            .and_then(|status| match status {
+                Some(inner) => Some(inner),
+                None => None,
+            })
+    }
+    fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&IdentityAddress>> {
         self.lookup_addresses
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
-    pub fn verify_signature(
-        &'a mut self,
-        field: &IdentityField,
-        signature: &IdentitySignature,
-    ) -> Option<&'a IdentityAddress> {
-        if let Some(addresses) = self.lookup_addresses(field) {
+    fn lookup_addresses_owned(&self, field: &IdentityField) -> Option<Vec<IdentityAddress>> {
+        self.lookup_addresses
+            .get(field)
+            .map(|addresses| addresses.iter().map(|address| *address).cloned().collect())
+    }
+    fn verify_message(&'a mut self, field: &IdentityField, message: &ExpectedMessage) {
+        // TODO: Log if None?
+
+        // Lookup all addresses which contain the field.
+        if let Some(addresses) = self.lookup_addresses_owned(field) {
+            // For each address, verify the field.
             for address in addresses {
-                if let Some(identity) = self.identities.get_mut(address) {
-                    let pub_key = &identity.pub_key;
-
-                    // TODO: Verify signature
-                    let is_valid = false;
-                    if is_valid {
-                        // TODO: Log/error if `None`?
-                        identity
-                            .fields
-                            .iter_mut()
-                            .find(|status| &status.field == field)
-                            .map(|mut status| status.is_verified = true);
-
-                        return Some(&identity.address);
-                    } else {
-                        // TODO: Log?
+                if let Some(field_status) = self.lookup_field_status_mut(&address, field) {
+                    // Set as verified if valid.
+                    if field_status.expected_message.contains(message) {
+                        field_status.is_verified = true;
                     }
                 }
             }
-        }
-
-        None
+        };
     }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct Identity {
+pub struct IdentityInfo {
     address: IdentityAddress,
-    pub_key: IdentityPubkey,
     fields: Vec<FieldStatus>,
 }
 
@@ -91,12 +97,21 @@ pub struct IdentitySignature(Vec<u32>);
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct FieldStatus {
     field: IdentityField,
-    challenge: IdentityChallenge,
+    expected_message: ExpectedMessage,
     is_verified: bool,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldAddress(String);
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ExpectedMessage(String);
+
+impl ExpectedMessage {
+    fn contains(&self, message: &ExpectedMessage) -> bool {
+        false
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum IdentityField {
