@@ -3,6 +3,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub type IdentityStateLock<'a> = Arc<RwLock<IdentityState<'a>>>;
+
+#[derive(Default)]
 pub struct IdentityState<'a> {
     identities: HashMap<IdentityAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a IdentityAddress>>,
@@ -103,11 +106,8 @@ pub struct IdentityInfo {
     fields: Vec<FieldStatus>,
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityAddress(String);
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct IdentityPubkey(Vec<u32>);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct IdentityChallenge(Vec<u32>);
@@ -127,6 +127,9 @@ pub struct FieldAddress(String);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ExpectedMessage(String);
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ProvidedMessage(String);
 
 impl ExpectedMessage {
     fn contains(&self, message: &ExpectedMessage) -> bool {
