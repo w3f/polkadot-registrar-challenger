@@ -69,7 +69,7 @@ impl<'a> IdentityState<'a> {
     fn verify_message(
         &'a self,
         field: &IdentityField,
-        message: &ExpectedMessage,
+        message: &ProvidedMessage,
     ) -> Vec<&'a IdentityAddress> {
         let mut address_changes = vec![];
 
@@ -79,7 +79,7 @@ impl<'a> IdentityState<'a> {
             for address in addresses {
                 if let Some(field_status) = self.lookup_field_status(&address, field) {
                     // Track address if the expected message was found.
-                    if field_status.expected_message.contains(message) {
+                    if let Some(message_part) = field_status.expected_message.contains(message) {
                         address_changes.push(address);
                     }
                 }
@@ -129,11 +129,22 @@ pub struct FieldAddress(String);
 pub struct ExpectedMessage(String);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct ProvidedMessage(String);
+pub struct ProvidedMessage {
+    parts: Vec<ProvidedMessagePart>,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ProvidedMessagePart(String);
 
 impl ExpectedMessage {
-    fn contains(&self, message: &ExpectedMessage) -> bool {
-        self.0.contains(&message.0)
+    fn contains<'a>(&self, message: &'a ProvidedMessage) -> Option<&'a ProvidedMessagePart> {
+        for part in &message.parts {
+            if self.0.contains(&part.0) {
+                return Some(part)
+            }
+        }
+
+        None
     }
 }
 

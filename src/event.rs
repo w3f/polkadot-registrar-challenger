@@ -6,6 +6,12 @@ pub struct Event<Body> {
     body: Body,
 }
 
+impl<Body> Event<Body> {
+    fn body(&self) -> &Body {
+        &self.body
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct EventHeader {
     event_version: EventVersion,
