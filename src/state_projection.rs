@@ -8,6 +8,7 @@ pub struct IdentityState<'a> {
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a IdentityAddress>>,
 }
 
+// TODO: Should logs be printed if users are not found?
 impl<'a> IdentityState<'a> {
     fn new() -> Self {
         IdentityState {
@@ -34,6 +35,17 @@ impl<'a> IdentityState<'a> {
                 .or_insert(vec![address].into_iter().collect());
         }
     }
+    fn lookup_field_status(
+        &self,
+        address: &IdentityAddress,
+        field: &IdentityField,
+    ) -> Option<&FieldStatus> {
+        self.identities
+            .get(address)
+            .map(|statuses| statuses.iter().find(|status| &status.field == field))
+            // Unpack `Option<Option<T>>` to `Option<T>`
+            .and_then(|status| status)
+    }
     fn lookup_field_status_mut(
         &mut self,
         address: &IdentityAddress,
@@ -51,41 +63,37 @@ impl<'a> IdentityState<'a> {
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
-    // Lookup all addresses which contain the specified field (*owned*). This
-    // method is used to get around Rust's borrow checker.
-    fn lookup_addresses_owned(&self, field: &IdentityField) -> Option<Vec<IdentityAddress>> {
-        self.lookup_addresses
-            .get(field)
-            .map(|addresses| addresses.iter().map(|address| *address).cloned().collect())
-    }
-    fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
-        self.identities
-            .get(address)
-            .map(|field_statuses| field_statuses.iter().any(|status| status.is_verified))
-    }
     fn verify_message(
-        &mut self,
+        &'a self,
         field: &IdentityField,
         message: &ExpectedMessage,
-    ) -> Vec<IdentityAddress> {
-        // TODO: Log if None?
+    ) -> Vec<&'a IdentityAddress> {
         let mut address_changes = vec![];
 
         // Lookup all addresses which contain the field.
-        if let Some(addresses) = self.lookup_addresses_owned(field) {
+        if let Some(addresses) = self.lookup_addresses(field) {
             // For each address, verify the field.
             for address in addresses {
-                if let Some(field_status) = self.lookup_field_status_mut(&address, field) {
-                    // Set as verified if valid.
+                if let Some(field_status) = self.lookup_field_status(&address, field) {
+                    // Track address if the expected message was found.
                     if field_status.expected_message.contains(message) {
                         address_changes.push(address);
-                        field_status.is_verified = true;
                     }
                 }
             }
         };
 
         address_changes
+    }
+    fn set_verified(&mut self, address: &IdentityAddress, field: &IdentityField) {
+        if let Some(field_status) = self.lookup_field_status_mut(address, field) {
+            field_status.is_verified = true;
+        }
+    }
+    fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
+        self.identities
+            .get(address)
+            .map(|field_statuses| field_statuses.iter().any(|status| status.is_verified))
     }
 }
 
