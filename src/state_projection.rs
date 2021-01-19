@@ -19,7 +19,8 @@ impl<'a> IdentityState<'a> {
         let address = identity.address.clone();
 
         self.identities.insert(address.clone(), identity);
-        // Unwrapping is fine here since the value was just inserted.
+        // Acquire references to the key/value from within the map. Unwrapping
+        // is fine here since the value was just inserted.
         let (address, identity) = self.identities.get_key_value(&address).unwrap();
 
         for field in &identity.fields {
@@ -28,15 +29,43 @@ impl<'a> IdentityState<'a> {
                 .and_modify(|active_addresses| {
                     active_addresses.insert(address);
                 })
-                .or_insert({
-                    let mut active_addresses = HashSet::new();
-                    active_addresses.insert(address);
-                    active_addresses
-                });
+                .or_insert(vec![address].into_iter().collect());
         }
     }
-    pub fn lookup_addresses(&self, field: &IdentityField) {
+    pub fn lookup_addresses(&'a self, field: &IdentityField) -> Option<Vec<&'a IdentityAddress>> {
+        self.lookup_addresses
+            .get(field)
+            .map(|addresses| addresses.iter().map(|address| *address).collect())
+    }
+    pub fn verify_signature(
+        &'a mut self,
+        field: &IdentityField,
+        signature: &IdentitySignature,
+    ) -> Option<&'a IdentityAddress> {
+        if let Some(addresses) = self.lookup_addresses(field) {
+            for address in addresses {
+                if let Some(identity) = self.identities.get_mut(address) {
+                    let pub_key = &identity.pub_key;
 
+                    // TODO: Verify signature
+                    let is_valid = false;
+                    if is_valid {
+                        // TODO: Log/error if `None`?
+                        identity
+                            .fields
+                            .iter_mut()
+                            .find(|status| &status.field == field)
+                            .map(|mut status| status.is_verified = true);
+
+                        return Some(&identity.address);
+                    } else {
+                        // TODO: Log?
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
 
