@@ -66,12 +66,12 @@ impl<'a> IdentityState<'a> {
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
-    fn verify_message(
-        &'a self,
+    pub fn verify_message(
+        &self,
         field: &IdentityField,
         message: &ProvidedMessage,
-    ) -> Vec<&'a IdentityAddress> {
-        let mut address_changes = vec![];
+    ) -> Vec<VerificationOutcome> {
+        let mut outcomes = vec![];
 
         // Lookup all addresses which contain the field.
         if let Some(addresses) = self.lookup_addresses(field) {
@@ -79,25 +79,54 @@ impl<'a> IdentityState<'a> {
             for address in addresses {
                 if let Some(field_status) = self.lookup_field_status(&address, field) {
                     // Track address if the expected message was found.
-                    if let Some(message_part) = field_status.expected_message.contains(message) {
-                        address_changes.push(address);
-                    }
+                    outcomes.push(
+                        if let Some(message_part) = field_status.expected_message.contains(message)
+                        {
+                            VerificationOutcome {
+                                address: address.clone(),
+                                expected_message: field_status.expected_message.clone(),
+                                status: VerificationStatus::Valid,
+                            }
+                        } else {
+                            VerificationOutcome {
+                                address: address.clone(),
+                                expected_message: field_status.expected_message.clone(),
+                                status: VerificationStatus::Invalid,
+                            }
+                        },
+                    );
                 }
             }
         };
 
-        address_changes
+        outcomes
     }
-    fn set_verified(&mut self, address: &IdentityAddress, field: &IdentityField) {
+    pub fn set_verified(&mut self, address: &IdentityAddress, field: &IdentityField) -> bool {
         if let Some(field_status) = self.lookup_field_status_mut(address, field) {
             field_status.is_verified = true;
+            true
+        } else {
+            false
         }
     }
-    fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
+    pub fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
         self.identities
             .get(address)
             .map(|field_statuses| field_statuses.iter().any(|status| status.is_verified))
     }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct VerificationOutcome {
+    pub address: IdentityAddress,
+    pub expected_message: ExpectedMessage,
+    pub status: VerificationStatus,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum VerificationStatus {
+    Valid,
+    Invalid,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
@@ -140,7 +169,7 @@ impl ExpectedMessage {
     fn contains<'a>(&self, message: &'a ProvidedMessage) -> Option<&'a ProvidedMessagePart> {
         for part in &message.parts {
             if self.0.contains(&part.0) {
-                return Some(part)
+                return Some(part);
             }
         }
 
