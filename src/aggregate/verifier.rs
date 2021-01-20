@@ -31,51 +31,47 @@ impl<'a> VerifierAggregate<'a> {
         );
 
         // Verify message by acquiring a *reader*
-        let verification_outcomes = {
-            let reader = state.read().await;
-            reader.verify_message(&identity_field, &provided_message)
-        };
+        let reader = state.read().await;
+        let verification_outcomes = reader.verify_message(&identity_field, &provided_message);
 
-        // If corresponding identities have been found, generate events, acquire
-        // a *writer* and update the state if necessary.
-        if !verification_outcomes.is_empty() {
-            let mut events = vec![];
-            let mut writer = state.write().await;
+        // If corresponding identities have been found, generate the
+        // corresponding events.
+        let mut events = vec![];
+        for outcome in verification_outcomes {
+            let address = outcome.address;
 
-            for outcome in verification_outcomes {
-                let address = outcome.address;
+            events.push(match outcome.status {
+                VerificationStatus::Valid => {
+                    // TODO: Handle unwrap
+                    let is_fully_verified = reader.is_fully_verified(&address).unwrap();
 
-                events.push(match outcome.status {
-                    VerificationStatus::Valid => {
-                        // TODO: Log `false`?
-                        writer.set_verified(&address, &identity_field);
-                        // TODO: Handle unwrap
-                        let is_fully_verified = writer.is_fully_verified(&address).unwrap();
-
-                        IdentityVerification {
-                            address: address,
-                            field: identity_field.clone(),
-                            provided_message: provided_message.clone(),
-                            expected_message: outcome.expected_message,
-                            is_valid: true,
-                            is_fully_verified: is_fully_verified,
-                        }
-                    }
-                    VerificationStatus::Invalid => IdentityVerification {
-                        address: address,
+                    IdentityVerification {
+                        address: address.clone(),
                         field: identity_field.clone(),
                         provided_message: provided_message.clone(),
-                        expected_message: outcome.expected_message,
-                        is_valid: false,
-                        is_fully_verified: false,
-                    },
-                });
-            }
-        } else {
-            return Ok(None);
+                        expected_message: outcome.expected_message.clone(),
+                        is_valid: true,
+                        is_fully_verified: is_fully_verified,
+                    }
+                    .into()
+                }
+                VerificationStatus::Invalid => IdentityVerification {
+                    address: address.clone(),
+                    field: identity_field.clone(),
+                    provided_message: provided_message.clone(),
+                    expected_message: outcome.expected_message.clone(),
+                    is_valid: false,
+                    is_fully_verified: false,
+                }
+                .into(),
+            });
         }
 
-        Ok(None)
+        if events.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(events))
+        }
     }
 }
 

@@ -67,10 +67,10 @@ impl<'a> IdentityState<'a> {
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
     pub fn verify_message(
-        &self,
+        &'a self,
         field: &IdentityField,
         message: &ProvidedMessage,
-    ) -> Vec<VerificationOutcome> {
+    ) -> Vec<VerificationOutcome<'a>> {
         let mut outcomes = vec![];
 
         // Lookup all addresses which contain the field.
@@ -83,14 +83,14 @@ impl<'a> IdentityState<'a> {
                         if let Some(message_part) = field_status.expected_message.contains(message)
                         {
                             VerificationOutcome {
-                                address: address.clone(),
-                                expected_message: field_status.expected_message.clone(),
+                                address: address,
+                                expected_message: &field_status.expected_message,
                                 status: VerificationStatus::Valid,
                             }
                         } else {
                             VerificationOutcome {
-                                address: address.clone(),
-                                expected_message: field_status.expected_message.clone(),
+                                address: address,
+                                expected_message: &field_status.expected_message,
                                 status: VerificationStatus::Invalid,
                             }
                         },
@@ -117,9 +117,9 @@ impl<'a> IdentityState<'a> {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct VerificationOutcome {
-    pub address: IdentityAddress,
-    pub expected_message: ExpectedMessage,
+pub struct VerificationOutcome<'a> {
+    pub address: &'a IdentityAddress,
+    pub expected_message: &'a ExpectedMessage,
     pub status: VerificationStatus,
 }
 

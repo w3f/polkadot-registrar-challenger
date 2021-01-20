@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::projection::{
     ExpectedMessage, FieldAddress, IdentityAddress, IdentityChallenge, IdentityField,
     ProvidedMessage,
@@ -19,24 +21,44 @@ impl<Body> Event<Body> {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct Timestamp(u64);
+pub struct Timestamp(u128);
+
+impl Timestamp {
+    pub fn unix_time() -> Self {
+        let start = SystemTime::now();
+        let unix_time = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_millis();
+
+        Timestamp(unix_time)
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct TTL(u64);
+pub struct TTL(u128);
+
+impl TTL {
+    pub fn from_secs(secs: u64) -> Self {
+        TTL((secs * 1_000) as u128)
+    }
+    pub fn immortal() -> Self {
+        TTL(0)
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct EventHeader {
-    event_version: EventVersion,
     event_name: EventName,
     timestamp: Timestamp,
     ttl: TTL,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct EventVersion(u32);
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub enum EventName {}
+pub enum EventName {
+    #[serde(rename = "identity_verification_v1")]
+    IdentityVerification,
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 // It's possible that a message is split into multiple chunks. For example,
@@ -77,4 +99,17 @@ pub struct IdentityVerification {
     pub expected_message: ExpectedMessage,
     pub is_valid: bool,
     pub is_fully_verified: bool,
+}
+
+impl From<IdentityVerification> for Event<IdentityVerification> {
+    fn from(val: IdentityVerification) -> Self {
+        Event {
+            header: EventHeader {
+                event_name: EventName::IdentityVerification,
+                timestamp: Timestamp::unix_time(),
+                ttl: TTL::immortal(),
+            },
+            body: val,
+        }
+    }
 }
