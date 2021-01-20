@@ -106,6 +106,7 @@ impl<'a> IdentityState<'a> {
 
         outcomes
     }
+    // TODO: Should return Result
     pub fn set_verified(&mut self, address: &IdentityAddress, field: &IdentityField) -> bool {
         if let Some(field_status) = self.lookup_field_status_mut(address, field) {
             field_status.is_verified = true;
@@ -114,10 +115,15 @@ impl<'a> IdentityState<'a> {
             false
         }
     }
+    // TODO: Should return Result
     pub fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
         self.identities
             .get(address)
             .map(|field_statuses| field_statuses.iter().any(|status| status.is_verified))
+    }
+    // TODO: Should return Result
+    pub fn remove_identity(&mut self, address: &IdentityAddress) -> bool {
+        false
     }
 }
 

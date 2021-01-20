@@ -75,6 +75,20 @@ impl<'a> VerifierAggregate<'a> {
     }
     async fn apply_state_changes(state: IdentityStateLock<'a>, event: Event<IdentityVerification>) {
         let body = event.body();
+        let address = body.address;
+        let field = body.field;
+
+        if body.is_valid {
+            let mut writer = state.write().await;
+            // TODO: Handle `false`?
+            writer.set_verified(&address, &field);
+
+            // Check whether `is_valid` and `is_fully_verified` are both `true`, return error.
+            if body.is_fully_verified {
+                // TODO: Notify Websocket responder?
+                writer.remove_identity(&address);
+            }
+        }
     }
 }
 
