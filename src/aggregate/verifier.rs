@@ -30,7 +30,7 @@ impl<'a> VerifierAggregate<'a> {
             body.message,
         );
 
-        // Verify message by acquiring a *reader*
+        // Verify message by acquiring a reader to the state.
         let reader = state.read().await;
         let verification_outcomes = reader.verify_message(&identity_field, &provided_message);
 
@@ -73,6 +73,9 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
+    async fn apply_state_changes(state: IdentityStateLock<'a>, event: Event<IdentityVerification>) {
+        let body = event.body();
+    }
 }
 
 impl<'is> Aggregate for VerifierAggregate<'is> {
@@ -100,6 +103,6 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
             VerifierCommand::VerifyMessage(event) => Self::handle_verify_message(state, event),
         };
 
-        unimplemented!()
+        Box::pin(fut)
     }
 }

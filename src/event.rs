@@ -56,7 +56,7 @@ pub struct EventHeader {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum EventName {
-    #[serde(rename = "identity_verification_v1")]
+    #[serde(rename = "identity_verification")]
     IdentityVerification,
 }
 

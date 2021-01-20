@@ -78,6 +78,11 @@ impl<'a> IdentityState<'a> {
             // For each address, verify the field.
             for address in addresses {
                 if let Some(field_status) = self.lookup_field_status(&address, field) {
+                    // Only verify if it has not been already.
+                    if field_status.is_verified {
+                        continue;
+                    }
+
                     // Track address if the expected message was found.
                     outcomes.push(
                         if let Some(message_part) = field_status.expected_message.contains(message)
