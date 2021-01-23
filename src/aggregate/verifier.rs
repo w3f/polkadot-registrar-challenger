@@ -1,7 +1,5 @@
 use crate::event::{Event, ExternalMessage, IdentityVerification};
-use crate::projection::{
-    IdentityField, IdentityStateLock, VerificationOutcome, VerificationStatus,
-};
+use crate::projection::{IdentityField, IdentityState, VerificationOutcome, VerificationStatus};
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
@@ -20,8 +18,8 @@ pub struct VerifierAggregate<'a> {
 }
 
 impl<'a> VerifierAggregate<'a> {
-    async fn handle_verify_message(
-        state: &IdentityStateLock<'a>,
+    fn handle_verify_message(
+        state: &IdentityState<'a>,
         event: Event<ExternalMessage>,
     ) -> Result<Option<Vec<Event<IdentityVerification>>>> {
         let body = event.body();
@@ -31,8 +29,7 @@ impl<'a> VerifierAggregate<'a> {
         );
 
         // Verify message by acquiring a reader to the state.
-        let reader = state.read().await;
-        let verification_outcomes = reader.verify_message(&identity_field, &provided_message);
+        let verification_outcomes = state.verify_message(&identity_field, &provided_message);
 
         // If corresponding identities have been found, generate the
         // corresponding events.
@@ -43,7 +40,7 @@ impl<'a> VerifierAggregate<'a> {
             events.push(match outcome.status {
                 VerificationStatus::Valid => {
                     // TODO: Handle unwrap
-                    let is_fully_verified = reader.is_fully_verified(&address).unwrap();
+                    let is_fully_verified = state.is_fully_verified(&address).unwrap();
 
                     IdentityVerification {
                         address: address.clone(),
@@ -73,20 +70,19 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
-    async fn apply_state_changes(state: IdentityStateLock<'a>, event: Event<IdentityVerification>) {
+    fn apply_state_changes(state: &mut IdentityState<'a>, event: Event<IdentityVerification>) {
         let body = event.body();
         let address = body.address;
         let field = body.field;
 
         if body.is_valid {
-            let mut writer = state.write().await;
             // TODO: Handle `false`?
-            writer.set_verified(&address, &field);
+            state.set_verified(&address, &field);
 
             // Check whether `is_valid` and `is_fully_verified` are both `true`, return error.
             if body.is_fully_verified {
                 // TODO: Notify Websocket responder?
-                writer.remove_identity(&address);
+                state.remove_identity(&address);
             }
         }
     }
@@ -94,14 +90,15 @@ impl<'a> VerifierAggregate<'a> {
 
 impl<'is> Aggregate for VerifierAggregate<'is> {
     type Id = VerifierAggregateId;
-    type State = IdentityStateLock<'is>;
+    type State = IdentityState<'is>;
     type Event = Event<IdentityVerification>;
     // This aggregate has a single purpose. No commands required.
     type Command = VerifierCommand;
     type Error = failure::Error;
 
-    fn apply(state: Self::State, event: Self::Event) -> Result<Self::State> {
-        unimplemented!()
+    fn apply(mut state: Self::State, event: Self::Event) -> Result<Self::State> {
+        Self::apply_state_changes(&mut state, event);
+        Ok(state)
     }
 
     fn handle<'a, 's>(
@@ -113,8 +110,10 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
     where
         's: 'a,
     {
-        let fut = match command {
-            VerifierCommand::VerifyMessage(event) => Self::handle_verify_message(state, event),
+        let fut = async move {
+            match command {
+                VerifierCommand::VerifyMessage(event) => Self::handle_verify_message(state, event),
+            }
         };
 
         Box::pin(fut)
