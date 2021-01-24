@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::projection::{
+use crate::state::{
     ExpectedMessage, FieldAddress, IdentityAddress, IdentityChallenge, IdentityField,
     ProvidedMessage,
 };

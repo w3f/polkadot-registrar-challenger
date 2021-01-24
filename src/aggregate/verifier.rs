@@ -1,5 +1,5 @@
 use crate::event::{Event, ExternalMessage, IdentityVerification};
-use crate::projection::{IdentityField, IdentityState, VerificationOutcome, VerificationStatus};
+use crate::state::{IdentityField, IdentityState, VerificationOutcome, VerificationStatus};
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;

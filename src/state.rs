@@ -3,8 +3,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-pub type IdentityStateLock<'a> = Arc<RwLock<IdentityState<'a>>>;
-
 #[derive(Default)]
 pub struct IdentityState<'a> {
     identities: HashMap<IdentityAddress, Vec<FieldStatus>>,
