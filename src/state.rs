@@ -83,8 +83,7 @@ impl<'a> IdentityState<'a> {
 
                     // Track address if the expected message was found.
                     outcomes.push(
-                        if let Some(message_part) = field_status.expected_message.contains(message)
-                        {
+                        if let Some(_) = field_status.expected_message.contains(message) {
                             VerificationOutcome {
                                 net_address: net_address,
                                 expected_message: &field_status.expected_message,

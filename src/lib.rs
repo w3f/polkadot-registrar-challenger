@@ -13,6 +13,7 @@ use std::fs;
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
 mod aggregate;
+mod api;
 mod event;
 mod state;
 

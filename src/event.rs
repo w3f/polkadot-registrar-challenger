@@ -84,9 +84,9 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
         let (origin, address) = val;
 
         match origin {
-            Email => IdentityField::Email(address),
-            Matrix => IdentityField::Matrix(address),
-            Twitter => IdentityField::Twitter(address),
+            ExternalOrigin::Email => IdentityField::Email(address),
+            ExternalOrigin::Matrix => IdentityField::Matrix(address),
+            ExternalOrigin::Twitter => IdentityField::Twitter(address),
         }
     }
 }
