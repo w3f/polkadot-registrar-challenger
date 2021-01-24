@@ -39,26 +39,19 @@ impl<'a> VerifierAggregate<'a> {
 
             events.push(match outcome.status {
                 VerificationStatus::Valid => {
-                    // TODO: Handle unwrap
-                    let is_fully_verified = state.is_fully_verified(&address).unwrap();
-
                     IdentityVerification {
                         address: address.clone(),
                         field: identity_field.clone(),
-                        provided_message: provided_message.clone(),
                         expected_message: outcome.expected_message.clone(),
                         is_valid: true,
-                        is_fully_verified: is_fully_verified,
                     }
                     .into()
                 }
                 VerificationStatus::Invalid => IdentityVerification {
                     address: address.clone(),
                     field: identity_field.clone(),
-                    provided_message: provided_message.clone(),
                     expected_message: outcome.expected_message.clone(),
                     is_valid: false,
-                    is_fully_verified: false,
                 }
                 .into(),
             });
@@ -78,12 +71,6 @@ impl<'a> VerifierAggregate<'a> {
         if body.is_valid {
             // TODO: Handle `false`?
             state.set_verified(&address, &field);
-
-            // Check whether `is_valid` and `is_fully_verified` are both `true`, return error.
-            if body.is_fully_verified {
-                // TODO: Notify Websocket responder?
-                state.remove_identity(&address);
-            }
         }
     }
 }

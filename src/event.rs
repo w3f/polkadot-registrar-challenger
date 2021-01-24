@@ -95,10 +95,8 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 pub struct IdentityVerification {
     pub address: IdentityAddress,
     pub field: IdentityField,
-    pub provided_message: ProvidedMessage,
     pub expected_message: ExpectedMessage,
     pub is_valid: bool,
-    pub is_fully_verified: bool,
 }
 
 impl From<IdentityVerification> for Event<IdentityVerification> {
