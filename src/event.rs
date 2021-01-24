@@ -93,11 +93,14 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityVerification {
-    pub address: IdentityAddress,
+    pub net_address: IdentityAddress,
     pub field: IdentityField,
     pub expected_message: ExpectedMessage,
     pub is_valid: bool,
 }
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct FieldInfo {}
 
 impl From<IdentityVerification> for Event<IdentityVerification> {
     fn from(val: IdentityVerification) -> Self {

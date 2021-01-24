@@ -35,20 +35,18 @@ impl<'a> VerifierAggregate<'a> {
         // corresponding events.
         let mut events = vec![];
         for outcome in verification_outcomes {
-            let address = outcome.address;
+            let net_address = outcome.net_address;
 
             events.push(match outcome.status {
-                VerificationStatus::Valid => {
-                    IdentityVerification {
-                        address: address.clone(),
-                        field: identity_field.clone(),
-                        expected_message: outcome.expected_message.clone(),
-                        is_valid: true,
-                    }
-                    .into()
+                VerificationStatus::Valid => IdentityVerification {
+                    net_address: net_address.clone(),
+                    field: identity_field.clone(),
+                    expected_message: outcome.expected_message.clone(),
+                    is_valid: true,
                 }
+                .into(),
                 VerificationStatus::Invalid => IdentityVerification {
-                    address: address.clone(),
+                    net_address: net_address.clone(),
                     field: identity_field.clone(),
                     expected_message: outcome.expected_message.clone(),
                     is_valid: false,
@@ -65,12 +63,12 @@ impl<'a> VerifierAggregate<'a> {
     }
     fn apply_state_changes(state: &mut IdentityState<'a>, event: Event<IdentityVerification>) {
         let body = event.body();
-        let address = body.address;
+        let net_address = body.net_address;
         let field = body.field;
 
         if body.is_valid {
             // TODO: Handle `false`?
-            state.set_verified(&address, &field);
+            state.set_verified(&net_address, &field);
         }
     }
 }

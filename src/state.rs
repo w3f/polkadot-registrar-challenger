@@ -19,21 +19,21 @@ impl<'a> IdentityState<'a> {
     }
     fn insert_identity(&'a mut self, identity: IdentityInfo) {
         // Insert identity.
-        let (address, fields) = (identity.address, identity.fields);
-        self.identities.insert(address.clone(), fields);
+        let (net_address, fields) = (identity.net_address, identity.fields);
+        self.identities.insert(net_address.clone(), fields);
 
         // Acquire references to the key/value from within the map. Unwrapping
         // is fine here since the value was just inserted.
-        let (address, fields) = self.identities.get_key_value(&address).unwrap();
+        let (net_address, fields) = self.identities.get_key_value(&net_address).unwrap();
 
         // Create fast lookup tables.
         for field in fields {
             self.lookup_addresses
                 .entry(&field.field)
                 .and_modify(|active_addresses| {
-                    active_addresses.insert(address);
+                    active_addresses.insert(net_address);
                 })
-                .or_insert(vec![address].into_iter().collect());
+                .or_insert(vec![net_address].into_iter().collect());
         }
     }
     fn lookup_field_status(
@@ -72,10 +72,10 @@ impl<'a> IdentityState<'a> {
         let mut outcomes = vec![];
 
         // Lookup all addresses which contain the field.
-        if let Some(addresses) = self.lookup_addresses(field) {
+        if let Some(net_addresses) = self.lookup_addresses(field) {
             // For each address, verify the field.
-            for address in addresses {
-                if let Some(field_status) = self.lookup_field_status(&address, field) {
+            for net_address in net_addresses {
+                if let Some(field_status) = self.lookup_field_status(&net_address, field) {
                     // Only verify if it has not been already.
                     if field_status.is_verified {
                         continue;
@@ -86,13 +86,13 @@ impl<'a> IdentityState<'a> {
                         if let Some(message_part) = field_status.expected_message.contains(message)
                         {
                             VerificationOutcome {
-                                address: address,
+                                net_address: net_address,
                                 expected_message: &field_status.expected_message,
                                 status: VerificationStatus::Valid,
                             }
                         } else {
                             VerificationOutcome {
-                                address: address,
+                                net_address: net_address,
                                 expected_message: &field_status.expected_message,
                                 status: VerificationStatus::Invalid,
                             }
@@ -127,7 +127,7 @@ impl<'a> IdentityState<'a> {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct VerificationOutcome<'a> {
-    pub address: &'a IdentityAddress,
+    pub net_address: &'a IdentityAddress,
     pub expected_message: &'a ExpectedMessage,
     pub status: VerificationStatus,
 }
@@ -140,7 +140,7 @@ pub enum VerificationStatus {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct IdentityInfo {
-    address: IdentityAddress,
+    net_address: IdentityAddress,
     fields: Vec<FieldStatus>,
 }
 
@@ -187,6 +187,7 @@ impl ExpectedMessage {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "field_type", content = "address")]
 pub enum IdentityField {
     #[serde(rename = "legal_name")]
     LegalName(FieldAddress),
