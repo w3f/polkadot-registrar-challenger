@@ -1,16 +1,19 @@
 use crate::event::{Event, ExternalMessage, IdentityVerification};
-use crate::state::{IdentityField, IdentityState, VerificationOutcome, VerificationStatus};
+use crate::state::{
+    IdentityAddress, IdentityField, IdentityState, VerificationOutcome, VerificationStatus,
+};
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
 use std::marker::PhantomData;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-#[serde(rename = "verifier_aggregate_id")]
+#[serde(rename = "aggregate_verifier_id")]
 pub struct VerifierAggregateId;
 
 pub enum VerifierCommand {
     VerifyMessage(Event<ExternalMessage>),
+    RequestState(IdentityAddress),
 }
 
 pub struct VerifierAggregate<'a> {
@@ -61,6 +64,12 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
+    fn handle_state_request(
+        state: &IdentityState<'a>,
+        net_address: IdentityAddress,
+    ) -> Result<Option<Vec<Event<IdentityVerification>>>> {
+        Ok(None)
+    }
     fn apply_state_changes(state: &mut IdentityState<'a>, event: Event<IdentityVerification>) {
         let body = event.body();
         let net_address = body.net_address;
@@ -98,6 +107,9 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
         let fut = async move {
             match command {
                 VerifierCommand::VerifyMessage(event) => Self::handle_verify_message(state, event),
+                VerifierCommand::RequestState(address) => {
+                    Self::handle_state_request(state, address)
+                }
             }
         };
 
