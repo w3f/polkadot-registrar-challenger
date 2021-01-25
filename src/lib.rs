@@ -15,6 +15,7 @@ pub type Result<T> = std::result::Result<T, failure::Error>;
 mod aggregate;
 mod api;
 mod event;
+mod projection;
 mod state;
 
 #[derive(Debug, Deserialize)]
