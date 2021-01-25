@@ -340,7 +340,7 @@ fn print_identity_info() {
                 }),
             },
             FieldStatus {
-                field: IdentityField::DisplayName(FieldAddress("alice@email.com".to_string())),
+                field: IdentityField::DisplayName(FieldAddress("Alice in Wonderland".to_string())),
                 challenge: ChallengeStatus::CheckDisplayName(CheckDisplayNameChallenge {
                     status: Validity::Valid,
                     similarities: None,
