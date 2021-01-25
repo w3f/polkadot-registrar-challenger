@@ -5,7 +5,11 @@ use futures::future;
 use futures::StreamExt;
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
-use jsonrpc_pubsub::{typed::Subscriber, PubSubHandler, Session, SubscriptionId};
+use jsonrpc_pubsub::{
+    manager::{IdProvider, NumericIdProvider},
+    typed::Subscriber,
+    PubSubHandler, Session, SubscriptionId,
+};
 use lock_api::RwLockReadGuard;
 use matrix_sdk::api::r0::receipt;
 use parking_lot::{RawRwLock, RwLock};
@@ -24,11 +28,20 @@ impl ConnectionPool {
             .get(net_address)
             .map(|info| info.sender.clone())
     }
-    pub fn receiver(&self, net_address: &NetworkAddress) -> Option<Receiver<Event<StateWrapper>>> {
+    // TODO: Unit test this!!
+    fn receiver(&self, net_address: &NetworkAddress) -> Receiver<Event<StateWrapper>> {
         self.pool
             .read()
             .get(net_address)
             .map(|info| info.receiver.clone())
+            .or_else(|| {
+                let info = ConnectionInfo::new();
+                let receiver = info.receiver.clone();
+                self.pool.write().insert(net_address.clone(), info);
+                Some(receiver)
+            })
+            // Always returns `Some(...)`.
+            .unwrap()
     }
 }
 
@@ -68,7 +81,7 @@ pub trait PublicRpc {
     fn subscribe_account_status(
         &self,
         _: Self::Metadata,
-        _: Subscriber<String>,
+        _: Subscriber<Event<StateWrapper>>,
         network: BlankNetwork,
         address: IdentityAddress,
     );
@@ -94,12 +107,33 @@ impl PublicRpc for PublicRpcApi {
     fn subscribe_account_status(
         &self,
         _: Self::Metadata,
-        _: Subscriber<String>,
+        subscriber: Subscriber<Event<StateWrapper>>,
         network: BlankNetwork,
         address: IdentityAddress,
     ) {
         let net_address = NetworkAddress::from(network, address);
-        let receiver = self.connection_pool.receiver(&net_address).unwrap();
+        let receiver = self.connection_pool.receiver(&net_address);
+
+        // Assign an ID to the subscriber.
+        let sink = match subscriber
+            .assign_id(SubscriptionId::Number(NumericIdProvider::new().next_id()))
+        {
+            Ok(sink) => sink,
+            Err(_) => {
+                debug!("Connection has already been terminated");
+                return;
+            }
+        };
+
+        // Spawn notification handler.
+        tokio::spawn(async move {
+            while let Ok(event) = receiver.recv().await {
+                if let Err(_) = sink.notify(Ok(event)) {
+                    debug!("Closing connection");
+                    break;
+                }
+            }
+        });
     }
     fn unsubscribe_account_status(
         &self,
