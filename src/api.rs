@@ -13,8 +13,14 @@ pub struct ConnectionPool {
     pool: Arc<RwLock<HashMap<IdentityAddress, ConnectionInfo>>>,
 }
 
-pub struct ReceiverLock<'a> {
+pub struct ConnectionPoolLock<'a> {
     lock: RwLockReadGuard<'a, RawRwLock, HashMap<IdentityAddress, ConnectionInfo>>,
+}
+
+impl<'a> ConnectionPoolLock<'a> {
+    pub fn sender(&'a self, net_address: &IdentityAddress) -> Option<&'a Sender<Params>> {
+        self.lock.get(net_address).map(|info| &info.sender)
+    }
 }
 
 impl ConnectionPool {
@@ -23,8 +29,8 @@ impl ConnectionPool {
             pool: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    fn acquire_receiver<'a>(&'a self, net_address: &IdentityAddress) -> ReceiverLock<'a> {
-        ReceiverLock {
+    pub fn acquire_lock<'a>(&'a self) -> ConnectionPoolLock<'a> {
+        ConnectionPoolLock {
             lock: self.pool.read(),
         }
     }
