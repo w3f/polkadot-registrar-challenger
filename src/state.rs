@@ -71,6 +71,8 @@ impl<'a> IdentityState<'a> {
     ) -> Vec<VerificationOutcome<'a>> {
         let mut outcomes = vec![];
 
+        // TODO: Reject Display Name fields. Just in case.
+
         // Lookup all addresses which contain the field.
         if let Some(net_addresses) = self.lookup_addresses(field) {
             // For each address, verify the field.

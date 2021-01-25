@@ -1,4 +1,4 @@
-use crate::event::{Event, RequestFullState};
+use crate::event::{Event, FullStateRequest};
 use crate::state::IdentityAddress;
 use crate::Result;
 use eventually::Aggregate;
@@ -17,7 +17,7 @@ pub struct RequestHandlerAggregate {}
 impl Aggregate for RequestHandlerAggregate {
     type Id = RequestHandlerId;
     type State = ();
-    type Event = Event<RequestFullState>;
+    type Event = Event<FullStateRequest>;
     type Command = RequestHandlerCommand;
     type Error = failure::Error;
 
@@ -38,7 +38,7 @@ impl Aggregate for RequestHandlerAggregate {
         let fut = async move {
             match command {
                 RequestHandlerCommand::RequestState(net_address) => {
-                    Ok(Some(vec![RequestFullState {
+                    Ok(Some(vec![FullStateRequest {
                         net_address: net_address,
                     }
                     .into()]))
