@@ -168,18 +168,64 @@ impl IdentityInfo {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityAddress(String);
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct IdentityChallenge(Vec<u32>);
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct IdentitySignature(Vec<u32>);
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldStatus {
-    field: IdentityField,
-    expected_message: ExpectedMessage,
-    is_verified: bool,
+    field_type: IdentityField,
+    challenge: ChallengeStatus,
 }
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "")]
+pub enum ChallengeStatus {
+    #[serde(rename = "expect_message")]
+    ExpectMessage(ExpectMessageChallenge),
+    #[serde(rename = "back_and_forth")]
+    BackAndForth(BackAndForthChallenge),
+    #[serde(rename = "display_name_check")]
+    CheckDisplayName(CheckDisplayNameChallenge),
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ExpectMessageChallenge {
+    pub expect_message: ExpectedMessage,
+    pub from: IdentityField,
+    pub to: IdentityField,
+    pub status: Validity,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct BackAndForthChallenge {
+    pub expect_first_message: ExpectedMessage,
+    pub expect_second_message: ExpectedMessage,
+    pub from: IdentityField,
+    pub to: IdentityField,
+    pub status: Validity,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct CheckDisplayNameChallenge {
+    pub status: AcceptanceStatus,
+    pub similarities: Vec<DisplayName>,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub enum Validity {
+    #[serde(rename = "valid")]
+    Valid,
+    #[serde(rename = "invalid")]
+    Invalid,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub enum AcceptanceStatus {
+    #[serde(rename = "accepted")]
+    Accepted,
+    #[serde(rename = "rejected")]
+    Rejected,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct DisplayName(String);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldAddress(String);
