@@ -1,7 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::{
-    ExpectedMessage, FieldAddress, IdentityAddress, IdentityField, IdentityInfo, ProvidedMessage,
+    ExpectedMessage, FieldAddress, IdentityAddress, IdentityField, IdentityInfo, NetworkAddress,
+    ProvidedMessage,
 };
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -109,7 +110,7 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FullStateRequest {
-    pub net_address: IdentityAddress,
+    pub net_address: NetworkAddress,
 }
 
 impl From<FullStateRequest> for Event<FullStateRequest> {
@@ -127,7 +128,7 @@ impl From<FullStateRequest> for Event<FullStateRequest> {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FullStateNotFoundResponse {
-    pub net_address: IdentityAddress,
+    pub net_address: NetworkAddress,
 }
 
 impl From<FullStateNotFoundResponse> for Event<FullStateNotFoundResponse> {

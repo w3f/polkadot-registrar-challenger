@@ -7,8 +7,8 @@ use tokio::sync::RwLock;
 
 #[derive(Default)]
 pub struct IdentityState<'a> {
-    identities: HashMap<IdentityAddress, Vec<FieldStatus>>,
-    lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a IdentityAddress>>,
+    identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
+    lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a NetworkAddress>>,
 }
 
 // TODO: Should logs be printed if users are not found?
@@ -40,33 +40,33 @@ impl<'a> IdentityState<'a> {
     }
     fn lookup_field_status(
         &self,
-        address: &IdentityAddress,
+        net_address: &NetworkAddress,
         field: &IdentityField,
     ) -> Option<&FieldStatus> {
         self.identities
-            .get(address)
+            .get(net_address)
             .map(|statuses| statuses.iter().find(|status| &status.field == field))
             // Unpack `Option<Option<T>>` to `Option<T>`
             .and_then(|status| status)
     }
     fn lookup_field_status_mut(
         &mut self,
-        address: &IdentityAddress,
+        net_address: &NetworkAddress,
         field: &IdentityField,
     ) -> Option<&mut FieldStatus> {
         self.identities
-            .get_mut(address)
+            .get_mut(net_address)
             .map(|statuses| statuses.iter_mut().find(|status| &status.field == field))
             // Unpack `Option<Option<T>>` to `Option<T>`
             .and_then(|status| status)
     }
     // Lookup all addresses which contain the specified field.
-    fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&IdentityAddress>> {
+    fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&NetworkAddress>> {
         self.lookup_addresses
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
-    pub fn lookup_full_state(&self, net_address: &IdentityAddress) -> Option<IdentityInfo> {
+    pub fn lookup_full_state(&self, net_address: &NetworkAddress) -> Option<IdentityInfo> {
         self.identities.get(net_address).map(|fields| IdentityInfo {
             net_address: net_address.clone(),
             fields: fields.clone(),
@@ -114,8 +114,8 @@ impl<'a> IdentityState<'a> {
         outcomes
     }
     // TODO: Should return Result
-    pub fn set_verified(&mut self, address: &IdentityAddress, field: &IdentityField) -> bool {
-        if let Some(field_status) = self.lookup_field_status_mut(address, field) {
+    pub fn set_verified(&mut self, net_address: &NetworkAddress, field: &IdentityField) -> bool {
+        if let Some(field_status) = self.lookup_field_status_mut(net_address, field) {
             // TODO
             //field_status.is_valid = true;
             true
@@ -124,20 +124,20 @@ impl<'a> IdentityState<'a> {
         }
     }
     // TODO: Should return Result
-    pub fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
+    pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Option<bool> {
         self.identities
-            .get(address)
+            .get(net_address)
             .map(|field_statuses| field_statuses.iter().any(|status| status.is_valid()))
     }
     // TODO: Should return Result
-    pub fn remove_identity(&mut self, address: &IdentityAddress) -> bool {
+    pub fn remove_identity(&mut self, net_address: &NetworkAddress) -> bool {
         false
     }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct VerificationOutcome<'a> {
-    pub net_address: &'a IdentityAddress,
+    pub net_address: &'a NetworkAddress,
     pub expected_message: &'a ExpectedMessage,
     pub status: VerificationStatus,
 }
@@ -149,8 +149,17 @@ pub enum VerificationStatus {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "network", content = "address")]
+pub enum NetworkAddress {
+    #[serde(rename = "polkadot")]
+    Polkadot(IdentityAddress),
+    #[serde(rename = "kusama")]
+    Kusama(IdentityAddress),
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityInfo {
-    pub net_address: IdentityAddress,
+    pub net_address: NetworkAddress,
     fields: Vec<FieldStatus>,
 }
 
@@ -302,3 +311,26 @@ pub enum IdentityField {
     /// NOTE: Currently unsupported.
     Additional,
 }
+
+/*
+#[test]
+fn print() {
+    let info = IdentityInfo {
+        net_address: IdentityInfo("15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string()),
+        network: Network::Polkadot,
+        fields: vec![
+            FieldStatus {
+                field: IdentityField::Matrix(FieldAddress("@alice:matrix.org")),
+                challenge: ChallengeStatus::ExpectMessage(
+                    ExpectedMessage {
+                        expected_message: ExpectedMessage("1127233905"),
+                        from: IdentityField::Matrix(FieldAddress("@alice:matrix.org"))
+                        to: IdentityField::Matrix(FieldAddress("@registrar:matrix.org"))
+                        status: Validity::Valid,
+                    }
+                )
+            }
+        ]
+    };
+}
+*/

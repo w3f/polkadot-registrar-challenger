@@ -1,4 +1,4 @@
-use crate::state::IdentityAddress;
+use crate::state::NetworkAddress;
 use futures::future;
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
@@ -10,15 +10,15 @@ use std::sync::Arc;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 
 pub struct ConnectionPool {
-    pool: Arc<RwLock<HashMap<IdentityAddress, ConnectionInfo>>>,
+    pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
 }
 
 pub struct ConnectionPoolLock<'a> {
-    lock: RwLockReadGuard<'a, RawRwLock, HashMap<IdentityAddress, ConnectionInfo>>,
+    lock: RwLockReadGuard<'a, RawRwLock, HashMap<NetworkAddress, ConnectionInfo>>,
 }
 
 impl<'a> ConnectionPoolLock<'a> {
-    pub fn sender(&'a self, net_address: &IdentityAddress) -> Option<&'a Sender<Params>> {
+    pub fn sender(&'a self, net_address: &NetworkAddress) -> Option<&'a Sender<Params>> {
         self.lock.get(net_address).map(|info| &info.sender)
     }
 }

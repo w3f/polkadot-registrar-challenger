@@ -1,5 +1,5 @@
 use crate::event::{Event, FullStateRequest};
-use crate::state::IdentityAddress;
+use crate::state::NetworkAddress;
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
@@ -9,7 +9,7 @@ use futures::future::BoxFuture;
 pub struct RequestHandlerId;
 
 pub enum RequestHandlerCommand {
-    RequestState(IdentityAddress),
+    RequestState(NetworkAddress),
 }
 
 pub struct RequestHandlerAggregate {}

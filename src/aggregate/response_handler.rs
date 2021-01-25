@@ -1,5 +1,5 @@
 use crate::event::{Event, FullStateNotFoundResponse};
-use crate::state::{IdentityAddress, IdentityInfo, IdentityState};
+use crate::state::{IdentityInfo, IdentityState, NetworkAddress};
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 pub struct ResponseHandlerId;
 
 pub enum ResponseHandlerCommand {
-    RequestState(IdentityAddress),
+    RequestState(NetworkAddress),
 }
 
 pub struct ResponseHandlerAggregate<'a> {
