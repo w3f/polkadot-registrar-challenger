@@ -143,3 +143,19 @@ impl From<FullStateNotFoundResponse> for Event<FullStateNotFoundResponse> {
         }
     }
 }
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct StateWrapper {
+    #[serde(flatten)]
+    pub state: IdentityInfo,
+    pub notifications: Vec<Notification>,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "level", content = "message")]
+pub enum Notification {
+    Success(String),
+    Info(String),
+    Warn(String),
+    Error(String),
+}

@@ -1,4 +1,4 @@
-use crate::{api::start_api, Result};
+use crate::{api::start_api, event::Notification, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
@@ -331,25 +331,34 @@ fn print_identity_info() {
                 }),
             },
             FieldStatus {
-                field: IdentityField::Matrix(FieldAddress("alice@email.com".to_string())),
+                field: IdentityField::Email(FieldAddress("alice@email.com".to_string())),
                 challenge: ChallengeStatus::BackAndForth(BackAndForthChallenge {
                     expected_message: ExpectedMessage("6861321088".to_string()),
-                    from: IdentityField::Matrix(FieldAddress("alice@email.com".to_string())),
-                    to: IdentityField::Matrix(FieldAddress(
-                        "registrar@web3.foundation".to_string(),
-                    )),
-                    status: Validity::Valid,
+                    from: IdentityField::Email(FieldAddress("alice@email.com".to_string())),
+                    to: IdentityField::Email(FieldAddress("registrar@web3.foundation".to_string())),
+                    status: Validity::Unconfirmed,
                 }),
             },
             FieldStatus {
                 field: IdentityField::DisplayName(FieldAddress("alice@email.com".to_string())),
                 challenge: ChallengeStatus::CheckDisplayName(CheckDisplayNameChallenge {
-                    status: Validity::Unconfirmed,
+                    status: Validity::Valid,
                     similarities: None,
                 }),
             },
         ],
     };
 
-    println!("{}", serde_json::to_string(&info).unwrap())
+    use crate::event::{Notification, StateWrapper};
+
+    println!(
+        "{}",
+        serde_json::to_string(&StateWrapper {
+            state: info,
+            notifications: vec![Notification::Success(
+                "The Matrix account has been verified".to_string()
+            ),]
+        })
+        .unwrap()
+    )
 }
