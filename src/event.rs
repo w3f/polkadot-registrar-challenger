@@ -56,8 +56,6 @@ pub struct EventHeader {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum EventName {
-    #[serde(rename = "identity_verification")]
-    IdentityVerification,
     #[serde(rename = "full_state_request")]
     FullStateRequest,
     #[serde(rename = "identity_info")]
@@ -106,27 +104,6 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
             ExternalOrigin::Email => IdentityField::Email(address),
             ExternalOrigin::Matrix => IdentityField::Matrix(address),
             ExternalOrigin::Twitter => IdentityField::Twitter(address),
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct IdentityVerification {
-    pub net_address: IdentityAddress,
-    pub field: IdentityField,
-    pub expected_message: ExpectedMessage,
-    pub is_valid: bool,
-}
-
-impl From<IdentityVerification> for Event<IdentityVerification> {
-    fn from(val: IdentityVerification) -> Self {
-        Event {
-            header: EventHeader {
-                event_name: EventName::IdentityVerification,
-                timestamp: Timestamp::unix_time(),
-                ttl: TTL::immortal(),
-            },
-            body: val,
         }
     }
 }

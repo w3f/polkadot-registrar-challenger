@@ -1,3 +1,4 @@
+use crate::Result;
 use eventually::Aggregate;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -147,8 +148,21 @@ pub enum VerificationStatus {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityInfo {
-    net_address: IdentityAddress,
+    pub net_address: IdentityAddress,
     fields: Vec<FieldStatus>,
+}
+
+impl IdentityInfo {
+    pub fn set_validity(&mut self, target: &IdentityField, validity: bool) -> Result<()> {
+        self.fields
+            .iter_mut()
+            .find(|status| &status.field == target)
+            .map(|status| {
+                status.is_verified = validity;
+                ()
+            })
+            .ok_or(failure::err_msg("Target field was not found"))
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]

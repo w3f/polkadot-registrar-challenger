@@ -1,6 +1,7 @@
-use crate::event::{Event, ExternalMessage, IdentityVerification};
+use crate::event::{Event, ExternalMessage};
 use crate::state::{
-    IdentityAddress, IdentityField, IdentityState, VerificationOutcome, VerificationStatus,
+    IdentityAddress, IdentityField, IdentityInfo, IdentityState, VerificationOutcome,
+    VerificationStatus,
 };
 use crate::Result;
 use eventually::Aggregate;
@@ -23,7 +24,7 @@ impl<'a> VerifierAggregate<'a> {
     fn handle_verify_message(
         state: &IdentityState<'a>,
         event: Event<ExternalMessage>,
-    ) -> Result<Option<Vec<Event<IdentityVerification>>>> {
+    ) -> Result<Option<Vec<Event<IdentityInfo>>>> {
         let body = event.body();
         let (identity_field, provided_message) = (
             IdentityField::from((body.origin, body.field_address)),
@@ -38,23 +39,14 @@ impl<'a> VerifierAggregate<'a> {
         let mut events = vec![];
         for outcome in verification_outcomes {
             let net_address = outcome.net_address;
+            let mut state = state.lookup_full_state(&net_address).unwrap();
 
-            events.push(match outcome.status {
-                VerificationStatus::Valid => IdentityVerification {
-                    net_address: net_address.clone(),
-                    field: identity_field.clone(),
-                    expected_message: outcome.expected_message.clone(),
-                    is_valid: true,
-                }
-                .into(),
-                VerificationStatus::Invalid => IdentityVerification {
-                    net_address: net_address.clone(),
-                    field: identity_field.clone(),
-                    expected_message: outcome.expected_message.clone(),
-                    is_valid: false,
-                }
-                .into(),
-            });
+            match outcome.status {
+                VerificationStatus::Valid => state.set_validity(&identity_field, true)?,
+                VerificationStatus::Invalid => state.set_validity(&identity_field, false)?,
+            };
+
+            events.push(state.into());
         }
 
         if events.is_empty() {
@@ -63,7 +55,8 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
-    fn apply_state_changes(state: &mut IdentityState<'a>, event: Event<IdentityVerification>) {
+    fn apply_state_changes(state: &mut IdentityState<'a>, event: Event<IdentityInfo>) {
+        /*
         let body = event.body();
         let net_address = body.net_address;
         let field = body.field;
@@ -72,13 +65,14 @@ impl<'a> VerifierAggregate<'a> {
             // TODO: Handle `false`?
             state.set_verified(&net_address, &field);
         }
+        */
     }
 }
 
 impl<'is> Aggregate for VerifierAggregate<'is> {
     type Id = VerifierAggregateId;
     type State = IdentityState<'is>;
-    type Event = Event<IdentityVerification>;
+    type Event = Event<IdentityInfo>;
     // This aggregate has a single purpose. No commands required.
     type Command = VerifierCommand;
     type Error = failure::Error;
