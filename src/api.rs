@@ -1,4 +1,4 @@
-use crate::event::BlankNetwork;
+use crate::event::{BlankNetwork, Event, StateWrapper};
 use crate::state::{IdentityAddress, NetworkAddress};
 use async_channel::{unbounded, Receiver, Sender};
 use futures::future;
@@ -18,13 +18,13 @@ pub struct ConnectionPool {
 }
 
 impl ConnectionPool {
-    pub fn sender(&self, net_address: &NetworkAddress) -> Option<Sender<Params>> {
+    pub fn sender(&self, net_address: &NetworkAddress) -> Option<Sender<Event<StateWrapper>>> {
         self.pool
             .read()
             .get(net_address)
             .map(|info| info.sender.clone())
     }
-    pub fn receiver(&self, net_address: &NetworkAddress) -> Option<Receiver<Params>> {
+    pub fn receiver(&self, net_address: &NetworkAddress) -> Option<Receiver<Event<StateWrapper>>> {
         self.pool
             .read()
             .get(net_address)
@@ -41,8 +41,8 @@ impl ConnectionPool {
 }
 
 struct ConnectionInfo {
-    sender: Sender<Params>,
-    receiver: Receiver<Params>,
+    sender: Sender<Event<StateWrapper>>,
+    receiver: Receiver<Event<StateWrapper>>,
 }
 
 impl ConnectionInfo {
