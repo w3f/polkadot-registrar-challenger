@@ -3,13 +3,31 @@ use futures::future;
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{typed::Subscriber, PubSubHandler, Session, SubscriptionId};
-use parking_lot::RwLock;
+use lock_api::RwLockReadGuard;
+use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 
 pub struct ConnectionPool {
     pool: Arc<RwLock<HashMap<IdentityAddress, ConnectionInfo>>>,
+}
+
+pub struct ReceiverLock<'a> {
+    lock: RwLockReadGuard<'a, RawRwLock, HashMap<IdentityAddress, ConnectionInfo>>,
+}
+
+impl ConnectionPool {
+    fn new() -> Self {
+        ConnectionPool {
+            pool: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+    fn acquire_receiver<'a>(&'a self, net_address: &IdentityAddress) -> ReceiverLock<'a> {
+        ReceiverLock {
+            lock: self.pool.read(),
+        }
+    }
 }
 
 struct ConnectionInfo {
@@ -25,23 +43,6 @@ impl ConnectionInfo {
             sender: sender,
             receiver: receiver,
         }
-    }
-}
-
-impl ConnectionPool {
-    fn acquire_sender(&self, net_address: &IdentityAddress) -> Sender<Params> {
-        self.pool
-            .read()
-            .get(&net_address)
-            .map(|info| info.sender.clone())
-            .or_else(|| {
-                let info = ConnectionInfo::new();
-                let sender = info.sender.clone();
-                self.pool.write().insert(net_address.clone(), info);
-                Some(sender)
-            })
-            // Is always `Some(..)`
-            .unwrap()
     }
 }
 
