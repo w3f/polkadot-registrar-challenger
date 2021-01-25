@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::{
-    ExpectedMessage, FieldAddress, IdentityAddress, IdentityChallenge, IdentityField,
+    ExpectedMessage, FieldAddress, IdentityAddress, IdentityChallenge, IdentityField, IdentityInfo,
     ProvidedMessage,
 };
 
@@ -58,8 +58,25 @@ pub struct EventHeader {
 pub enum EventName {
     #[serde(rename = "identity_verification")]
     IdentityVerification,
-    #[serde(rename = "request_full_state")]
+    #[serde(rename = "full_state_request")]
     FullStateRequest,
+    #[serde(rename = "identity_info")]
+    IdentityInfo,
+    #[serde(rename = "full_state_not_found_response")]
+    FullStateNotFoundResponse,
+}
+
+impl From<IdentityInfo> for Event<IdentityInfo> {
+    fn from(val: IdentityInfo) -> Self {
+        Event {
+            header: EventHeader {
+                event_name: EventName::IdentityInfo,
+                timestamp: Timestamp::unix_time(),
+                ttl: TTL::immortal(),
+            },
+            body: val,
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -124,6 +141,24 @@ impl From<FullStateRequest> for Event<FullStateRequest> {
         Event {
             header: EventHeader {
                 event_name: EventName::FullStateRequest,
+                timestamp: Timestamp::unix_time(),
+                ttl: TTL::immortal(),
+            },
+            body: val,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct FullStateNotFoundResponse {
+    pub net_address: IdentityAddress,
+}
+
+impl From<FullStateNotFoundResponse> for Event<FullStateNotFoundResponse> {
+    fn from(val: FullStateNotFoundResponse) -> Self {
+        Event {
+            header: EventHeader {
+                event_name: EventName::FullStateNotFoundResponse,
                 timestamp: Timestamp::unix_time(),
                 ttl: TTL::immortal(),
             },

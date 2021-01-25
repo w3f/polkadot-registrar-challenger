@@ -64,6 +64,12 @@ impl<'a> IdentityState<'a> {
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
+    pub fn lookup_full_state(&self, net_address: &IdentityAddress) -> Option<IdentityInfo> {
+        self.identities.get(net_address).map(|fields| IdentityInfo {
+            net_address: net_address.clone(),
+            fields: fields.clone(),
+        })
+    }
     pub fn verify_message(
         &'a self,
         field: &IdentityField,
@@ -139,7 +145,7 @@ pub enum VerificationStatus {
     Invalid,
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityInfo {
     net_address: IdentityAddress,
     fields: Vec<FieldStatus>,
@@ -154,7 +160,7 @@ pub struct IdentityChallenge(Vec<u32>);
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct IdentitySignature(Vec<u32>);
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldStatus {
     field: IdentityField,
     expected_message: ExpectedMessage,
@@ -188,7 +194,7 @@ impl ExpectedMessage {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "field_type", content = "address")]
+#[serde(tag = "type", content = "address")]
 pub enum IdentityField {
     #[serde(rename = "legal_name")]
     LegalName(FieldAddress),
