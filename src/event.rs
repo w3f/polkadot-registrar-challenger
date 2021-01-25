@@ -58,6 +58,8 @@ pub struct EventHeader {
 pub enum EventName {
     #[serde(rename = "identity_verification")]
     IdentityVerification,
+    #[serde(rename = "request_full_state")]
+    RequestFullState,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -99,14 +101,29 @@ pub struct IdentityVerification {
     pub is_valid: bool,
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct FieldInfo {}
-
 impl From<IdentityVerification> for Event<IdentityVerification> {
     fn from(val: IdentityVerification) -> Self {
         Event {
             header: EventHeader {
                 event_name: EventName::IdentityVerification,
+                timestamp: Timestamp::unix_time(),
+                ttl: TTL::immortal(),
+            },
+            body: val,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct RequestFullState {
+    pub net_address: IdentityAddress,
+}
+
+impl From<RequestFullState> for Event<RequestFullState> {
+    fn from(val: RequestFullState) -> Self {
+        Event {
+            header: EventHeader {
+                event_name: EventName::RequestFullState,
                 timestamp: Timestamp::unix_time(),
                 ttl: TTL::immortal(),
             },

@@ -1,8 +1,8 @@
+use crate::event::{Event, RequestFullState};
 use crate::state::IdentityAddress;
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
-use std::marker::PhantomData;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename = "rpc_requests")]
@@ -17,12 +17,13 @@ pub struct RequestHandlerAggregate {}
 impl Aggregate for RequestHandlerAggregate {
     type Id = RequestHandlerId;
     type State = ();
-    type Event = ();
+    type Event = Event<RequestFullState>;
     type Command = RequestHandlerCommand;
     type Error = failure::Error;
 
-    fn apply(state: Self::State, event: Self::Event) -> Result<Self::State> {
-        unimplemented!()
+    /// No state changes occur on this aggregate.
+    fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {
+        Ok(state)
     }
 
     fn handle<'a, 's>(
@@ -34,6 +35,17 @@ impl Aggregate for RequestHandlerAggregate {
     where
         's: 'a,
     {
-        unimplemented!()
+        let fut = async move {
+            match command {
+                RequestHandlerCommand::RequestState(net_address) => {
+                    Ok(Some(vec![RequestFullState {
+                        net_address: net_address,
+                    }
+                    .into()]))
+                }
+            }
+        };
+
+        Box::pin(fut)
     }
 }
