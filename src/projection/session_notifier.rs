@@ -1,7 +1,6 @@
 use crate::aggregate::VerifierAggregateId;
 use crate::api::ConnectionPool;
-use crate::event::Event;
-use crate::state::IdentityInfo;
+use crate::event::{Event, StateWrapper};
 use crate::Result;
 use eventually::store::Persisted;
 use eventually::Projection;
@@ -14,7 +13,7 @@ pub struct SessionNotifier {
 
 impl Projection for SessionNotifier {
     type SourceId = VerifierAggregateId;
-    type Event = Event<IdentityInfo>;
+    type Event = Event<StateWrapper>;
     type Error = failure::Error;
 
     fn project(&mut self, event: Persisted<Self::SourceId, Self::Event>) -> BoxFuture<Result<()>> {
@@ -23,8 +22,7 @@ impl Projection for SessionNotifier {
             let body = event.body_ref();
 
             self.connection_pool
-                .acquire_lock()
-                .sender(&body.net_address)
+                .sender(&body.state.net_address)
                 .map(|sender| sender.send(Params::None.parse().unwrap()));
 
             Ok(())

@@ -1,25 +1,33 @@
-use crate::state::NetworkAddress;
+use crate::event::BlankNetwork;
+use crate::state::{IdentityAddress, NetworkAddress};
 use futures::future;
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{typed::Subscriber, PubSubHandler, Session, SubscriptionId};
 use lock_api::RwLockReadGuard;
+use matrix_sdk::api::r0::receipt;
 use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 
 pub struct ConnectionPool {
+    // TODO: Arc/RwLock around HashMap necessary?
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
 }
 
-pub struct ConnectionPoolLock<'a> {
-    lock: RwLockReadGuard<'a, RawRwLock, HashMap<NetworkAddress, ConnectionInfo>>,
-}
-
-impl<'a> ConnectionPoolLock<'a> {
-    pub fn sender(&'a self, net_address: &NetworkAddress) -> Option<&'a Sender<Params>> {
-        self.lock.get(net_address).map(|info| &info.sender)
+impl ConnectionPool {
+    pub fn sender(&self, net_address: &NetworkAddress) -> Option<Sender<Params>> {
+        self.pool
+            .read()
+            .get(net_address)
+            .map(|info| info.sender.clone())
+    }
+    pub fn receiver(&self, net_address: &NetworkAddress) -> Option<Arc<RwLock<Receiver<Params>>>> {
+        self.pool
+            .read()
+            .get(net_address)
+            .map(|info| info.receiver.clone())
     }
 }
 
@@ -29,16 +37,11 @@ impl ConnectionPool {
             pool: Arc::new(RwLock::new(HashMap::new())),
         }
     }
-    pub fn acquire_lock<'a>(&'a self) -> ConnectionPoolLock<'a> {
-        ConnectionPoolLock {
-            lock: self.pool.read(),
-        }
-    }
 }
 
 struct ConnectionInfo {
     sender: Sender<Params>,
-    receiver: Receiver<Params>,
+    receiver: Arc<RwLock<Receiver<Params>>>,
 }
 
 impl ConnectionInfo {
@@ -47,13 +50,13 @@ impl ConnectionInfo {
 
         ConnectionInfo {
             sender: sender,
-            receiver: receiver,
+            receiver: Arc::new(RwLock::new(receiver)),
         }
     }
 }
 
 #[rpc]
-pub trait Rpc {
+pub trait PublicRpc {
     type Metadata;
 
     #[pubsub(
@@ -61,7 +64,13 @@ pub trait Rpc {
         subscribe,
         name = "account_subscribeStatus"
     )]
-    fn subscribe_account_status(&self, _: Self::Metadata, _: Subscriber<String>, param: u64);
+    fn subscribe_account_status(
+        &self,
+        _: Self::Metadata,
+        _: Subscriber<String>,
+        network: BlankNetwork,
+        address: IdentityAddress,
+    );
     #[pubsub(
         subscription = "account_status",
         unsubscribe,
@@ -72,6 +81,36 @@ pub trait Rpc {
         _: Option<Self::Metadata>,
         _: SubscriptionId,
     ) -> Result<bool>;
+}
+
+struct PublicRpcApi {
+    connection_pool: ConnectionPool,
+}
+
+impl PublicRpc for PublicRpcApi {
+    type Metadata = Arc<Session>;
+
+    fn subscribe_account_status(
+        &self,
+        _: Self::Metadata,
+        _: Subscriber<String>,
+        network: BlankNetwork,
+        address: IdentityAddress,
+    ) {
+        let net_address = NetworkAddress::from(network, address);
+        let receiver = self.connection_pool.receiver(&net_address).unwrap();
+
+        tokio::spawn(async move {
+            let receiver = receiver;
+        });
+    }
+    fn unsubscribe_account_status(
+        &self,
+        _: Option<Self::Metadata>,
+        _: SubscriptionId,
+    ) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 pub fn start_api() {

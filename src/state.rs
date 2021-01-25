@@ -1,3 +1,4 @@
+use crate::event::BlankNetwork;
 use crate::{api::start_api, event::Notification, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
@@ -155,6 +156,15 @@ pub enum NetworkAddress {
     Polkadot(IdentityAddress),
     #[serde(rename = "kusama")]
     Kusama(IdentityAddress),
+}
+
+impl NetworkAddress {
+    pub fn from(network: BlankNetwork, address: IdentityAddress) -> Self {
+        match network {
+            BlankNetwork::Polkadot => NetworkAddress::Polkadot(address),
+            BlankNetwork::Kusama => NetworkAddress::Kusama(address),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
