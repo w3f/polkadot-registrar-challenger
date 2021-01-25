@@ -195,7 +195,7 @@ impl FieldStatus {
 
         match status {
             Validity::Valid => true,
-            Validity::Invalid => false,
+            Validity::Invalid | Validity::Unconfirmed => false,
         }
     }
     pub fn set_validity(&mut self, validity: Validity) {
@@ -247,7 +247,7 @@ pub struct BackAndForthChallenge {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct CheckDisplayNameChallenge {
     pub status: Validity,
-    pub similarities: Vec<DisplayName>,
+    pub similarities: Option<Vec<DisplayName>>,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -256,6 +256,8 @@ pub enum Validity {
     Valid,
     #[serde(rename = "invalid")]
     Invalid,
+    #[serde(rename = "unconfirmed")]
+    Unconfirmed,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -312,25 +314,42 @@ pub enum IdentityField {
     Additional,
 }
 
-/*
 #[test]
-fn print() {
+fn print_identity_info() {
     let info = IdentityInfo {
-        net_address: IdentityInfo("15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string()),
-        network: Network::Polkadot,
+        net_address: NetworkAddress::Polkadot(IdentityAddress(
+            "15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string(),
+        )),
         fields: vec![
             FieldStatus {
-                field: IdentityField::Matrix(FieldAddress("@alice:matrix.org")),
-                challenge: ChallengeStatus::ExpectMessage(
-                    ExpectedMessage {
-                        expected_message: ExpectedMessage("1127233905"),
-                        from: IdentityField::Matrix(FieldAddress("@alice:matrix.org"))
-                        to: IdentityField::Matrix(FieldAddress("@registrar:matrix.org"))
-                        status: Validity::Valid,
-                    }
-                )
-            }
-        ]
+                field: IdentityField::Matrix(FieldAddress("@alice:matrix.org".to_string())),
+                challenge: ChallengeStatus::ExpectMessage(ExpectMessageChallenge {
+                    expected_message: ExpectedMessage("1127233905".to_string()),
+                    from: IdentityField::Matrix(FieldAddress("@alice:matrix.org".to_string())),
+                    to: IdentityField::Matrix(FieldAddress("@registrar:matrix.org".to_string())),
+                    status: Validity::Valid,
+                }),
+            },
+            FieldStatus {
+                field: IdentityField::Matrix(FieldAddress("alice@email.com".to_string())),
+                challenge: ChallengeStatus::BackAndForth(BackAndForthChallenge {
+                    expected_message: ExpectedMessage("6861321088".to_string()),
+                    from: IdentityField::Matrix(FieldAddress("alice@email.com".to_string())),
+                    to: IdentityField::Matrix(FieldAddress(
+                        "registrar@web3.foundation".to_string(),
+                    )),
+                    status: Validity::Valid,
+                }),
+            },
+            FieldStatus {
+                field: IdentityField::DisplayName(FieldAddress("alice@email.com".to_string())),
+                challenge: ChallengeStatus::CheckDisplayName(CheckDisplayNameChallenge {
+                    status: Validity::Unconfirmed,
+                    similarities: None,
+                }),
+            },
+        ],
     };
+
+    println!("{}", serde_json::to_string(&info).unwrap())
 }
-*/
