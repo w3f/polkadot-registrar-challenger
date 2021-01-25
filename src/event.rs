@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::{
-    ExpectedMessage, FieldAddress, IdentityAddress, IdentityChallenge, IdentityField, IdentityInfo,
+    ExpectedMessage, FieldAddress, IdentityAddress, IdentityField, IdentityInfo, NetworkAddress,
     ProvidedMessage,
 };
 
@@ -110,7 +110,7 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FullStateRequest {
-    pub net_address: IdentityAddress,
+    pub net_address: NetworkAddress,
 }
 
 impl From<FullStateRequest> for Event<FullStateRequest> {
@@ -128,7 +128,7 @@ impl From<FullStateRequest> for Event<FullStateRequest> {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FullStateNotFoundResponse {
-    pub net_address: IdentityAddress,
+    pub net_address: NetworkAddress,
 }
 
 impl From<FullStateNotFoundResponse> for Event<FullStateNotFoundResponse> {
@@ -142,4 +142,20 @@ impl From<FullStateNotFoundResponse> for Event<FullStateNotFoundResponse> {
             body: val,
         }
     }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct StateWrapper {
+    #[serde(flatten)]
+    pub state: IdentityInfo,
+    pub notifications: Vec<Notification>,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "level", content = "message")]
+pub enum Notification {
+    Success(String),
+    Info(String),
+    Warn(String),
+    Error(String),
 }
