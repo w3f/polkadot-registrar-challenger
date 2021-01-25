@@ -21,9 +21,12 @@ impl Projection for SessionNotifier {
             let event = event.take();
             let body = event.body_ref();
 
-            self.connection_pool
-                .sender(&body.state.net_address)
-                .map(|sender| sender.send(Params::None.parse().unwrap()));
+            if let Some(sender) = self.connection_pool.sender(&body.state.net_address) {
+                match sender.send(Params::None.parse().unwrap()).await {
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
+            }
 
             Ok(())
         };

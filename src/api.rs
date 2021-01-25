@@ -1,6 +1,8 @@
 use crate::event::BlankNetwork;
 use crate::state::{IdentityAddress, NetworkAddress};
+use async_channel::{unbounded, Receiver, Sender};
 use futures::future;
+use futures::StreamExt;
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{typed::Subscriber, PubSubHandler, Session, SubscriptionId};
@@ -9,7 +11,6 @@ use matrix_sdk::api::r0::receipt;
 use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::broadcast::{self, Receiver, Sender};
 
 pub struct ConnectionPool {
     // TODO: Arc/RwLock around HashMap necessary?
@@ -23,7 +24,7 @@ impl ConnectionPool {
             .get(net_address)
             .map(|info| info.sender.clone())
     }
-    pub fn receiver(&self, net_address: &NetworkAddress) -> Option<Arc<RwLock<Receiver<Params>>>> {
+    pub fn receiver(&self, net_address: &NetworkAddress) -> Option<Receiver<Params>> {
         self.pool
             .read()
             .get(net_address)
@@ -41,16 +42,16 @@ impl ConnectionPool {
 
 struct ConnectionInfo {
     sender: Sender<Params>,
-    receiver: Arc<RwLock<Receiver<Params>>>,
+    receiver: Receiver<Params>,
 }
 
 impl ConnectionInfo {
     fn new() -> Self {
-        let (sender, receiver) = broadcast::channel(1_000);
+        let (sender, receiver) = unbounded();
 
         ConnectionInfo {
             sender: sender,
-            receiver: Arc::new(RwLock::new(receiver)),
+            receiver: receiver,
         }
     }
 }
@@ -99,10 +100,6 @@ impl PublicRpc for PublicRpcApi {
     ) {
         let net_address = NetworkAddress::from(network, address);
         let receiver = self.connection_pool.receiver(&net_address).unwrap();
-
-        tokio::spawn(async move {
-            let receiver = receiver;
-        });
     }
     fn unsubscribe_account_status(
         &self,
