@@ -1,6 +1,6 @@
 use crate::event::{Event, ExternalMessage};
 use crate::state::{
-    IdentityAddress, IdentityField, IdentityInfo, IdentityState, VerificationOutcome,
+    IdentityAddress, IdentityField, IdentityInfo, IdentityState, Validity, VerificationOutcome,
     VerificationStatus,
 };
 use crate::Result;
@@ -42,8 +42,12 @@ impl<'a> VerifierAggregate<'a> {
             let mut state = state.lookup_full_state(&net_address).unwrap();
 
             match outcome.status {
-                VerificationStatus::Valid => state.set_validity(&identity_field, true)?,
-                VerificationStatus::Invalid => state.set_validity(&identity_field, false)?,
+                VerificationStatus::Valid => {
+                    state.set_validity(&identity_field, Validity::Valid)?
+                }
+                VerificationStatus::Invalid => {
+                    state.set_validity(&identity_field, Validity::Invalid)?
+                }
             };
 
             events.push(state.into());

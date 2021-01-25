@@ -1,5 +1,6 @@
-use crate::Result;
+use crate::{api::start_api, Result};
 use eventually::Aggregate;
+use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -86,26 +87,26 @@ impl<'a> IdentityState<'a> {
             for net_address in net_addresses {
                 if let Some(field_status) = self.lookup_field_status(&net_address, field) {
                     // Only verify if it has not been already.
-                    if field_status.is_verified {
+                    if field_status.is_valid() {
                         continue;
                     }
 
                     // Track address if the expected message was found.
-                    outcomes.push(
-                        if let Some(_) = field_status.expected_message.contains(message) {
-                            VerificationOutcome {
-                                net_address: net_address,
-                                expected_message: &field_status.expected_message,
-                                status: VerificationStatus::Valid,
-                            }
-                        } else {
-                            VerificationOutcome {
-                                net_address: net_address,
-                                expected_message: &field_status.expected_message,
-                                status: VerificationStatus::Invalid,
-                            }
-                        },
-                    );
+                    // TODO: Handle unwrap
+                    let expected_message = field_status.expected_message().unwrap();
+                    outcomes.push(if let Some(_) = expected_message.contains(message) {
+                        VerificationOutcome {
+                            net_address: net_address,
+                            expected_message: expected_message,
+                            status: VerificationStatus::Valid,
+                        }
+                    } else {
+                        VerificationOutcome {
+                            net_address: net_address,
+                            expected_message: expected_message,
+                            status: VerificationStatus::Invalid,
+                        }
+                    });
                 }
             }
         };
@@ -115,7 +116,8 @@ impl<'a> IdentityState<'a> {
     // TODO: Should return Result
     pub fn set_verified(&mut self, address: &IdentityAddress, field: &IdentityField) -> bool {
         if let Some(field_status) = self.lookup_field_status_mut(address, field) {
-            field_status.is_verified = true;
+            // TODO
+            //field_status.is_valid = true;
             true
         } else {
             false
@@ -125,7 +127,7 @@ impl<'a> IdentityState<'a> {
     pub fn is_fully_verified(&self, address: &IdentityAddress) -> Option<bool> {
         self.identities
             .get(address)
-            .map(|field_statuses| field_statuses.iter().any(|status| status.is_verified))
+            .map(|field_statuses| field_statuses.iter().any(|status| status.is_valid()))
     }
     // TODO: Should return Result
     pub fn remove_identity(&mut self, address: &IdentityAddress) -> bool {
@@ -153,12 +155,12 @@ pub struct IdentityInfo {
 }
 
 impl IdentityInfo {
-    pub fn set_validity(&mut self, target: &IdentityField, validity: bool) -> Result<()> {
+    pub fn set_validity(&mut self, target: &IdentityField, validity: Validity) -> Result<()> {
         self.fields
             .iter_mut()
             .find(|status| &status.field == target)
             .map(|status| {
-                status.is_verified = validity;
+                status.set_validity(validity);
                 ()
             })
             .ok_or(failure::err_msg("Target field was not found"))
@@ -170,12 +172,44 @@ pub struct IdentityAddress(String);
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldStatus {
-    field_type: IdentityField,
+    field: IdentityField,
     challenge: ChallengeStatus,
 }
 
+impl FieldStatus {
+    pub fn is_valid(&self) -> bool {
+        let status = match &self.challenge {
+            ChallengeStatus::ExpectMessage(state) => &state.status,
+            ChallengeStatus::BackAndForth(state) => &state.status,
+            ChallengeStatus::CheckDisplayName(state) => &state.status,
+        };
+
+        match status {
+            Validity::Valid => true,
+            Validity::Invalid => false,
+        }
+    }
+    pub fn set_validity(&mut self, validity: Validity) {
+        let mut status = match self.challenge {
+            ChallengeStatus::ExpectMessage(ref mut state) => &mut state.status,
+            ChallengeStatus::BackAndForth(ref mut state) => &mut state.status,
+            ChallengeStatus::CheckDisplayName(ref mut state) => &mut state.status,
+        };
+
+        *status = validity;
+    }
+    // TODO: Should this maybe return `Result`?
+    pub fn expected_message(&self) -> Option<&ExpectedMessage> {
+        match self.challenge {
+            ChallengeStatus::ExpectMessage(ref state) => Some(&state.expected_message),
+            ChallengeStatus::BackAndForth(ref state) => Some(&state.expected_message),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type", content = "")]
+#[serde(tag = "type", content = "state")]
 pub enum ChallengeStatus {
     #[serde(rename = "expect_message")]
     ExpectMessage(ExpectMessageChallenge),
@@ -187,7 +221,7 @@ pub enum ChallengeStatus {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ExpectMessageChallenge {
-    pub expect_message: ExpectedMessage,
+    pub expected_message: ExpectedMessage,
     pub from: IdentityField,
     pub to: IdentityField,
     pub status: Validity,
@@ -195,8 +229,7 @@ pub struct ExpectMessageChallenge {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct BackAndForthChallenge {
-    pub expect_first_message: ExpectedMessage,
-    pub expect_second_message: ExpectedMessage,
+    pub expected_message: ExpectedMessage,
     pub from: IdentityField,
     pub to: IdentityField,
     pub status: Validity,
@@ -204,7 +237,7 @@ pub struct BackAndForthChallenge {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct CheckDisplayNameChallenge {
-    pub status: AcceptanceStatus,
+    pub status: Validity,
     pub similarities: Vec<DisplayName>,
 }
 
@@ -214,14 +247,6 @@ pub enum Validity {
     Valid,
     #[serde(rename = "invalid")]
     Invalid,
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub enum AcceptanceStatus {
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "rejected")]
-    Rejected,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]

@@ -1,8 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::state::{
-    ExpectedMessage, FieldAddress, IdentityAddress, IdentityChallenge, IdentityField, IdentityInfo,
-    ProvidedMessage,
+    ExpectedMessage, FieldAddress, IdentityAddress, IdentityField, IdentityInfo, ProvidedMessage,
 };
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
