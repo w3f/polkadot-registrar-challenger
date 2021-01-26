@@ -1,6 +1,8 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
+extern crate failure;
+#[macro_use]
 extern crate serde;
 #[macro_use]
 extern crate actix_web;
@@ -8,6 +10,7 @@ extern crate actix_web;
 use actix_web::dev::RequestHead;
 use actix_web::guard::Guard;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder, Scope};
+use state::NetworkAddress;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
@@ -19,6 +22,12 @@ mod api;
 mod event;
 mod projection;
 mod state;
+
+#[derive(Debug, Fail)]
+enum Error {
+    #[fail(display = "The target address was not found ({}): {:?}", _1, _0)]
+    TargetAddressNotFound(NetworkAddress, String),
+}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {

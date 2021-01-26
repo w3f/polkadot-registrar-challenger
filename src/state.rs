@@ -1,5 +1,5 @@
 use crate::event::BlankNetwork;
-use crate::{api::start_api, event::Notification, Result};
+use crate::{api::start_api, event::Notification, Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
@@ -125,10 +125,14 @@ impl<'a> IdentityState<'a> {
         }
     }
     // TODO: Should return Result
-    pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Option<bool> {
+    pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Result<bool> {
         self.identities
             .get(net_address)
             .map(|field_statuses| field_statuses.iter().any(|status| status.is_valid()))
+            .ok_or(
+                Error::TargetAddressNotFound(net_address.clone(), "is_fully_verified".to_string())
+                    .into(),
+            )
     }
     // TODO: Should return Result
     pub fn remove_identity(&mut self, net_address: &NetworkAddress) -> bool {
