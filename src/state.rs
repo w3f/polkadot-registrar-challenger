@@ -200,12 +200,14 @@ impl FieldStatus {
         let status = match &self.challenge {
             ChallengeStatus::ExpectMessage(state) => &state.status,
             ChallengeStatus::BackAndForth(state) => {
-                if state.first_check_status == Validity::Valid && state.second_check_status == Validity::Valid {
-                    return true
+                if state.first_check_status == Validity::Valid
+                    && state.second_check_status == Validity::Valid
+                {
+                    return true;
                 } else {
-                    return false
+                    return false;
                 }
-            },
+            }
             ChallengeStatus::CheckDisplayName(state) => &state.status,
         };
 
