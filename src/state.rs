@@ -199,7 +199,13 @@ impl FieldStatus {
     pub fn is_valid(&self) -> bool {
         let status = match &self.challenge {
             ChallengeStatus::ExpectMessage(state) => &state.status,
-            ChallengeStatus::BackAndForth(state) => &state.status,
+            ChallengeStatus::BackAndForth(state) => {
+                if state.first_check_status == Validity::Valid && state.second_check_status == Validity::Valid {
+                    return true
+                } else {
+                    return false
+                }
+            },
             ChallengeStatus::CheckDisplayName(state) => &state.status,
         };
 
@@ -211,7 +217,7 @@ impl FieldStatus {
     pub fn set_validity(&mut self, validity: Validity) {
         let mut status = match self.challenge {
             ChallengeStatus::ExpectMessage(ref mut state) => &mut state.status,
-            ChallengeStatus::BackAndForth(ref mut state) => &mut state.status,
+            ChallengeStatus::BackAndForth(ref mut state) => &mut state.first_check_status,
             ChallengeStatus::CheckDisplayName(ref mut state) => &mut state.status,
         };
 
@@ -251,7 +257,8 @@ pub struct BackAndForthChallenge {
     pub expected_message: ExpectedMessage,
     pub from: IdentityField,
     pub to: IdentityField,
-    pub status: Validity,
+    pub first_check_status: Validity,
+    pub second_check_status: Validity,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -346,7 +353,8 @@ fn print_identity_info() {
                     expected_message: ExpectedMessage("6861321088".to_string()),
                     from: IdentityField::Email(FieldAddress("alice@email.com".to_string())),
                     to: IdentityField::Email(FieldAddress("registrar@web3.foundation".to_string())),
-                    status: Validity::Unconfirmed,
+                    first_check_status: Validity::Unconfirmed,
+                    second_check_status: Validity::Unconfirmed,
                 }),
             },
             FieldStatus {
