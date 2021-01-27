@@ -1,4 +1,3 @@
-use crate::Result;
 use eventually::store::{AppendError, EventStream, Expected, Persisted, Select};
 // TODO: Alias `EventStream` as `StoreEventStream`
 use futures::future::BoxFuture;
@@ -12,9 +11,11 @@ mod verifier;
 
 pub use verifier::VerifierAggregateId;
 
-#[derive(Debug, Fail)]
+type Result<T> = std::result::Result<T, EmptyStoreError>;
+
+#[derive(Debug, Error)]
 pub enum EmptyStoreError {
-    #[fail(display = "EmptyStore does not support any functionality")]
+    #[error("EmptyStore does not support any functionality")]
     NotPermitted,
 }
 
@@ -31,7 +32,7 @@ pub struct EmptyStore<Id, Event> {
 
 impl<Id, Event> eventually::EventStore for EmptyStore<Id, Event>
 where
-    Id: Eq
+    Id: Eq,
 {
     type SourceId = Id;
     type Event = Event;

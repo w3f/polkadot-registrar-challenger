@@ -186,7 +186,7 @@ impl IdentityInfo {
                 status.set_validity(validity);
                 ()
             })
-            .ok_or(failure::err_msg("Target field was not found"))
+            .ok_or(anyhow!("Target field was not found"))
     }
 }
 

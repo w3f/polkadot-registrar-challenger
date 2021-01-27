@@ -20,7 +20,7 @@ impl Aggregate for RequestHandlerAggregate {
     type State = ();
     type Event = Event<FullStateRequest>;
     type Command = RequestHandlerCommand;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     /// No state changes occur on this aggregate.
     fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {

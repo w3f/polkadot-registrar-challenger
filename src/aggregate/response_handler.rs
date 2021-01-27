@@ -34,7 +34,7 @@ impl<'is> Aggregate for ResponseHandlerAggregate<'is> {
     type State = IdentityState<'is>;
     type Event = EventType;
     type Command = ResponseHandlerCommand;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {
         unimplemented!()

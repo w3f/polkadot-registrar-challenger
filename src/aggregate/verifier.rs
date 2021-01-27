@@ -79,7 +79,7 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
     type Event = Event<IdentityInfo>;
     // This aggregate has a single purpose. No commands required.
     type Command = VerifierCommand;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn apply(mut state: Self::State, event: Self::Event) -> Result<Self::State> {
         Self::apply_state_changes(&mut state, event);

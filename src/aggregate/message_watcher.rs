@@ -9,7 +9,7 @@ impl Aggregate for MessageWatcher {
     type State = ();
     type Event = ();
     type Command = ();
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {
         unimplemented!()

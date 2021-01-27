@@ -14,7 +14,7 @@ pub struct SessionNotifier {
 impl Projection for SessionNotifier {
     type SourceId = VerifierAggregateId;
     type Event = Event<StateWrapper>;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn project(&mut self, event: Persisted<Self::SourceId, Self::Event>) -> BoxFuture<Result<()>> {
         let fut = async move {

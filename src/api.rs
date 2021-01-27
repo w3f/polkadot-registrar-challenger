@@ -1,9 +1,9 @@
+use crate::aggregate::request_handler::RequestHandlerAggregate;
+use crate::aggregate::EmptyStore;
 use crate::event::{BlankNetwork, Event, StateWrapper};
 use crate::state::{IdentityAddress, IdentityState, NetworkAddress};
-use crate::aggregate::EmptyStore;
-use crate::aggregate::request_handler::RequestHandlerAggregate;
-use eventually::{Repository, Aggregate};
 use async_channel::{unbounded, Receiver, Sender};
+use eventually::{Aggregate, Repository};
 use futures::future;
 use futures::StreamExt;
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
@@ -102,7 +102,13 @@ pub trait PublicRpc {
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
     identity_state: Arc<RwLock<IdentityState<'static>>>,
-    repository: Repository<RequestHandlerAggregate, EmptyStore<<RequestHandlerAggregate as Aggregate>::Id, <RequestHandlerAggregate as Aggregate>::Event>>,
+    repository: Repository<
+        RequestHandlerAggregate,
+        EmptyStore<
+            <RequestHandlerAggregate as Aggregate>::Id,
+            <RequestHandlerAggregate as Aggregate>::Event,
+        >,
+    >,
 }
 
 impl PublicRpc for PublicRpcApi {

@@ -1,7 +1,9 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate failure;
+extern crate thiserror;
+#[macro_use]
+extern crate anyhow;
 #[macro_use]
 extern crate serde;
 #[macro_use]
@@ -15,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 
-pub type Result<T> = std::result::Result<T, failure::Error>;
+pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 mod aggregate;
 mod api;
@@ -23,9 +25,9 @@ mod event;
 mod projection;
 mod state;
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 enum Error {
-    #[fail(display = "The target address was not found ({}): {:?}", _1, _0)]
+    #[error("The target address was not found ({}): {:?}", _1, _0)]
     TargetAddressNotFound(NetworkAddress, String),
 }
 
