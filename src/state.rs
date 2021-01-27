@@ -39,6 +39,25 @@ impl<'a> IdentityState<'a> {
                 .or_insert(vec![net_address].into_iter().collect());
         }
     }
+    pub fn update_field(
+        &mut self,
+        net_address: &NetworkAddress,
+        field_status: FieldStatus,
+    ) -> Result<()> {
+        self.identities
+            .get_mut(net_address)
+            .ok_or(anyhow!("network address not found"))
+            .and_then(|statuses| {
+                statuses
+                    .iter_mut()
+                    .find(|status| status.field == field_status.field)
+                    .map(|status| {
+                        *status = field_status;
+                        ()
+                    })
+                    .ok_or(anyhow!("field not found"))
+            })
+    }
     fn lookup_field_status(
         &self,
         net_address: &NetworkAddress,
