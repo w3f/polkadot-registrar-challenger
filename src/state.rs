@@ -196,6 +196,7 @@ pub struct IdentityAddress(String);
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldStatus {
     field: IdentityField,
+    is_permitted: bool,
     challenge: ChallengeStatus,
 }
 

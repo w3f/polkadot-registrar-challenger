@@ -139,7 +139,7 @@ impl PublicRpc for PublicRpcApi {
 
         // Spawn notification handler.
         tokio::spawn(async move {
-            // Check the cache on whether the identity is currently availalbe.
+            // Check the cache on whether the identity is currently available.
             // If not, send a request and have the session handler take care of it.
             if let Some(info) = identity_state.read().lookup_full_state(&net_address) {
                 if let Err(_) = sink.notify(Ok(info.into())) {
