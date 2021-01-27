@@ -1,4 +1,6 @@
-use crate::aggregate::request_handler::RequestHandlerAggregate;
+use crate::aggregate::request_handler::{
+    RequestHandlerAggregate, RequestHandlerCommand, RequestHandlerId,
+};
 use crate::aggregate::EmptyStore;
 use crate::event::{BlankNetwork, Event, StateWrapper};
 use crate::state::{IdentityAddress, IdentityState, NetworkAddress};
@@ -102,11 +104,13 @@ pub trait PublicRpc {
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
     identity_state: Arc<RwLock<IdentityState<'static>>>,
-    repository: Repository<
-        RequestHandlerAggregate,
-        EmptyStore<
-            <RequestHandlerAggregate as Aggregate>::Id,
-            <RequestHandlerAggregate as Aggregate>::Event,
+    repository: Arc<
+        Repository<
+            RequestHandlerAggregate,
+            EmptyStore<
+                <RequestHandlerAggregate as Aggregate>::Id,
+                <RequestHandlerAggregate as Aggregate>::Event,
+            >,
         >,
     >,
 }
@@ -136,24 +140,36 @@ impl PublicRpc for PublicRpcApi {
         };
 
         let identity_state = Arc::clone(&self.identity_state);
+        let repository = Arc::clone(&self.repository);
 
         // Spawn notification handler.
         tokio::spawn(async move {
             // Check the cache on whether the identity is currently available.
             // If not, send a request and have the session handler take care of it.
-            if let Some(info) = identity_state.read().lookup_full_state(&net_address) {
+            let info = identity_state.read().lookup_full_state(&net_address);
+            if let Some(info) = info {
                 if let Err(_) = sink.notify(Ok(info.into())) {
                     debug!("Closing connection");
-                    return;
+                    return Ok(());
                 }
+            } else {
+                let _ = repository
+                    .get(RequestHandlerId)
+                    .await?
+                    .handle(RequestHandlerCommand::RequestState(net_address))
+                    .await?;
             }
 
             while let Ok(event) = receiver.recv().await {
+                //identity_state.upgradable_read()
+
                 if let Err(_) = sink.notify(Ok(event.body())) {
                     debug!("Closing connection");
                     break;
                 }
             }
+
+            crate::Result::<()>::Ok(())
         });
     }
     fn unsubscribe_account_status(

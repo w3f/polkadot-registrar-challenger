@@ -1,13 +1,15 @@
 use crate::event::{Event, FullStateRequest};
 use crate::state::NetworkAddress;
-use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
+
+type Result<T> = std::result::Result<T, crate::Error>;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename = "rpc_requests")]
 pub struct RequestHandlerId;
 
+#[derive(Debug, Clone)]
 pub enum RequestHandlerCommand {
     RequestState(NetworkAddress),
 }
@@ -20,7 +22,8 @@ impl Aggregate for RequestHandlerAggregate {
     type State = ();
     type Event = Event<FullStateRequest>;
     type Command = RequestHandlerCommand;
-    type Error = anyhow::Error;
+    //type Error = anyhow::Error;
+    type Error = crate::Error;
 
     /// No state changes occur on this aggregate.
     fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {

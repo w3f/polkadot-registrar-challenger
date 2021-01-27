@@ -26,7 +26,7 @@ mod projection;
 mod state;
 
 #[derive(Debug, Error)]
-enum Error {
+pub enum Error {
     #[error("The target address was not found ({}): {:?}", _1, _0)]
     TargetAddressNotFound(NetworkAddress, String),
 }
