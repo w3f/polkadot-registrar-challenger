@@ -1,5 +1,8 @@
 use crate::event::{BlankNetwork, Event, StateWrapper};
-use crate::state::{IdentityAddress, NetworkAddress};
+use crate::state::{IdentityAddress, IdentityState, NetworkAddress};
+use crate::aggregate::EmptyStore;
+use crate::aggregate::request_handler::RequestHandlerAggregate;
+use eventually::{Repository, Aggregate};
 use async_channel::{unbounded, Receiver, Sender};
 use futures::future;
 use futures::StreamExt;
@@ -28,7 +31,6 @@ impl ConnectionPool {
             .get(net_address)
             .map(|info| info.sender.clone())
     }
-    // TODO: Unit test this!!
     fn receiver(&self, net_address: &NetworkAddress) -> Receiver<Event<StateWrapper>> {
         self.pool
             .read()
@@ -81,7 +83,7 @@ pub trait PublicRpc {
     fn subscribe_account_status(
         &self,
         _: Self::Metadata,
-        _: Subscriber<Event<StateWrapper>>,
+        _: Subscriber<StateWrapper>,
         network: BlankNetwork,
         address: IdentityAddress,
     );
@@ -99,6 +101,8 @@ pub trait PublicRpc {
 
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
+    identity_state: Arc<RwLock<IdentityState<'static>>>,
+    repository: Repository<RequestHandlerAggregate, EmptyStore<<RequestHandlerAggregate as Aggregate>::Id, <RequestHandlerAggregate as Aggregate>::Event>>,
 }
 
 impl PublicRpc for PublicRpcApi {
@@ -107,7 +111,7 @@ impl PublicRpc for PublicRpcApi {
     fn subscribe_account_status(
         &self,
         _: Self::Metadata,
-        subscriber: Subscriber<Event<StateWrapper>>,
+        subscriber: Subscriber<StateWrapper>,
         network: BlankNetwork,
         address: IdentityAddress,
     ) {
@@ -125,10 +129,21 @@ impl PublicRpc for PublicRpcApi {
             }
         };
 
+        let identity_state = Arc::clone(&self.identity_state);
+
         // Spawn notification handler.
         tokio::spawn(async move {
+            // Check the cache on whether the identity is currently availalbe.
+            // If not, send a request and have the session handler take care of it.
+            if let Some(info) = identity_state.read().lookup_full_state(&net_address) {
+                if let Err(_) = sink.notify(Ok(info.into())) {
+                    debug!("Closing connection");
+                    return;
+                }
+            }
+
             while let Ok(event) = receiver.recv().await {
-                if let Err(_) = sink.notify(Ok(event)) {
+                if let Err(_) = sink.notify(Ok(event.body())) {
                     debug!("Closing connection");
                     break;
                 }

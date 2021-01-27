@@ -151,6 +151,15 @@ pub struct StateWrapper {
     pub notifications: Vec<Notification>,
 }
 
+impl From<IdentityInfo> for StateWrapper {
+    fn from(val: IdentityInfo) -> Self {
+        StateWrapper {
+            state: val,
+            notifications: vec![],
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "level", content = "message")]
 pub enum Notification {

@@ -12,6 +12,7 @@ pub enum RequestHandlerCommand {
     RequestState(NetworkAddress),
 }
 
+#[derive(Debug, Clone)]
 pub struct RequestHandlerAggregate {}
 
 impl Aggregate for RequestHandlerAggregate {
