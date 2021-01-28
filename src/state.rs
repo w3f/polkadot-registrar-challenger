@@ -1,4 +1,4 @@
-use crate::event::BlankNetwork;
+use crate::event::{BlankNetwork, Event, EventType};
 use crate::{api::start_api, event::Notification, Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
@@ -188,12 +188,24 @@ impl NetworkAddress {
             BlankNetwork::Kusama => NetworkAddress::Kusama(address),
         }
     }
+    pub fn net_address_str(&self) -> &str {
+        match self {
+            NetworkAddress::Polkadot(address) => address.0.as_str(),
+            NetworkAddress::Kusama(address) => address.0.as_str(),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityInfo {
     pub net_address: NetworkAddress,
     fields: Vec<FieldStatus>,
+}
+
+impl From<IdentityInfo> for Event {
+    fn from(val: IdentityInfo) -> Self {
+        EventType::IdentityInfo(val).into()
+    }
 }
 
 impl IdentityInfo {

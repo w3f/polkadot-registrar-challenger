@@ -21,19 +21,28 @@ use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct SubId(u64);
+
+impl From<u64> for SubId {
+    fn from(val: u64) -> Self {
+        SubId(val)
+    }
+}
+
 pub struct ConnectionPool {
     // TODO: Arc/RwLock around HashMap necessary?
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
 }
 
 impl ConnectionPool {
-    pub fn sender(&self, net_address: &NetworkAddress) -> Option<Sender<Event<StateWrapper>>> {
+    pub fn sender(&self, net_address: &NetworkAddress) -> Option<Sender<Event>> {
         self.pool
             .read()
             .get(net_address)
             .map(|info| info.sender.clone())
     }
-    fn receiver(&self, net_address: &NetworkAddress) -> Receiver<Event<StateWrapper>> {
+    fn receiver(&self, net_address: &NetworkAddress) -> Receiver<Event> {
         self.pool
             .read()
             .get(net_address)
@@ -58,8 +67,8 @@ impl ConnectionPool {
 }
 
 struct ConnectionInfo {
-    sender: Sender<Event<StateWrapper>>,
-    receiver: Receiver<Event<StateWrapper>>,
+    sender: Sender<Event>,
+    receiver: Receiver<Event>,
 }
 
 impl ConnectionInfo {
@@ -129,9 +138,8 @@ impl PublicRpc for PublicRpcApi {
         let receiver = self.connection_pool.receiver(&net_address);
 
         // Assign an ID to the subscriber.
-        let sink = match subscriber
-            .assign_id(SubscriptionId::Number(NumericIdProvider::new().next_id()))
-        {
+        let sub_id: SubId = NumericIdProvider::new().next_id().into();
+        let sink = match subscriber.assign_id(SubscriptionId::Number(sub_id.0)) {
             Ok(sink) => sink,
             Err(_) => {
                 debug!("Connection has already been terminated");
@@ -156,17 +164,22 @@ impl PublicRpc for PublicRpcApi {
                 let _ = repository
                     .get(RequestHandlerId)
                     .await?
-                    .handle(RequestHandlerCommand::RequestState(net_address))
+                    .handle(RequestHandlerCommand::RequestState {
+                        requester: sub_id,
+                        net_address: net_address,
+                    })
                     .await?;
             }
 
             while let Ok(event) = receiver.recv().await {
                 //identity_state.upgradable_read()
 
-                if let Err(_) = sink.notify(Ok(event.body())) {
+                /*
+                if let Err(_) = sink.notify(Ok(event.expe())) {
                     debug!("Closing connection");
                     break;
                 }
+                */
             }
 
             crate::Result::<()>::Ok(())
