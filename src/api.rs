@@ -210,7 +210,41 @@ impl PublicRpc for PublicRpcApi {
                             None => error!("Identity state not found in cache"),
                         }
                     }
-                    _ => {}
+                    EventType::IdentityInfo(full_state) => {
+                        // Apply all queued changes to the identity state.
+                        for change in changes_queue {
+                            let (net_address, field_status) =
+                                (change.net_address, change.field_status);
+                            if let Err(err) = identity_state
+                                .write()
+                                .update_field(&net_address, field_status)
+                            {
+                                error!("{}", err);
+                                continue;
+                            }
+                        }
+
+                        // Wipe the changes queue (reinitialize to get around
+                        // the borrow-checker).
+                        changes_queue = vec![];
+
+                        // Send current state to the subscriber.
+                        match identity_state
+                            .read()
+                            .lookup_full_state(&full_state.net_address)
+                        {
+                            Some(full_state) => {
+                                if let Err(_) = sink.notify(Ok(full_state.into())) {
+                                    debug!("Connection closed");
+                                    return Ok(());
+                                }
+                            }
+                            None => error!("Identity state not found in cache"),
+                        }
+                    }
+                    _ => {
+                        error!("Received unexpected event. Ignoring.")
+                    }
                 }
                 /*
                 if let Err(_) = sink.notify(Ok(event.expe())) {
