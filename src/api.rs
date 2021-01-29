@@ -16,7 +16,7 @@ use jsonrpc_pubsub::{
     PubSubHandler, Session, SubscriptionId,
 };
 use lock_api::RwLockReadGuard;
-use matrix_sdk::api::r0::receipt;
+use matrix_sdk::api::{error, r0::receipt};
 use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -199,7 +199,16 @@ impl PublicRpc for PublicRpcApi {
                             continue;
                         };
 
-                        let full_state = identity_state.read().lookup_full_state(&net_address);
+                        // Finally, fetch the current state and send it to the subscriber.
+                        match identity_state.read().lookup_full_state(&net_address) {
+                            Some(full_state) => {
+                                if let Err(_) = sink.notify(Ok(full_state.into())) {
+                                    debug!("Connection closed");
+                                    return Ok(());
+                                }
+                            }
+                            None => error!("Identity state not found in cache"),
+                        }
                     }
                     _ => {}
                 }
