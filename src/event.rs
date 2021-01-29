@@ -9,7 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
     header: EventHeader,
-    body: EventType,
+    pub body: EventType,
 }
 
 impl Event {

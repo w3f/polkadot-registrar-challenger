@@ -2,7 +2,7 @@ use crate::aggregate::request_handler::{
     RequestHandlerAggregate, RequestHandlerCommand, RequestHandlerId,
 };
 use crate::aggregate::EmptyStore;
-use crate::event::{BlankNetwork, Event, StateWrapper};
+use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified, StateWrapper};
 use crate::state::{IdentityAddress, IdentityState, NetworkAddress};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
@@ -157,7 +157,7 @@ impl PublicRpc for PublicRpcApi {
             let info = identity_state.read().lookup_full_state(&net_address);
             if let Some(info) = info {
                 if let Err(_) = sink.notify(Ok(info.into())) {
-                    debug!("Closing connection");
+                    debug!("Connection closed");
                     return Ok(());
                 }
             } else {
@@ -171,9 +171,38 @@ impl PublicRpc for PublicRpcApi {
                     .await?;
             }
 
-            while let Ok(event) = receiver.recv().await {
-                //identity_state.upgradable_read()
+            let mut changes_queue: Vec<FieldStatusVerified> = vec![];
 
+            while let Ok(event) = receiver.recv().await {
+                match event.body {
+                    EventType::FieldStatusVerified(field_changes_verified) => {
+                        let net_address = &field_changes_verified.net_address;
+
+                        // Check if the identity exists in cache. If not, queue
+                        // the change and apply it later on a `EventType::IdentityInfo`
+                        // event. This behavior could occur if changes are
+                        // received before the requested state.
+                        if !identity_state.read().exists(net_address) {
+                            changes_queue.push(field_changes_verified);
+
+                            continue;
+                        }
+
+                        let field_status = field_changes_verified.field_status;
+
+                        // Update the identity with the state change.
+                        if let Err(err) = identity_state
+                            .write()
+                            .update_field(&net_address, field_status)
+                        {
+                            error!("{}", err);
+                            continue;
+                        };
+
+                        let full_state = identity_state.read().lookup_full_state(&net_address);
+                    }
+                    _ => {}
+                }
                 /*
                 if let Err(_) = sink.notify(Ok(event.expe())) {
                     debug!("Closing connection");
