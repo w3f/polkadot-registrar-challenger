@@ -2,12 +2,15 @@ use crate::aggregate::request_handler::{
     RequestHandlerAggregate, RequestHandlerCommand, RequestHandlerId,
 };
 use crate::aggregate::EmptyStore;
-use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified, StateWrapper};
-use crate::state::{IdentityAddress, IdentityState, NetworkAddress};
+use crate::event::{
+    BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, StateWrapper,
+};
+use crate::state::{IdentityAddress, IdentityInfo, IdentityState, NetworkAddress};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
-use futures::future;
+use future::join;
 use futures::StreamExt;
+use futures::{future, join};
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
@@ -16,7 +19,10 @@ use jsonrpc_pubsub::{
     PubSubHandler, Session, SubscriptionId,
 };
 use lock_api::RwLockReadGuard;
-use matrix_sdk::api::{error, r0::receipt};
+use matrix_sdk::api::{
+    error,
+    r0::{receipt, sync::sync_events::State},
+};
 use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -98,6 +104,34 @@ impl ConnectionInfo {
     }
 }
 
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RpcResponse<T, E> {
+    Ok(T),
+    Err(E),
+}
+
+type AccountStatusResponse = RpcResponse<AccountStatusMessage, ErrorMessage>;
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AccountStatusMessage {
+    StateWrapper(StateWrapper),
+    IdentityInfo(IdentityInfo),
+}
+
+impl From<StateWrapper> for AccountStatusMessage {
+    fn from(val: StateWrapper) -> Self {
+        AccountStatusMessage::StateWrapper(val)
+    }
+}
+
+impl From<IdentityInfo> for AccountStatusMessage {
+    fn from(val: IdentityInfo) -> Self {
+        AccountStatusMessage::IdentityInfo(val)
+    }
+}
+
 #[rpc]
 pub trait PublicRpc {
     type Metadata;
@@ -110,7 +144,7 @@ pub trait PublicRpc {
     fn subscribe_account_status(
         &self,
         _: Self::Metadata,
-        _: Subscriber<StateWrapper>,
+        _: Subscriber<AccountStatusResponse>,
         network: BlankNetwork,
         address: IdentityAddress,
     );
@@ -146,7 +180,7 @@ impl PublicRpc for PublicRpcApi {
     fn subscribe_account_status(
         &self,
         _: Self::Metadata,
-        subscriber: Subscriber<StateWrapper>,
+        subscriber: Subscriber<AccountStatusResponse>,
         network: BlankNetwork,
         address: IdentityAddress,
     ) {
@@ -167,13 +201,32 @@ impl PublicRpc for PublicRpcApi {
         let identity_state = Arc::clone(&self.identity_state);
         let repository = Arc::clone(&self.repository);
 
+        let sink_direct = sink.clone();
+        tokio::spawn(async move {
+            while let Ok(event) = direct_listener.recv().await {
+                let response = match event.body {
+                    EventType::IdentityInfo(val) => AccountStatusResponse::Ok(val.into()),
+                    EventType::ErrorMessage(val) => AccountStatusResponse::Err(val.into()),
+                    _ => {
+                        error!("Received unrecognized event from direct line");
+                        continue;
+                    }
+                };
+
+                if let Err(_) = sink_direct.notify(Ok(response)) {
+                    debug!("Connection closed");
+                    return;
+                }
+            }
+        });
+
         // Spawn notification handler.
         tokio::spawn(async move {
             // Check the cache on whether the identity is currently available.
             // If not, send a request and have the session handler take care of it.
             let info = identity_state.read().lookup_full_state(&net_address);
             if let Some(info) = info {
-                if let Err(_) = sink.notify(Ok(info.into())) {
+                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(info.into()))) {
                     debug!("Connection closed");
                     return Ok(());
                 }
@@ -219,7 +272,9 @@ impl PublicRpc for PublicRpcApi {
                         // Finally, fetch the current state and send it to the subscriber.
                         match identity_state.read().lookup_full_state(&net_address) {
                             Some(full_state) => {
-                                if let Err(_) = sink.notify(Ok(full_state.into())) {
+                                if let Err(_) =
+                                    sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
+                                {
                                     debug!("Connection closed");
                                     return Ok(());
                                 }
@@ -251,7 +306,9 @@ impl PublicRpc for PublicRpcApi {
                             .lookup_full_state(&full_state.net_address)
                         {
                             Some(full_state) => {
-                                if let Err(_) = sink.notify(Ok(full_state.into())) {
+                                if let Err(_) =
+                                    sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
+                                {
                                     debug!("Connection closed");
                                     return Ok(());
                                 }
