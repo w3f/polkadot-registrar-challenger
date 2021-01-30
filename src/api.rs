@@ -201,9 +201,13 @@ impl PublicRpc for PublicRpcApi {
         let identity_state = Arc::clone(&self.identity_state);
         let repository = Arc::clone(&self.repository);
 
+        // Spawn a task to handle direct messages intended for the individual subscriber.
+        //
+        // Messages are generated in `crate::projection::response_notifier`.
         let sink_direct = sink.clone();
         tokio::spawn(async move {
             while let Ok(event) = direct_listener.recv().await {
+                // Determine whether the event is a regular message or an error message.
                 let response = match event.body {
                     EventType::IdentityInfo(val) => AccountStatusResponse::Ok(val.into()),
                     EventType::ErrorMessage(val) => AccountStatusResponse::Err(val.into()),
@@ -213,6 +217,7 @@ impl PublicRpc for PublicRpcApi {
                     }
                 };
 
+                // Send message to subscriber.
                 if let Err(_) = sink_direct.notify(Ok(response)) {
                     debug!("Connection closed");
                     return;
@@ -220,10 +225,13 @@ impl PublicRpc for PublicRpcApi {
             }
         });
 
-        // Spawn notification handler.
+        // Spawn a task to handle notifications intended for all subscribers to
+        // a specific topic, aka. state changes of a specific network address
+        // (e.g. Polkadot address).
+        //
+        // Messages are generated in `crate::projection::state_change_notifier`.
         tokio::spawn(async move {
-            // Check the cache on whether the identity is currently available.
-            // If not, send a request and have the session handler take care of it.
+            // Check the cache on whether the identity is currently available...
             let info = identity_state.read().lookup_full_state(&net_address);
             if let Some(info) = info {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(info.into()))) {
@@ -231,6 +239,7 @@ impl PublicRpc for PublicRpcApi {
                     return Ok(());
                 }
             } else {
+                // ... if not, send a request and have the "direct message" handler take care of it.
                 let _ = repository
                     .get(RequestHandlerId)
                     .await?
@@ -241,8 +250,8 @@ impl PublicRpc for PublicRpcApi {
                     .await?;
             }
 
+            // Queue for state changes.
             let mut changes_queue: Vec<FieldStatusVerified> = vec![];
-
             while let Ok(event) = watcher.recv().await {
                 match event.body {
                     EventType::FieldStatusVerified(field_changes_verified) => {
