@@ -1,6 +1,6 @@
 use crate::event::{Event, ExternalMessage};
-use crate::state::{
-    IdentityAddress, IdentityField, IdentityInfo, IdentityState, Validity, VerificationOutcome,
+use crate::manager::{
+    IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity, VerificationOutcome,
     VerificationStatus,
 };
 use crate::Result;
@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 pub struct VerifierAggregateId;
 
 pub enum VerifierCommand {
-    VerifyMessage(Event<ExternalMessage>),
+    VerifyMessage(Event),
 }
 
 pub struct VerifierAggregate<'a> {
@@ -22,10 +22,10 @@ pub struct VerifierAggregate<'a> {
 
 impl<'a> VerifierAggregate<'a> {
     fn handle_verify_message(
-        state: &IdentityState<'a>,
-        event: Event<ExternalMessage>,
-    ) -> Result<Option<Vec<Event<IdentityInfo>>>> {
-        let body = event.body();
+        state: &IdentityManager<'a>,
+        event: Event,
+    ) -> Result<Option<Vec<Event>>> {
+        let body = event.expect_external_message()?;
         let (identity_field, provided_message) = (
             IdentityField::from((body.origin, body.field_address)),
             body.message,
@@ -59,7 +59,7 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
-    fn apply_state_changes(state: &mut IdentityState<'a>, event: Event<IdentityInfo>) {
+    fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
         /*
         let body = event.body();
         let net_address = body.net_address;
@@ -75,8 +75,8 @@ impl<'a> VerifierAggregate<'a> {
 
 impl<'is> Aggregate for VerifierAggregate<'is> {
     type Id = VerifierAggregateId;
-    type State = IdentityState<'is>;
-    type Event = Event<IdentityInfo>;
+    type State = IdentityManager<'is>;
+    type Event = Event;
     // This aggregate has a single purpose. No commands required.
     type Command = VerifierCommand;
     type Error = anyhow::Error;

@@ -12,7 +12,7 @@ extern crate actix_web;
 use actix_web::dev::RequestHead;
 use actix_web::guard::Guard;
 use actix_web::{web, App, HttpResponse, HttpServer, Responder, Scope};
-use state::NetworkAddress;
+use manager::NetworkAddress;
 use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
@@ -22,8 +22,8 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 mod aggregate;
 mod api;
 mod event;
+mod manager;
 mod projection;
-mod state;
 
 #[derive(Debug, Error)]
 pub enum Error {

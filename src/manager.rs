@@ -1,4 +1,4 @@
-use crate::event::BlankNetwork;
+use crate::event::{BlankNetwork, Event, EventType};
 use crate::{api::start_api, event::Notification, Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
@@ -7,20 +7,20 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[derive(Default)]
-pub struct IdentityState<'a> {
+pub struct IdentityManager<'a> {
     identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a NetworkAddress>>,
 }
 
 // TODO: Should logs be printed if users are not found?
-impl<'a> IdentityState<'a> {
+impl<'a> IdentityManager<'a> {
     fn new() -> Self {
-        IdentityState {
+        IdentityManager {
             identities: HashMap::new(),
             lookup_addresses: HashMap::new(),
         }
     }
-    fn insert_identity(&'a mut self, identity: IdentityInfo) {
+    fn insert_identity(&'a mut self, identity: IdentityState) {
         // Insert identity.
         let (net_address, fields) = (identity.net_address, identity.fields);
         self.identities.insert(net_address.clone(), fields);
@@ -38,6 +38,9 @@ impl<'a> IdentityState<'a> {
                 })
                 .or_insert(vec![net_address].into_iter().collect());
         }
+    }
+    pub fn exists(&self, net_address: &NetworkAddress) -> bool {
+        self.identities.contains_key(net_address)
     }
     pub fn update_field(
         &mut self,
@@ -86,11 +89,13 @@ impl<'a> IdentityState<'a> {
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
-    pub fn lookup_full_state(&self, net_address: &NetworkAddress) -> Option<IdentityInfo> {
-        self.identities.get(net_address).map(|fields| IdentityInfo {
-            net_address: net_address.clone(),
-            fields: fields.clone(),
-        })
+    pub fn lookup_full_state(&self, net_address: &NetworkAddress) -> Option<IdentityState> {
+        self.identities
+            .get(net_address)
+            .map(|fields| IdentityState {
+                net_address: net_address.clone(),
+                fields: fields.clone(),
+            })
     }
     pub fn verify_message(
         &'a self,
@@ -188,15 +193,27 @@ impl NetworkAddress {
             BlankNetwork::Kusama => NetworkAddress::Kusama(address),
         }
     }
+    pub fn net_address_str(&self) -> &str {
+        match self {
+            NetworkAddress::Polkadot(address) => address.0.as_str(),
+            NetworkAddress::Kusama(address) => address.0.as_str(),
+        }
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct IdentityInfo {
+pub struct IdentityState {
     pub net_address: NetworkAddress,
     fields: Vec<FieldStatus>,
 }
 
-impl IdentityInfo {
+impl From<IdentityState> for Event {
+    fn from(val: IdentityState) -> Self {
+        EventType::IdentityState(val).into()
+    }
+}
+
+impl IdentityState {
     pub fn set_validity(&mut self, target: &IdentityField, validity: Validity) -> Result<()> {
         self.fields
             .iter_mut()
@@ -359,7 +376,7 @@ pub enum IdentityField {
 
 #[test]
 fn print_identity_info() {
-    let info = IdentityInfo {
+    let state = IdentityState {
         net_address: NetworkAddress::Polkadot(IdentityAddress(
             "15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string(),
         )),
@@ -398,7 +415,7 @@ fn print_identity_info() {
     println!(
         "{}",
         serde_json::to_string(&StateWrapper {
-            state: info,
+            state: state,
             notifications: vec![Notification::Success(
                 "The Matrix account has been verified".to_string()
             ),]

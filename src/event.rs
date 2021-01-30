@@ -1,22 +1,80 @@
+use crate::api::SubId;
+use crate::manager::{
+    ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField, IdentityState,
+    NetworkAddress, ProvidedMessage,
+};
+use crate::Result;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::state::{
-    ExpectedMessage, FieldAddress, IdentityAddress, IdentityField, IdentityInfo, NetworkAddress,
-    ProvidedMessage,
-};
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct Event<Body> {
+pub struct Event {
     header: EventHeader,
-    body: Body,
+    pub body: EventType,
 }
 
-impl<Body> Event<Body> {
-    pub fn body_ref(&self) -> &Body {
-        &self.body
+impl Event {
+    pub fn expect_identity_info(self) -> Result<IdentityState> {
+        match self.body {
+            EventType::IdentityState(val) => Ok(val),
+            _ => Err(anyhow!("unexpected event type")),
+        }
     }
-    pub fn body(self) -> Body {
-        self.body
+    pub fn expect_external_message(self) -> Result<ExternalMessage> {
+        match self.body {
+            EventType::ExternalMessage(val) => Ok(val),
+            _ => Err(anyhow!("unexpected event type")),
+        }
+    }
+    pub fn expect_field_status_verified(self) -> Result<FieldStatusVerified> {
+        match self.body {
+            EventType::FieldStatusVerified(val) => Ok(val),
+            _ => Err(anyhow!("unexpected event type")),
+        }
+    }
+    pub fn expect_field_status_verified_ref(&self) -> Result<&FieldStatusVerified> {
+        match &self.body {
+            EventType::FieldStatusVerified(val) => Ok(val),
+            _ => Err(anyhow!("unexpected event type")),
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type", content = "content")]
+pub enum EventType {
+    #[serde(rename = "full_state_request")]
+    FullStateRequest(FullStateRequest),
+    #[serde(rename = "identity_info")]
+    IdentityState(IdentityState),
+    #[serde(rename = "error_message")]
+    ErrorMessage(ErrorMessage),
+    #[serde(rename = "external_message")]
+    ExternalMessage(ExternalMessage),
+    #[serde(rename = "field_status_verified")]
+    FieldStatusVerified(FieldStatusVerified),
+}
+
+impl From<EventType> for Event {
+    fn from(val: EventType) -> Self {
+        Event {
+            header: EventHeader {
+                timestamp: Timestamp::unix_time(),
+                ttl: TTL::immortal(),
+            },
+            body: val,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ErrorMessage {
+    pub requester: Option<SubId>,
+    pub message: String,
+}
+
+impl From<ErrorMessage> for Event {
+    fn from(val: ErrorMessage) -> Self {
+        EventType::ErrorMessage(val).into()
     }
 }
 
@@ -49,32 +107,8 @@ impl TTL {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct EventHeader {
-    event_name: EventName,
     timestamp: Timestamp,
     ttl: TTL,
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub enum EventName {
-    #[serde(rename = "full_state_request")]
-    FullStateRequest,
-    #[serde(rename = "identity_info")]
-    IdentityInfo,
-    #[serde(rename = "full_state_not_found_response")]
-    FullStateNotFoundResponse,
-}
-
-impl From<IdentityInfo> for Event<IdentityInfo> {
-    fn from(val: IdentityInfo) -> Self {
-        Event {
-            header: EventHeader {
-                event_name: EventName::IdentityInfo,
-                timestamp: Timestamp::unix_time(),
-                ttl: TTL::immortal(),
-            },
-            body: val,
-        }
-    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -110,49 +144,25 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FullStateRequest {
+    pub requester: SubId,
     pub net_address: NetworkAddress,
 }
 
-impl From<FullStateRequest> for Event<FullStateRequest> {
+impl From<FullStateRequest> for Event {
     fn from(val: FullStateRequest) -> Self {
-        Event {
-            header: EventHeader {
-                event_name: EventName::FullStateRequest,
-                timestamp: Timestamp::unix_time(),
-                ttl: TTL::immortal(),
-            },
-            body: val,
-        }
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct FullStateNotFoundResponse {
-    pub net_address: NetworkAddress,
-}
-
-impl From<FullStateNotFoundResponse> for Event<FullStateNotFoundResponse> {
-    fn from(val: FullStateNotFoundResponse) -> Self {
-        Event {
-            header: EventHeader {
-                event_name: EventName::FullStateNotFoundResponse,
-                timestamp: Timestamp::unix_time(),
-                ttl: TTL::immortal(),
-            },
-            body: val,
-        }
+        EventType::FullStateRequest(val).into()
     }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct StateWrapper {
     #[serde(flatten)]
-    pub state: IdentityInfo,
+    pub state: IdentityState,
     pub notifications: Vec<Notification>,
 }
 
-impl From<IdentityInfo> for StateWrapper {
-    fn from(val: IdentityInfo) -> Self {
+impl From<IdentityState> for StateWrapper {
+    fn from(val: IdentityState) -> Self {
         StateWrapper {
             state: val,
             notifications: vec![],
@@ -174,4 +184,10 @@ pub enum Notification {
 pub enum BlankNetwork {
     Polkadot,
     Kusama,
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct FieldStatusVerified {
+    pub net_address: NetworkAddress,
+    pub field_status: FieldStatus,
 }

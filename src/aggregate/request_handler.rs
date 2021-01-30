@@ -1,5 +1,6 @@
+use crate::api::SubId;
 use crate::event::{Event, FullStateRequest};
-use crate::state::NetworkAddress;
+use crate::manager::NetworkAddress;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
 
@@ -11,7 +12,10 @@ pub struct RequestHandlerId;
 
 #[derive(Debug, Clone)]
 pub enum RequestHandlerCommand {
-    RequestState(NetworkAddress),
+    RequestState {
+        requester: SubId,
+        net_address: NetworkAddress,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -20,7 +24,7 @@ pub struct RequestHandlerAggregate {}
 impl Aggregate for RequestHandlerAggregate {
     type Id = RequestHandlerId;
     type State = ();
-    type Event = Event<FullStateRequest>;
+    type Event = Event;
     type Command = RequestHandlerCommand;
     //type Error = anyhow::Error;
     type Error = crate::Error;
@@ -41,12 +45,14 @@ impl Aggregate for RequestHandlerAggregate {
     {
         let fut = async move {
             match command {
-                RequestHandlerCommand::RequestState(net_address) => {
-                    Ok(Some(vec![FullStateRequest {
-                        net_address: net_address,
-                    }
-                    .into()]))
+                RequestHandlerCommand::RequestState {
+                    requester,
+                    net_address,
+                } => Ok(Some(vec![FullStateRequest {
+                    requester: requester,
+                    net_address: net_address,
                 }
+                .into()])),
             }
         };
 

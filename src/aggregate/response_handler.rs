@@ -1,5 +1,6 @@
-use crate::event::{Event, FullStateNotFoundResponse};
-use crate::state::{IdentityInfo, IdentityState, NetworkAddress};
+use crate::api::SubId;
+use crate::event::{ErrorMessage, Event, EventType};
+use crate::manager::{IdentityManager, IdentityState, NetworkAddress};
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
@@ -10,29 +11,20 @@ use std::marker::PhantomData;
 pub struct ResponseHandlerId;
 
 pub enum ResponseHandlerCommand {
-    RequestState(NetworkAddress),
+    RequestState {
+        requester: SubId,
+        net_address: NetworkAddress,
+    },
 }
 
 pub struct ResponseHandlerAggregate<'a> {
     _p1: PhantomData<&'a ()>,
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub enum EventType {
-    IdentityInfo(Event<IdentityInfo>),
-    FullStateNotFoundResponse(Event<FullStateNotFoundResponse>),
-}
-
-impl From<IdentityInfo> for EventType {
-    fn from(val: IdentityInfo) -> Self {
-        EventType::IdentityInfo(val.into())
-    }
-}
-
 impl<'is> Aggregate for ResponseHandlerAggregate<'is> {
     type Id = ResponseHandlerId;
-    type State = IdentityState<'is>;
-    type Event = EventType;
+    type State = IdentityManager<'is>;
+    type Event = Event;
     type Command = ResponseHandlerCommand;
     type Error = anyhow::Error;
 
@@ -51,19 +43,26 @@ impl<'is> Aggregate for ResponseHandlerAggregate<'is> {
     {
         let fut = async move {
             match command {
-                ResponseHandlerCommand::RequestState(net_address) => {
-                    let event: EventType = state
+                ResponseHandlerCommand::RequestState {
+                    requester,
+                    net_address,
+                } => {
+                    let event: Event = state
                         .lookup_full_state(&net_address)
-                        .map(|info| info.into())
+                        .map(|state| state.into())
                         .or_else(|| {
-                            Some(EventType::FullStateNotFoundResponse(
-                                FullStateNotFoundResponse {
-                                    net_address: net_address,
+                            Some(
+                                ErrorMessage {
+                                    requester: Some(requester),
+                                    message: format!(
+                                        "Network address {} could not be found",
+                                        net_address.net_address_str()
+                                    ),
                                 }
                                 .into(),
-                            ))
+                            )
                         })
-                        // Unwrapping here is fine, since this will always return `Some(..)`
+                        // This always returns `Some(..)`.
                         .unwrap();
 
                     Result::<Option<Vec<Self::Event>>>::Ok(Some(vec![event]))
