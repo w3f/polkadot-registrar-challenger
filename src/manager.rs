@@ -7,20 +7,20 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[derive(Default)]
-pub struct IdentityState<'a> {
+pub struct IdentityManager<'a> {
     identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a NetworkAddress>>,
 }
 
 // TODO: Should logs be printed if users are not found?
-impl<'a> IdentityState<'a> {
+impl<'a> IdentityManager<'a> {
     fn new() -> Self {
-        IdentityState {
+        IdentityManager {
             identities: HashMap::new(),
             lookup_addresses: HashMap::new(),
         }
     }
-    fn insert_identity(&'a mut self, identity: IdentityInfo) {
+    fn insert_identity(&'a mut self, identity: IdentityState) {
         // Insert identity.
         let (net_address, fields) = (identity.net_address, identity.fields);
         self.identities.insert(net_address.clone(), fields);
@@ -89,11 +89,13 @@ impl<'a> IdentityState<'a> {
             .get(field)
             .map(|addresses| addresses.iter().map(|address| *address).collect())
     }
-    pub fn lookup_full_state(&self, net_address: &NetworkAddress) -> Option<IdentityInfo> {
-        self.identities.get(net_address).map(|fields| IdentityInfo {
-            net_address: net_address.clone(),
-            fields: fields.clone(),
-        })
+    pub fn lookup_full_state(&self, net_address: &NetworkAddress) -> Option<IdentityState> {
+        self.identities
+            .get(net_address)
+            .map(|fields| IdentityState {
+                net_address: net_address.clone(),
+                fields: fields.clone(),
+            })
     }
     pub fn verify_message(
         &'a self,
@@ -200,18 +202,18 @@ impl NetworkAddress {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct IdentityInfo {
+pub struct IdentityState {
     pub net_address: NetworkAddress,
     fields: Vec<FieldStatus>,
 }
 
-impl From<IdentityInfo> for Event {
-    fn from(val: IdentityInfo) -> Self {
-        EventType::IdentityInfo(val).into()
+impl From<IdentityState> for Event {
+    fn from(val: IdentityState) -> Self {
+        EventType::IdentityState(val).into()
     }
 }
 
-impl IdentityInfo {
+impl IdentityState {
     pub fn set_validity(&mut self, target: &IdentityField, validity: Validity) -> Result<()> {
         self.fields
             .iter_mut()
@@ -374,7 +376,7 @@ pub enum IdentityField {
 
 #[test]
 fn print_identity_info() {
-    let info = IdentityInfo {
+    let info = IdentityState {
         net_address: NetworkAddress::Polkadot(IdentityAddress(
             "15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string(),
         )),

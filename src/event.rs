@@ -1,6 +1,6 @@
 use crate::api::SubId;
-use crate::state::{
-    ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField, IdentityInfo,
+use crate::manager::{
+    ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField, IdentityState,
     NetworkAddress, ProvidedMessage,
 };
 use crate::Result;
@@ -13,9 +13,9 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn expect_identity_info(self) -> Result<IdentityInfo> {
+    pub fn expect_identity_info(self) -> Result<IdentityState> {
         match self.body {
-            EventType::IdentityInfo(val) => Ok(val),
+            EventType::IdentityState(val) => Ok(val),
             _ => Err(anyhow!("unexpected event type")),
         }
     }
@@ -45,7 +45,7 @@ pub enum EventType {
     #[serde(rename = "full_state_request")]
     FullStateRequest(FullStateRequest),
     #[serde(rename = "identity_info")]
-    IdentityInfo(IdentityInfo),
+    IdentityState(IdentityState),
     #[serde(rename = "error_message")]
     ErrorMessage(ErrorMessage),
     #[serde(rename = "external_message")]
@@ -157,12 +157,12 @@ impl From<FullStateRequest> for Event {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct StateWrapper {
     #[serde(flatten)]
-    pub state: IdentityInfo,
+    pub state: IdentityState,
     pub notifications: Vec<Notification>,
 }
 
-impl From<IdentityInfo> for StateWrapper {
-    fn from(val: IdentityInfo) -> Self {
+impl From<IdentityState> for StateWrapper {
+    fn from(val: IdentityState) -> Self {
         StateWrapper {
             state: val,
             notifications: vec![],

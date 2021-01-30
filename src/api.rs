@@ -5,7 +5,7 @@ use crate::aggregate::EmptyStore;
 use crate::event::{
     BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, StateWrapper,
 };
-use crate::state::{IdentityAddress, IdentityInfo, IdentityState, NetworkAddress};
+use crate::manager::{IdentityAddress, IdentityManager, IdentityState, NetworkAddress};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
 use future::join;
@@ -143,7 +143,7 @@ pub trait PublicRpc {
 
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
-    identity_state: Arc<RwLock<IdentityState<'static>>>,
+    identity_state: Arc<RwLock<IdentityManager<'static>>>,
     repository: Arc<
         Repository<
             RequestHandlerAggregate,
@@ -215,7 +215,7 @@ impl PublicRpc for PublicRpcApi {
                         let net_address = &field_changes_verified.net_address;
 
                         // Check if the identity exists in cache. If not, queue
-                        // the change and apply it later on a `EventType::IdentityInfo`
+                        // the change and apply it later on a `EventType::IdentityState`
                         // event. This behavior could occur if changes are
                         // received before the requested state.
                         if !identity_state.read().exists(net_address) {
@@ -248,7 +248,7 @@ impl PublicRpc for PublicRpcApi {
                             None => error!("Identity state not found in cache"),
                         }
                     }
-                    EventType::IdentityInfo(full_state) => {
+                    EventType::IdentityState(full_state) => {
                         // Apply all queued changes to the identity state.
                         for change in changes_queue {
                             let (net_address, field_status) =

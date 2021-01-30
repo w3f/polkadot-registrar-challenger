@@ -1,6 +1,6 @@
 use crate::event::{Event, ExternalMessage};
-use crate::state::{
-    IdentityAddress, IdentityField, IdentityInfo, IdentityState, Validity, VerificationOutcome,
+use crate::manager::{
+    IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity, VerificationOutcome,
     VerificationStatus,
 };
 use crate::Result;
@@ -22,7 +22,7 @@ pub struct VerifierAggregate<'a> {
 
 impl<'a> VerifierAggregate<'a> {
     fn handle_verify_message(
-        state: &IdentityState<'a>,
+        state: &IdentityManager<'a>,
         event: Event,
     ) -> Result<Option<Vec<Event>>> {
         let body = event.expect_external_message()?;
@@ -59,7 +59,7 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
-    fn apply_state_changes(state: &mut IdentityState<'a>, event: Event) {
+    fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
         /*
         let body = event.body();
         let net_address = body.net_address;
@@ -75,7 +75,7 @@ impl<'a> VerifierAggregate<'a> {
 
 impl<'is> Aggregate for VerifierAggregate<'is> {
     type Id = VerifierAggregateId;
-    type State = IdentityState<'is>;
+    type State = IdentityManager<'is>;
     type Event = Event;
     // This aggregate has a single purpose. No commands required.
     type Command = VerifierCommand;

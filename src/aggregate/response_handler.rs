@@ -1,6 +1,6 @@
 use crate::api::SubId;
 use crate::event::{ErrorMessage, Event, EventType};
-use crate::state::{IdentityInfo, IdentityState, NetworkAddress};
+use crate::manager::{IdentityManager, IdentityState, NetworkAddress};
 use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
@@ -23,7 +23,7 @@ pub struct ResponseHandlerAggregate<'a> {
 
 impl<'is> Aggregate for ResponseHandlerAggregate<'is> {
     type Id = ResponseHandlerId;
-    type State = IdentityState<'is>;
+    type State = IdentityManager<'is>;
     type Event = Event;
     type Command = ResponseHandlerCommand;
     type Error = anyhow::Error;

@@ -1,6 +1,6 @@
 use crate::api::SubId;
 use crate::event::{Event, FullStateRequest};
-use crate::state::NetworkAddress;
+use crate::manager::NetworkAddress;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
 
