@@ -95,10 +95,10 @@ impl<'a> IdentityManager<'a> {
             })
     }
     pub fn verify_message(
-        &'a self,
+        &self,
         field: &IdentityField,
         message: &ProvidedMessage,
-    ) -> Vec<VerificationOutcome<'a>> {
+    ) -> Vec<VerificationOutcome> {
         let mut outcomes = vec![];
 
         // TODO: Reject Display Name fields. Just in case.
@@ -108,27 +108,34 @@ impl<'a> IdentityManager<'a> {
             // For each address, verify the field.
             for net_address in net_addresses {
                 if let Some(field_status) = self.lookup_field_status(&net_address, field) {
-                    // Only verify if it has not been already.
-                    if field_status.is_valid() {
-                        continue;
-                    }
+                    // Variables must be cloned, since those are later converted
+                    // into events (which requires ownership) and sent to the
+                    // event store.
+                    let net_address = net_address.clone();
+                    let field_status = field_status.clone();
 
-                    // Track address if the expected message was found.
-                    // TODO: Handle unwrap
-                    let expected_message = field_status.expected_message().unwrap();
-                    outcomes.push(if let Some(_) = expected_message.contains(message) {
-                        VerificationOutcome {
-                            net_address: net_address,
-                            expected_message: expected_message,
-                            status: VerificationStatus::Valid,
+                    // Verify the message, each verified specifically based on
+                    // the challenge type.
+                    match field_status.challenge {
+                        ChallengeStatus::ExpectMessage(ref challenge) => {
+                            if challenge.status != Validity::Valid {
+                                outcomes.push({
+                                    if challenge.expected_message.contains(message).is_some() {
+                                        VerificationOutcome {
+                                            net_address: net_address,
+                                            field_status: field_status,
+                                        }
+                                    } else {
+                                        VerificationOutcome {
+                                            net_address: net_address,
+                                            field_status: field_status,
+                                        }
+                                    }
+                                });
+                            }
                         }
-                    } else {
-                        VerificationOutcome {
-                            net_address: net_address,
-                            expected_message: expected_message,
-                            status: VerificationStatus::Invalid,
-                        }
-                    });
+                        _ => {}
+                    }
                 }
             }
         };
@@ -162,16 +169,9 @@ impl<'a> IdentityManager<'a> {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct VerificationOutcome<'a> {
-    pub net_address: &'a NetworkAddress,
-    pub expected_message: &'a ExpectedMessage,
-    pub status: VerificationStatus,
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum VerificationStatus {
-    Valid,
-    Invalid,
+pub struct VerificationOutcome {
+    pub net_address: NetworkAddress,
+    pub field_status: FieldStatus,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -295,6 +295,12 @@ pub struct ExpectMessageChallenge {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct BackAndForthChallenge {
     pub expected_message: ExpectedMessage,
+    // VERY IMPORTANT: This field MUST be skipped during serializing and MAY NO
+    // be sent to the the end user via the API, since the message must be
+    // explicitly received by the specified `from` address and sent back to the
+    // service (`to` address).
+    #[serde(skip_serializing)]
+    pub expected_message_back: ExpectedMessage,
     pub from: IdentityField,
     pub to: IdentityField,
     pub first_check_status: Validity,

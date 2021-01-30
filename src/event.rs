@@ -191,3 +191,9 @@ pub struct FieldStatusVerified {
     pub net_address: NetworkAddress,
     pub field_status: FieldStatus,
 }
+
+impl From<FieldStatusVerified> for Event {
+    fn from(val: FieldStatusVerified) -> Self {
+        EventType::FieldStatusVerified(val).into()
+    }
+}

@@ -1,7 +1,7 @@
-use crate::event::{Event, ExternalMessage};
+use crate::event::{Event, ExternalMessage, FieldStatusVerified};
 use crate::manager::{
-    IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity, VerificationOutcome,
-    VerificationStatus,
+    FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity,
+    VerificationOutcome,
 };
 use crate::Result;
 use eventually::Aggregate;
@@ -36,21 +36,18 @@ impl<'a> VerifierAggregate<'a> {
 
         // If corresponding identities have been found, generate the
         // corresponding events.
-        let mut events = vec![];
+        let mut events: Vec<Event> = vec![];
         for outcome in verification_outcomes {
             let net_address = outcome.net_address;
             let mut state = state.lookup_full_state(&net_address).unwrap();
 
-            match outcome.status {
-                VerificationStatus::Valid => {
-                    state.set_validity(&identity_field, Validity::Valid)?
+            events.push(
+                FieldStatusVerified {
+                    net_address: net_address,
+                    field_status: outcome.field_status,
                 }
-                VerificationStatus::Invalid => {
-                    state.set_validity(&identity_field, Validity::Invalid)?
-                }
-            };
-
-            events.push(state.into());
+                .into(),
+            );
         }
 
         if events.is_empty() {
@@ -61,7 +58,8 @@ impl<'a> VerifierAggregate<'a> {
     }
     fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
         /*
-        let body = event.body();
+        let event = event.exp
+        let body = event.body;
         let net_address = body.net_address;
         let field = body.field;
 
