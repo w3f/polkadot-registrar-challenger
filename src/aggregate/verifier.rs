@@ -1,4 +1,4 @@
-use crate::event::{Event, ExternalMessage, FieldStatusVerified};
+use crate::event::{Event, ExternalMessage, FieldStatusVerified, IdentityFullyVerified};
 use crate::manager::{
     FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity,
     VerificationOutcome,
@@ -31,23 +31,38 @@ impl<'a> VerifierAggregate<'a> {
             body.message,
         );
 
-        // Verify the message.
-        let verification_outcomes = state.verify_message(&identity_field, &provided_message);
-
-        // If corresponding identities have been found, generate the
-        // corresponding events.
         let mut events: Vec<Event> = vec![];
-        for outcome in verification_outcomes {
-            let net_address = outcome.net_address;
-            let mut state = state.lookup_full_state(&net_address).unwrap();
 
-            events.push(
-                FieldStatusVerified {
-                    net_address: net_address,
-                    field_status: outcome.field_status,
+        // Verify the message.
+        let mut c_net_address = None;
+        state
+            .verify_message(&identity_field, &provided_message)
+            .map(|outcome| {
+                c_net_address = Some(outcome.net_address.clone());
+
+                events.push(
+                    FieldStatusVerified {
+                        net_address: outcome.net_address,
+                        field_status: outcome.field_status,
+                    }
+                    .into(),
+                );
+            });
+
+        // If a message has been successfully verified (and `c_net_address` is
+        // therefore `Some(..)`), then check whether the full identity has been
+        // verified and create an event if that's the case.
+        if let Some(net_address) = c_net_address {
+            state.is_fully_verified(&net_address).map(|it_is| {
+                if it_is {
+                    events.push(
+                        IdentityFullyVerified {
+                            net_address: net_address,
+                        }
+                        .into(),
+                    );
                 }
-                .into(),
-            );
+            })?;
         }
 
         if events.is_empty() {

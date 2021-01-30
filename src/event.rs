@@ -52,6 +52,8 @@ pub enum EventType {
     ExternalMessage(ExternalMessage),
     #[serde(rename = "field_status_verified")]
     FieldStatusVerified(FieldStatusVerified),
+    #[serde(rename = "identity_fully_verified")]
+    IdentityFullyVerified(IdentityFullyVerified),
 }
 
 impl From<EventType> for Event {
@@ -143,6 +145,7 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+// TODO: Delete, no longer required.
 pub struct FullStateRequest {
     pub requester: SubId,
     pub net_address: NetworkAddress,
@@ -195,5 +198,16 @@ pub struct FieldStatusVerified {
 impl From<FieldStatusVerified> for Event {
     fn from(val: FieldStatusVerified) -> Self {
         EventType::FieldStatusVerified(val).into()
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct IdentityFullyVerified {
+    pub net_address: NetworkAddress,
+}
+
+impl From<IdentityFullyVerified> for Event {
+    fn from(val: IdentityFullyVerified) -> Self {
+        EventType::IdentityFullyVerified(val).into()
     }
 }

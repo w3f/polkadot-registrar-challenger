@@ -1,5 +1,4 @@
 use eventually::store::{AppendError, EventStream, Expected, Persisted, Select};
-// TODO: Alias `EventStream` as `StoreEventStream`
 use futures::future::BoxFuture;
 use std::convert::{AsRef, TryFrom};
 use std::marker::PhantomData;
