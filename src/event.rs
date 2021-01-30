@@ -68,7 +68,7 @@ impl From<EventType> for Event {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ErrorMessage {
-    pub requester: Option<SubId>,
+    pub code: u32,
     pub message: String,
 }
 

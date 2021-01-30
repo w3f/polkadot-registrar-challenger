@@ -1,4 +1,4 @@
-use crate::aggregate::VerifierAggregateId;
+use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::{Event, StateWrapper};
 use crate::Result;

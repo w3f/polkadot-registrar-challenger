@@ -1,7 +1,3 @@
-use crate::aggregate::request_handler::{
-    RequestHandlerAggregate, RequestHandlerCommand, RequestHandlerId,
-};
-use crate::aggregate::EmptyStore;
 use crate::event::{
     BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, StateWrapper,
 };
@@ -26,6 +22,9 @@ use matrix_sdk::api::{
 use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+const REGISTRAR_ID: u32 = 0;
+const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct SubId(u64);
@@ -144,15 +143,6 @@ pub trait PublicRpc {
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
     identity_state: Arc<RwLock<IdentityManager<'static>>>,
-    repository: Arc<
-        Repository<
-            RequestHandlerAggregate,
-            EmptyStore<
-                <RequestHandlerAggregate as Aggregate>::Id,
-                <RequestHandlerAggregate as Aggregate>::Event,
-            >,
-        >,
-    >,
 }
 
 impl PublicRpc for PublicRpcApi {
@@ -180,7 +170,6 @@ impl PublicRpc for PublicRpcApi {
         let direct_listener = self.connection_pool.register_direct(sub_id.clone());
 
         let identity_state = Arc::clone(&self.identity_state);
-        let repository = Arc::clone(&self.repository);
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
@@ -189,41 +178,29 @@ impl PublicRpc for PublicRpcApi {
         // Messages are generated in `crate::projection::state_change_notifier`.
         tokio::spawn(async move {
             // Check the cache on whether the identity is currently available...
-            let state = identity_state.read().lookup_full_state(&net_address);
-            if let Some(state) = state {
+            if let Some(state) = identity_state.read().lookup_full_state(&net_address) {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
                     return Ok(());
                 }
             } else {
                 // ... if not, send a request and have the "direct message" handler take care of it.
-                let _ = repository
-                    .get(RequestHandlerId)
-                    .await?
-                    .handle(RequestHandlerCommand::RequestState {
-                        requester: sub_id,
-                        net_address: net_address,
-                    })
-                    .await?;
+                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
+                    code: NO_PENDING_JUDGMENT_REQUEST_CODE,
+                    message: format!(
+                        "There is no pending judgement request for this identity (registrar #{}",
+                        REGISTRAR_ID
+                    ),
+                }))) {
+                    debug!("Connection closed");
+                    return Ok(());
+                }
             }
 
-            // Queue for state changes.
-            let mut changes_queue: Vec<FieldStatusVerified> = vec![];
             while let Ok(event) = watcher.recv().await {
                 match event.body {
                     EventType::FieldStatusVerified(field_changes_verified) => {
                         let net_address = &field_changes_verified.net_address;
-
-                        // Check if the identity exists in cache. If not, queue
-                        // the change and apply it later on a `EventType::IdentityState`
-                        // event. This behavior could occur if changes are
-                        // received before the requested state.
-                        if !identity_state.read().exists(net_address) {
-                            changes_queue.push(field_changes_verified);
-
-                            continue;
-                        }
-
                         let field_status = field_changes_verified.field_status;
 
                         // Update the identity with the state change.
@@ -237,40 +214,6 @@ impl PublicRpc for PublicRpcApi {
 
                         // Finally, fetch the current state and send it to the subscriber.
                         match identity_state.read().lookup_full_state(&net_address) {
-                            Some(full_state) => {
-                                if let Err(_) =
-                                    sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
-                                {
-                                    debug!("Connection closed");
-                                    return Ok(());
-                                }
-                            }
-                            None => error!("Identity state not found in cache"),
-                        }
-                    }
-                    EventType::IdentityState(full_state) => {
-                        // Apply all queued changes to the identity state.
-                        for change in changes_queue {
-                            let (net_address, field_status) =
-                                (change.net_address, change.field_status);
-                            if let Err(err) = identity_state
-                                .write()
-                                .update_field(&net_address, field_status)
-                            {
-                                error!("{}", err);
-                                continue;
-                            }
-                        }
-
-                        // Wipe the changes queue (reinitialize to get around
-                        // the borrow-checker).
-                        changes_queue = vec![];
-
-                        // Send current state to the subscriber.
-                        match identity_state
-                            .read()
-                            .lookup_full_state(&full_state.net_address)
-                        {
                             Some(full_state) => {
                                 if let Err(_) =
                                     sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
