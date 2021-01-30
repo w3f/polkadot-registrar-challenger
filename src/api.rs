@@ -177,7 +177,10 @@ impl PublicRpc for PublicRpcApi {
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
         tokio::spawn(async move {
-            // Check the cache on whether the identity is currently available...
+            // Check the state for the requested identity and respond
+            // immediately with the current state. If the identity is not
+            // available, it implies there is not pending judgement request (for
+            // the specified registrar, at least).
             if let Some(state) = identity_state.read().lookup_full_state(&net_address) {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
@@ -197,6 +200,7 @@ impl PublicRpc for PublicRpcApi {
                 }
             }
 
+            // Start event loop and keep the subscriber informed about any state changes.
             while let Ok(event) = watcher.recv().await {
                 match event.body {
                     EventType::FieldStatusVerified(field_changes_verified) => {
