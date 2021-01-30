@@ -175,7 +175,7 @@ impl PublicRpc for PublicRpcApi {
         // a specific topic, aka. state changes of a specific network address
         // (e.g. Polkadot address).
         //
-        // Messages are generated in `crate::projection::state_change_notifier`.
+        // Messages are generated in `crate::projection::identity_change_notifier`.
         tokio::spawn(async move {
             // Check the cache on whether the identity is currently available...
             if let Some(state) = identity_state.read().lookup_full_state(&net_address) {

@@ -1,1 +1,1 @@
-mod session_notifier;
+mod identity_change_notifier;
