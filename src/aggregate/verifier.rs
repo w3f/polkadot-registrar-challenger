@@ -49,8 +49,6 @@ impl<'a> VerifierAggregate<'a> {
                 );
             });
 
-        // TODO: Remove this from here, issue a `JudgementGiven` event.
-        //
         // If a message has been successfully verified (and `c_net_address` is
         // therefore `Some(..)`), then check whether the full identity has been
         // verified and create an event if that's the case.
@@ -74,23 +72,20 @@ impl<'a> VerifierAggregate<'a> {
         }
     }
     fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
-        let _ = event
-            .expect_field_status_verified()
-            .map_err(|err| {
-                error!("{}", err);
-                err
-            })
-            .and_then(|field_status| {
+        match event.body {
+            EventType::FieldStatusVerified(field_status) => {
                 let (net_address, field_status) =
                     (field_status.net_address, field_status.field_status);
 
-                state
+                let _ = state
                     .update_field(&net_address, field_status)
                     .map_err(|err| {
                         error!("{}", err);
-                        err
-                    })
-            });
+                    });
+            }
+            EventType::IdentityFullyVerified(_) => {}
+            _ => warn!("Received unrecognized event type when applying changes"),
+        }
     }
 }
 
