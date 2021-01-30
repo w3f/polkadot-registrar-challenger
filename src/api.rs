@@ -174,7 +174,7 @@ impl PublicRpc for PublicRpcApi {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
                     code: NO_PENDING_JUDGMENT_REQUEST_CODE,
                     message: format!(
-                        "There is no pending judgement request for this identity (registrar #{}",
+                        "There is no pending judgement request for this identity (for registrar #{}",
                         REGISTRAR_ID
                     ),
                 }))) {

@@ -175,22 +175,12 @@ impl<'a> IdentityManager<'a> {
 
         None
     }
-    // TODO: Should return Result
-    pub fn set_verified(&mut self, net_address: &NetworkAddress, field: &IdentityField) -> bool {
-        if let Some(field_status) = self.lookup_field_status_mut(net_address, field) {
-            // TODO
-            //field_status.is_valid = true;
-            true
-        } else {
-            false
-        }
-    }
     pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Result<bool> {
         self.identities
             .get(net_address)
             .map(|field_statuses| field_statuses.iter().any(|status| status.is_valid()))
             .ok_or(anyhow!(
-                "failed to check the full verification status of unknown target: {:?}",
+                "failed to check the full verification status of unknown target: {:?}. This is a bug",
                 net_address
             ))
     }

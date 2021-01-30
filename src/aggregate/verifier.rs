@@ -1,4 +1,4 @@
-use crate::event::{Event, ExternalMessage, FieldStatusVerified, IdentityFullyVerified};
+use crate::event::{Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified};
 use crate::manager::{
     FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity,
     VerificationOutcome,
@@ -49,6 +49,8 @@ impl<'a> VerifierAggregate<'a> {
                 );
             });
 
+        // TODO: Remove this from here, issue a `JudgementGiven` event.
+        //
         // If a message has been successfully verified (and `c_net_address` is
         // therefore `Some(..)`), then check whether the full identity has been
         // verified and create an event if that's the case.
@@ -72,17 +74,23 @@ impl<'a> VerifierAggregate<'a> {
         }
     }
     fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
-        /*
-        let event = event.exp
-        let body = event.body;
-        let net_address = body.net_address;
-        let field = body.field;
+        let _ = event
+            .expect_field_status_verified()
+            .map_err(|err| {
+                error!("{}", err);
+                err
+            })
+            .and_then(|field_status| {
+                let (net_address, field_status) =
+                    (field_status.net_address, field_status.field_status);
 
-        if body.is_valid {
-            // TODO: Handle `false`?
-            state.set_verified(&net_address, &field);
-        }
-        */
+                state
+                    .update_field(&net_address, field_status)
+                    .map_err(|err| {
+                        error!("{}", err);
+                        err
+                    })
+            });
     }
 }
 
