@@ -36,13 +36,13 @@ pub struct ConnectionPool {
 }
 
 impl ConnectionPool {
-    pub fn sender(&self, net_address: &NetworkAddress) -> Option<Sender<Event>> {
+    pub fn notify_net_address(&self, net_address: &NetworkAddress) -> Option<Sender<Event>> {
         self.pool
             .read()
             .get(net_address)
             .map(|info| info.sender.clone())
     }
-    fn receiver(&self, net_address: &NetworkAddress) -> Receiver<Event> {
+    fn watch_net_address(&self, net_address: &NetworkAddress) -> Receiver<Event> {
         self.pool
             .read()
             .get(net_address)
@@ -135,7 +135,7 @@ impl PublicRpc for PublicRpcApi {
         address: IdentityAddress,
     ) {
         let net_address = NetworkAddress::from(network, address);
-        let receiver = self.connection_pool.receiver(&net_address);
+        let watcher = self.connection_pool.watch_net_address(&net_address);
 
         // Assign an ID to the subscriber.
         let sub_id: SubId = NumericIdProvider::new().next_id().into();
@@ -173,7 +173,7 @@ impl PublicRpc for PublicRpcApi {
 
             let mut changes_queue: Vec<FieldStatusVerified> = vec![];
 
-            while let Ok(event) = receiver.recv().await {
+            while let Ok(event) = watcher.recv().await {
                 match event.body {
                     EventType::FieldStatusVerified(field_changes_verified) => {
                         let net_address = &field_changes_verified.net_address;
@@ -246,12 +246,6 @@ impl PublicRpc for PublicRpcApi {
                         error!("Received unexpected event. Ignoring.")
                     }
                 }
-                /*
-                if let Err(_) = sink.notify(Ok(event.expe())) {
-                    debug!("Closing connection");
-                    break;
-                }
-                */
             }
 
             crate::Result::<()>::Ok(())

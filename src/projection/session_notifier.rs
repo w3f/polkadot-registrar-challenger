@@ -21,8 +21,8 @@ impl Projection for SessionNotifier {
             let event = event.take();
             let body = event.expect_field_status_verified_ref()?;
 
-            if let Some(sender) = self.connection_pool.sender(&body.net_address) {
-                if let Err(_) = sender.send(event).await {
+            if let Some(notifier) = self.connection_pool.notify_net_address(&body.net_address) {
+                if let Err(_) = notifier.send(event).await {
                     error!("All connections to RPC sessions");
                 }
             }
