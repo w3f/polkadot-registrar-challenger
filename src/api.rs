@@ -33,6 +33,7 @@ impl From<u64> for SubId {
 pub struct ConnectionPool {
     // TODO: Arc/RwLock around HashMap necessary?
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
+    direct: Arc<RwLock<HashMap<SubId, ConnectionInfo>>>,
 }
 
 impl ConnectionPool {
@@ -56,12 +57,27 @@ impl ConnectionPool {
             // Always returns `Some(...)`.
             .unwrap()
     }
+    fn register_direct(&self, sub_id: SubId) -> Receiver<Event> {
+        self.direct
+            .write()
+            .entry(sub_id)
+            .or_insert(ConnectionInfo::new())
+            .receiver
+            .clone()
+    }
+    fn get_direct(&self, sub_id: &SubId) -> Option<Sender<Event>> {
+        self.direct
+            .read()
+            .get(sub_id)
+            .map(|info| info.sender.clone())
+    }
 }
 
 impl ConnectionPool {
     fn new() -> Self {
         ConnectionPool {
             pool: Arc::new(RwLock::new(HashMap::new())),
+            direct: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -134,9 +150,6 @@ impl PublicRpc for PublicRpcApi {
         network: BlankNetwork,
         address: IdentityAddress,
     ) {
-        let net_address = NetworkAddress::from(network, address);
-        let watcher = self.connection_pool.watch_net_address(&net_address);
-
         // Assign an ID to the subscriber.
         let sub_id: SubId = NumericIdProvider::new().next_id().into();
         let sink = match subscriber.assign_id(SubscriptionId::Number(sub_id.0)) {
@@ -146,6 +159,10 @@ impl PublicRpc for PublicRpcApi {
                 return;
             }
         };
+
+        let net_address = NetworkAddress::from(network, address);
+        let watcher = self.connection_pool.watch_net_address(&net_address);
+        let direct_listener = self.connection_pool.register_direct(sub_id.clone());
 
         let identity_state = Arc::clone(&self.identity_state);
         let repository = Arc::clone(&self.repository);
