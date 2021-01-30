@@ -69,17 +69,6 @@ impl<'a> IdentityManager<'a> {
             // Unpack `Option<Option<T>>` to `Option<T>`
             .and_then(|status| status)
     }
-    fn lookup_field_status_mut(
-        &mut self,
-        net_address: &NetworkAddress,
-        field: &IdentityField,
-    ) -> Option<&mut FieldStatus> {
-        self.identities
-            .get_mut(net_address)
-            .map(|statuses| statuses.iter_mut().find(|status| &status.field == field))
-            // Unpack `Option<Option<T>>` to `Option<T>`
-            .and_then(|status| status)
-    }
     // Lookup all addresses which contain the specified field.
     fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&NetworkAddress>> {
         self.lookup_addresses
@@ -232,19 +221,6 @@ impl From<IdentityState> for Event {
     }
 }
 
-impl IdentityState {
-    pub fn set_validity(&mut self, target: &IdentityField, validity: Validity) -> Result<()> {
-        self.fields
-            .iter_mut()
-            .find(|status| &status.field == target)
-            .map(|status| {
-                status.set_validity(validity);
-                ()
-            })
-            .ok_or(anyhow!("Target field was not found"))
-    }
-}
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityAddress(String);
 
@@ -274,23 +250,6 @@ impl FieldStatus {
         match status {
             Validity::Valid => true,
             Validity::Invalid | Validity::Unconfirmed => false,
-        }
-    }
-    pub fn set_validity(&mut self, validity: Validity) {
-        let mut status = match self.challenge {
-            ChallengeStatus::ExpectMessage(ref mut state) => &mut state.status,
-            ChallengeStatus::BackAndForth(ref mut state) => &mut state.first_check_status,
-            ChallengeStatus::CheckDisplayName(ref mut state) => &mut state.status,
-        };
-
-        *status = validity;
-    }
-    // TODO: Should this maybe return `Result`?
-    pub fn expected_message(&self) -> Option<&ExpectedMessage> {
-        match self.challenge {
-            ChallengeStatus::ExpectMessage(ref state) => Some(&state.expected_message),
-            ChallengeStatus::BackAndForth(ref state) => Some(&state.expected_message),
-            _ => None,
         }
     }
 }

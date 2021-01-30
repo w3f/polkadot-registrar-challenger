@@ -93,7 +93,6 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
     type Id = VerifierAggregateId;
     type State = IdentityManager<'is>;
     type Event = Event;
-    // This aggregate has a single purpose. No commands required.
     type Command = VerifierCommand;
     type Error = anyhow::Error;
 
