@@ -47,17 +47,17 @@ impl ConnectionPool {
         self.pool
             .read()
             .get(net_address)
-            .map(|info| info.sender.clone())
+            .map(|state| state.sender.clone())
     }
     fn watch_net_address(&self, net_address: &NetworkAddress) -> Receiver<Event> {
         self.pool
             .read()
             .get(net_address)
-            .map(|info| info.receiver.clone())
+            .map(|state| state.receiver.clone())
             .or_else(|| {
-                let info = ConnectionInfo::new();
-                let receiver = info.receiver.clone();
-                self.pool.write().insert(net_address.clone(), info);
+                let state = ConnectionInfo::new();
+                let receiver = state.receiver.clone();
+                self.pool.write().insert(net_address.clone(), state);
                 Some(receiver)
             })
             // Always returns `Some(...)`.
@@ -75,7 +75,7 @@ impl ConnectionPool {
         self.direct
             .read()
             .get(sub_id)
-            .map(|info| info.sender.clone())
+            .map(|state| state.sender.clone())
     }
 }
 
@@ -189,9 +189,9 @@ impl PublicRpc for PublicRpcApi {
         // Messages are generated in `crate::projection::state_change_notifier`.
         tokio::spawn(async move {
             // Check the cache on whether the identity is currently available...
-            let info = identity_state.read().lookup_full_state(&net_address);
-            if let Some(info) = info {
-                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(info.into()))) {
+            let state = identity_state.read().lookup_full_state(&net_address);
+            if let Some(state) = state {
+                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
                     return Ok(());
                 }

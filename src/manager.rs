@@ -376,7 +376,7 @@ pub enum IdentityField {
 
 #[test]
 fn print_identity_info() {
-    let info = IdentityState {
+    let state = IdentityState {
         net_address: NetworkAddress::Polkadot(IdentityAddress(
             "15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string(),
         )),
@@ -415,7 +415,7 @@ fn print_identity_info() {
     println!(
         "{}",
         serde_json::to_string(&StateWrapper {
-            state: info,
+            state: state,
             notifications: vec![Notification::Success(
                 "The Matrix account has been verified".to_string()
             ),]

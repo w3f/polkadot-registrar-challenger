@@ -49,7 +49,7 @@ impl<'is> Aggregate for ResponseHandlerAggregate<'is> {
                 } => {
                     let event: Event = state
                         .lookup_full_state(&net_address)
-                        .map(|info| info.into())
+                        .map(|state| state.into())
                         .or_else(|| {
                             Some(
                                 ErrorMessage {
