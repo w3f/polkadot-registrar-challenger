@@ -111,26 +111,7 @@ pub enum RpcResponse<T, E> {
     Err(E),
 }
 
-type AccountStatusResponse = RpcResponse<AccountStatusMessage, ErrorMessage>;
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum AccountStatusMessage {
-    StateWrapper(StateWrapper),
-    IdentityInfo(IdentityInfo),
-}
-
-impl From<StateWrapper> for AccountStatusMessage {
-    fn from(val: StateWrapper) -> Self {
-        AccountStatusMessage::StateWrapper(val)
-    }
-}
-
-impl From<IdentityInfo> for AccountStatusMessage {
-    fn from(val: IdentityInfo) -> Self {
-        AccountStatusMessage::IdentityInfo(val)
-    }
-}
+type AccountStatusResponse = RpcResponse<StateWrapper, ErrorMessage>;
 
 #[rpc]
 pub trait PublicRpc {
@@ -200,30 +181,6 @@ impl PublicRpc for PublicRpcApi {
 
         let identity_state = Arc::clone(&self.identity_state);
         let repository = Arc::clone(&self.repository);
-
-        // Spawn a task to handle direct messages intended for the individual subscriber.
-        //
-        // Messages are generated in `crate::projection::response_notifier`.
-        let sink_direct = sink.clone();
-        tokio::spawn(async move {
-            while let Ok(event) = direct_listener.recv().await {
-                // Determine whether the event is a regular message or an error message.
-                let response = match event.body {
-                    EventType::IdentityInfo(val) => AccountStatusResponse::Ok(val.into()),
-                    EventType::ErrorMessage(val) => AccountStatusResponse::Err(val.into()),
-                    _ => {
-                        error!("Received unrecognized event from direct line");
-                        continue;
-                    }
-                };
-
-                // Send message to subscriber.
-                if let Err(_) = sink_direct.notify(Ok(response)) {
-                    debug!("Connection closed");
-                    return;
-                }
-            }
-        });
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
