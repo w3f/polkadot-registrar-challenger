@@ -26,6 +26,7 @@ use std::sync::Arc;
 const REGISTRAR_ID: u32 = 0;
 const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
 
+// TODO: Remove this type since it is no longer necessary.
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct SubId(u64);
 
@@ -36,9 +37,7 @@ impl From<u64> for SubId {
 }
 
 pub struct ConnectionPool {
-    // TODO: Arc/RwLock around HashMap necessary?
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
-    direct: Arc<RwLock<HashMap<SubId, ConnectionInfo>>>,
 }
 
 impl ConnectionPool {
@@ -62,27 +61,12 @@ impl ConnectionPool {
             // Always returns `Some(...)`.
             .unwrap()
     }
-    fn register_direct(&self, sub_id: SubId) -> Receiver<Event> {
-        self.direct
-            .write()
-            .entry(sub_id)
-            .or_insert(ConnectionInfo::new())
-            .receiver
-            .clone()
-    }
-    fn get_direct(&self, sub_id: &SubId) -> Option<Sender<Event>> {
-        self.direct
-            .read()
-            .get(sub_id)
-            .map(|state| state.sender.clone())
-    }
 }
 
 impl ConnectionPool {
     fn new() -> Self {
         ConnectionPool {
             pool: Arc::new(RwLock::new(HashMap::new())),
-            direct: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -142,7 +126,7 @@ pub trait PublicRpc {
 
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
-    identity_state: Arc<RwLock<IdentityManager<'static>>>,
+    manager: Arc<RwLock<IdentityManager<'static>>>,
 }
 
 impl PublicRpc for PublicRpcApi {
@@ -167,9 +151,8 @@ impl PublicRpc for PublicRpcApi {
 
         let net_address = NetworkAddress::from(network, address);
         let watcher = self.connection_pool.watch_net_address(&net_address);
-        let direct_listener = self.connection_pool.register_direct(sub_id.clone());
 
-        let identity_state = Arc::clone(&self.identity_state);
+        let manager = Arc::clone(&self.manager);
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
@@ -181,7 +164,7 @@ impl PublicRpc for PublicRpcApi {
             // immediately with the current state. If the identity is not
             // available, it implies there is not pending judgement request (for
             // the specified registrar, at least).
-            if let Some(state) = identity_state.read().lookup_full_state(&net_address) {
+            if let Some(state) = manager.read().lookup_full_state(&net_address) {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
                     return Ok(());
@@ -208,16 +191,13 @@ impl PublicRpc for PublicRpcApi {
                         let field_status = field_changes_verified.field_status;
 
                         // Update the identity with the state change.
-                        if let Err(err) = identity_state
-                            .write()
-                            .update_field(&net_address, field_status)
-                        {
+                        if let Err(err) = manager.write().update_field(&net_address, field_status) {
                             error!("{}", err);
                             continue;
                         };
 
                         // Finally, fetch the current state and send it to the subscriber.
-                        match identity_state.read().lookup_full_state(&net_address) {
+                        match manager.read().lookup_full_state(&net_address) {
                             Some(full_state) => {
                                 if let Err(_) =
                                     sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
