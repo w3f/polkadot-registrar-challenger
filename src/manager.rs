@@ -97,8 +97,28 @@ impl<'a> IdentityManager<'a> {
     pub fn verify_message(
         &self,
         field: &IdentityField,
-        message: &ProvidedMessage,
+        provided_message: &ProvidedMessage,
     ) -> Vec<VerificationOutcome> {
+        /// Convenience function for verifying the message.
+        fn generate_outcome(
+            net_address: NetworkAddress,
+            field_status: FieldStatus,
+            expected_message: &ExpectedMessage,
+            provided_message: &ProvidedMessage,
+        ) -> VerificationOutcome {
+            if expected_message.contains(provided_message).is_some() {
+                VerificationOutcome {
+                    net_address: net_address,
+                    field_status: field_status,
+                }
+            } else {
+                VerificationOutcome {
+                    net_address: net_address,
+                    field_status: field_status,
+                }
+            }
+        }
+
         let mut outcomes = vec![];
 
         // TODO: Reject Display Name fields. Just in case.
@@ -108,33 +128,49 @@ impl<'a> IdentityManager<'a> {
             // For each address, verify the field.
             for net_address in net_addresses {
                 if let Some(field_status) = self.lookup_field_status(&net_address, field) {
-                    // Variables must be cloned, since those are later converted
-                    // into events (which requires ownership) and sent to the
-                    // event store.
-                    let net_address = net_address.clone();
-                    let field_status = field_status.clone();
+                    // Variables must be cloned, since those are later
+                    // converted into events (which requires ownership) and sent
+                    // to the event store.
+                    let c_net_address = net_address.clone();
+                    let c_field_status = field_status.clone();
 
                     // Verify the message, each verified specifically based on
                     // the challenge type.
-                    match field_status.challenge {
+                    match &field_status.challenge {
                         ChallengeStatus::ExpectMessage(ref challenge) => {
                             if challenge.status != Validity::Valid {
                                 outcomes.push({
-                                    if challenge.expected_message.contains(message).is_some() {
-                                        VerificationOutcome {
-                                            net_address: net_address,
-                                            field_status: field_status,
-                                        }
-                                    } else {
-                                        VerificationOutcome {
-                                            net_address: net_address,
-                                            field_status: field_status,
-                                        }
-                                    }
+                                    generate_outcome(
+                                        c_net_address,
+                                        c_field_status,
+                                        &challenge.expected_message,
+                                        provided_message,
+                                    )
                                 });
                             }
                         }
-                        _ => {}
+                        ChallengeStatus::BackAndForth(challenge) => {
+                            // The first check must be verified before it can
+                            // proceed on the seconds check.
+                            if challenge.first_check_status != Validity::Valid {
+                                outcomes.push(generate_outcome(
+                                    c_net_address,
+                                    c_field_status,
+                                    &challenge.expected_message,
+                                    provided_message,
+                                ));
+                            } else if challenge.second_check_status != Validity::Valid {
+                                outcomes.push(generate_outcome(
+                                    c_net_address,
+                                    c_field_status,
+                                    &challenge.expected_message_back,
+                                    provided_message,
+                                ));
+                            }
+                        }
+                        ChallengeStatus::CheckDisplayName(_) => {
+                            error!("Received a display name check in the message verifier. This is a bug");
+                        }
                     }
                 }
             }
