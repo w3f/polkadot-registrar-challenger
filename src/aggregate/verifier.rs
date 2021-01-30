@@ -31,7 +31,7 @@ impl<'a> VerifierAggregate<'a> {
             body.message,
         );
 
-        // Verify message by acquiring a reader to the state.
+        // Verify the message.
         let verification_outcomes = state.verify_message(&identity_field, &provided_message);
 
         // If corresponding identities have been found, generate the

@@ -23,7 +23,7 @@ impl Projection for SessionNotifier {
 
             if let Some(notifier) = self.connection_pool.notify_net_address(&body.net_address) {
                 if let Err(_) = notifier.send(event).await {
-                    error!("All connections to RPC sessions");
+                    error!("All connections to RPC sessions are closed");
                 }
             }
 

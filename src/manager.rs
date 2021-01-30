@@ -39,9 +39,6 @@ impl<'a> IdentityManager<'a> {
                 .or_insert(vec![net_address].into_iter().collect());
         }
     }
-    pub fn exists(&self, net_address: &NetworkAddress) -> bool {
-        self.identities.contains_key(net_address)
-    }
     pub fn update_field(
         &mut self,
         net_address: &NetworkAddress,
