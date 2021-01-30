@@ -128,9 +128,9 @@ impl<'a> IdentityManager<'a> {
             // For each address, verify the field.
             for net_address in net_addresses {
                 if let Some(field_status) = self.lookup_field_status(&net_address, field) {
-                    // Variables must be cloned, since those are later
-                    // converted into events (which requires ownership) and sent
-                    // to the event store.
+                    // Variables must be cloned, since those are later converted
+                    // into events (which require ownership) and sent to the
+                    // event store.
                     let c_net_address = net_address.clone();
                     let c_field_status = field_status.clone();
 
