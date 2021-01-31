@@ -1,10 +1,17 @@
-use crate::event::{BlankNetwork, Event, EventType};
+use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified};
 use crate::{api::start_api, event::Notification, Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use std::fmt;
+
+pub enum UpdateChanges {
+    VerificationValid(IdentityField),
+    VerificationInvalid(IdentityField),
+    BackAndForthExpected(IdentityField),
+}
 
 #[derive(Default)]
 pub struct IdentityManager<'a> {
@@ -38,6 +45,25 @@ impl<'a> IdentityManager<'a> {
                 })
                 .or_insert(vec![net_address].into_iter().collect());
         }
+    }
+    pub fn update_field2(
+        &mut self,
+        verified: FieldStatusVerified,
+    ) -> Result<()> {
+        self.identities
+            .get_mut(&verified.net_address)
+            .ok_or(anyhow!("network address not found"))
+            .and_then(|statuses| {
+                statuses
+                    .iter_mut()
+                    .find(|status| status.field == verified.field_status.field)
+                    .map(|status| {
+
+                        *status = verified.field_status;
+                        ()
+                    })
+                    .ok_or(anyhow!("field not found"))
+            })
     }
     pub fn update_field(
         &mut self,
@@ -310,6 +336,12 @@ pub struct DisplayName(String);
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldAddress(String);
 
+impl FieldAddress {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ExpectedMessage(String);
 
@@ -356,6 +388,24 @@ pub enum IdentityField {
     #[serde(rename = "additional")]
     /// NOTE: Currently unsupported.
     Additional,
+}
+
+impl fmt::Display for IdentityField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            IdentityField::LegalName(addr) => format!("legal name (\"{}\")", addr.as_str()),
+            IdentityField::DisplayName(addr) => format!("display name (\"{}\")", addr.as_str()),
+            IdentityField::Email(addr) => format!("email (\"{}\")", addr.as_str()),
+            IdentityField::Web(addr) => format!("web (\"{}\")", addr.as_str()),
+            IdentityField::Twitter(addr) => format!("twitter (\"{}\")", addr.as_str()),
+            IdentityField::Matrix(addr) => format!("matrix (\"{}\")", addr.as_str()),
+            IdentityField::PGPFingerprint(addr) => format!("PGP Fingerprint: (\"{}\")", addr.as_str()),
+            IdentityField::Image => format!("image"),
+            IdentityField::Additional => format!("additional information"),
+        };
+
+        write!(f, "{}", string)
+    }
 }
 
 #[test]
