@@ -124,6 +124,12 @@ pub struct ExternalMessage {
     pub message: ProvidedMessage,
 }
 
+impl From<ExternalMessage> for Event {
+    fn from(val: ExternalMessage) -> Self {
+        EventType::ExternalMessage(val).into()
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum ExternalOrigin {
     #[serde(rename = "email")]

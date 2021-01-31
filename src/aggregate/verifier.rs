@@ -8,8 +8,7 @@ use eventually::Aggregate;
 use futures::future::BoxFuture;
 use std::marker::PhantomData;
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-#[serde(rename = "aggregate_verifier_id")]
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct VerifierAggregateId;
 
 pub enum VerifierCommand {
