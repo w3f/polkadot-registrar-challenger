@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 pub struct VerifierAggregateId;
 
 pub enum VerifierCommand {
-    VerifyMessage(Event),
+    VerifyMessage(ExternalMessage),
 }
 
 pub struct VerifierAggregate<'a> {
@@ -23,12 +23,11 @@ pub struct VerifierAggregate<'a> {
 impl<'a> VerifierAggregate<'a> {
     fn handle_verify_message(
         state: &IdentityManager<'a>,
-        event: Event,
+        external_message: ExternalMessage,
     ) -> Result<Option<Vec<Event>>> {
-        let body = event.expect_external_message()?;
-        let (identity_field, provided_message) = (
-            IdentityField::from((body.origin, body.field_address)),
-            body.message,
+        let (identity_field, external_message) = (
+            IdentityField::from((external_message.origin, external_message.field_address)),
+            external_message.message,
         );
 
         let mut events: Vec<Event> = vec![];
@@ -36,7 +35,7 @@ impl<'a> VerifierAggregate<'a> {
         // Verify the message.
         let mut c_net_address = None;
         state
-            .verify_message(&identity_field, &provided_message)
+            .verify_message(&identity_field, &external_message)
             .map(|outcome| {
                 c_net_address = Some(outcome.net_address.clone());
 
@@ -107,7 +106,9 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
     {
         let fut = async move {
             match command {
-                VerifierCommand::VerifyMessage(event) => Self::handle_verify_message(state, event),
+                VerifierCommand::VerifyMessage(external_message) => {
+                    Self::handle_verify_message(state, external_message)
+                }
             }
         };
 
