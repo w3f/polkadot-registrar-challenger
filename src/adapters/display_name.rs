@@ -6,9 +6,7 @@ pub const VIOLATIONS_CAP: usize = 5;
 pub struct DisplayNameHandler {}
 
 impl DisplayNameHandler {
-    pub async fn handle_display_name_matching(
-        &self,
-    ) -> Result<()> {
+    pub async fn handle_display_name_matching(&self) -> Result<()> {
         //let display_names = self.db.select_display_names(&net_account).await?;
         /*
         let display_names = vec![];

@@ -7,11 +7,8 @@ extern crate anyhow;
 #[macro_use]
 extern crate serde;
 #[macro_use]
-extern crate actix_web;
+extern crate async_trait;
 
-use actix_web::dev::RequestHead;
-use actix_web::guard::Guard;
-use actix_web::{web, App, HttpResponse, HttpServer, Responder, Scope};
 use manager::NetworkAddress;
 use std::collections::{HashMap, HashSet};
 use std::env;

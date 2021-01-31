@@ -86,7 +86,9 @@ impl SmtpImapClientBuilder {
     pub fn build(self) -> Result<SmtpImapClient> {
         Ok(SmtpImapClient {
             smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
-            imap_server: self.imap_server.ok_or(anyhow!("SMTP server not specified"))?,
+            imap_server: self
+                .imap_server
+                .ok_or(anyhow!("SMTP server not specified"))?,
             inbox: self.inbox.ok_or(anyhow!("SMTP server not specified"))?,
             user: self.user.ok_or(anyhow!("SMTP server not specified"))?,
             password: self.password.ok_or(anyhow!("SMTP server not specified"))?,

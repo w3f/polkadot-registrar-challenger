@@ -31,9 +31,7 @@ impl TryFrom<String> for TwitterId {
     type Error = anyhow::Error;
 
     fn try_from(val: String) -> Result<Self> {
-        Ok(TwitterId(
-            val.parse::<u64>()?
-        ))
+        Ok(TwitterId(val.parse::<u64>()?))
     }
 }
 
@@ -115,14 +113,22 @@ impl TwitterBuilder {
     pub fn build(self) -> Result<TwitterHandler> {
         Ok(TwitterHandler {
             client: Client::new(),
-            screen_name: self.screen_name.ok_or(anyhow!("screen name not specified"))?,
-            consumer_key: self.consumer_key.ok_or(anyhow!("screen name not specified"))?,
+            screen_name: self
+                .screen_name
+                .ok_or(anyhow!("screen name not specified"))?,
+            consumer_key: self
+                .consumer_key
+                .ok_or(anyhow!("screen name not specified"))?,
             consumer_secret: self
                 .consumer_secret
                 .ok_or(anyhow!("screen name not specified"))?,
-            sig_method: self.sig_method.ok_or(anyhow!("screen name not specified"))?,
+            sig_method: self
+                .sig_method
+                .ok_or(anyhow!("screen name not specified"))?,
             token: self.token.ok_or(anyhow!("screen name not specified"))?,
-            token_secret: self.token_secret.ok_or(anyhow!("screen name not specified"))?,
+            token_secret: self
+                .token_secret
+                .ok_or(anyhow!("screen name not specified"))?,
             version: self.version.ok_or(anyhow!("screen name not specified"))?,
         })
     }
@@ -160,10 +166,7 @@ pub struct TwitterHandler {
 }
 
 impl TwitterHandler {
-    pub async fn handle_incoming_messages(
-        &self,
-        my_id: &TwitterId,
-    ) -> Result<()> {
+    pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
         let watermark = 0;
         let (messages, watermark) = self.request_messages(my_id, watermark).await?;
 
@@ -303,21 +306,13 @@ impl TwitterHandler {
             full_url.pop();
         }
 
-        let mut request = self
-            .client
-            .get(&full_url)
-            .build()?;
+        let mut request = self.client.get(&full_url).build()?;
 
         self.authenticate_request(&HttpMethod::GET, url, &mut request, params)?;
 
-        let resp = self
-            .client
-            .execute(request)
-            .await?;
+        let resp = self.client.execute(request).await?;
 
-        let txt = resp
-            .text()
-            .await?;
+        let txt = resp.text().await?;
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
@@ -334,14 +329,9 @@ impl TwitterHandler {
 
         self.authenticate_request(&HttpMethod::POST, url, &mut request, None)?;
 
-        let resp = self
-            .client
-            .execute(request)
-            .await?;
+        let resp = self.client.execute(request).await?;
 
-        let txt = resp
-            .text()
-            .await?;
+        let txt = resp.text().await?;
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
