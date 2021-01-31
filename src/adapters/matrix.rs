@@ -72,12 +72,8 @@ impl MatrixClient {
             recv,
         ))
     }
-    async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
-        self.client
-            .leave_room(room_id)
-            .await
-            .map_err(|err| err.into())
-            .map(|_| ())
+    pub async fn start(&self) {
+        self.client.add_event_emitter(Box::new(self.clone())).await;
     }
 }
 
