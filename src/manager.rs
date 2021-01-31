@@ -1,5 +1,6 @@
-use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified};
-use crate::{api::start_api, event::Notification, Error, Result};
+use crate::api::start_api;
+use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified, Notification};
+use crate::{Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
@@ -11,6 +12,23 @@ pub enum UpdateChanges {
     VerificationValid(IdentityField),
     VerificationInvalid(IdentityField),
     BackAndForthExpected(IdentityField),
+}
+
+#[rustfmt::skip]
+impl From<UpdateChanges> for Notification {
+    fn from(val: UpdateChanges) -> Self {
+        match val {
+            UpdateChanges::VerificationValid(field) => Notification::Success(
+                format!("The {} field has been verified", field)
+            ),
+            UpdateChanges::VerificationInvalid(field) => Notification::Warn(
+                format!("The {} field has failed verification", field)
+            ),
+            UpdateChanges::BackAndForthExpected(field) => Notification::Info(
+                format!("The first challenge of the {0} field has been verified. An additional challenge has been sent to {0}", field)
+            ),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -46,10 +64,7 @@ impl<'a> IdentityManager<'a> {
                 .or_insert(vec![net_address].into_iter().collect());
         }
     }
-    pub fn update_field(
-        &mut self,
-        verified: FieldStatusVerified,
-    ) -> Result<Option<UpdateChanges>> {
+    pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
             .get_mut(&verified.net_address)
             .ok_or(anyhow!("network address not found"))
