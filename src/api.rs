@@ -187,11 +187,11 @@ impl PublicRpc for PublicRpcApi {
             while let Ok(event) = watcher.recv().await {
                 match event.body {
                     EventType::FieldStatusVerified(field_changes_verified) => {
-                        let net_address = &field_changes_verified.net_address;
-                        let field_status = field_changes_verified.field_status;
+                        let net_address = &field_changes_verified.net_address.clone();
 
+                        //let mut notifications = vec![];
                         // Update the identity with the state change.
-                        if let Err(err) = manager.write().update_field(&net_address, field_status) {
+                        if let Err(err) = manager.write().update_field(field_changes_verified) {
                             error!("{}", err);
                             continue;
                         };

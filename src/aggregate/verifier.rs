@@ -73,15 +73,10 @@ impl<'a> VerifierAggregate<'a> {
     }
     fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
         match event.body {
-            EventType::FieldStatusVerified(field_status) => {
-                let (net_address, field_status) =
-                    (field_status.net_address, field_status.field_status);
-
-                let _ = state
-                    .update_field(&net_address, field_status)
-                    .map_err(|err| {
-                        error!("{}", err);
-                    });
+            EventType::FieldStatusVerified(field_status_verified) => {
+                let _ = state.update_field(field_status_verified).map_err(|err| {
+                    error!("{}", err);
+                });
             }
             EventType::IdentityFullyVerified(_) => {}
             _ => warn!("Received unrecognized event type when applying changes"),
