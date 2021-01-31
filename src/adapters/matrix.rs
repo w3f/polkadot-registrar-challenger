@@ -1,5 +1,7 @@
-use crate::{event, Result};
-use async_channel::Sender;
+use crate::event::{ExternalMessage, ExternalOrigin};
+use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
+use crate::Result;
+use async_channel::{unbounded, Receiver, Sender};
 use futures::TryFutureExt;
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::{MessageEventContent, TextMessageEventContent};
@@ -19,6 +21,18 @@ pub struct MatrixMessage {
     message: String,
 }
 
+impl From<MatrixMessage> for ExternalMessage {
+    fn from(val: MatrixMessage) -> Self {
+        ExternalMessage {
+            origin: ExternalOrigin::Matrix,
+            field_address: FieldAddress::from(val.from),
+            message: ProvidedMessage {
+                parts: vec![ProvidedMessagePart::from(val.message)],
+            },
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
@@ -31,8 +45,7 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
-        sender: Sender<MatrixMessage>,
-    ) -> Result<MatrixClient> {
+    ) -> Result<(MatrixClient, Receiver<MatrixMessage>)> {
         info!("Setting up Matrix client");
         // Setup client
         let client_config = ClientConfig::new().store_path(db_path);
@@ -49,10 +62,15 @@ impl MatrixClient {
         info!("Syncing Matrix client");
         client.sync(SyncSettings::default()).await;
 
-        Ok(MatrixClient {
-            client: client,
-            sender: sender,
-        })
+        let (tx, recv) = unbounded();
+
+        Ok((
+            MatrixClient {
+                client: client,
+                sender: tx,
+            },
+            recv,
+        ))
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
         self.client
@@ -113,7 +131,8 @@ impl EventEmitter for MatrixClient {
 
                     // Send message to `crate::system`, where the message will
                     // be processed by an aggregate and sent to the event store.
-                    let _ = self.sender
+                    let _ = self
+                        .sender
                         .send(MatrixMessage {
                             from: event.sender.to_string(),
                             message: content.body.clone(),

@@ -392,16 +392,30 @@ impl FieldAddress {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct ExpectedMessage(String);
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct ProvidedMessage {
-    parts: Vec<ProvidedMessagePart>,
+impl From<String> for FieldAddress {
+    fn from(val: String) -> Self {
+        FieldAddress(val)
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ExpectedMessage(String);
+
+// TODO: Should be moved to `crate::events`
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct ProvidedMessage {
+    pub parts: Vec<ProvidedMessagePart>,
+}
+
+// TODO: Should be moved to `crate::events`
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ProvidedMessagePart(String);
+
+impl From<String> for ProvidedMessagePart {
+    fn from(val: String) -> Self {
+        ProvidedMessagePart(val)
+    }
+}
 
 impl ExpectedMessage {
     fn contains<'a>(&self, message: &'a ProvidedMessage) -> Option<&'a ProvidedMessagePart> {
