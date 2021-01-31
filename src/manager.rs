@@ -14,19 +14,20 @@ pub enum UpdateChanges {
     BackAndForthExpected(IdentityField),
 }
 
-#[rustfmt::skip]
 impl From<UpdateChanges> for Notification {
     fn from(val: UpdateChanges) -> Self {
         match val {
-            UpdateChanges::VerificationValid(field) => Notification::Success(
-                format!("The {} field has been verified", field)
-            ),
-            UpdateChanges::VerificationInvalid(field) => Notification::Warn(
-                format!("The {} field has failed verification", field)
-            ),
-            UpdateChanges::BackAndForthExpected(field) => Notification::Info(
-                format!("The first challenge of the {0} field has been verified. An additional challenge has been sent to {0}", field)
-            ),
+            UpdateChanges::VerificationValid(field) => {
+                Notification::Success(format!("The {} field has been verified", field))
+            }
+            UpdateChanges::VerificationInvalid(field) => {
+                Notification::Warn(format!("The {} field has failed verification", field))
+            }
+            UpdateChanges::BackAndForthExpected(field) => Notification::Info(format!(
+                "The first challenge of the {0} field has been verified. \
+                An additional challenge has been sent to {0}",
+                field
+            )),
         }
     }
 }
