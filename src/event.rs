@@ -1,3 +1,5 @@
+use matrix_sdk::api::r0::sync::sync_events::State;
+
 use crate::api::SubId;
 use crate::manager::{
     ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField, IdentityState,
@@ -162,6 +164,15 @@ pub struct StateWrapper {
     #[serde(flatten)]
     pub state: IdentityState,
     pub notifications: Vec<Notification>,
+}
+
+impl StateWrapper {
+    pub fn with_notifications(state: IdentityState, notifications: Vec<Notification>) -> Self {
+        StateWrapper {
+            state: state,
+            notifications: notifications,
+        }
+    }
 }
 
 impl From<IdentityState> for StateWrapper {

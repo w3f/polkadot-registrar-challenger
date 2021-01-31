@@ -1,5 +1,5 @@
 use crate::event::{
-    BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, StateWrapper,
+    BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, Notification, StateWrapper,
 };
 use crate::manager::{IdentityAddress, IdentityManager, IdentityState, NetworkAddress};
 use async_channel::{unbounded, Receiver, Sender};
@@ -189,19 +189,24 @@ impl PublicRpc for PublicRpcApi {
                     EventType::FieldStatusVerified(field_changes_verified) => {
                         let net_address = &field_changes_verified.net_address.clone();
 
-                        //let mut notifications = vec![];
-                        // Update the identity with the state change.
-                        if let Err(err) = manager.write().update_field(field_changes_verified) {
-                            error!("{}", err);
-                            continue;
-                        };
+                        // Update the identity with the state change and create notifications (if any).
+                        let notification: Vec<Notification> =
+                            match manager.write().update_field(field_changes_verified) {
+                                Ok(try_notification) => try_notification
+                                    .map(|changes| vec![changes.into()])
+                                    .unwrap_or(vec![]),
+                                Err(err) => {
+                                    error!("{}", err);
+                                    continue;
+                                }
+                            };
 
                         // Finally, fetch the current state and send it to the subscriber.
                         match manager.read().lookup_full_state(&net_address) {
                             Some(full_state) => {
-                                if let Err(_) =
-                                    sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
-                                {
+                                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
+                                    StateWrapper::with_notifications(full_state, notification),
+                                ))) {
                                     debug!("Connection closed");
                                     return Ok(());
                                 }
