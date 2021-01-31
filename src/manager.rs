@@ -3,9 +3,9 @@ use crate::{api::start_api, event::Notification, Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use std::fmt;
 
 pub enum UpdateChanges {
     VerificationValid(IdentityField),
@@ -49,7 +49,7 @@ impl<'a> IdentityManager<'a> {
     pub fn update_field2(
         &mut self,
         verified: FieldStatusVerified,
-    ) -> Result<()> {
+    ) -> Result<Option<UpdateChanges>> {
         self.identities
             .get_mut(&verified.net_address)
             .ok_or(anyhow!("network address not found"))
@@ -58,9 +58,58 @@ impl<'a> IdentityManager<'a> {
                     .iter_mut()
                     .find(|status| status.field == verified.field_status.field)
                     .map(|status| {
+                        let verified_status = verified.field_status;
 
-                        *status = verified.field_status;
-                        ()
+                        // If the current field status has already been
+                        // verified, skip (and avoid sending a new
+                        // notification).
+                        if (status.is_valid() && verified_status.is_valid())
+                            || (status.is_valid() && verified_status.is_not_valid())
+                        {
+                            None
+                        }
+                        // Return a warning that no changes have been committed
+                        // since the verification is invalid.
+                        else if status.is_not_valid() && verified_status.is_not_valid() {
+                            Some(UpdateChanges::VerificationInvalid(verified_status.field))
+                        }
+                        // Verification is valid, so commit changes. Gernerate
+                        // different notifications based on the individual
+                        // challenge type.
+                        else if status.is_not_valid() && verified_status.is_valid() {
+                            let field = verified_status.field.clone();
+                            *status = verified_status;
+
+                            match &status.challenge {
+                                ChallengeStatus::ExpectMessage(_)
+                                | ChallengeStatus::CheckDisplayName(_) => {
+                                    Some(UpdateChanges::VerificationValid(field))
+                                }
+                                ChallengeStatus::BackAndForth(challenge) => {
+                                    // The first message has been verified, now
+                                    // the second message must be verified.
+                                    if challenge.first_check_status == Validity::Valid
+                                        && challenge.second_check_status == Validity::Invalid
+                                    {
+                                        Some(UpdateChanges::VerificationValid(field))
+                                    }
+                                    // Both messages have been fully verified.
+                                    else if challenge.first_check_status == Validity::Valid
+                                        && challenge.second_check_status == Validity::Valid
+                                    {
+                                        Some(UpdateChanges::BackAndForthExpected(field))
+                                    }
+                                    // This case should never occur. Better safe than sorry.
+                                    else {
+                                        None
+                                    }
+                                }
+                            }
+                        }
+                        // This case should never occur. Better safe than sorry.
+                        else {
+                            None
+                        }
                     })
                     .ok_or(anyhow!("field not found"))
             })
@@ -278,6 +327,10 @@ impl FieldStatus {
             Validity::Invalid | Validity::Unconfirmed => false,
         }
     }
+    /// Convenience method for improved readability.
+    pub fn is_not_valid(&self) -> bool {
+        !self.is_valid()
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -399,7 +452,9 @@ impl fmt::Display for IdentityField {
             IdentityField::Web(addr) => format!("web (\"{}\")", addr.as_str()),
             IdentityField::Twitter(addr) => format!("twitter (\"{}\")", addr.as_str()),
             IdentityField::Matrix(addr) => format!("matrix (\"{}\")", addr.as_str()),
-            IdentityField::PGPFingerprint(addr) => format!("PGP Fingerprint: (\"{}\")", addr.as_str()),
+            IdentityField::PGPFingerprint(addr) => {
+                format!("PGP Fingerprint: (\"{}\")", addr.as_str())
+            }
             IdentityField::Image => format!("image"),
             IdentityField::Additional => format!("additional information"),
         };
