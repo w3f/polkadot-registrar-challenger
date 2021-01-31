@@ -1,4 +1,4 @@
 mod display_name;
 mod email;
-mod matrix;
+pub mod matrix;
 mod twitter;

@@ -49,6 +49,7 @@ pub struct MatrixConfig {
     pub homeserver: String,
     pub username: String,
     pub password: String,
+    pub db_path: String,
 }
 
 #[derive(Debug, Deserialize)]

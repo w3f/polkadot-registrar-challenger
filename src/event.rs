@@ -1,17 +1,26 @@
-use matrix_sdk::api::r0::sync::sync_events::State;
-
 use crate::api::SubId;
 use crate::manager::{
     ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField, IdentityState,
     NetworkAddress, ProvidedMessage,
 };
 use crate::Result;
+use eventually_event_store_db::GenericEvent;
+use matrix_sdk::api::r0::sync::sync_events::State;
+use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
     header: EventHeader,
     pub body: EventType,
+}
+
+impl TryFrom<Event> for GenericEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(val: Event) -> Result<Self> {
+        GenericEvent::serialize(val).map_err(|err| err.into())
+    }
 }
 
 impl Event {
