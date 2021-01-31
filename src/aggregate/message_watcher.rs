@@ -1,28 +1,24 @@
+use super::Error;
 use crate::event::{Event, ExternalMessage};
-use crate::Result;
 use eventually::Aggregate;
 use eventually_event_store_db::GenericEvent;
 use futures::future::BoxFuture;
 use std::convert::AsRef;
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Error, Debug)]
-#[error(transparent)]
-struct Error(anyhow::Error);
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct MessageWatcherId;
 
 impl TryFrom<String> for MessageWatcherId {
-    type Error = anyhow::Error;
+    type Error = Error;
 
     fn try_from(value: String) -> Result<Self> {
         if value == "external_messages" {
             Ok(MessageWatcherId)
         } else {
-            Err(anyhow!(
-                "Invalid aggregate Id, expected: 'external_messages'"
-            ))
+            Err(anyhow!("Invalid aggregate Id, expected: 'external_messages'").into())
         }
     }
 }
@@ -33,6 +29,7 @@ impl AsRef<str> for MessageWatcherId {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum MessageWatcherCommand {
     AddMessage(ExternalMessage),
 }
@@ -51,7 +48,7 @@ impl Aggregate for MessageWatcher {
     type State = ();
     type Event = GenericEvent;
     type Command = MessageWatcherCommand;
-    type Error = anyhow::Error;
+    type Error = Error;
 
     fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {
         Ok(state)

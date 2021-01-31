@@ -1,5 +1,5 @@
 use crate::adapters::matrix::MatrixClient;
-use crate::aggregate::{MessageWatcher, MessageWatcherId, MessageWatcherCommand};
+use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 use crate::{MatrixConfig, Result};
 use eventually::aggregate::AggregateRootBuilder;
 use eventually::Repository;
@@ -21,9 +21,10 @@ async fn run_matrix_listener(
 
     while let Ok(message) = recv.recv().await {
         // TODO: Why does Repository::get() require a parameter?
-        let root = repository.get(MessageWatcherId).await.unwrap();
-        //root.handle(MessageWatcherCommand::AddMessage(message.into())).await
-        //.map_err(|err| error!("Failed to handle command to add message: {}", err));
+        let mut root = repository.get(MessageWatcherId).await.unwrap();
+        root.handle(MessageWatcherCommand::AddMessage(message.into()))
+            .await
+            .map_err(|err| error!("Failed to handle command to add message: {}", err));
     }
 
     Err(anyhow!("The Matrix client has shut down"))
