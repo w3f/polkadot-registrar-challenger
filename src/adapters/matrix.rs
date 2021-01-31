@@ -1,8 +1,9 @@
 use crate::{event, Result};
 use async_channel::Sender;
+use futures::TryFutureExt;
 use matrix_sdk::events::room::member::MemberEventContent;
-use matrix_sdk::events::room::message::MessageEventContent;
-use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
+use matrix_sdk::events::room::message::{MessageEventContent, TextMessageEventContent};
+use matrix_sdk::events::{AnyMessageEventContent, StrippedStateEvent, SyncMessageEvent};
 use matrix_sdk::identifiers::{RoomId, UserId};
 use matrix_sdk::{Client, ClientConfig, EventEmitter, RoomState, SyncSettings};
 use std::convert::TryInto;
@@ -21,6 +22,7 @@ pub struct MatrixMessage {
 #[derive(Clone)]
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
+    sender: Sender<MatrixMessage>,
 }
 
 impl MatrixClient {
@@ -47,9 +49,10 @@ impl MatrixClient {
         info!("Syncing Matrix client");
         client.sync(SyncSettings::default()).await;
 
-        let matrix = MatrixClient { client: client };
-
-        Ok(matrix)
+        Ok(MatrixClient {
+            client: client,
+            sender: sender,
+        })
     }
     async fn leave_room(&self, room_id: &RoomId) -> Result<()> {
         self.client
@@ -93,5 +96,40 @@ impl EventEmitter for MatrixClient {
             debug!("Joined room {}", room.room_id());
         }
     }
-    async fn on_room_message(&self, _: RoomState, _: &SyncMessageEvent<MessageEventContent>) {}
+    async fn on_room_message(
+        &self,
+        room: RoomState,
+        event: &SyncMessageEvent<MessageEventContent>,
+    ) {
+        if let RoomState::Joined(_) = room {
+            match event.content {
+                MessageEventContent::Text(ref content) => {
+                    //let msg = txt_content.body;
+
+                    debug!(
+                        "Received message \"{}\" from {}",
+                        content.body, event.sender
+                    );
+
+                    // Send message to `crate::system`, where the message will
+                    // be processed by an aggregate and sent to the event store.
+                    let _ = self.sender
+                        .send(MatrixMessage {
+                            from: event.sender.to_string(),
+                            message: content.body.clone(),
+                        })
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                "Failed to send message from Matrix adapter to system: {:?}",
+                                err
+                            )
+                        });
+                }
+                _ => {
+                    trace!("Received unacceptable message type from {}", event.sender);
+                }
+            }
+        }
+    }
 }
