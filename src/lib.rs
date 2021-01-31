@@ -24,6 +24,7 @@ mod api;
 mod event;
 mod manager;
 mod projection;
+mod system;
 
 #[derive(Debug, Error)]
 pub enum Error {
