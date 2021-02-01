@@ -55,7 +55,20 @@ async fn run_email_listener(
         .request_interval(config.request_interval)
         .build()?;
 
+    info!("Starting Email client");
     client.start().await;
 
-    Ok(())
+    let repository = Repository::new(MessageWatcher.into(), store);
+
+    info!("Starting event loop for incoming Email messages");
+    while let Ok(message) = recv.recv().await {
+        let mut root = repository.get(MessageWatcherId).await.unwrap();
+
+        let _ = root
+            .handle(MessageWatcherCommand::AddMessage(message.into()))
+            .await
+            .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
+    }
+
+    Err(anyhow!("The Email client has shut down"))
 }

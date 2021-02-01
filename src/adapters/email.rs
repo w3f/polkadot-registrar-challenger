@@ -1,3 +1,5 @@
+use crate::event::{ExternalMessage, ExternalOrigin};
+use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
 use crate::Result;
 use async_channel::{Receiver, Sender};
 use futures::FutureExt;
@@ -12,6 +14,22 @@ use tokio::time::{self, Duration};
 pub struct EmailMessage {
     from: String,
     message_parts: Vec<String>,
+}
+
+impl From<EmailMessage> for ExternalMessage {
+    fn from(val: EmailMessage) -> Self {
+        ExternalMessage {
+            origin: ExternalOrigin::Email,
+            field_address: FieldAddress::from(val.from),
+            message: ProvidedMessage {
+                parts: val
+                    .message_parts
+                    .into_iter()
+                    .map(|string| ProvidedMessagePart::from(string))
+                    .collect(),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
