@@ -1,29 +1,49 @@
 use crate::Result;
+use async_channel::{Receiver, Sender};
 use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{cmp::Ordering, hash::Hash};
 use tokio::time::{self, Duration};
 
 const REQ_MESSAGE_TIMEOUT: u64 = 180;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedMessageContext {
-    pub sender: TwitterId,
-    pub message: String,
-    pub created: u64,
+    sender: TwitterId,
+    id: u64,
+    message: String,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
+pub struct TwitterMessage {
+    sender: String,
+    message: String,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct TwitterId(u64);
 
 impl TwitterId {
     pub fn as_u64(&self) -> u64 {
         self.0
+    }
+}
+
+impl Ord for TwitterId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for TwitterId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -39,25 +59,6 @@ impl TryFrom<String> for TwitterId {
     fn try_from(val: String) -> Result<Self> {
         Ok(TwitterId(val.parse::<u64>()?))
     }
-}
-
-impl ToSql for TwitterId {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::Owned(Value::Integer(self.0 as i64)))
-    }
-}
-
-impl FromSql for TwitterId {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value {
-            ValueRef::Integer(val) => Ok(TwitterId(val as u64)),
-            _ => Err(FromSqlError::InvalidType),
-        }
-    }
-}
-#[derive(Debug, Clone, Deserialize)]
-pub struct TwitterApiError {
-    errors: Vec<ApiErrorObject>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -116,27 +117,34 @@ impl TwitterBuilder {
         self.version = Some(version);
         self
     }
-    pub fn build(self) -> Result<TwitterHandler> {
-        Ok(TwitterHandler {
-            client: Client::new(),
-            screen_name: self
-                .screen_name
-                .ok_or(anyhow!("screen name not specified"))?,
-            consumer_key: self
-                .consumer_key
-                .ok_or(anyhow!("screen name not specified"))?,
-            consumer_secret: self
-                .consumer_secret
-                .ok_or(anyhow!("screen name not specified"))?,
-            sig_method: self
-                .sig_method
-                .ok_or(anyhow!("screen name not specified"))?,
-            token: self.token.ok_or(anyhow!("screen name not specified"))?,
-            token_secret: self
-                .token_secret
-                .ok_or(anyhow!("screen name not specified"))?,
-            version: self.version.ok_or(anyhow!("screen name not specified"))?,
-        })
+    pub fn build(self) -> Result<(TwitterHandler, Receiver<TwitterMessage>)> {
+        let (tx, recv) = async_channel::unbounded();
+
+        Ok((
+            TwitterHandler {
+                client: Client::new(),
+                screen_name: self
+                    .screen_name
+                    .ok_or(anyhow!("screen name not specified"))?,
+                consumer_key: self
+                    .consumer_key
+                    .ok_or(anyhow!("screen name not specified"))?,
+                consumer_secret: self
+                    .consumer_secret
+                    .ok_or(anyhow!("screen name not specified"))?,
+                sig_method: self
+                    .sig_method
+                    .ok_or(anyhow!("screen name not specified"))?,
+                token: self.token.ok_or(anyhow!("screen name not specified"))?,
+                token_secret: self
+                    .token_secret
+                    .ok_or(anyhow!("screen name not specified"))?,
+                version: self.version.ok_or(anyhow!("screen name not specified"))?,
+                twitter_ids: HashMap::new(),
+                sender: tx,
+            },
+            recv,
+        ))
     }
 }
 
@@ -182,52 +190,61 @@ pub struct TwitterHandler {
     token: String,
     token_secret: String,
     version: f64,
+    twitter_ids: HashMap<TwitterId, String>,
+    sender: Sender<TwitterMessage>,
 }
 
 impl TwitterHandler {
-    pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
+    pub async fn handle_incoming_messages(
+        &mut self,
+        my_id: &TwitterId,
+    ) -> Result<Vec<TwitterMessage>> {
+        debug!("Requesting Twitter messages");
         let messages = self.request_messages(my_id).await?;
 
         if messages.is_empty() {
-            return Ok(());
+            return Ok(vec![]);
         } else {
-            debug!("Received {} new messasge(-s)", messages.len());
+            debug!("Fetched {} message(-s)", messages.len());
         }
 
-        //let mut idents = vec![];
+        // Collect all the Twitter Ids that need to be looked-up.
+        #[rustfmt::skip]
+        let mut to_lookup: Vec<&TwitterId> = messages
+            .iter()
+            .filter(|context| {
+                // Only lookup Ids that aren't cached.
+                !self.twitter_ids.contains_key(&context.sender)
+            })
+            .map(|context| &context.sender)
+            .collect();
 
-        let mut to_lookup = vec![];
-        for message in &messages {
-            // Avoid duplicates.
-            /*
-            if let Some(_) = idents
-                .iter()
-                .find(|(_, twitter_id, _)| **twitter_id == &message.sender)
-            {
-                continue;
-            }
-            */
-        }
+        // Remove duplicates.
+        to_lookup.sort();
+        to_lookup.dedup();
 
-        let lookup_results;
-        if !to_lookup.is_empty() {
-            debug!("Looking up TwitterIds");
-            lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
+        // Lookup Twitter Ids and insert those into the cache.
+        debug!("Looking up TwitterIds");
+        let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
+        self.twitter_ids.extend(lookup_results);
 
-            /*
-            for (account, twitter_id) in &lookup_results {
-                idents.push((account.clone(), &twitter_id, false));
-            }
-             */
-        }
+        // Parse al messages into `TwitterMessage`.
+        let parsed_messages = messages
+            .into_iter()
+            .map(|context| {
+                Ok(TwitterMessage {
+                    // This should never return an error.
+                    sender: self
+                        .twitter_ids
+                        .get(&context.sender)
+                        .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
+                        .clone(),
+                    message: context.message,
+                })
+            })
+            .collect::<Result<Vec<TwitterMessage>>>()?;
 
-        /*
-        for (account, twitter_id, init_msg) in &idents {
-            debug!("Starting verification process for {}", account.as_str());
-        }
-         */
-
-        Ok(())
+        Ok(parsed_messages)
     }
     /// Creates a signature as documented here:
     /// https://developer.twitter.com/en/docs/authentication/oauth-1-0a/creating-a-signature
@@ -360,7 +377,7 @@ impl TwitterHandler {
         &self,
         twitter_ids: Option<&[&TwitterId]>,
         accounts: Option<&[&String]>,
-    ) -> Result<Vec<(String, TwitterId)>> {
+    ) -> Result<HashMap<TwitterId, String>> {
         let mut params = vec![];
 
         // Lookups for UserIds
@@ -411,7 +428,7 @@ impl TwitterHandler {
 
         Ok(user_objects
             .into_iter()
-            .map(|obj| (format!("@{}", obj.screen_name), obj.id))
+            .map(|obj| (obj.id, format!("@{}", obj.screen_name)))
             .collect())
     }
     fn my_screen_name(&self) -> &String {
@@ -462,11 +479,7 @@ impl ApiMessageRequest {
                     .ok_or(anyhow!("unrecognized data"))?
                     .try_into()?,
                 message: event.message_create.message_data.text,
-                created: event
-                    .created_timestamp
-                    .ok_or(anyhow!("unrecognized data"))?
-                    .parse::<u64>()
-                    .map_err(|_| anyhow!("unrecognized data"))?,
+                id: event.id.parse().map_err(|_| anyhow!("unrecognized data"))?,
             };
 
             messages.push(message);
