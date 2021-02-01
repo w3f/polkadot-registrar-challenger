@@ -233,7 +233,14 @@ impl TwitterHandler {
     }
     async fn handle_incoming_messages(&mut self) -> Result<Vec<TwitterMessage>> {
         debug!("Requesting Twitter messages");
-        let messages = self.request_messages().await?;
+        // Request message on parse those into a simpler type.
+        let messages = self
+            .get_request::<ApiMessageRequest>(
+                "https://api.twitter.com/1.1/direct_messages/events/list.json",
+                None,
+            )
+            .await?
+            .parse()?;
 
         if messages.is_empty() {
             return Ok(vec![]);
@@ -398,14 +405,6 @@ impl TwitterHandler {
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
-    async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
-        self.get_request::<ApiMessageRequest>(
-            "https://api.twitter.com/1.1/direct_messages/events/list.json",
-            None,
-        )
-        .await?
-        .get_messages()
-    }
     async fn lookup_twitter_id(
         &self,
         twitter_ids: Option<&[&TwitterId]>,
@@ -464,9 +463,6 @@ impl TwitterHandler {
             .map(|obj| (obj.id, format!("@{}", obj.screen_name)))
             .collect())
     }
-    fn my_screen_name(&self) -> &String {
-        &self.screen_name
-    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -501,7 +497,7 @@ struct ApiMessageData {
 }
 
 impl ApiMessageRequest {
-    fn get_messages(self) -> Result<Vec<ReceivedMessageContext>> {
+    fn parse(self) -> Result<Vec<ReceivedMessageContext>> {
         let mut messages = vec![];
 
         for event in self.events {
