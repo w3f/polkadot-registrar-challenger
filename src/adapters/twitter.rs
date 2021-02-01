@@ -1,3 +1,5 @@
+use crate::event::{ExternalMessage, ExternalOrigin};
+use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
 use crate::Result;
 use async_channel::{Receiver, Sender};
 use rand::{thread_rng, Rng};
@@ -24,6 +26,18 @@ pub struct ReceivedMessageContext {
 pub struct TwitterMessage {
     sender: String,
     message: String,
+}
+
+impl From<TwitterMessage> for ExternalMessage {
+    fn from(val: TwitterMessage) -> Self {
+        ExternalMessage {
+            origin: ExternalOrigin::Twitter,
+            field_address: FieldAddress::from(val.sender),
+            message: ProvidedMessage {
+                parts: vec![ProvidedMessagePart::from(val.message)],
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -71,10 +85,10 @@ pub struct TwitterBuilder {
     screen_name: Option<String>,
     consumer_key: Option<String>,
     consumer_secret: Option<String>,
-    sig_method: Option<String>,
     token: Option<String>,
     token_secret: Option<String>,
     version: Option<f64>,
+    request_interval: Option<u64>,
 }
 
 impl TwitterBuilder {
@@ -83,10 +97,10 @@ impl TwitterBuilder {
             screen_name: None,
             consumer_key: None,
             consumer_secret: None,
-            sig_method: None,
             token: None,
             token_secret: None,
             version: None,
+            request_interval: None,
         }
     }
     pub fn screen_name(mut self, account: String) -> Self {
@@ -101,10 +115,6 @@ impl TwitterBuilder {
         self.consumer_secret = Some(key);
         self
     }
-    pub fn sig_method(mut self, method: String) -> Self {
-        self.sig_method = Some(method);
-        self
-    }
     pub fn token(mut self, token: String) -> Self {
         self.token = Some(token);
         self
@@ -115,6 +125,10 @@ impl TwitterBuilder {
     }
     pub fn version(mut self, version: f64) -> Self {
         self.version = Some(version);
+        self
+    }
+    pub fn request_interval(mut self, interval: u64) -> Self {
+        self.request_interval = Some(interval);
         self
     }
     pub fn build(self) -> Result<(TwitterHandler, Receiver<TwitterMessage>)> {
@@ -128,19 +142,19 @@ impl TwitterBuilder {
                     .ok_or(anyhow!("screen name not specified"))?,
                 consumer_key: self
                     .consumer_key
-                    .ok_or(anyhow!("screen name not specified"))?,
+                    .ok_or(anyhow!("consumer key name not specified"))?,
                 consumer_secret: self
                     .consumer_secret
-                    .ok_or(anyhow!("screen name not specified"))?,
-                sig_method: self
-                    .sig_method
-                    .ok_or(anyhow!("screen name not specified"))?,
+                    .ok_or(anyhow!("consumer secret name not specified"))?,
                 token: self.token.ok_or(anyhow!("screen name not specified"))?,
                 token_secret: self
                     .token_secret
                     .ok_or(anyhow!("screen name not specified"))?,
                 version: self.version.ok_or(anyhow!("screen name not specified"))?,
                 twitter_ids: HashMap::new(),
+                request_interval: self
+                    .request_interval
+                    .ok_or(anyhow!("request interval not specified"))?,
                 sender: tx,
             },
             recv,
@@ -186,21 +200,40 @@ pub struct TwitterHandler {
     screen_name: String,
     consumer_key: String,
     consumer_secret: String,
-    sig_method: String,
     token: String,
     token_secret: String,
     version: f64,
     twitter_ids: HashMap<TwitterId, String>,
+    request_interval: u64,
     sender: Sender<TwitterMessage>,
 }
 
 impl TwitterHandler {
-    pub async fn handle_incoming_messages(
-        &mut self,
-        my_id: &TwitterId,
-    ) -> Result<Vec<TwitterMessage>> {
+    pub async fn start(&mut self) {
+        loop {
+            match self.handle_incoming_messages().await {
+                Ok(messages) => {
+                    for message in messages {
+                        // Send the message to `crate::system`, where the
+                        // message will be processed by an aggregate and sent to
+                        // the event store.
+                        let _ = self.sender.send(message).await.map_err(|err| {
+                            error!(
+                                "Failed to send message from Twitter adapter to system: {:?}",
+                                err
+                            );
+                        });
+                    }
+                }
+                Err(err) => error!("{:?}", err),
+            }
+
+            time::sleep(Duration::from_secs(self.request_interval)).await;
+        }
+    }
+    async fn handle_incoming_messages(&mut self) -> Result<Vec<TwitterMessage>> {
         debug!("Requesting Twitter messages");
-        let messages = self.request_messages(my_id).await?;
+        let messages = self.request_messages().await?;
 
         if messages.is_empty() {
             return Ok(vec![]);
@@ -266,7 +299,7 @@ impl TwitterHandler {
         let mut fields = vec![
             ("oauth_consumer_key", self.consumer_key.as_str()),
             ("oauth_nonce", nonce.as_str()),
-            ("oauth_signature_method", self.sig_method.as_str()),
+            ("oauth_signature_method", "HMAC-SHA1"),
             ("oauth_timestamp", &timestamp),
             ("oauth_token", self.token.as_str()),
             ("oauth_version", &version),
@@ -365,13 +398,13 @@ impl TwitterHandler {
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
-    async fn request_messages(&self, exclude: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
+    async fn request_messages(&self) -> Result<Vec<ReceivedMessageContext>> {
         self.get_request::<ApiMessageRequest>(
             "https://api.twitter.com/1.1/direct_messages/events/list.json",
             None,
         )
         .await?
-        .get_messages(exclude)
+        .get_messages()
     }
     async fn lookup_twitter_id(
         &self,
@@ -468,7 +501,7 @@ struct ApiMessageData {
 }
 
 impl ApiMessageRequest {
-    fn get_messages(self, my_id: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
+    fn get_messages(self) -> Result<Vec<ReceivedMessageContext>> {
         let mut messages = vec![];
 
         for event in self.events {

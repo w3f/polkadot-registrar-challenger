@@ -60,6 +60,7 @@ pub struct TwitterConfig {
     pub api_secret: String,
     pub token: String,
     pub token_secret: String,
+    pub request_interval: u64,
 }
 
 #[derive(Debug, Deserialize)]
