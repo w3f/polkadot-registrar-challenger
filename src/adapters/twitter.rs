@@ -1,16 +1,22 @@
 use crate::Result;
+use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::time::{self, Duration};
 
-#[cfg(not(test))]
 const REQ_MESSAGE_TIMEOUT: u64 = 180;
-#[cfg(test)]
-const REQ_MESSAGE_TIMEOUT: u64 = 1;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReceivedMessageContext {
+    pub sender: TwitterId,
+    pub message: String,
+    pub created: u64,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 pub struct TwitterId(u64);
@@ -153,6 +159,19 @@ impl HttpMethod {
     }
 }
 
+fn gen_nonce() -> String {
+    let random: [u8; 16] = thread_rng().gen();
+    hex::encode(random)
+}
+
+fn gen_timestamp() -> u64 {
+    let start = SystemTime::now();
+    start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs()
+}
+
 #[derive(Clone)]
 pub struct TwitterHandler {
     client: Client,
@@ -167,8 +186,7 @@ pub struct TwitterHandler {
 
 impl TwitterHandler {
     pub async fn handle_incoming_messages(&self, my_id: &TwitterId) -> Result<()> {
-        let watermark = 0;
-        let (messages, watermark) = self.request_messages(my_id, watermark).await?;
+        let messages = self.request_messages(my_id).await?;
 
         if messages.is_empty() {
             return Ok(());
@@ -222,16 +240,15 @@ impl TwitterHandler {
     ) -> Result<()> {
         use urlencoding::encode;
 
-        // TODO
-        //let challenge = Challenge::gen_random();
-        let challenge = "".to_string();
-        //let timestamp = unix_time().to_string();
-        let timestamp = "".to_string();
+        // Prepare  required data.
+        let nonce = gen_nonce();
+        let timestamp = gen_timestamp().to_string();
         let version = format!("{:.1}", self.version);
 
+        // Create  OAuth 1.0 fields.
         let mut fields = vec![
             ("oauth_consumer_key", self.consumer_key.as_str()),
-            ("oauth_nonce", challenge.as_str()),
+            ("oauth_nonce", nonce.as_str()),
             ("oauth_signature_method", self.sig_method.as_str()),
             ("oauth_timestamp", &timestamp),
             ("oauth_token", self.token.as_str()),
@@ -271,6 +288,7 @@ impl TwitterHandler {
         fields.push(("oauth_signature", &sig));
         fields.sort_by(|(a, _), (b, _)| a.cmp(b));
 
+        // Merge all fields into the OAuth header.
         let mut oauth_header = String::new();
         oauth_header.push_str("OAuth ");
 
@@ -307,11 +325,8 @@ impl TwitterHandler {
         }
 
         let mut request = self.client.get(&full_url).build()?;
-
         self.authenticate_request(&HttpMethod::GET, url, &mut request, params)?;
-
         let resp = self.client.execute(request).await?;
-
         let txt = resp.text().await?;
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
@@ -328,24 +343,18 @@ impl TwitterHandler {
             .build()?;
 
         self.authenticate_request(&HttpMethod::POST, url, &mut request, None)?;
-
         let resp = self.client.execute(request).await?;
-
         let txt = resp.text().await?;
 
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
-    async fn request_messages(
-        &self,
-        exclude: &TwitterId,
-        watermark: u64,
-    ) -> Result<(Vec<ReceivedMessageContext>, u64)> {
+    async fn request_messages(&self, exclude: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
         self.get_request::<ApiMessageRequest>(
             "https://api.twitter.com/1.1/direct_messages/events/list.json",
             None,
         )
         .await?
-        .get_messages(exclude, watermark)
+        .get_messages(exclude)
     }
     async fn lookup_twitter_id(
         &self,
@@ -411,13 +420,7 @@ impl TwitterHandler {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ApiMessageSend {
-    event: ApiEvent,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
 struct ApiMessageRequest {
-    // Used for receiving messages.
     events: Vec<ApiEvent>,
 }
 
@@ -425,6 +428,7 @@ struct ApiMessageRequest {
 struct ApiEvent {
     #[serde(rename = "type")]
     t_type: String,
+    id: String,
     created_timestamp: Option<String>,
     message_create: ApiMessageCreate,
 }
@@ -446,42 +450,12 @@ struct ApiMessageData {
     text: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReceivedMessageContext {
-    pub sender: TwitterId,
-    pub message: String,
-    pub created: u64,
-}
-
-impl ApiMessageSend {
-    fn new(recipient: &TwitterId, msg: String) -> Self {
-        ApiMessageSend {
-            event: ApiEvent {
-                t_type: "message_create".to_string(),
-                created_timestamp: None,
-                message_create: ApiMessageCreate {
-                    target: ApiTarget {
-                        recipient_id: recipient.as_u64().to_string(),
-                    },
-                    sender_id: None,
-                    message_data: ApiMessageData { text: msg },
-                },
-            },
-        }
-    }
-}
-
 impl ApiMessageRequest {
-    fn get_messages(
-        self,
-        my_id: &TwitterId,
-        watermark: u64,
-    ) -> Result<(Vec<ReceivedMessageContext>, u64)> {
-        let mut msgs = vec![];
+    fn get_messages(self, my_id: &TwitterId) -> Result<Vec<ReceivedMessageContext>> {
+        let mut messages = vec![];
 
-        let mut new_watermark = watermark;
         for event in self.events {
-            let msg = ReceivedMessageContext {
+            let message = ReceivedMessageContext {
                 sender: event
                     .message_create
                     .sender_id
@@ -495,15 +469,9 @@ impl ApiMessageRequest {
                     .map_err(|_| anyhow!("unrecognized data"))?,
             };
 
-            if &msg.sender != my_id && msg.created > watermark {
-                if msg.created > new_watermark {
-                    new_watermark = msg.created;
-                }
-
-                msgs.push(msg);
-            }
+            messages.push(message);
         }
 
-        Ok((msgs, new_watermark))
+        Ok(messages)
     }
 }
