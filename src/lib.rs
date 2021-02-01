@@ -65,11 +65,12 @@ pub struct TwitterConfig {
 #[derive(Debug, Deserialize)]
 pub struct EmailConfig {
     pub enabled: bool,
-    pub stmp_server: String,
+    pub smtp_server: String,
     pub imap_server: String,
     pub inbox: String,
     pub user: String,
     pub password: String,
+    pub request_interval: u64,
 }
 
 fn open_config() -> Result<Config> {

@@ -1,4 +1,6 @@
 use crate::Result;
+use async_channel::{Receiver, Sender};
+use futures::FutureExt;
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
@@ -6,6 +8,11 @@ use lettre_email::EmailBuilder;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::result::Result as StdResult;
 use tokio::time::{self, Duration};
+
+pub struct EmailMessage {
+    from: String,
+    message_parts: Vec<String>,
+}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct EmailId(u64);
@@ -51,6 +58,7 @@ pub struct SmtpImapClientBuilder {
     inbox: Option<String>,
     user: Option<String>,
     password: Option<String>,
+    request_interval: Option<u64>,
 }
 
 impl SmtpImapClientBuilder {
@@ -61,6 +69,7 @@ impl SmtpImapClientBuilder {
             inbox: None,
             user: None,
             password: None,
+            request_interval: None,
         }
     }
     pub fn email_server(mut self, server: String) -> Self {
@@ -83,16 +92,31 @@ impl SmtpImapClientBuilder {
         self.password = Some(password);
         self
     }
-    pub fn build(self) -> Result<SmtpImapClient> {
-        Ok(SmtpImapClient {
-            smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
-            imap_server: self
-                .imap_server
-                .ok_or(anyhow!("SMTP server not specified"))?,
-            inbox: self.inbox.ok_or(anyhow!("SMTP server not specified"))?,
-            user: self.user.ok_or(anyhow!("SMTP server not specified"))?,
-            password: self.password.ok_or(anyhow!("SMTP server not specified"))?,
-        })
+    pub fn request_interval(mut self, interval: u64) -> Self {
+        self.request_interval = Some(interval);
+        self
+    }
+    pub fn build(self) -> Result<(SmtpImapClient, Receiver<EmailMessage>)> {
+        let (rx, recv) = async_channel::unbounded();
+
+        Ok((
+            SmtpImapClient {
+                smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
+                imap_server: self
+                    .imap_server
+                    .ok_or(anyhow!("IMAP server not specified"))?,
+                inbox: self.inbox.ok_or(anyhow!("inbox server not specified"))?,
+                user: self.user.ok_or(anyhow!("user server not specified"))?,
+                password: self
+                    .password
+                    .ok_or(anyhow!("password server not specified"))?,
+                request_interval: self
+                    .request_interval
+                    .ok_or(anyhow!("request interval not specified"))?,
+                sender: rx,
+            },
+            recv,
+        ))
     }
 }
 
@@ -103,10 +127,33 @@ pub struct SmtpImapClient {
     inbox: String,
     user: String,
     password: String,
+    request_interval: u64,
+    sender: Sender<EmailMessage>,
 }
 
 impl SmtpImapClient {
-    async fn request_messages(&self) -> Result<Vec<()>> {
+    pub async fn start(&self) {
+        loop {
+            match self.request_messages() {
+                Ok(messages) => {
+                    for message in messages {
+                        // Send the message to `crate::system`, where the message will
+                        // be processed by an aggregate and sent to the event store.
+                        let _ = self.sender.send(message).await.map_err(|err| {
+                            error!(
+                                "Failed to send message from Email adapter to system: {:?}",
+                                err
+                            );
+                        });
+                    }
+                }
+                Err(err) => error!("{:?}", err),
+            }
+
+            time::sleep(Duration::from_secs(self.request_interval)).await;
+        }
+    }
+    fn request_messages(&self) -> Result<Vec<EmailMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
@@ -137,10 +184,9 @@ impl SmtpImapClient {
         };
 
         let messages = imap.fetch(query, "(RFC822 UID)")?;
-
         let mut parsed_messages = vec![];
         for message in &messages {
-            let email_id = EmailId::from(message.uid.ok_or(anyhow!("unrecognized data"))?);
+            //let email_id = EmailId::from(message.uid.ok_or(anyhow!("unrecognized data"))?);
             if let Some(body) = message.body() {
                 let mail = mailparse::parse_mail(body)?;
 
@@ -152,25 +198,32 @@ impl SmtpImapClient {
                     .get_value()
                     .convert_into()?;
 
+                debug!("Received message from {}", sender);
+
+                // Prepare message
+                let mut email_message = EmailMessage {
+                    from: sender,
+                    message_parts: vec![],
+                };
+
                 if let Ok(body) = mail.get_body() {
-                    //parsed_messages.push(create_message_context(email_id, sender.clone(), body));
+                    email_message.message_parts.push(body);
                 } else {
-                    warn!("No body found in message from {}", sender);
+                    warn!("No body found in message from");
                 }
 
+                // An email message can contain multiple "subparts". Add each of
+                // those into the prepared message. The `VerifierAggregate` will
+                // check each of those parts.
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        /*
-                            parsed_messages.push(create_message_context(
-                                email_id,
-                                sender.clone(),
-                                body,
-                            ));
-                        */
+                        email_message.message_parts.push(body);
                     } else {
-                        warn!("No body found in subpart message from {}", sender);
+                        debug!("No body found in subpart message");
                     }
                 }
+
+                parsed_messages.push(email_message);
             } else {
                 warn!("No body");
             }
@@ -178,28 +231,4 @@ impl SmtpImapClient {
 
         Ok(parsed_messages)
     }
-    /*
-    async fn send_message(&self, account: &Account, message: VerifierMessage) -> Result<()> {
-        // SMTP transport
-        let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
-            .credentials(Credentials::new(
-                self.user.to_string(),
-                self.password.to_string(),
-            ))
-            .transport();
-
-        let email = EmailBuilder::new()
-            // Addresses can be specified by the tuple (email, alias)
-            .to(account.as_str())
-            .from(self.user.as_str())
-            .subject("W3F Registrar Verification Service")
-            .text(message.as_str())
-            .build()
-            .unwrap();
-
-        let _ = smtp.send(email.into())?;
-
-        Ok(())
-    }
-    */
 }

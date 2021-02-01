@@ -1,9 +1,11 @@
+use crate::adapters::email::SmtpImapClientBuilder;
 use crate::adapters::matrix::MatrixClient;
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
-use crate::{MatrixConfig, Result};
+use crate::{EmailConfig, MatrixConfig, Result};
 use eventually::aggregate::AggregateRootBuilder;
 use eventually::Repository;
 use eventually_event_store_db::EventStore;
+use lettre_email::Email;
 
 async fn run_matrix_listener(
     config: MatrixConfig,
@@ -38,4 +40,22 @@ async fn run_matrix_listener(
     }
 
     Err(anyhow!("The Matrix client has shut down"))
+}
+
+async fn run_email_listener(
+    config: EmailConfig,
+    store: EventStore<MessageWatcherId>,
+) -> Result<()> {
+    let (client, recv) = SmtpImapClientBuilder::new()
+        .email_server(config.smtp_server)
+        .imap_server(config.imap_server)
+        .email_inbox(config.inbox)
+        .email_user(config.user)
+        .email_password(config.password)
+        .request_interval(config.request_interval)
+        .build()?;
+
+    client.start().await;
+
+    Ok(())
 }

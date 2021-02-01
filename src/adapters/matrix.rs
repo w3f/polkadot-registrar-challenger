@@ -1,7 +1,7 @@
 use crate::event::{ExternalMessage, ExternalOrigin};
 use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
 use crate::Result;
-use async_channel::{unbounded, Receiver, Sender};
+use async_channel::{Receiver, Sender};
 use futures::TryFutureExt;
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::{MessageEventContent, TextMessageEventContent};
@@ -16,6 +16,7 @@ use url::Url;
 const REJOIN_DELAY: u64 = 3;
 const REJOIN_MAX_ATTEMPTS: usize = 5;
 
+// TODO: This type should be unified with other adapters.
 pub struct MatrixMessage {
     from: String,
     message: String,
@@ -62,7 +63,7 @@ impl MatrixClient {
         info!("Syncing Matrix client");
         client.sync(SyncSettings::default()).await;
 
-        let (tx, recv) = unbounded();
+        let (tx, recv) = async_channel::unbounded();
 
         Ok((
             MatrixClient {
@@ -103,7 +104,7 @@ impl EventEmitter for MatrixClient {
 
                 if rejoin_attempts == REJOIN_MAX_ATTEMPTS {
                     error!("Can't join room {} ({:?})", room.room_id(), err);
-                    break;
+                    return;
                 }
             }
 
@@ -125,8 +126,9 @@ impl EventEmitter for MatrixClient {
                         content.body, event.sender
                     );
 
-                    // Send message to `crate::system`, where the message will
-                    // be processed by an aggregate and sent to the event store.
+                    // Send the message to `crate::system`, where the message
+                    // will be processed by an aggregate and sent to the event
+                    // store.
                     let _ = self
                         .sender
                         .send(MatrixMessage {
