@@ -1,19 +1,21 @@
 use crate::Result;
 use strsim::jaro;
 
+/// In case of violations, this is the max amount of names to be shown to the
+/// end user.
 pub const VIOLATIONS_CAP: usize = 5;
 
-pub struct DisplayNameHandler {}
+pub struct DisplayNameHandler {
+    display_names: Vec<String>,
+    limit: f64,
+}
 
 impl DisplayNameHandler {
-    pub async fn handle_display_name_matching(&self) -> Result<()> {
-        //let display_names = self.db.select_display_names(&net_account).await?;
-        /*
-        let display_names = vec![];
+    pub async fn verify_display_name(&self, display_name: &str) -> Vec<String> {
         let mut violations = vec![];
 
-        for display_name in &display_names {
-            if Self::is_too_similar(display_name, &account, self.limit) {
+        for display_name in &self.display_names {
+            if Self::is_too_similar(display_name, display_name, self.limit) {
                 violations.push(display_name.clone());
             }
 
@@ -23,53 +25,11 @@ impl DisplayNameHandler {
             }
         }
 
-        //self.db.delete_display_name_violations(&net_account).await?;
-
-        // The display name does obviously not need to be verified by
-        // signing a challenge or having to contact an address. But we just
-        // treat it as any other "account".
-        if violations.is_empty() {
-            // Keep track of display names for future matching.
-            self.db.insert_display_name(&net_account, &account).await?;
-
-            self.db
-                .set_account_status(&account, &AccountType::DisplayName, &AccountStatus::Valid)
-                .await?;
-
-            self.db
-                .set_challenge_status(
-                    &net_account,
-                    &AccountType::DisplayName,
-                    &ChallengeStatus::Accepted,
-                )
-                .await?;
-        } else {
-            self.db
-                .insert_display_name_violations(&net_account, &violations)
-                .await?;
-
-            self.db
-                .set_account_status(&account, &AccountType::DisplayName, &AccountStatus::Invalid)
-                .await?;
-
-            self.db
-                .set_challenge_status(
-                    &net_account,
-                    &AccountType::DisplayName,
-                    &ChallengeStatus::Rejected,
-                )
-                .await?;
-        }
-
-        self.comms.notify_status_change(net_account);
-        */
-
-        Ok(())
+        violations
     }
-    /*
-    fn is_too_similar(display_name: &Account, account: &Account, limit: f64) -> bool {
-        let name_str = display_name.as_str().to_lowercase();
-        let account_str = account.as_str().to_lowercase();
+    fn is_too_similar(display_name: &str, account: &str, limit: f64) -> bool {
+        let name_str = display_name.to_lowercase();
+        let account_str = account.to_lowercase();
 
         let similarities = [
             jaro(&name_str, &account_str),
@@ -78,7 +38,6 @@ impl DisplayNameHandler {
 
         similarities.iter().any(|&s| s > limit)
     }
-    */
 }
 
 fn jaro_words(left: &str, right: &str, delimiter: &[&str]) -> f64 {

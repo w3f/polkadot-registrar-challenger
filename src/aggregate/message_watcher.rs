@@ -34,6 +34,9 @@ pub enum MessageWatcherCommand {
     AddMessage(ExternalMessage),
 }
 
+/// This is a simple aggregate which adds messages from external sources into
+/// the event store. No state must be maintained. The message themselves are
+/// verified by the `VerifiedAggregate`.
 #[derive(Debug, Clone)]
 pub struct MessageWatcher;
 

@@ -1,14 +1,14 @@
-use crate::event::ExternalMessage;
-use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
+use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
+use crate::event::ExternalMessage;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
+use async_channel::Receiver;
 use eventually::aggregate::AggregateRootBuilder;
 use eventually::Repository;
 use eventually_event_store_db::EventStore;
 use lettre_email::Email;
-use async_channel::Receiver;
 
 async fn run_matrix_listener(
     config: MatrixConfig,
@@ -73,7 +73,14 @@ async fn run_twitter_listener(
 
 /// For each message received by an adapter, send a command to the aggregate and
 /// let it handle it. This aggregate does not actually need to maintain a state.
-async fn messages_event_loop<T>(store: EventStore<MessageWatcherId>,recv: Receiver<T>, name: &str) -> Result<()> where T: Into<ExternalMessage> {
+async fn messages_event_loop<T>(
+    store: EventStore<MessageWatcherId>,
+    recv: Receiver<T>,
+    name: &str,
+) -> Result<()>
+where
+    T: Into<ExternalMessage>,
+{
     let repository = Repository::new(MessageWatcher.into(), store);
 
     info!("Starting event loop for incoming {} messages", name);
