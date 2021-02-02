@@ -35,23 +35,14 @@ impl From<UpdateChanges> for Notification {
 }
 
 #[derive(Default, Clone)]
-pub struct IdentityManager<'a> {
+pub struct IdentityManager {
     identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<IdentityField, HashSet<NetworkAddress>>,
     display_names: Vec<DisplayName>,
-    _p1: std::marker::PhantomData<&'a ()>,
 }
 
 // TODO: Should logs be printed if users are not found?
-impl<'a> IdentityManager<'a> {
-    fn new() -> Self {
-        IdentityManager {
-            identities: HashMap::new(),
-            lookup_addresses: HashMap::new(),
-            display_names: Vec::new(),
-            _p1: std::marker::PhantomData,
-        }
-    }
+impl IdentityManager {
     pub fn insert_identity(&mut self, identity: IdentityInserted) {
         // Take value from Event wrapper.
         let identity = identity.identity;

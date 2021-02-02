@@ -15,7 +15,7 @@ use std::marker::PhantomData;
 
 type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct VerifierAggregateId;
 
 impl TryFrom<String> for VerifierAggregateId {
@@ -51,16 +51,11 @@ pub enum VerifierCommand {
 }
 
 #[derive(Debug, Clone)]
-pub struct VerifierAggregate<'a> {
-    _p: PhantomData<&'a ()>,
-}
+pub struct VerifierAggregate;
 
-impl<'a> VerifierAggregate<'a> {
-    pub fn new() -> Self {
-        VerifierAggregate { _p: PhantomData }
-    }
+impl VerifierAggregate {
     fn handle_verify_message(
-        state: &IdentityManager<'a>,
+        state: &IdentityManager,
         external_message: ExternalMessage,
     ) -> Result<Option<Vec<GenericEvent>>> {
         let (identity_field, external_message) = (
@@ -114,7 +109,7 @@ impl<'a> VerifierAggregate<'a> {
         }
     }
     fn handle_display_name(
-        state: &IdentityManager<'a>,
+        state: &IdentityManager,
         net_address: NetworkAddress,
         display_name: DisplayName,
     ) -> Result<Option<Vec<GenericEvent>>> {
@@ -163,7 +158,7 @@ impl<'a> VerifierAggregate<'a> {
             ))
         }
     }
-    fn apply_state_changes(state: &mut IdentityManager<'a>, event: GenericEvent) {
+    fn apply_state_changes(state: &mut IdentityManager, event: GenericEvent) {
         let event: Event = if let Ok(event) = event.as_json() {
             event
         } else {
@@ -187,9 +182,9 @@ impl<'a> VerifierAggregate<'a> {
     }
 }
 
-impl<'is> Aggregate for VerifierAggregate<'is> {
+impl Aggregate for VerifierAggregate {
     type Id = VerifierAggregateId;
-    type State = IdentityManager<'is>;
+    type State = IdentityManager;
     type Event = GenericEvent;
     type Command = VerifierCommand;
     type Error = Error;

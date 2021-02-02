@@ -1,9 +1,12 @@
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::event::{
     BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, Notification, StateWrapper,
 };
 use crate::manager::{IdentityAddress, IdentityManager, IdentityState, NetworkAddress};
+use crate::{account_fetch::AccountFetch, aggregate};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
+use eventually_event_store_db::EventStore;
 use future::join;
 use futures::StreamExt;
 use futures::{future, join};
@@ -21,10 +24,12 @@ use matrix_sdk::api::{
 };
 use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::marker::PhantomData;
+use std::sync::{Arc, Weak};
 
 const REGISTRAR_ID: u32 = 0;
 const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
+const FAILED_TO_FETCH_IDENTITY_STATE: u32 = 1000;
 
 // TODO: Remove this type since it is no longer necessary.
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -125,13 +130,28 @@ pub trait PublicRpc {
     ) -> Result<bool>;
 }
 
-#[derive(Default)]
-pub struct PublicRpcApi {
+pub struct PublicRpcApi<T> {
     connection_pool: ConnectionPool,
-    manager: Arc<RwLock<IdentityManager<'static>>>,
+    manager: Arc<RwLock<IdentityManager>>,
+    repository: Repository<VerifierAggregate, EventStore<VerifierAggregateId>>,
+    _p: PhantomData<T>,
 }
 
-impl PublicRpc for PublicRpcApi {
+impl<T> PublicRpcApi<T> {
+    pub fn new(store: EventStore<VerifierAggregateId>, aggregate: VerifierAggregate) -> Self {
+        PublicRpcApi {
+            connection_pool: Default::default(),
+            manager: Default::default(),
+            repository: Repository::new(aggregate.into(), store),
+            _p: Default::default(),
+        }
+    }
+}
+
+impl<T> PublicRpc for PublicRpcApi<T>
+where
+    T: 'static + Send + Sync + AccountFetch,
+{
     type Metadata = Arc<Session>;
 
     fn subscribe_account_status(
@@ -162,26 +182,52 @@ impl PublicRpc for PublicRpcApi {
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
         tokio::spawn(async move {
+            let handler = Arc::new(());
+
             // Check the state for the requested identity and respond
-            // immediately with the current state. If the identity is not
-            // available, it implies there is not pending judgement request (for
-            // the specified registrar, at least).
+            // immediately with the current state.
             if let Some(state) = manager.read().lookup_full_state(&net_address) {
+                // Send the current state to the subscriber.
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
                     return Ok(());
                 }
             } else {
-                // ... if not, send a request and have the "direct message" handler take care of it.
-                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
-                    code: NO_PENDING_JUDGMENT_REQUEST_CODE,
-                    message: format!(
-                        "There is no pending judgement request for this identity (for registrar #{}",
-                        REGISTRAR_ID
-                    ),
-                }))) {
-                    debug!("Connection closed");
-                    return Ok(());
+                // ... if not, fetch the current identity state from the remote RPC service.
+                match T::fetch_account_state(&net_address, Arc::downgrade(&handler)) {
+                    Ok(try_state) => {
+                        if let Some(state) = try_state {
+                            // Send the current state to the subscriber.
+                            if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into())))
+                            {
+                                debug!("Connection closed");
+                                return Ok(());
+                            }
+                        } else {
+                            if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
+                                code: NO_PENDING_JUDGMENT_REQUEST_CODE,
+                                message: format!(
+                                    "There is no pending judgement request for this identity (for registrar #{}",
+                                    REGISTRAR_ID
+                                ),
+                            }))) {
+                                debug!("Connection closed");
+                                return Ok(());
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        error!("{}", err);
+
+                        // TODO: This should have retries.
+                        if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
+                            code: FAILED_TO_FETCH_IDENTITY_STATE,
+                            message: "Failed to fetch identity state from RPC service. This is a backend error.".to_string()
+                        }))) {
+                            debug!("Connection closed");
+                            return Ok(());
+                        }
+                    }
                 }
             }
 
@@ -205,15 +251,25 @@ impl PublicRpc for PublicRpcApi {
 
                         // Finally, fetch the current state and send it to the subscriber.
                         match manager.read().lookup_full_state(&net_address) {
-                            Some(full_state) => {
+                            Some(identity_state) => {
                                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                                    StateWrapper::with_notifications(full_state, notification),
+                                    StateWrapper::with_notifications(identity_state, notification),
                                 ))) {
                                     debug!("Connection closed");
                                     return Ok(());
                                 }
                             }
                             None => error!("Identity state not found in cache"),
+                        }
+                    }
+                    EventType::IdentityInserted(inserted) => {
+                        manager.write().insert_identity(inserted.clone());
+
+                        if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
+                            StateWrapper::from(inserted.identity),
+                        ))) {
+                            debug!("Connection closed");
+                            return Ok(());
                         }
                     }
                     _ => {

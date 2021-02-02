@@ -1,7 +1,11 @@
+use crate::account_fetch::AccountFetch;
+use crate::manager::{IdentityState, NetworkAddress};
 use crate::system::run_api_service;
+use crate::Result;
+use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
 use std::process::{Child, Command};
-use jsonrpc_ws_server::Server as WsServer;
+use std::sync::Weak;
 
 mod api_account_status;
 
@@ -27,14 +31,17 @@ impl InMemBackend {
         let port: usize = thread_rng().gen_range(1_024, 65_535);
         let ws_connection = format!("0.0.0.0:{}", port);
 
-        let ws_handle = run_api_service(port).unwrap();
+        unimplemented!();
+        //let ws_handle = run_api_service::<TestAccounts>(port).unwrap();
 
+        /*
         InMemBackend {
             es_handle: es_handle,
             es_connection: es_connection,
             ws_handle: ws_handle,
             ws_connection: ws_connection,
         }
+        */
     }
     fn event_store_connection(&self) -> &str {
         &self.es_connection
@@ -48,5 +55,17 @@ impl Drop for InMemBackend {
     fn drop(&mut self) {
         self.es_handle.kill().unwrap();
         // ws_handle closes itself when dropped.
+    }
+}
+
+#[derive(Default)]
+struct TestAccounts {}
+
+impl AccountFetch for TestAccounts {
+    fn fetch_account_state(
+        net_address: &NetworkAddress,
+        handle: Weak<()>,
+    ) -> Result<Option<IdentityState>> {
+        unimplemented!()
     }
 }

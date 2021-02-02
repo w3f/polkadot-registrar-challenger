@@ -23,7 +23,7 @@ impl Projection for SessionNotifier {
                 EventType::FieldStatusVerified(ref field_status) => &field_status.net_address,
                 EventType::IdentityFullyVerified(ref verified) => &verified.net_address,
                 _ => {
-                    warn!("Received unrecognized event when notifying sessions");
+                    warn!("Received unexpected event when notifying sessions");
                     return Ok(());
                 }
             };

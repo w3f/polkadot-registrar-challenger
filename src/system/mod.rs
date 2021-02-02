@@ -1,3 +1,4 @@
+use crate::account_fetch::AccountFetch;
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
@@ -20,11 +21,18 @@ use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use lettre_email::Email;
 use std::sync::Arc;
 
-pub fn run_api_service(port: usize) -> Result<WsServer> {
+pub fn run_api_service<T>(
+    store: EventStore<VerifierAggregateId>,
+    aggregate: VerifierAggregate,
+    port: usize,
+) -> Result<WsServer>
+where
+    T: 'static + Send + Sync + AccountFetch,
+{
     let mut io = PubSubHandler::default();
-    io.extend_with(PublicRpcApi::default().to_delegate());
+    io.extend_with(PublicRpcApi::<T>::new(store, aggregate).to_delegate());
 
-    // TODO: Might consider setting `max_connections`
+    // TODO: Might consider setting `max_connections`.
     let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
         Arc::new(Session::new(context.sender().clone()))
     })
@@ -39,7 +47,7 @@ async fn run_verifier_subscription(
 ) -> Result<()> {
     info!("Starting message subscription");
 
-    let repository = Repository::new(VerifierAggregate::new().into(), store);
+    let repository = Repository::new(VerifierAggregate.into(), store);
 
     subscriber
         .resume()
