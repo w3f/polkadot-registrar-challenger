@@ -1,14 +1,35 @@
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 use crate::event::ExternalMessage;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
 use eventually::aggregate::AggregateRootBuilder;
 use eventually::Repository;
-use eventually_event_store_db::EventStore;
+use eventually::Subscription;
+use eventually_event_store_db::{EventStore, EventSubscription};
+use futures::future;
+use futures::stream::StreamExt;
 use lettre_email::Email;
+
+async fn run_verifier_subscription(
+    subscriber: EventSubscription<MessageWatcherId>,
+    store: EventStore<VerifierAggregateId>,
+) -> Result<()> {
+    info!("Starting message subscription");
+
+    let repository = Repository::new(VerifierAggregate::new().into(), store);
+
+    subscriber
+        .resume()
+        .await?
+        .for_each(|persisted| future::ready(()))
+        .await;
+
+    Ok(())
+}
 
 async fn run_matrix_listener(
     config: MatrixConfig,

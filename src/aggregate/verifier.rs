@@ -8,6 +8,7 @@ use crate::manager::{
     NetworkAddress, Validity, VerificationOutcome,
 };
 use eventually::Aggregate;
+use eventually_event_store_db::GenericEvent;
 use futures::future::BoxFuture;
 use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
@@ -48,15 +49,19 @@ pub enum VerifierCommand {
     InsertIdentity(IdentityState),
 }
 
+#[derive(Debug, Clone)]
 pub struct VerifierAggregate<'a> {
     _p: PhantomData<&'a ()>,
 }
 
 impl<'a> VerifierAggregate<'a> {
+    pub fn new() -> Self {
+        VerifierAggregate { _p: PhantomData }
+    }
     fn handle_verify_message(
         state: &IdentityManager<'a>,
         external_message: ExternalMessage,
-    ) -> Result<Option<Vec<Event>>> {
+    ) -> Result<Option<Vec<GenericEvent>>> {
         let (identity_field, external_message) = (
             IdentityField::from((external_message.origin, external_message.field_address)),
             external_message.message,
@@ -99,15 +104,20 @@ impl<'a> VerifierAggregate<'a> {
         if events.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(events))
+            Ok(Some(
+                events
+                    .into_iter()
+                    .map(|event| event.try_into().map_err(|err| Error::from(err)))
+                    .collect::<Result<Vec<GenericEvent>>>()?,
+            ))
         }
     }
     fn handle_display_name(
         state: &IdentityManager<'a>,
         net_address: NetworkAddress,
         display_name: DisplayName,
-    ) -> Result<Option<Vec<Event>>> {
-        let mut events = vec![];
+    ) -> Result<Option<Vec<GenericEvent>>> {
+        let mut events: Vec<Event> = vec![];
 
         // Verify the display name.
         let mut c_net_address = None;
@@ -144,10 +154,23 @@ impl<'a> VerifierAggregate<'a> {
         if events.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(events))
+            Ok(Some(
+                events
+                    .into_iter()
+                    .map(|event| event.try_into().map_err(|err| Error::from(err)))
+                    .collect::<Result<Vec<GenericEvent>>>()?,
+            ))
         }
     }
-    fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
+    fn apply_state_changes(state: &mut IdentityManager<'a>, event: GenericEvent) {
+        let event: Event = if let Ok(event) = event.as_json() {
+            event
+        } else {
+            // This should never occur, since the `handle` method creates the events.
+            error!("Failed to apply changes, event could not be deserialized");
+            return;
+        };
+
         match event.body {
             EventType::FieldStatusVerified(field_status_verified) => {
                 let _ = state.update_field(field_status_verified).map_err(|err| {
@@ -166,7 +189,7 @@ impl<'a> VerifierAggregate<'a> {
 impl<'is> Aggregate for VerifierAggregate<'is> {
     type Id = VerifierAggregateId;
     type State = IdentityManager<'is>;
-    type Event = Event;
+    type Event = GenericEvent;
     type Command = VerifierCommand;
     type Error = Error;
 
@@ -199,7 +222,10 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
                     display_name,
                 } => unimplemented!(),
                 VerifierCommand::InsertIdentity(identity) => {
-                    Ok(Some(vec![IdentityInserted { identity: identity }.into()]))
+                    Ok(Some(vec![Event::from(IdentityInserted {
+                        identity: identity,
+                    })
+                    .try_into()?]))
                 }
             }
         };
