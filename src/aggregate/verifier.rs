@@ -38,6 +38,7 @@ impl AsRef<str> for VerifierAggregateId {
 
 #[derive(Debug, Clone)]
 pub enum VerifierCommand {
+    InsertIdentity(IdentityState),
     VerifyMessage(ExternalMessage),
     VerifyDisplayName {
         net_address: NetworkAddress,
@@ -47,7 +48,6 @@ pub enum VerifierCommand {
         net_address: NetworkAddress,
         display_name: DisplayName,
     },
-    InsertIdentity(IdentityState),
 }
 
 #[derive(Debug, Clone)]

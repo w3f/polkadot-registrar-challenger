@@ -1,4 +1,4 @@
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::event::{
     BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, Notification, StateWrapper,
 };
@@ -133,7 +133,7 @@ pub trait PublicRpc {
 pub struct PublicRpcApi<T> {
     connection_pool: ConnectionPool,
     manager: Arc<RwLock<IdentityManager>>,
-    repository: Repository<VerifierAggregate, EventStore<VerifierAggregateId>>,
+    repository: Arc<Repository<VerifierAggregate, EventStore<VerifierAggregateId>>>,
     _p: PhantomData<T>,
 }
 
@@ -142,7 +142,7 @@ impl<T> PublicRpcApi<T> {
         PublicRpcApi {
             connection_pool: Default::default(),
             manager: Default::default(),
-            repository: Repository::new(aggregate.into(), store),
+            repository: Arc::new(Repository::new(aggregate.into(), store)),
             _p: Default::default(),
         }
     }
@@ -175,6 +175,7 @@ where
         let watcher = self.connection_pool.watch_net_address(&net_address);
 
         let manager = Arc::clone(&self.manager);
+        let repository = Arc::clone(&self.repository);
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
@@ -186,7 +187,8 @@ where
 
             // Check the state for the requested identity and respond
             // immediately with the current state.
-            if let Some(state) = manager.read().lookup_full_state(&net_address) {
+            let try_state = manager.read().lookup_full_state(&net_address);
+            if let Some(state) = try_state {
                 // Send the current state to the subscriber.
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
@@ -197,6 +199,13 @@ where
                 match T::fetch_account_state(&net_address, Arc::downgrade(&handler)) {
                     Ok(try_state) => {
                         if let Some(state) = try_state {
+                            let _ = repository
+                                .get(VerifierAggregateId)
+                                .await
+                                .unwrap()
+                                .handle(VerifierCommand::InsertIdentity(state.clone()))
+                                .await;
+
                             // Send the current state to the subscriber.
                             if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into())))
                             {
