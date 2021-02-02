@@ -1,9 +1,10 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::api::start_api;
-use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified, Notification};
+use crate::event::{
+    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
+};
 use crate::{Error, Result};
 use eventually::Aggregate;
-use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
@@ -36,8 +37,9 @@ impl From<UpdateChanges> for Notification {
 #[derive(Default)]
 pub struct IdentityManager<'a> {
     identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
-    lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a NetworkAddress>>,
+    lookup_addresses: HashMap<IdentityField, HashSet<NetworkAddress>>,
     display_names: Vec<DisplayName>,
+    _p1: std::marker::PhantomData<&'a ()>,
 }
 
 // TODO: Should logs be printed if users are not found?
@@ -47,12 +49,13 @@ impl<'a> IdentityManager<'a> {
             identities: HashMap::new(),
             lookup_addresses: HashMap::new(),
             display_names: Vec::new(),
+            _p1: std::marker::PhantomData,
         }
     }
-    pub fn get_display_names(&self) -> &[DisplayName] {
-        self.display_names.as_slice()
-    }
-    fn insert_identity(&'a mut self, identity: IdentityState) {
+    pub fn insert_identity(&mut self, identity: IdentityInserted) {
+        // Take value from Event wrapper.
+        let identity = identity.identity;
+
         // Insert identity.
         let (net_address, fields) = (identity.net_address, identity.fields);
         self.identities.insert(net_address.clone(), fields);
@@ -64,11 +67,11 @@ impl<'a> IdentityManager<'a> {
         // Create fast lookup tables.
         for field in fields {
             self.lookup_addresses
-                .entry(&field.field)
+                .entry(field.field.clone())
                 .and_modify(|active_addresses| {
-                    active_addresses.insert(net_address);
+                    active_addresses.insert(net_address.clone());
                 })
-                .or_insert(vec![net_address].into_iter().collect());
+                .or_insert(vec![net_address].into_iter().cloned().collect());
         }
     }
     pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
@@ -151,7 +154,7 @@ impl<'a> IdentityManager<'a> {
     fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&NetworkAddress>> {
         self.lookup_addresses
             .get(field)
-            .map(|addresses| addresses.iter().map(|address| *address).collect())
+            .map(|addresses| addresses.iter().map(|address| address).collect())
     }
     pub fn lookup_full_state(&self, net_address: &NetworkAddress) -> Option<IdentityState> {
         self.identities

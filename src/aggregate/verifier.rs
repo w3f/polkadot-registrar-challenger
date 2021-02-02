@@ -1,6 +1,8 @@
 use super::display_name::DisplayNameHandler;
 use super::Error;
-use crate::event::{Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified};
+use crate::event::{
+    Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified, IdentityInserted,
+};
 use crate::manager::{
     DisplayName, FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState,
     NetworkAddress, Validity, VerificationOutcome,
@@ -43,6 +45,7 @@ pub enum VerifierCommand {
         net_address: NetworkAddress,
         display_name: DisplayName,
     },
+    InsertIdentity(IdentityState),
 }
 
 pub struct VerifierAggregate<'a> {
@@ -151,6 +154,9 @@ impl<'a> VerifierAggregate<'a> {
                     error!("{}", err);
                 });
             }
+            EventType::IdentityInserted(identity) => {
+                state.insert_identity(identity);
+            }
             EventType::IdentityFullyVerified(_) => {}
             _ => warn!("Received unrecognized event type when applying changes"),
         }
@@ -192,6 +198,9 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
                     net_address,
                     display_name,
                 } => unimplemented!(),
+                VerifierCommand::InsertIdentity(identity) => {
+                    Ok(Some(vec![IdentityInserted { identity: identity }.into()]))
+                }
             }
         };
 

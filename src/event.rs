@@ -65,6 +65,8 @@ pub enum EventType {
     FieldStatusVerified(FieldStatusVerified),
     #[serde(rename = "identity_fully_verified")]
     IdentityFullyVerified(IdentityFullyVerified),
+    #[serde(rename = "identity_inserted")]
+    IdentityInserted(IdentityInserted),
 }
 
 impl From<EventType> for Event {
@@ -235,5 +237,18 @@ pub struct IdentityFullyVerified {
 impl From<IdentityFullyVerified> for Event {
     fn from(val: IdentityFullyVerified) -> Self {
         EventType::IdentityFullyVerified(val).into()
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityInserted {
+    #[serde(flatten)]
+    pub identity: IdentityState,
+}
+
+impl From<IdentityInserted> for Event {
+    fn from(val: IdentityInserted) -> Self {
+        EventType::IdentityInserted(val).into()
     }
 }
