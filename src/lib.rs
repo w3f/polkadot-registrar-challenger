@@ -23,6 +23,7 @@ mod event;
 mod manager;
 mod projection;
 mod system;
+mod tests;
 
 #[derive(Debug, Error)]
 pub enum Error {
