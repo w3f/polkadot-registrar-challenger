@@ -250,7 +250,8 @@ impl<'a> IdentityManager<'a> {
                                             // Clone the current state and overwrite the validity as `Valid`.
                                             let mut challenge = challenge.clone();
                                             challenge.status = Validity::Valid;
-                                            c_field_status.challenge = ChallengeStatus::ExpectMessage(challenge);
+                                            c_field_status.challenge =
+                                                ChallengeStatus::ExpectMessage(challenge);
                                             c_field_status
                                         },
                                     }
@@ -268,21 +269,43 @@ impl<'a> IdentityManager<'a> {
                         ChallengeStatus::BackAndForth(challenge) => {
                             // The first check must be verified before it can
                             // proceed on the seconds check.
-                            if challenge.first_check_status != Validity::Valid {
-                                return Some(generate_outcome(
-                                    c_net_address,
-                                    c_field_status,
-                                    &challenge.expected_message,
-                                    provided_message,
-                                ));
+                            let outcome = if challenge.first_check_status != Validity::Valid {
+                                VerificationOutcome {
+                                    net_address: c_net_address,
+                                    field_status: {
+                                        // Clone the current state and overwrite
+                                        // the validity of the **first** status
+                                        // as `Valid`.
+                                        let mut challenge = challenge.clone();
+                                        challenge.first_check_status = Validity::Valid;
+                                        c_field_status.challenge =
+                                            ChallengeStatus::BackAndForth(challenge);
+                                        c_field_status
+                                    },
+                                }
                             } else if challenge.second_check_status != Validity::Valid {
-                                return Some(generate_outcome(
-                                    c_net_address,
-                                    c_field_status,
-                                    &challenge.expected_message_back,
-                                    provided_message,
-                                ));
-                            }
+                                VerificationOutcome {
+                                    net_address: c_net_address,
+                                    field_status: {
+                                        // Clone the current state and overwrite
+                                        // the validity of the **second** status
+                                        // as `Valid`.
+                                        let mut challenge = challenge.clone();
+                                        challenge.second_check_status = Validity::Valid;
+                                        c_field_status.challenge =
+                                            ChallengeStatus::BackAndForth(challenge);
+                                        c_field_status
+                                    },
+                                }
+                            } else {
+                                VerificationOutcome {
+                                    net_address: c_net_address,
+                                    // Leave current state as is.
+                                    field_status: c_field_status,
+                                }
+                            };
+
+                            return Some(outcome);
                         }
                         ChallengeStatus::CheckDisplayName(_) => {
                             error!("Received a display name check in the message verifier. This is a bug");
