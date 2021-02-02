@@ -82,30 +82,22 @@ pub struct ApiErrorObject {
 }
 
 pub struct TwitterBuilder {
-    screen_name: Option<String>,
     consumer_key: Option<String>,
     consumer_secret: Option<String>,
     token: Option<String>,
     token_secret: Option<String>,
-    version: Option<f64>,
     request_interval: Option<u64>,
 }
 
 impl TwitterBuilder {
     pub fn new() -> Self {
         TwitterBuilder {
-            screen_name: None,
             consumer_key: None,
             consumer_secret: None,
             token: None,
             token_secret: None,
-            version: None,
             request_interval: None,
         }
-    }
-    pub fn screen_name(mut self, account: String) -> Self {
-        self.screen_name = Some(account);
-        self
     }
     pub fn consumer_key(mut self, key: String) -> Self {
         self.consumer_key = Some(key);
@@ -123,10 +115,6 @@ impl TwitterBuilder {
         self.token_secret = Some(secret);
         self
     }
-    pub fn version(mut self, version: f64) -> Self {
-        self.version = Some(version);
-        self
-    }
     pub fn request_interval(mut self, interval: u64) -> Self {
         self.request_interval = Some(interval);
         self
@@ -137,9 +125,6 @@ impl TwitterBuilder {
         Ok((
             TwitterHandler {
                 client: Client::new(),
-                screen_name: self
-                    .screen_name
-                    .ok_or(anyhow!("screen name not specified"))?,
                 consumer_key: self
                     .consumer_key
                     .ok_or(anyhow!("consumer key name not specified"))?,
@@ -150,7 +135,6 @@ impl TwitterBuilder {
                 token_secret: self
                     .token_secret
                     .ok_or(anyhow!("screen name not specified"))?,
-                version: self.version.ok_or(anyhow!("screen name not specified"))?,
                 twitter_ids: HashMap::new(),
                 request_interval: self
                     .request_interval
@@ -197,12 +181,10 @@ fn gen_timestamp() -> u64 {
 #[derive(Clone)]
 pub struct TwitterHandler {
     client: Client,
-    screen_name: String,
     consumer_key: String,
     consumer_secret: String,
     token: String,
     token_secret: String,
-    version: f64,
     twitter_ids: HashMap<TwitterId, String>,
     request_interval: u64,
     sender: Sender<TwitterMessage>,
@@ -300,7 +282,6 @@ impl TwitterHandler {
         // Prepare  required data.
         let nonce = gen_nonce();
         let timestamp = gen_timestamp().to_string();
-        let version = format!("{:.1}", self.version);
 
         // Create  OAuth 1.0 fields.
         let mut fields = vec![
@@ -309,7 +290,7 @@ impl TwitterHandler {
             ("oauth_signature_method", "HMAC-SHA1"),
             ("oauth_timestamp", &timestamp),
             ("oauth_token", self.token.as_str()),
-            ("oauth_version", &version),
+            ("oauth_version", "1.0"),
         ];
 
         if let Some(params) = params {

@@ -1,7 +1,8 @@
 use crate::adapters::email::SmtpImapClientBuilder;
 use crate::adapters::matrix::MatrixClient;
+use crate::adapters::twitter::TwitterBuilder;
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
-use crate::{EmailConfig, MatrixConfig, Result};
+use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use eventually::aggregate::AggregateRootBuilder;
 use eventually::Repository;
 use eventually_event_store_db::EventStore;
@@ -46,6 +47,8 @@ async fn run_email_listener(
     config: EmailConfig,
     store: EventStore<MessageWatcherId>,
 ) -> Result<()> {
+    info!("Configuring email client");
+
     let (client, recv) = SmtpImapClientBuilder::new()
         .email_server(config.smtp_server)
         .imap_server(config.imap_server)
@@ -55,12 +58,12 @@ async fn run_email_listener(
         .request_interval(config.request_interval)
         .build()?;
 
-    info!("Starting Email client");
+    info!("Starting email client");
     client.start().await;
 
     let repository = Repository::new(MessageWatcher.into(), store);
 
-    info!("Starting event loop for incoming Email messages");
+    info!("Starting event loop for incoming email messages");
     while let Ok(message) = recv.recv().await {
         let mut root = repository.get(MessageWatcherId).await.unwrap();
 
@@ -70,5 +73,37 @@ async fn run_email_listener(
             .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
     }
 
-    Err(anyhow!("The Email client has shut down"))
+    Err(anyhow!("The email client has shut down"))
+}
+
+async fn run_twitter_listener(
+    config: TwitterConfig,
+    store: EventStore<MessageWatcherId>,
+) -> Result<()> {
+    info!("Configuring Twitter client");
+
+    let (mut client, recv) = TwitterBuilder::new()
+        .consumer_key(config.api_key)
+        .consumer_secret(config.api_secret)
+        .token(config.token)
+        .token_secret(config.token_secret)
+        .request_interval(config.request_interval)
+        .build()?;
+
+    info!("Starting Twitter client");
+    client.start().await;
+
+    let repository = Repository::new(MessageWatcher.into(), store);
+
+    info!("Starting event loop for incoming Twitter messages");
+    while let Ok(message) = recv.recv().await {
+        let mut root = repository.get(MessageWatcherId).await.unwrap();
+
+        let _ = root
+            .handle(MessageWatcherCommand::AddMessage(message.into()))
+            .await
+            .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
+    }
+
+    Err(anyhow!("The Twitter client has shut down"))
 }

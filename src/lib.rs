@@ -55,7 +55,6 @@ pub struct MatrixConfig {
 #[derive(Debug, Deserialize)]
 pub struct TwitterConfig {
     pub enabled: bool,
-    pub screen_name: String,
     pub api_key: String,
     pub api_secret: String,
     pub token: String,
