@@ -1,9 +1,9 @@
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
-use crate::event::ExternalMessage;
+use crate::event::{Event, EventType, ExternalMessage};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
 use eventually::aggregate::AggregateRootBuilder;
@@ -25,7 +25,34 @@ async fn run_verifier_subscription(
     subscriber
         .resume()
         .await?
-        .for_each(|persisted| future::ready(()))
+        .for_each(|persisted| async {
+            let event: Event = if let Ok(persisted) = persisted {
+                if let Ok(event) = persisted.take().as_json() {
+                    event
+                } else {
+                    error!("Failed to parse event from stream");
+                    return ();
+                }
+            } else {
+                error!("Failed to acquire event from stream");
+                return ();
+            };
+
+            let mut root = repository.get(VerifierAggregateId).await.unwrap();
+
+            // Verify message with the aggregate.
+            match event.body {
+                EventType::ExternalMessage(message) => {
+                    let _ = root
+                        .handle(VerifierCommand::VerifyMessage(message))
+                        .await
+                        .map_err(|err| error!("Failed to verify message with aggregate: {}", err));
+                }
+                _ => warn!("Received unexpected message"),
+            }
+
+            ()
+        })
         .await;
 
     Ok(())

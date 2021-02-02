@@ -36,6 +36,7 @@ impl AsRef<str> for VerifierAggregateId {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum VerifierCommand {
     VerifyMessage(ExternalMessage),
     VerifyDisplayName {
