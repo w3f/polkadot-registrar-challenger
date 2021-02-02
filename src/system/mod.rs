@@ -1,4 +1,5 @@
-use crate::adapters::email::SmtpImapClientBuilder;
+use crate::event::ExternalMessage;
+use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
@@ -7,6 +8,7 @@ use eventually::aggregate::AggregateRootBuilder;
 use eventually::Repository;
 use eventually_event_store_db::EventStore;
 use lettre_email::Email;
+use async_channel::Receiver;
 
 async fn run_matrix_listener(
     config: MatrixConfig,
@@ -25,22 +27,7 @@ async fn run_matrix_listener(
     info!("Starting Matrix client");
     client.start().await;
 
-    let repository = Repository::new(MessageWatcher.into(), store);
-
-    // For each message received, send a command to the aggregate and let it
-    // handle it. This aggregate does not actually need to maintain a state.
-    info!("Starting event loop for incoming Matrix messages");
-    while let Ok(message) = recv.recv().await {
-        // TODO: Why does Repository::get() require a parameter?
-        let mut root = repository.get(MessageWatcherId).await.unwrap();
-
-        let _ = root
-            .handle(MessageWatcherCommand::AddMessage(message.into()))
-            .await
-            .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
-    }
-
-    Err(anyhow!("The Matrix client has shut down"))
+    messages_event_loop(store, recv, "email").await
 }
 
 async fn run_email_listener(
@@ -61,19 +48,7 @@ async fn run_email_listener(
     info!("Starting email client");
     client.start().await;
 
-    let repository = Repository::new(MessageWatcher.into(), store);
-
-    info!("Starting event loop for incoming email messages");
-    while let Ok(message) = recv.recv().await {
-        let mut root = repository.get(MessageWatcherId).await.unwrap();
-
-        let _ = root
-            .handle(MessageWatcherCommand::AddMessage(message.into()))
-            .await
-            .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
-    }
-
-    Err(anyhow!("The email client has shut down"))
+    messages_event_loop(store, recv, "email").await
 }
 
 async fn run_twitter_listener(
@@ -93,9 +68,15 @@ async fn run_twitter_listener(
     info!("Starting Twitter client");
     client.start().await;
 
+    messages_event_loop(store, recv, "Twitter").await
+}
+
+/// For each message received by an adapter, send a command to the aggregate and
+/// let it handle it. This aggregate does not actually need to maintain a state.
+async fn messages_event_loop<T>(store: EventStore<MessageWatcherId>,recv: Receiver<T>, name: &str) -> Result<()> where T: Into<ExternalMessage> {
     let repository = Repository::new(MessageWatcher.into(), store);
 
-    info!("Starting event loop for incoming Twitter messages");
+    info!("Starting event loop for incoming {} messages", name);
     while let Ok(message) = recv.recv().await {
         let mut root = repository.get(MessageWatcherId).await.unwrap();
 
@@ -105,5 +86,5 @@ async fn run_twitter_listener(
             .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
     }
 
-    Err(anyhow!("The Twitter client has shut down"))
+    Err(anyhow!("The {} client has shut down", name))
 }
