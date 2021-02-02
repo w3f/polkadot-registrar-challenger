@@ -1,15 +1,43 @@
-use crate::event::{BlankNetwork, Event, EventType};
-use crate::{api::start_api, event::Notification, Error, Result};
+use crate::aggregate::display_name::DisplayNameHandler;
+use crate::api::start_api;
+use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified, Notification};
+use crate::{Error, Result};
 use eventually::Aggregate;
 use serde::__private::de::InPlaceSeed;
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+
+pub enum UpdateChanges {
+    VerificationValid(IdentityField),
+    VerificationInvalid(IdentityField),
+    BackAndForthExpected(IdentityField),
+}
+
+impl From<UpdateChanges> for Notification {
+    fn from(val: UpdateChanges) -> Self {
+        match val {
+            UpdateChanges::VerificationValid(field) => {
+                Notification::Success(format!("The {} field has been verified", field))
+            }
+            UpdateChanges::VerificationInvalid(field) => {
+                Notification::Warn(format!("The {} field has failed verification", field))
+            }
+            UpdateChanges::BackAndForthExpected(field) => Notification::Info(format!(
+                "The first challenge of the {0} field has been verified. \
+                An additional challenge has been sent to {0}",
+                field
+            )),
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct IdentityManager<'a> {
     identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a NetworkAddress>>,
+    display_names: Vec<DisplayName>,
 }
 
 // TODO: Should logs be printed if users are not found?
@@ -18,7 +46,11 @@ impl<'a> IdentityManager<'a> {
         IdentityManager {
             identities: HashMap::new(),
             lookup_addresses: HashMap::new(),
+            display_names: Vec::new(),
         }
+    }
+    pub fn get_display_names(&self) -> &[DisplayName] {
+        self.display_names.as_slice()
     }
     fn insert_identity(&'a mut self, identity: IdentityState) {
         // Insert identity.
@@ -39,24 +71,67 @@ impl<'a> IdentityManager<'a> {
                 .or_insert(vec![net_address].into_iter().collect());
         }
     }
-    pub fn exists(&self, net_address: &NetworkAddress) -> bool {
-        self.identities.contains_key(net_address)
-    }
-    pub fn update_field(
-        &mut self,
-        net_address: &NetworkAddress,
-        field_status: FieldStatus,
-    ) -> Result<()> {
+    pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
-            .get_mut(net_address)
+            .get_mut(&verified.net_address)
             .ok_or(anyhow!("network address not found"))
             .and_then(|statuses| {
                 statuses
                     .iter_mut()
-                    .find(|status| status.field == field_status.field)
+                    .find(|status| status.field == verified.field_status.field)
                     .map(|status| {
-                        *status = field_status;
-                        ()
+                        let verified_status = verified.field_status;
+
+                        // If the current field status has already been
+                        // verified, skip (and avoid sending a new
+                        // notification).
+                        if (status.is_valid() && verified_status.is_valid())
+                            || (status.is_valid() && verified_status.is_not_valid())
+                        {
+                            None
+                        }
+                        // Return a warning that no changes have been committed
+                        // since the verification is invalid.
+                        else if status.is_not_valid() && verified_status.is_not_valid() {
+                            Some(UpdateChanges::VerificationInvalid(verified_status.field))
+                        }
+                        // Verification is valid, so commit changes. Gernerate
+                        // different notifications based on the individual
+                        // challenge type.
+                        else if status.is_not_valid() && verified_status.is_valid() {
+                            let field = verified_status.field.clone();
+                            *status = verified_status;
+
+                            match &status.challenge {
+                                ChallengeStatus::ExpectMessage(_)
+                                | ChallengeStatus::CheckDisplayName(_) => {
+                                    Some(UpdateChanges::VerificationValid(field))
+                                }
+                                ChallengeStatus::BackAndForth(challenge) => {
+                                    // The first message has been verified, now
+                                    // the second message must be verified.
+                                    if challenge.first_check_status == Validity::Valid
+                                        && challenge.second_check_status == Validity::Invalid
+                                    {
+                                        Some(UpdateChanges::VerificationValid(field))
+                                    }
+                                    // Both messages have been fully verified.
+                                    else if challenge.first_check_status == Validity::Valid
+                                        && challenge.second_check_status == Validity::Valid
+                                    {
+                                        Some(UpdateChanges::BackAndForthExpected(field))
+                                    }
+                                    // This case should never occur. Better safe than sorry.
+                                    else {
+                                        None
+                                    }
+                                }
+                            }
+                        }
+                        // This case should never occur. Better safe than sorry.
+                        else {
+                            None
+                        }
                     })
                     .ok_or(anyhow!("field not found"))
             })
@@ -69,17 +144,6 @@ impl<'a> IdentityManager<'a> {
         self.identities
             .get(net_address)
             .map(|statuses| statuses.iter().find(|status| &status.field == field))
-            // Unpack `Option<Option<T>>` to `Option<T>`
-            .and_then(|status| status)
-    }
-    fn lookup_field_status_mut(
-        &mut self,
-        net_address: &NetworkAddress,
-        field: &IdentityField,
-    ) -> Option<&mut FieldStatus> {
-        self.identities
-            .get_mut(net_address)
-            .map(|statuses| statuses.iter_mut().find(|status| &status.field == field))
             // Unpack `Option<Option<T>>` to `Option<T>`
             .and_then(|status| status)
     }
@@ -97,13 +161,66 @@ impl<'a> IdentityManager<'a> {
                 fields: fields.clone(),
             })
     }
-    pub fn verify_message(
-        &'a self,
-        field: &IdentityField,
-        message: &ProvidedMessage,
-    ) -> Vec<VerificationOutcome<'a>> {
-        let mut outcomes = vec![];
+    pub fn verify_display_name(
+        &self,
+        net_address: NetworkAddress,
+        display_name: DisplayName,
+    ) -> Result<VerificationOutcome> {
+        let field_status = self
+            .lookup_field_status(
+                &net_address,
+                &IdentityField::DisplayName(display_name.clone()),
+            )
+            .ok_or(anyhow!(
+                "no identity found based on display name: \"{}\"",
+                display_name.as_str()
+            ))?
+            .clone();
 
+        let handler = DisplayNameHandler::with_state(&self.display_names);
+        let violations = handler.verify_display_name(&display_name);
+
+        let outcome = if violations.is_empty() {
+            VerificationOutcome {
+                net_address: net_address,
+                field_status: field_status,
+            }
+        } else {
+            VerificationOutcome {
+                net_address: net_address,
+                field_status: field_status,
+            }
+        };
+
+        Ok(outcome)
+    }
+    pub fn verify_message(
+        &self,
+        field: &IdentityField,
+        provided_message: &ProvidedMessage,
+    ) -> Option<VerificationOutcome> {
+        /// Convenience function for verifying the message.
+        // TODO: This does not actually set the challenge as valid/invalid...
+        fn generate_outcome(
+            net_address: NetworkAddress,
+            field_status: FieldStatus,
+            expected_message: &ExpectedMessage,
+            provided_message: &ProvidedMessage,
+        ) -> VerificationOutcome {
+            if expected_message.contains(provided_message).is_some() {
+                VerificationOutcome {
+                    net_address: net_address,
+                    field_status: field_status,
+                }
+            } else {
+                VerificationOutcome {
+                    net_address: net_address,
+                    field_status: field_status,
+                }
+            }
+        }
+
+        // Tack all the verification outcomes generated by this method.
         // TODO: Reject Display Name fields. Just in case.
 
         // Lookup all addresses which contain the field.
@@ -111,52 +228,62 @@ impl<'a> IdentityManager<'a> {
             // For each address, verify the field.
             for net_address in net_addresses {
                 if let Some(field_status) = self.lookup_field_status(&net_address, field) {
-                    // Only verify if it has not been already.
-                    if field_status.is_valid() {
-                        continue;
-                    }
+                    // Variables must be cloned, since those are later converted
+                    // into events (which require ownership) and sent to the
+                    // event store.
+                    let c_net_address = net_address.clone();
+                    let c_field_status = field_status.clone();
 
-                    // Track address if the expected message was found.
-                    // TODO: Handle unwrap
-                    let expected_message = field_status.expected_message().unwrap();
-                    outcomes.push(if let Some(_) = expected_message.contains(message) {
-                        VerificationOutcome {
-                            net_address: net_address,
-                            expected_message: expected_message,
-                            status: VerificationStatus::Valid,
+                    // Verify the message, each verified specifically based on
+                    // the challenge type.
+                    match &field_status.challenge {
+                        ChallengeStatus::ExpectMessage(ref challenge) => {
+                            if challenge.status != Validity::Valid {
+                                return Some(generate_outcome(
+                                    c_net_address,
+                                    c_field_status,
+                                    &challenge.expected_message,
+                                    provided_message,
+                                ));
+                            }
                         }
-                    } else {
-                        VerificationOutcome {
-                            net_address: net_address,
-                            expected_message: expected_message,
-                            status: VerificationStatus::Invalid,
+                        ChallengeStatus::BackAndForth(challenge) => {
+                            // The first check must be verified before it can
+                            // proceed on the seconds check.
+                            if challenge.first_check_status != Validity::Valid {
+                                return Some(generate_outcome(
+                                    c_net_address,
+                                    c_field_status,
+                                    &challenge.expected_message,
+                                    provided_message,
+                                ));
+                            } else if challenge.second_check_status != Validity::Valid {
+                                return Some(generate_outcome(
+                                    c_net_address,
+                                    c_field_status,
+                                    &challenge.expected_message_back,
+                                    provided_message,
+                                ));
+                            }
                         }
-                    });
+                        ChallengeStatus::CheckDisplayName(_) => {
+                            error!("Received a display name check in the message verifier. This is a bug");
+                        }
+                    }
                 }
             }
         };
 
-        outcomes
+        None
     }
-    // TODO: Should return Result
-    pub fn set_verified(&mut self, net_address: &NetworkAddress, field: &IdentityField) -> bool {
-        if let Some(field_status) = self.lookup_field_status_mut(net_address, field) {
-            // TODO
-            //field_status.is_valid = true;
-            true
-        } else {
-            false
-        }
-    }
-    // TODO: Should return Result
     pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Result<bool> {
         self.identities
             .get(net_address)
             .map(|field_statuses| field_statuses.iter().any(|status| status.is_valid()))
-            .ok_or(
-                Error::TargetAddressNotFound(net_address.clone(), "is_fully_verified".to_string())
-                    .into(),
-            )
+            .ok_or(anyhow!(
+                "failed to check the full verification status of unknown target: {:?}. This is a bug",
+                net_address
+            ))
     }
     // TODO: Should return Result
     pub fn remove_identity(&mut self, net_address: &NetworkAddress) -> bool {
@@ -165,16 +292,9 @@ impl<'a> IdentityManager<'a> {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub struct VerificationOutcome<'a> {
-    pub net_address: &'a NetworkAddress,
-    pub expected_message: &'a ExpectedMessage,
-    pub status: VerificationStatus,
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
-pub enum VerificationStatus {
-    Valid,
-    Invalid,
+pub struct VerificationOutcome {
+    pub net_address: NetworkAddress,
+    pub field_status: FieldStatus,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -213,19 +333,6 @@ impl From<IdentityState> for Event {
     }
 }
 
-impl IdentityState {
-    pub fn set_validity(&mut self, target: &IdentityField, validity: Validity) -> Result<()> {
-        self.fields
-            .iter_mut()
-            .find(|status| &status.field == target)
-            .map(|status| {
-                status.set_validity(validity);
-                ()
-            })
-            .ok_or(anyhow!("Target field was not found"))
-    }
-}
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityAddress(String);
 
@@ -257,22 +364,9 @@ impl FieldStatus {
             Validity::Invalid | Validity::Unconfirmed => false,
         }
     }
-    pub fn set_validity(&mut self, validity: Validity) {
-        let mut status = match self.challenge {
-            ChallengeStatus::ExpectMessage(ref mut state) => &mut state.status,
-            ChallengeStatus::BackAndForth(ref mut state) => &mut state.first_check_status,
-            ChallengeStatus::CheckDisplayName(ref mut state) => &mut state.status,
-        };
-
-        *status = validity;
-    }
-    // TODO: Should this maybe return `Result`?
-    pub fn expected_message(&self) -> Option<&ExpectedMessage> {
-        match self.challenge {
-            ChallengeStatus::ExpectMessage(ref state) => Some(&state.expected_message),
-            ChallengeStatus::BackAndForth(ref state) => Some(&state.expected_message),
-            _ => None,
-        }
+    /// Convenience method for improved readability.
+    pub fn is_not_valid(&self) -> bool {
+        !self.is_valid()
     }
 }
 
@@ -298,6 +392,12 @@ pub struct ExpectMessageChallenge {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct BackAndForthChallenge {
     pub expected_message: ExpectedMessage,
+    // VERY IMPORTANT: This field MUST be skipped during serializing and MAY NO
+    // be sent to the the end user via the API, since the message must be
+    // explicitly received by the specified `from` address and sent back to the
+    // service (`to` address).
+    #[serde(skip_serializing)]
+    pub expected_message_back: ExpectedMessage,
     pub from: IdentityField,
     pub to: IdentityField,
     pub first_check_status: Validity,
@@ -323,19 +423,45 @@ pub enum Validity {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct DisplayName(String);
 
+impl DisplayName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldAddress(String);
+
+impl FieldAddress {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<String> for FieldAddress {
+    fn from(val: String) -> Self {
+        FieldAddress(val)
+    }
+}
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ExpectedMessage(String);
 
+// TODO: Should be moved to `crate::events`
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ProvidedMessage {
-    parts: Vec<ProvidedMessagePart>,
+    pub parts: Vec<ProvidedMessagePart>,
 }
 
+// TODO: Should be moved to `crate::events`
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ProvidedMessagePart(String);
+
+impl From<String> for ProvidedMessagePart {
+    fn from(val: String) -> Self {
+        ProvidedMessagePart(val)
+    }
+}
 
 impl ExpectedMessage {
     fn contains<'a>(&self, message: &'a ProvidedMessage) -> Option<&'a ProvidedMessagePart> {
@@ -355,7 +481,7 @@ pub enum IdentityField {
     #[serde(rename = "legal_name")]
     LegalName(FieldAddress),
     #[serde(rename = "display_name")]
-    DisplayName(FieldAddress),
+    DisplayName(DisplayName),
     #[serde(rename = "email")]
     Email(FieldAddress),
     #[serde(rename = "web")]
@@ -372,6 +498,26 @@ pub enum IdentityField {
     #[serde(rename = "additional")]
     /// NOTE: Currently unsupported.
     Additional,
+}
+
+impl fmt::Display for IdentityField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = match self {
+            IdentityField::LegalName(addr) => format!("legal name (\"{}\")", addr.as_str()),
+            IdentityField::DisplayName(addr) => format!("display name (\"{}\")", addr.as_str()),
+            IdentityField::Email(addr) => format!("email (\"{}\")", addr.as_str()),
+            IdentityField::Web(addr) => format!("web (\"{}\")", addr.as_str()),
+            IdentityField::Twitter(addr) => format!("twitter (\"{}\")", addr.as_str()),
+            IdentityField::Matrix(addr) => format!("matrix (\"{}\")", addr.as_str()),
+            IdentityField::PGPFingerprint(addr) => {
+                format!("PGP Fingerprint: (\"{}\")", addr.as_str())
+            }
+            IdentityField::Image => format!("image"),
+            IdentityField::Additional => format!("additional information"),
+        };
+
+        write!(f, "{}", string)
+    }
 }
 
 #[test]

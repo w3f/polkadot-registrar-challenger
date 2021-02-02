@@ -17,7 +17,7 @@ path = "src/bin/main.rs"
 [dependencies]
 log = { version = "0.4.11", features = ["serde"] }
 env_logger = "0.7.1"
-tokio = { version = "0.2.22", features = ["macros"] }
+tokio = { version = "1.1.1", features = ["macros", "time"] }
 futures = "0.3.5"
 serde_yaml = "0.8.15"
 eventually = { path = "../eventually-rs/eventually" }
@@ -41,12 +41,11 @@ crossbeam = "0.7.3"
 futures-channel = "0.3.5"
 reqwest = { version = "0.10.8", features = ["json"] }
 urlencoding = "1.1.1"
-matrix-sdk = { version = "0.1.0", git = "https://github.com/matrix-org/matrix-rust-sdk.git" }
+matrix-sdk = { version = "0.2.0", git = "https://github.com/matrix-org/matrix-rust-sdk.git" }
 lettre = "0.9.0"
 lettre_email = "0.9.4"
 imap = "2.3.0"
 mailparse = "0.13.0"
-actix-web = "3.1.0"
 native-tls = "0.2.4"
 hmac = "0.9.0"
 sha-1 = "0.9.1"

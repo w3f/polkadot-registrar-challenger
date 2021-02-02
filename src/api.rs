@@ -1,9 +1,5 @@
-use crate::aggregate::request_handler::{
-    RequestHandlerAggregate, RequestHandlerCommand, RequestHandlerId,
-};
-use crate::aggregate::EmptyStore;
 use crate::event::{
-    BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, StateWrapper,
+    BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, Notification, StateWrapper,
 };
 use crate::manager::{IdentityAddress, IdentityManager, IdentityState, NetworkAddress};
 use async_channel::{unbounded, Receiver, Sender};
@@ -27,6 +23,10 @@ use parking_lot::{RawRwLock, RwLock};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+const REGISTRAR_ID: u32 = 0;
+const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
+
+// TODO: Remove this type since it is no longer necessary.
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct SubId(u64);
 
@@ -37,9 +37,7 @@ impl From<u64> for SubId {
 }
 
 pub struct ConnectionPool {
-    // TODO: Arc/RwLock around HashMap necessary?
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
-    direct: Arc<RwLock<HashMap<SubId, ConnectionInfo>>>,
 }
 
 impl ConnectionPool {
@@ -63,27 +61,12 @@ impl ConnectionPool {
             // Always returns `Some(...)`.
             .unwrap()
     }
-    fn register_direct(&self, sub_id: SubId) -> Receiver<Event> {
-        self.direct
-            .write()
-            .entry(sub_id)
-            .or_insert(ConnectionInfo::new())
-            .receiver
-            .clone()
-    }
-    fn get_direct(&self, sub_id: &SubId) -> Option<Sender<Event>> {
-        self.direct
-            .read()
-            .get(sub_id)
-            .map(|state| state.sender.clone())
-    }
 }
 
 impl ConnectionPool {
     fn new() -> Self {
         ConnectionPool {
             pool: Arc::new(RwLock::new(HashMap::new())),
-            direct: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -143,16 +126,7 @@ pub trait PublicRpc {
 
 struct PublicRpcApi {
     connection_pool: ConnectionPool,
-    identity_state: Arc<RwLock<IdentityManager<'static>>>,
-    repository: Arc<
-        Repository<
-            RequestHandlerAggregate,
-            EmptyStore<
-                <RequestHandlerAggregate as Aggregate>::Id,
-                <RequestHandlerAggregate as Aggregate>::Event,
-            >,
-        >,
-    >,
+    manager: Arc<RwLock<IdentityManager<'static>>>,
 }
 
 impl PublicRpc for PublicRpcApi {
@@ -177,104 +151,62 @@ impl PublicRpc for PublicRpcApi {
 
         let net_address = NetworkAddress::from(network, address);
         let watcher = self.connection_pool.watch_net_address(&net_address);
-        let direct_listener = self.connection_pool.register_direct(sub_id.clone());
 
-        let identity_state = Arc::clone(&self.identity_state);
-        let repository = Arc::clone(&self.repository);
+        let manager = Arc::clone(&self.manager);
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
         // (e.g. Polkadot address).
         //
-        // Messages are generated in `crate::projection::state_change_notifier`.
+        // Messages are generated in `crate::projection::identity_change_notifier`.
         tokio::spawn(async move {
-            // Check the cache on whether the identity is currently available...
-            let state = identity_state.read().lookup_full_state(&net_address);
-            if let Some(state) = state {
+            // Check the state for the requested identity and respond
+            // immediately with the current state. If the identity is not
+            // available, it implies there is not pending judgement request (for
+            // the specified registrar, at least).
+            if let Some(state) = manager.read().lookup_full_state(&net_address) {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
                     debug!("Connection closed");
                     return Ok(());
                 }
             } else {
                 // ... if not, send a request and have the "direct message" handler take care of it.
-                let _ = repository
-                    .get(RequestHandlerId)
-                    .await?
-                    .handle(RequestHandlerCommand::RequestState {
-                        requester: sub_id,
-                        net_address: net_address,
-                    })
-                    .await?;
+                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
+                    code: NO_PENDING_JUDGMENT_REQUEST_CODE,
+                    message: format!(
+                        "There is no pending judgement request for this identity (for registrar #{}",
+                        REGISTRAR_ID
+                    ),
+                }))) {
+                    debug!("Connection closed");
+                    return Ok(());
+                }
             }
 
-            // Queue for state changes.
-            let mut changes_queue: Vec<FieldStatusVerified> = vec![];
+            // Start event loop and keep the subscriber informed about any state changes.
             while let Ok(event) = watcher.recv().await {
                 match event.body {
                     EventType::FieldStatusVerified(field_changes_verified) => {
-                        let net_address = &field_changes_verified.net_address;
+                        let net_address = &field_changes_verified.net_address.clone();
 
-                        // Check if the identity exists in cache. If not, queue
-                        // the change and apply it later on a `EventType::IdentityState`
-                        // event. This behavior could occur if changes are
-                        // received before the requested state.
-                        if !identity_state.read().exists(net_address) {
-                            changes_queue.push(field_changes_verified);
-
-                            continue;
-                        }
-
-                        let field_status = field_changes_verified.field_status;
-
-                        // Update the identity with the state change.
-                        if let Err(err) = identity_state
-                            .write()
-                            .update_field(&net_address, field_status)
-                        {
-                            error!("{}", err);
-                            continue;
-                        };
+                        // Update the identity with the state change and create notifications (if any).
+                        let notification: Vec<Notification> =
+                            match manager.write().update_field(field_changes_verified) {
+                                Ok(try_notification) => try_notification
+                                    .map(|changes| vec![changes.into()])
+                                    .unwrap_or(vec![]),
+                                Err(err) => {
+                                    error!("{}", err);
+                                    continue;
+                                }
+                            };
 
                         // Finally, fetch the current state and send it to the subscriber.
-                        match identity_state.read().lookup_full_state(&net_address) {
+                        match manager.read().lookup_full_state(&net_address) {
                             Some(full_state) => {
-                                if let Err(_) =
-                                    sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
-                                {
-                                    debug!("Connection closed");
-                                    return Ok(());
-                                }
-                            }
-                            None => error!("Identity state not found in cache"),
-                        }
-                    }
-                    EventType::IdentityState(full_state) => {
-                        // Apply all queued changes to the identity state.
-                        for change in changes_queue {
-                            let (net_address, field_status) =
-                                (change.net_address, change.field_status);
-                            if let Err(err) = identity_state
-                                .write()
-                                .update_field(&net_address, field_status)
-                            {
-                                error!("{}", err);
-                                continue;
-                            }
-                        }
-
-                        // Wipe the changes queue (reinitialize to get around
-                        // the borrow-checker).
-                        changes_queue = vec![];
-
-                        // Send current state to the subscriber.
-                        match identity_state
-                            .read()
-                            .lookup_full_state(&full_state.net_address)
-                        {
-                            Some(full_state) => {
-                                if let Err(_) =
-                                    sink.notify(Ok(AccountStatusResponse::Ok(full_state.into())))
-                                {
+                                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
+                                    StateWrapper::with_notifications(full_state, notification),
+                                ))) {
                                     debug!("Connection closed");
                                     return Ok(());
                                 }

@@ -1,65 +1,12 @@
-use eventually::store::{AppendError, EventStream, Expected, Persisted, Select};
-// TODO: Alias `EventStream` as `StoreEventStream`
-use futures::future::BoxFuture;
-use std::convert::{AsRef, TryFrom};
-use std::marker::PhantomData;
-
+pub mod display_name;
 mod message_watcher;
-pub mod request_handler;
-mod response_handler;
-mod verifier;
+pub mod verifier;
 
-pub use verifier::VerifierAggregateId;
+// Expose publicly
+pub use message_watcher::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 
-type Result<T> = std::result::Result<T, EmptyStoreError>;
-
-#[derive(Debug, Error)]
-pub enum EmptyStoreError {
-    #[error("EmptyStore does not support any functionality")]
-    NotPermitted,
-}
-
-impl AppendError for EmptyStoreError {
-    fn is_conflict_error(&self) -> bool {
-        false
-    }
-}
-
-pub struct EmptyStore<Id, Event> {
-    _p1: PhantomData<Id>,
-    _p2: PhantomData<Event>,
-}
-
-impl<Id, Event> eventually::EventStore for EmptyStore<Id, Event>
-where
-    Id: Eq,
-{
-    type SourceId = Id;
-    type Event = Event;
-    type Error = EmptyStoreError;
-
-    fn append(
-        &mut self,
-        source_id: Self::SourceId,
-        version: Expected,
-        events: Vec<Self::Event>,
-    ) -> BoxFuture<Result<u32>> {
-        Box::pin(async { Err(EmptyStoreError::NotPermitted) })
-    }
-
-    fn stream(
-        &self,
-        source_id: Self::SourceId,
-        select: Select,
-    ) -> BoxFuture<Result<EventStream<Self>>> {
-        Box::pin(async { Err(EmptyStoreError::NotPermitted) })
-    }
-
-    fn stream_all(&self, select: Select) -> BoxFuture<Result<EventStream<Self>>> {
-        Box::pin(async { Err(EmptyStoreError::NotPermitted) })
-    }
-
-    fn remove(&mut self, source_id: Self::SourceId) -> BoxFuture<Result<()>> {
-        Box::pin(async { Err(EmptyStoreError::NotPermitted) })
-    }
-}
+/// This wrapper type is required for the use of `eventually`, since
+/// `anyhow::Error` does not implement `std::error::Error`.
+#[derive(Error, Debug)]
+#[error(transparent)]
+pub struct Error(#[from] anyhow::Error);

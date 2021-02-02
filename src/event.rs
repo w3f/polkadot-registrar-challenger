@@ -4,12 +4,23 @@ use crate::manager::{
     NetworkAddress, ProvidedMessage,
 };
 use crate::Result;
+use eventually_event_store_db::GenericEvent;
+use matrix_sdk::api::r0::sync::sync_events::State;
+use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
     header: EventHeader,
     pub body: EventType,
+}
+
+impl TryFrom<Event> for GenericEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(val: Event) -> Result<Self> {
+        GenericEvent::serialize(val).map_err(|err| err.into())
+    }
 }
 
 impl Event {
@@ -52,6 +63,8 @@ pub enum EventType {
     ExternalMessage(ExternalMessage),
     #[serde(rename = "field_status_verified")]
     FieldStatusVerified(FieldStatusVerified),
+    #[serde(rename = "identity_fully_verified")]
+    IdentityFullyVerified(IdentityFullyVerified),
 }
 
 impl From<EventType> for Event {
@@ -68,7 +81,7 @@ impl From<EventType> for Event {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ErrorMessage {
-    pub requester: Option<SubId>,
+    pub code: u32,
     pub message: String,
 }
 
@@ -120,6 +133,12 @@ pub struct ExternalMessage {
     pub message: ProvidedMessage,
 }
 
+impl From<ExternalMessage> for Event {
+    fn from(val: ExternalMessage) -> Self {
+        EventType::ExternalMessage(val).into()
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum ExternalOrigin {
     #[serde(rename = "email")]
@@ -143,6 +162,7 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+// TODO: Delete, no longer required.
 pub struct FullStateRequest {
     pub requester: SubId,
     pub net_address: NetworkAddress,
@@ -159,6 +179,15 @@ pub struct StateWrapper {
     #[serde(flatten)]
     pub state: IdentityState,
     pub notifications: Vec<Notification>,
+}
+
+impl StateWrapper {
+    pub fn with_notifications(state: IdentityState, notifications: Vec<Notification>) -> Self {
+        StateWrapper {
+            state: state,
+            notifications: notifications,
+        }
+    }
 }
 
 impl From<IdentityState> for StateWrapper {
@@ -190,4 +219,21 @@ pub enum BlankNetwork {
 pub struct FieldStatusVerified {
     pub net_address: NetworkAddress,
     pub field_status: FieldStatus,
+}
+
+impl From<FieldStatusVerified> for Event {
+    fn from(val: FieldStatusVerified) -> Self {
+        EventType::FieldStatusVerified(val).into()
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct IdentityFullyVerified {
+    pub net_address: NetworkAddress,
+}
+
+impl From<IdentityFullyVerified> for Event {
+    fn from(val: IdentityFullyVerified) -> Self {
+        EventType::IdentityFullyVerified(val).into()
+    }
 }
