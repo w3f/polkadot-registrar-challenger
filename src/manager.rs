@@ -232,19 +232,37 @@ impl<'a> IdentityManager<'a> {
                     // into events (which require ownership) and sent to the
                     // event store.
                     let c_net_address = net_address.clone();
-                    let c_field_status = field_status.clone();
+                    let mut c_field_status = field_status.clone();
 
                     // Verify the message, each verified specifically based on
                     // the challenge type.
                     match &field_status.challenge {
-                        ChallengeStatus::ExpectMessage(ref challenge) => {
+                        ChallengeStatus::ExpectMessage(challenge) => {
                             if challenge.status != Validity::Valid {
-                                return Some(generate_outcome(
-                                    c_net_address,
-                                    c_field_status,
-                                    &challenge.expected_message,
-                                    provided_message,
-                                ));
+                                let outcome = if challenge
+                                    .expected_message
+                                    .contains(&provided_message)
+                                    .is_some()
+                                {
+                                    VerificationOutcome {
+                                        net_address: c_net_address,
+                                        field_status: {
+                                            // Clone the current state and overwrite the validity as `Valid`.
+                                            let mut challenge = challenge.clone();
+                                            challenge.status = Validity::Valid;
+                                            c_field_status.challenge = ChallengeStatus::ExpectMessage(challenge);
+                                            c_field_status
+                                        },
+                                    }
+                                } else {
+                                    VerificationOutcome {
+                                        net_address: c_net_address,
+                                        // Leave current state as is.
+                                        field_status: c_field_status,
+                                    }
+                                };
+
+                                return Some(outcome);
                             }
                         }
                         ChallengeStatus::BackAndForth(challenge) => {
