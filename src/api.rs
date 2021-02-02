@@ -36,6 +36,7 @@ impl From<u64> for SubId {
     }
 }
 
+#[derive(Default)]
 pub struct ConnectionPool {
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
 }
@@ -124,7 +125,8 @@ pub trait PublicRpc {
     ) -> Result<bool>;
 }
 
-struct PublicRpcApi {
+#[derive(Default)]
+pub struct PublicRpcApi {
     connection_pool: ConnectionPool,
     manager: Arc<RwLock<IdentityManager<'static>>>,
 }

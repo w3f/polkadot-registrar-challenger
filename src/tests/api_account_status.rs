@@ -1,8 +1,6 @@
-use super::InMemEventStore;
+use super::InMemBackend;
 
 #[tokio::test]
 async fn submit_and_watch() {
-    let _ = InMemEventStore::run();
-
-
+    let _ = InMemBackend::run();
 }

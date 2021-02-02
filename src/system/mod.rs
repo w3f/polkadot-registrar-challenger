@@ -3,6 +3,7 @@ use crate::adapters::twitter::TwitterBuilder;
 use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
+use crate::api::{PublicRpc, PublicRpcApi};
 use crate::event::{Event, EventType, ExternalMessage};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
@@ -12,7 +13,25 @@ use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventSubscription};
 use futures::future;
 use futures::stream::StreamExt;
+use jsonrpc_core::delegates::IoDelegate;
+use jsonrpc_core::{IoHandler, MetaIoHandler};
+use jsonrpc_pubsub::{PubSubHandler, Session};
+use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use lettre_email::Email;
+use std::sync::Arc;
+
+pub fn run_api_service(port: usize) -> Result<WsServer> {
+    let mut io = PubSubHandler::default();
+    io.extend_with(PublicRpcApi::default().to_delegate());
+
+    // TODO: Might consider setting `max_connections`
+    let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
+        Arc::new(Session::new(context.sender().clone()))
+    })
+    .start(&format!("0.0.0.0:{}", port).parse()?)?;
+
+    Ok(handle)
+}
 
 async fn run_verifier_subscription(
     subscriber: EventSubscription<MessageWatcherId>,
