@@ -1,3 +1,4 @@
+use crate::aggregate::display_name::DisplayNameHandler;
 use crate::api::start_api;
 use crate::event::{BlankNetwork, Event, EventType, FieldStatusVerified, Notification};
 use crate::{Error, Result};
@@ -36,6 +37,7 @@ impl From<UpdateChanges> for Notification {
 pub struct IdentityManager<'a> {
     identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
     lookup_addresses: HashMap<&'a IdentityField, HashSet<&'a NetworkAddress>>,
+    display_names: Vec<DisplayName>,
 }
 
 // TODO: Should logs be printed if users are not found?
@@ -44,7 +46,11 @@ impl<'a> IdentityManager<'a> {
         IdentityManager {
             identities: HashMap::new(),
             lookup_addresses: HashMap::new(),
+            display_names: Vec::new(),
         }
+    }
+    pub fn get_display_names(&self) -> &[DisplayName] {
+        self.display_names.as_slice()
     }
     fn insert_identity(&'a mut self, identity: IdentityState) {
         // Insert identity.
@@ -155,12 +161,46 @@ impl<'a> IdentityManager<'a> {
                 fields: fields.clone(),
             })
     }
+    pub fn verify_display_name(
+        &self,
+        net_address: NetworkAddress,
+        display_name: DisplayName,
+    ) -> Result<VerificationOutcome> {
+        let field_status = self
+            .lookup_field_status(
+                &net_address,
+                &IdentityField::DisplayName(display_name.clone()),
+            )
+            .ok_or(anyhow!(
+                "no identity found based on display name: \"{}\"",
+                display_name.as_str()
+            ))?
+            .clone();
+
+        let handler = DisplayNameHandler::with_state(&self.display_names);
+        let violations = handler.verify_display_name(&display_name);
+
+        let outcome = if violations.is_empty() {
+            VerificationOutcome {
+                net_address: net_address,
+                field_status: field_status,
+            }
+        } else {
+            VerificationOutcome {
+                net_address: net_address,
+                field_status: field_status,
+            }
+        };
+
+        Ok(outcome)
+    }
     pub fn verify_message(
         &self,
         field: &IdentityField,
         provided_message: &ProvidedMessage,
     ) -> Option<VerificationOutcome> {
         /// Convenience function for verifying the message.
+        // TODO: This does not actually set the challenge as valid/invalid...
         fn generate_outcome(
             net_address: NetworkAddress,
             field_status: FieldStatus,
@@ -383,6 +423,12 @@ pub enum Validity {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct DisplayName(String);
 
+impl DisplayName {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldAddress(String);
 
@@ -435,7 +481,7 @@ pub enum IdentityField {
     #[serde(rename = "legal_name")]
     LegalName(FieldAddress),
     #[serde(rename = "display_name")]
-    DisplayName(FieldAddress),
+    DisplayName(DisplayName),
     #[serde(rename = "email")]
     Email(FieldAddress),
     #[serde(rename = "web")]

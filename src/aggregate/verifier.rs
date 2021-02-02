@@ -1,18 +1,42 @@
+use super::display_name::DisplayNameHandler;
+use super::Error;
 use crate::event::{Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified};
 use crate::manager::{
-    FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState, Validity,
-    VerificationOutcome,
+    DisplayName, FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState,
+    NetworkAddress, Validity, VerificationOutcome,
 };
-use crate::Result;
 use eventually::Aggregate;
 use futures::future::BoxFuture;
+use std::convert::{TryFrom, TryInto};
 use std::marker::PhantomData;
+
+type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct VerifierAggregateId;
 
+impl TryFrom<String> for VerifierAggregateId {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self> {
+        if value == "field_verifications" {
+            Ok(VerifierAggregateId)
+        } else {
+            Err(anyhow!("Invalid aggregate Id, expected: 'field_verifications'").into())
+        }
+    }
+}
+
+impl AsRef<str> for VerifierAggregateId {
+    fn as_ref(&self) -> &str {
+        "field_verifications"
+    }
+}
+
 pub enum VerifierCommand {
     VerifyMessage(ExternalMessage),
+    VerifyDisplayName(DisplayName),
+    PersistDisplayName(DisplayName),
 }
 
 pub struct VerifierAggregate<'a> {
@@ -69,6 +93,16 @@ impl<'a> VerifierAggregate<'a> {
             Ok(Some(events))
         }
     }
+    fn handle_display_name(
+        state: &IdentityManager<'a>,
+        net_address: NetworkAddress,
+        display_name: DisplayName,
+    ) -> Result<Option<Vec<Event>>> {
+        let handler = DisplayNameHandler::with_state(state.get_display_names());
+        let violations = handler.verify_display_name(&display_name);
+
+        Ok(None)
+    }
     fn apply_state_changes(state: &mut IdentityManager<'a>, event: Event) {
         match event.body {
             EventType::FieldStatusVerified(field_status_verified) => {
@@ -87,7 +121,7 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
     type State = IdentityManager<'is>;
     type Event = Event;
     type Command = VerifierCommand;
-    type Error = anyhow::Error;
+    type Error = Error;
 
     fn apply(mut state: Self::State, event: Self::Event) -> Result<Self::State> {
         Self::apply_state_changes(&mut state, event);
@@ -108,6 +142,12 @@ impl<'is> Aggregate for VerifierAggregate<'is> {
                 VerifierCommand::VerifyMessage(external_message) => {
                     Self::handle_verify_message(state, external_message)
                 }
+                VerifierCommand::VerifyDisplayName(display_name) => {
+                    //Self::handle_display_name(state, display_name)
+                    unimplemented!()
+                }
+                // TODO
+                VerifierCommand::PersistDisplayName(_) => unimplemented!(),
             }
         };
 

@@ -1,3 +1,4 @@
+use crate::manager::DisplayName;
 use crate::Result;
 use strsim::jaro;
 
@@ -5,17 +6,25 @@ use strsim::jaro;
 /// end user.
 pub const VIOLATIONS_CAP: usize = 5;
 
-pub struct DisplayNameHandler {
-    display_names: Vec<String>,
+pub struct DisplayNameHandler<'a> {
+    display_names: &'a [DisplayName],
     limit: f64,
 }
 
-impl DisplayNameHandler {
-    pub async fn verify_display_name(&self, display_name: &str) -> Vec<String> {
+impl<'a> DisplayNameHandler<'a> {
+    pub fn with_state(state: &'a [DisplayName]) -> Self {
+        DisplayNameHandler {
+            display_names: state,
+            limit: 0.5,
+        }
+    }
+    pub fn verify_display_name(&self, display_name: &DisplayName) -> Vec<DisplayName> {
         let mut violations = vec![];
 
-        for display_name in &self.display_names {
+        for display_name in self.display_names {
             if Self::is_too_similar(display_name, display_name, self.limit) {
+                // Clone the display name, since this will get inserted into an
+                // event which requires ownership.
                 violations.push(display_name.clone());
             }
 
@@ -27,9 +36,9 @@ impl DisplayNameHandler {
 
         violations
     }
-    fn is_too_similar(display_name: &str, account: &str, limit: f64) -> bool {
-        let name_str = display_name.to_lowercase();
-        let account_str = account.to_lowercase();
+    fn is_too_similar(display_name: &DisplayName, account: &DisplayName, limit: f64) -> bool {
+        let name_str = display_name.as_str().to_lowercase();
+        let account_str = account.as_str().to_lowercase();
 
         let similarities = [
             jaro(&name_str, &account_str),
