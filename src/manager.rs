@@ -575,6 +575,7 @@ impl fmt::Display for IdentityField {
     }
 }
 
+/*
 #[test]
 fn print_identity_info() {
     let state = IdentityState {
@@ -624,3 +625,4 @@ fn print_identity_info() {
         .unwrap()
     )
 }
+*/
