@@ -18,6 +18,7 @@ path = "src/bin/main.rs"
 log = { version = "0.4.11", features = ["serde"] }
 env_logger = "0.7.1"
 tokio = { version = "1.1.1", features = ["macros", "time"] }
+tokio-compat = "0.1.6"
 futures = "0.3.5"
 serde_yaml = "0.8.15"
 eventually = { path = "../eventually-rs/eventually" }
@@ -29,13 +30,14 @@ jsonrpc-ws-server = "17.0.0"
 jsonrpc-pubsub = "17.0.0"
 jsonrpc-core-client = "17.0.0"
 jsonrpc-client-transports = "17.0.0"
+parity-scale-codec = { version = "2.0.0", features = ["derive"] }
+frame-metadata = { version = "12.0.1", features = [ "std" ]}
 async-channel = "1.5.1"
 parking_lot = "0.11.1"
 lock_api = "0.4.2"
 thiserror = "1.0.23"
 anyhow = "1.0.38"
 reqwest = "0.11.0"
-substrate-subxt = { version = "0.13.0", git = "https://github.com/paritytech/substrate-subxt.git" } 
 tungstenite = "0.11.1"
 tokio-tungstenite = "0.11.0"
 serde = "1.0.116"

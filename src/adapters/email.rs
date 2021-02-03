@@ -4,10 +4,7 @@ use crate::Result;
 use async_channel::{Receiver, Sender};
 use futures::FutureExt;
 
-
 use lettre::Transport;
-
-
 
 use tokio::time::{self, Duration};
 

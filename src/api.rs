@@ -1,27 +1,25 @@
+use crate::account_fetch::AccountFetch;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
-use crate::event::{
-    BlankNetwork, ErrorMessage, Event, EventType, Notification, StateWrapper,
-};
+use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, Notification, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
-use crate::{account_fetch::AccountFetch};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
 use eventually_event_store_db::EventStore;
 
 use futures::StreamExt;
-use futures::{future};
+
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
     manager::{IdProvider, NumericIdProvider},
-    typed::Subscriber, Session, SubscriptionId,
+    typed::Subscriber,
+    Session, SubscriptionId,
 };
 
-
-use parking_lot::{RwLock};
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::{Arc};
+use std::sync::Arc;
 
 const REGISTRAR_ID: u32 = 0;
 const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;

@@ -1,7 +1,7 @@
 use crate::account_fetch::AccountFetch;
+use crate::adapters::email::SmtpImapClientBuilder;
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
-use crate::adapters::{email::SmtpImapClientBuilder};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 use crate::api::{PublicRpc, PublicRpcApi};
@@ -15,12 +15,12 @@ use eventually_event_store_db::{EventStore, EventSubscription};
 
 use futures::stream::StreamExt;
 
-
 use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub fn run_api_service<T>(
     store: EventStore<VerifierAggregateId>,
     aggregate: VerifierAggregate,
@@ -41,7 +41,8 @@ where
     Ok(handle)
 }
 
-async fn run_verifier_subscription(
+#[allow(dead_code)]
+pub async fn run_verifier_subscription(
     subscriber: EventSubscription<MessageWatcherId>,
     store: EventStore<VerifierAggregateId>,
 ) -> Result<()> {
@@ -85,6 +86,7 @@ async fn run_verifier_subscription(
     Ok(())
 }
 
+#[allow(dead_code)]
 async fn run_matrix_listener(
     config: MatrixConfig,
     store: EventStore<MessageWatcherId>,
@@ -105,6 +107,7 @@ async fn run_matrix_listener(
     messages_event_loop(store, recv, "email").await
 }
 
+#[allow(dead_code)]
 async fn run_email_listener(
     config: EmailConfig,
     store: EventStore<MessageWatcherId>,
@@ -126,6 +129,7 @@ async fn run_email_listener(
     messages_event_loop(store, recv, "email").await
 }
 
+#[allow(dead_code)]
 async fn run_twitter_listener(
     config: TwitterConfig,
     store: EventStore<MessageWatcherId>,
@@ -148,6 +152,7 @@ async fn run_twitter_listener(
 
 /// For each message received by an adapter, send a command to the aggregate and
 /// let it handle it. This aggregate does not actually need to maintain a state.
+#[allow(dead_code)]
 async fn messages_event_loop<T>(
     store: EventStore<MessageWatcherId>,
     recv: Receiver<T>,

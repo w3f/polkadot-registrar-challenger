@@ -1,4 +1,3 @@
-
 use super::Error;
 use crate::event::{
     Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified, IdentityInserted,
@@ -11,7 +10,6 @@ use eventually::Aggregate;
 use eventually_event_store_db::GenericEvent;
 use futures::future::BoxFuture;
 use std::convert::{TryFrom, TryInto};
-
 
 type Result<T> = std::result::Result<T, Error>;
 

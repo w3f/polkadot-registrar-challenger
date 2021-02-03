@@ -3,7 +3,7 @@ use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::manager::{IdentityState, NetworkAddress};
 use crate::system::run_api_service;
 use crate::Result;
-use eventually_event_store_db::{EventStoreBuilder};
+use eventually_event_store_db::EventStoreBuilder;
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
 use std::process::{Child, Command};

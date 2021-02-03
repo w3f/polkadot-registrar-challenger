@@ -9,7 +9,9 @@ extern crate serde;
 #[macro_use]
 extern crate async_trait;
 
+use aggregate::verifier::VerifierAggregate;
 use manager::NetworkAddress;
+use system::{run_api_service, run_verifier_subscription};
 
 use std::env;
 use std::fs;

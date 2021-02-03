@@ -3,12 +3,10 @@ use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
     BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
 };
-use crate::{Result};
+use crate::Result;
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-
-
 
 pub enum UpdateChanges {
     VerificationValid(IdentityField),
@@ -49,13 +47,29 @@ impl IdentityManager {
 
         // Insert identity.
         let (net_address, fields) = (identity.net_address, identity.fields);
-        self.identities.insert(net_address.clone(), fields);
+        self.identities
+            .entry(net_address.clone())
+            .and_modify(|statuses| {
+                if statuses == &fields {
+                    return;
+                }
+
+                for status in statuses {
+                    for field in &fields {
+                        if status != field && status.field.as_type() == field.field.as_type() {
+                            *status = field.clone();
+                            continue;
+                        }
+                    }
+                }
+            })
+            .or_insert(fields.clone());
 
         // Acquire references to the key/value from within the map. Unwrapping
         // is fine here since the value was just inserted.
         let (net_address, fields) = self.identities.get_key_value(&net_address).unwrap();
 
-        // Create fast lookup tables.
+        // Create lookup tables.
         for field in fields {
             self.lookup_addresses
                 .entry(field.field.clone())
@@ -552,6 +566,35 @@ pub enum IdentityField {
     Image,
     #[serde(rename = "additional")]
     /// NOTE: Currently unsupported.
+    Additional,
+}
+
+impl IdentityField {
+    fn as_type(&self) -> IdentityFieldType {
+        match self {
+            IdentityField::LegalName(_) => IdentityFieldType::LegalName,
+            IdentityField::DisplayName(_) => IdentityFieldType::DisplayName,
+            IdentityField::Email(_) => IdentityFieldType::Email,
+            IdentityField::Web(_) => IdentityFieldType::Web,
+            IdentityField::Twitter(_) => IdentityFieldType::Twitter,
+            IdentityField::Matrix(_) => IdentityFieldType::Matrix,
+            IdentityField::PGPFingerprint(_) => IdentityFieldType::PGPFingerprint,
+            IdentityField::Image => IdentityFieldType::Image,
+            IdentityField::Additional => IdentityFieldType::Additional,
+        }
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub enum IdentityFieldType {
+    LegalName,
+    DisplayName,
+    Email,
+    Web,
+    Twitter,
+    Matrix,
+    PGPFingerprint,
+    Image,
     Additional,
 }
 
