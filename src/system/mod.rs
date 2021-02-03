@@ -1,24 +1,24 @@
 use crate::account_fetch::AccountFetch;
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
-use crate::adapters::{email::SmtpImapClientBuilder, twitter::ReceivedMessageContext};
+use crate::adapters::{email::SmtpImapClientBuilder};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 use crate::api::{PublicRpc, PublicRpcApi};
 use crate::event::{Event, EventType, ExternalMessage};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
-use eventually::aggregate::AggregateRootBuilder;
+
 use eventually::Repository;
 use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventSubscription};
-use futures::future;
+
 use futures::stream::StreamExt;
-use jsonrpc_core::delegates::IoDelegate;
-use jsonrpc_core::{IoHandler, MetaIoHandler};
+
+
 use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
-use lettre_email::Email;
+
 use std::sync::Arc;
 
 pub fn run_api_service<T>(

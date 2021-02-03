@@ -4,12 +4,12 @@ use crate::Result;
 use async_channel::{Receiver, Sender};
 use futures::TryFutureExt;
 use matrix_sdk::events::room::member::MemberEventContent;
-use matrix_sdk::events::room::message::{MessageEventContent, TextMessageEventContent};
-use matrix_sdk::events::{AnyMessageEventContent, StrippedStateEvent, SyncMessageEvent};
-use matrix_sdk::identifiers::{RoomId, UserId};
+use matrix_sdk::events::room::message::{MessageEventContent};
+use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
+
 use matrix_sdk::{Client, ClientConfig, EventEmitter, RoomState, SyncSettings};
-use std::convert::TryInto;
-use std::result::Result as StdResult;
+
+
 use tokio::time::{self, Duration};
 use url::Url;
 

@@ -1,4 +1,4 @@
-use super::display_name::DisplayNameHandler;
+
 use super::Error;
 use crate::event::{
     Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified, IdentityInserted,
@@ -11,7 +11,7 @@ use eventually::Aggregate;
 use eventually_event_store_db::GenericEvent;
 use futures::future::BoxFuture;
 use std::convert::{TryFrom, TryInto};
-use std::marker::PhantomData;
+
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -196,7 +196,7 @@ impl Aggregate for VerifierAggregate {
 
     fn handle<'a, 's>(
         &'a self,
-        id: &'s Self::Id,
+        _id: &'s Self::Id,
         state: &'s Self::State,
         command: Self::Command,
     ) -> BoxFuture<Result<Option<Vec<Self::Event>>>>
@@ -214,8 +214,8 @@ impl Aggregate for VerifierAggregate {
                 } => Self::handle_display_name(state, net_address, display_name),
                 // TODO
                 VerifierCommand::PersistDisplayName {
-                    net_address,
-                    display_name,
+                    net_address: _,
+                    display_name: _,
                 } => unimplemented!(),
                 VerifierCommand::InsertIdentity(identity) => {
                     Ok(Some(vec![Event::from(IdentityInserted {

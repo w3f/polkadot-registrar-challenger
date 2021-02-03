@@ -5,7 +5,7 @@ use async_channel::{Receiver, Sender};
 use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
+
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;

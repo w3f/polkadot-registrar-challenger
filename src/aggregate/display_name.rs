@@ -1,5 +1,5 @@
 use crate::manager::DisplayName;
-use crate::Result;
+
 use strsim::jaro;
 
 /// In case of violations, this is the max amount of names to be shown to the
@@ -18,7 +18,7 @@ impl<'a> DisplayNameHandler<'a> {
             limit: 0.5,
         }
     }
-    pub fn verify_display_name(&self, display_name: &DisplayName) -> Vec<DisplayName> {
+    pub fn verify_display_name(&self, _display_name: &DisplayName) -> Vec<DisplayName> {
         let mut violations = vec![];
 
         for display_name in self.display_names {

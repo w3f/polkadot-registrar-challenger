@@ -3,12 +3,12 @@ use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
 use crate::Result;
 use async_channel::{Receiver, Sender};
 use futures::FutureExt;
-use lettre::smtp::authentication::Credentials;
-use lettre::smtp::SmtpClient;
+
+
 use lettre::Transport;
-use lettre_email::EmailBuilder;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use std::result::Result as StdResult;
+
+
+
 use tokio::time::{self, Duration};
 
 pub struct EmailMessage {

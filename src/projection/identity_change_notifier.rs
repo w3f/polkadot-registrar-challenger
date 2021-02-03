@@ -1,11 +1,11 @@
-use crate::aggregate::verifier::{self, VerifierAggregateId};
+use crate::aggregate::verifier::{VerifierAggregateId};
 use crate::api::ConnectionPool;
-use crate::event::{Event, EventType, StateWrapper};
+use crate::event::{Event, EventType};
 use crate::Result;
 use eventually::store::Persisted;
 use eventually::Projection;
 use futures::future::BoxFuture;
-use jsonrpc_core::types::params::Params;
+
 
 pub struct SessionNotifier {
     connection_pool: ConnectionPool,

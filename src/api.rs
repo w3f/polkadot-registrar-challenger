@@ -1,31 +1,27 @@
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::event::{
-    BlankNetwork, ErrorMessage, Event, EventType, FieldStatusVerified, Notification, StateWrapper,
+    BlankNetwork, ErrorMessage, Event, EventType, Notification, StateWrapper,
 };
-use crate::manager::{IdentityAddress, IdentityManager, IdentityState, NetworkAddress};
-use crate::{account_fetch::AccountFetch, aggregate};
+use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
+use crate::{account_fetch::AccountFetch};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
 use eventually_event_store_db::EventStore;
-use future::join;
+
 use futures::StreamExt;
-use futures::{future, join};
+use futures::{future};
 use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
     manager::{IdProvider, NumericIdProvider},
-    typed::Subscriber,
-    PubSubHandler, Session, SubscriptionId,
+    typed::Subscriber, Session, SubscriptionId,
 };
-use lock_api::RwLockReadGuard;
-use matrix_sdk::api::{
-    error,
-    r0::{receipt, sync::sync_events::State},
-};
-use parking_lot::{RawRwLock, RwLock};
+
+
+use parking_lot::{RwLock};
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc};
 
 const REGISTRAR_ID: u32 = 0;
 const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
@@ -183,7 +179,7 @@ where
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
         tokio::spawn(async move {
-            let handler = Arc::new(());
+            let _handler = Arc::new(());
 
             // Check the state for the requested identity and respond
             // immediately with the current state.

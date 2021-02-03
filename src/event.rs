@@ -5,7 +5,7 @@ use crate::manager::{
 };
 use crate::Result;
 use eventually_event_store_db::GenericEvent;
-use matrix_sdk::api::r0::sync::sync_events::State;
+
 use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
 

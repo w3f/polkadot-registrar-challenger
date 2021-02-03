@@ -1,14 +1,14 @@
 use crate::aggregate::display_name::DisplayNameHandler;
-use crate::api::start_api;
+
 use crate::event::{
     BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
 };
-use crate::{Error, Result};
-use eventually::Aggregate;
+use crate::{Result};
+
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+
+
 
 pub enum UpdateChanges {
     VerificationValid(IdentityField),
@@ -340,7 +340,7 @@ impl IdentityManager {
             ))
     }
     // TODO: Should return Result
-    pub fn remove_identity(&mut self, net_address: &NetworkAddress) -> bool {
+    pub fn remove_identity(&mut self, _net_address: &NetworkAddress) -> bool {
         false
     }
 }

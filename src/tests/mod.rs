@@ -1,9 +1,9 @@
 use crate::account_fetch::AccountFetch;
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::manager::{IdentityState, NetworkAddress};
 use crate::system::run_api_service;
 use crate::Result;
-use eventually_event_store_db::{EventStore, EventStoreBuilder};
+use eventually_event_store_db::{EventStoreBuilder};
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
 use std::process::{Child, Command};
@@ -60,7 +60,7 @@ impl Drop for InMemBackend {
 struct TestAccounts {}
 
 impl AccountFetch for TestAccounts {
-    fn fetch_account_state(net_address: &NetworkAddress) -> Result<Option<IdentityState>> {
+    fn fetch_account_state(_net_address: &NetworkAddress) -> Result<Option<IdentityState>> {
         unimplemented!()
     }
 }
