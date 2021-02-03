@@ -196,7 +196,7 @@ where
                 }
             } else {
                 // ... if not, fetch the current identity state from the remote RPC service.
-                match T::fetch_account_state(&net_address, Arc::downgrade(&handler)) {
+                match T::fetch_account_state(&net_address) {
                     Ok(try_state) => {
                         if let Some(state) = try_state {
                             let _ = repository
