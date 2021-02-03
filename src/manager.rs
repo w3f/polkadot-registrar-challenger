@@ -5,8 +5,11 @@ use crate::event::{
 };
 use crate::Result;
 
-use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::{
+    collections::{HashMap, HashSet},
+    vec,
+};
 
 pub enum UpdateChanges {
     VerificationValid(IdentityField),
@@ -50,6 +53,7 @@ impl IdentityManager {
         self.identities
             .entry(net_address.clone())
             .and_modify(|statuses| {
+                // TODO: This should just call `get_field_status_changes` and just return an error.
                 if statuses == &fields {
                     return;
                 }
@@ -78,6 +82,26 @@ impl IdentityManager {
                 })
                 .or_insert(vec![net_address].into_iter().cloned().collect());
         }
+    }
+    pub fn get_field_status_changes(&self, identity: &IdentityState) -> Option<Vec<FieldStatus>> {
+        let (net_address, statuses) = (&identity.net_address, &identity.fields);
+        let current = self.identities.get(net_address)?;
+
+        if current == statuses {
+            return Some(vec![]);
+        }
+
+        let mut changes = vec![];
+        for curr in current {
+            for status in statuses {
+                if curr != status && curr.field.as_type() == status.field.as_type() {
+                    changes.push(status.clone());
+                    continue;
+                }
+            }
+        }
+
+        Some(changes)
     }
     pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
