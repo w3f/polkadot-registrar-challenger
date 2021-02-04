@@ -1,4 +1,3 @@
-use crate::account_fetch::AccountFetch;
 use crate::adapters::email::SmtpImapClientBuilder;
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
@@ -21,16 +20,13 @@ use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 
 #[allow(dead_code)]
-pub fn run_api_service<T>(
+pub fn run_api_service(
     store: EventStore<VerifierAggregateId>,
     aggregate: VerifierAggregate,
     port: usize,
-) -> Result<WsServer>
-where
-    T: 'static + Send + Sync + AccountFetch,
-{
+) -> Result<WsServer> {
     let mut io = PubSubHandler::default();
-    io.extend_with(PublicRpcApi::<T>::new(store, aggregate).to_delegate());
+    io.extend_with(PublicRpcApi::new(store, aggregate).to_delegate());
 
     // TODO: Might consider setting `max_connections`.
     let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {

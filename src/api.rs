@@ -1,4 +1,3 @@
-use crate::account_fetch::AccountFetch;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, Notification, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
@@ -124,28 +123,23 @@ pub trait PublicRpc {
     ) -> Result<bool>;
 }
 
-pub struct PublicRpcApi<T> {
+pub struct PublicRpcApi {
     connection_pool: ConnectionPool,
     manager: Arc<RwLock<IdentityManager>>,
     repository: Arc<Repository<VerifierAggregate, EventStore<VerifierAggregateId>>>,
-    _p: PhantomData<T>,
 }
 
-impl<T> PublicRpcApi<T> {
+impl PublicRpcApi {
     pub fn new(store: EventStore<VerifierAggregateId>, aggregate: VerifierAggregate) -> Self {
         PublicRpcApi {
             connection_pool: Default::default(),
             manager: Default::default(),
             repository: Arc::new(Repository::new(aggregate.into(), store)),
-            _p: Default::default(),
         }
     }
 }
 
-impl<T> PublicRpc for PublicRpcApi<T>
-where
-    T: 'static + Send + Sync + AccountFetch,
-{
+impl PublicRpc for PublicRpcApi {
     type Metadata = Arc<Session>;
 
     fn subscribe_account_status(
@@ -190,6 +184,7 @@ where
                 }
             } else {
                 // ... if not, fetch the current identity state from the remote RPC service.
+                /*
                 match T::fetch_account_state(&net_address) {
                     Ok(try_state) => {
                         if let Some(state) = try_state {
@@ -232,6 +227,7 @@ where
                         }
                     }
                 }
+                */
             }
 
             // Start event loop and keep the subscriber informed about any state changes.

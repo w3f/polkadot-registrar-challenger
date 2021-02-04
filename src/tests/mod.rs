@@ -1,4 +1,3 @@
-use crate::account_fetch::AccountFetch;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::manager::{IdentityState, NetworkAddress};
 use crate::system::run_api_service;
@@ -36,7 +35,7 @@ impl InMemBackend {
         // Configure configure and run websocket server.
         let port: usize = thread_rng().gen_range(1_024, 65_535);
         let ws_connection = format!("0.0.0.0:{}", port);
-        let ws_handle = run_api_service::<TestAccounts>(store, VerifierAggregate, port).unwrap();
+        let ws_handle = run_api_service(store, VerifierAggregate, port).unwrap();
 
         InMemBackend {
             es_handle: es_handle,
@@ -53,14 +52,5 @@ impl Drop for InMemBackend {
     fn drop(&mut self) {
         self.es_handle.kill().unwrap();
         // ws_handle closes itself when dropped.
-    }
-}
-
-#[derive(Default)]
-struct TestAccounts {}
-
-impl AccountFetch for TestAccounts {
-    fn fetch_account_state(_net_address: &NetworkAddress) -> Result<Option<IdentityState>> {
-        unimplemented!()
     }
 }

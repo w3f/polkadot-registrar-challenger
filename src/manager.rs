@@ -71,6 +71,7 @@ impl IdentityManager {
 
         // Acquire references to the key/value from within the map. Unwrapping
         // is fine here since the value was just inserted.
+        // TODO: Remove this
         let (net_address, fields) = self.identities.get_key_value(&net_address).unwrap();
 
         // Create lookup tables.

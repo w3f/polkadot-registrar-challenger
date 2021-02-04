@@ -18,7 +18,6 @@ use std::fs;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
-mod account_fetch;
 mod adapters;
 mod aggregate;
 mod api;
