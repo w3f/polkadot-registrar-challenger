@@ -2,7 +2,7 @@ environment: production
 
 image:
   repo: web3f/polkadot-registrar-challenger
-  tag: v0.1.35
+  tag: v0.1.36
 
 config:
   port: 8080
