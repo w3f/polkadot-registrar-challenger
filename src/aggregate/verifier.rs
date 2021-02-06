@@ -9,7 +9,7 @@ use crate::manager::{
 use async_channel::Sender;
 use eventually::Aggregate;
 use eventually_event_store_db::GenericEvent;
-use futures::future::BoxFuture;
+use futures::{future::BoxFuture, TryFutureExt};
 use std::convert::{TryFrom, TryInto};
 
 type Result<T> = std::result::Result<T, Error>;
@@ -45,6 +45,10 @@ pub enum VerifierCommand {
     VerifyDisplayName {
         net_address: NetworkAddress,
         display_name: DisplayName,
+    },
+    GetChangesUpdates {
+        verified: FieldStatusVerified,
+        callback: Sender<Option<UpdateChanges>>,
     },
     PersistDisplayName {
         net_address: NetworkAddress,
@@ -220,7 +224,13 @@ impl Aggregate for VerifierAggregate {
                     net_address,
                     display_name,
                 } => Self::handle_display_name(state, net_address, display_name),
-                // TODO
+                VerifierCommand::GetChangesUpdates { verified, callback } => callback
+                    .send(state.get_update_changes(&verified)?)
+                    .await
+                    .map_err(|_| {
+                        anyhow!("failed to send updates changes to the callback channel").into()
+                    })
+                    .map(|_| None),
                 VerifierCommand::PersistDisplayName {
                     net_address: _,
                     display_name: _,

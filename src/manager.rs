@@ -1,3 +1,5 @@
+use matrix_sdk::api::r0::room::upgrade_room;
+
 use crate::aggregate::display_name::DisplayNameHandler;
 
 use crate::event::{
@@ -125,6 +127,21 @@ impl IdentityManager {
                             false
                         }
                     })
+            })
+    }
+    pub fn get_update_changes(
+        &self,
+        verified: &FieldStatusVerified,
+    ) -> Result<Option<UpdateChanges>> {
+        self.identities
+            .get(&verified.net_address)
+            .ok_or(anyhow!("network address not found"))
+            .and_then(|statuses| {
+                statuses
+                    .iter()
+                    .find(|status| status.field == verified.field_status.field)
+                    .ok_or(anyhow!("field not found"))
+                    .map(|current_status| Self::update_changes(current_status, verified))
             })
     }
     fn update_changes(
