@@ -54,27 +54,21 @@ impl IdentityManager {
         let (net_address, fields) = (identity.net_address, identity.fields);
         self.identities
             .entry(net_address.clone())
-            .and_modify(|statuses| {
-                // TODO: This should just call `get_field_status_changes` and just return an error.
-                if statuses == &fields {
+            .and_modify(|current_fields| {
+                if current_fields == &fields {
                     return;
                 }
 
-                for status in statuses {
+                for current in current_fields {
                     for field in &fields {
-                        if status != field && status.field.as_type() == field.field.as_type() {
-                            *status = field.clone();
+                        if current != field && current.field.as_type() == field.field.as_type() {
+                            *current = field.clone();
                             continue;
                         }
                     }
                 }
             })
             .or_insert(fields.clone());
-
-        // Acquire references to the key/value from within the map. Unwrapping
-        // is fine here since the value was just inserted.
-        // TODO: Remove this
-        let (net_address, fields) = self.identities.get_key_value(&net_address).unwrap();
 
         // Create lookup tables.
         for field in fields {
@@ -83,29 +77,10 @@ impl IdentityManager {
                 .and_modify(|active_addresses| {
                     active_addresses.insert(net_address.clone());
                 })
-                .or_insert(vec![net_address].into_iter().cloned().collect());
+                .or_insert(vec![net_address.clone()].into_iter().collect());
         }
     }
-    pub fn get_field_status_changes(&self, identity: &IdentityState) -> Option<Vec<FieldStatus>> {
-        let (net_address, statuses) = (&identity.net_address, &identity.fields);
-        let current = self.identities.get(net_address)?;
-
-        if current == statuses {
-            return Some(vec![]);
-        }
-
-        let mut changes = vec![];
-        for curr in current {
-            for status in statuses {
-                if curr != status && curr.field.as_type() == status.field.as_type() {
-                    changes.push(status.clone());
-                    continue;
-                }
-            }
-        }
-
-        Some(changes)
-    }
+    // TODO: This should return the full identity, too.
     pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
             .get_mut(&verified.net_address)
@@ -131,21 +106,6 @@ impl IdentityManager {
                             None
                         }
                     })
-            })
-    }
-    pub fn get_update_changes(
-        &self,
-        verified: &FieldStatusVerified,
-    ) -> Result<Option<UpdateChanges>> {
-        self.identities
-            .get(&verified.net_address)
-            .ok_or(anyhow!("network address not found"))
-            .and_then(|statuses| {
-                statuses
-                    .iter()
-                    .find(|status| status.field == verified.field_status.field)
-                    .ok_or(anyhow!("field not found"))
-                    .map(|current_status| Self::update_changes(current_status, verified))
             })
     }
     fn update_changes(

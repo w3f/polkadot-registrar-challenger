@@ -213,6 +213,7 @@ impl PublicRpc for PublicRpcApi {
                                     "Failed to update field: identity {:?} does not exit",
                                     net_address
                                 );
+
                                 continue;
                             }
                         };
@@ -241,7 +242,7 @@ impl PublicRpc for PublicRpcApi {
                         }
                     }
                     _ => {
-                        error!("Received unexpected event. Ignoring.")
+                        warn!("Received unexpected event")
                     }
                 }
             }

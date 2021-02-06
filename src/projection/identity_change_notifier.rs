@@ -21,10 +21,7 @@ impl Projection for SessionNotifier {
             let net_address = match event.body {
                 EventType::FieldStatusVerified(ref field_status) => &field_status.net_address,
                 EventType::IdentityFullyVerified(ref verified) => &verified.net_address,
-                _ => {
-                    warn!("Received unexpected event when notifying sessions");
-                    return Ok(());
-                }
+                _ => return Ok(()),
             };
 
             if let Some(notifier) = self.connection_pool.notify_net_address(net_address) {
