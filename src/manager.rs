@@ -1,12 +1,8 @@
-use matrix_sdk::api::r0::room::upgrade_room;
-
 use crate::aggregate::display_name::DisplayNameHandler;
-
 use crate::event::{
     BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
 };
 use crate::Result;
-
 use std::fmt;
 use std::{
     collections::{HashMap, HashSet},
@@ -251,27 +247,6 @@ impl IdentityManager {
         field: &IdentityField,
         provided_message: &ProvidedMessage,
     ) -> Option<VerificationOutcome> {
-        /// Convenience function for verifying the message.
-        // TODO: This does not actually set the challenge as valid/invalid...
-        fn generate_outcome(
-            net_address: NetworkAddress,
-            field_status: FieldStatus,
-            expected_message: &ExpectedMessage,
-            provided_message: &ProvidedMessage,
-        ) -> VerificationOutcome {
-            if expected_message.contains(provided_message).is_some() {
-                VerificationOutcome {
-                    net_address: net_address,
-                    field_status: field_status,
-                }
-            } else {
-                VerificationOutcome {
-                    net_address: net_address,
-                    field_status: field_status,
-                }
-            }
-        }
-
         // Lookup all addresses which contain the field.
         if let Some(net_addresses) = self.lookup_addresses(field) {
             // For each address, verify the field.
@@ -374,10 +349,6 @@ impl IdentityManager {
                 "failed to check the full verification status of unknown target: {:?}. This is a bug",
                 net_address
             ))
-    }
-    // TODO: Should return Result
-    pub fn remove_identity(&mut self, _net_address: &NetworkAddress) -> bool {
-        false
     }
 }
 
@@ -639,55 +610,3 @@ impl fmt::Display for IdentityField {
         write!(f, "{}", string)
     }
 }
-
-/*
-#[test]
-fn print_identity_info() {
-    let state = IdentityState {
-        net_address: NetworkAddress::Polkadot(IdentityAddress(
-            "15MUBwP6dyVw5CXF9PjSSv7SdXQuDSwjX86v1kBodCSWVR7cw".to_string(),
-        )),
-        fields: vec![
-            FieldStatus {
-                field: IdentityField::Matrix(FieldAddress("@alice:matrix.org".to_string())),
-                challenge: ChallengeStatus::ExpectMessage(ExpectMessageChallenge {
-                    expected_message: ExpectedMessage("1127233905".to_string()),
-                    from: IdentityField::Matrix(FieldAddress("@alice:matrix.org".to_string())),
-                    to: IdentityField::Matrix(FieldAddress("@registrar:matrix.org".to_string())),
-                    status: Validity::Valid,
-                }),
-            },
-            FieldStatus {
-                field: IdentityField::Email(FieldAddress("alice@email.com".to_string())),
-                challenge: ChallengeStatus::BackAndForth(BackAndForthChallenge {
-                    expected_message: ExpectedMessage("6861321088".to_string()),
-                    from: IdentityField::Email(FieldAddress("alice@email.com".to_string())),
-                    to: IdentityField::Email(FieldAddress("registrar@web3.foundation".to_string())),
-                    first_check_status: Validity::Unconfirmed,
-                    second_check_status: Validity::Unconfirmed,
-                }),
-            },
-            FieldStatus {
-                field: IdentityField::DisplayName(FieldAddress("Alice in Wonderland".to_string())),
-                challenge: ChallengeStatus::CheckDisplayName(CheckDisplayNameChallenge {
-                    status: Validity::Valid,
-                    similarities: None,
-                }),
-            },
-        ],
-    };
-
-    use crate::event::{Notification, StateWrapper};
-
-    println!(
-        "{}",
-        serde_json::to_string(&StateWrapper {
-            state: state,
-            notifications: vec![Notification::Success(
-                "The Matrix account has been verified".to_string()
-            ),]
-        })
-        .unwrap()
-    )
-}
-*/

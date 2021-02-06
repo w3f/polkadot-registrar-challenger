@@ -20,13 +20,9 @@ use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 
 #[allow(dead_code)]
-pub fn run_api_service(
-    store: EventStore<VerifierAggregateId>,
-    aggregate: VerifierAggregate,
-    port: usize,
-) -> Result<WsServer> {
+pub fn run_api_service(port: usize) -> Result<WsServer> {
     let mut io = PubSubHandler::default();
-    io.extend_with(PublicRpcApi::new(store, aggregate).to_delegate());
+    io.extend_with(PublicRpcApi::default().to_delegate());
 
     // TODO: Might consider setting `max_connections`.
     let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {

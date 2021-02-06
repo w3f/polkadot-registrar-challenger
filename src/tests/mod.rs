@@ -1,7 +1,5 @@
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
-use crate::manager::{IdentityState, NetworkAddress};
 use crate::system::run_api_service;
-use crate::Result;
 use eventually_event_store_db::EventStoreBuilder;
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
@@ -27,7 +25,8 @@ impl InMemBackend {
         .unwrap();
 
         // Build store.
-        let store = EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", port))
+        // TODO: This needed?
+        let _store = EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", port))
             .await
             .unwrap()
             .build_store::<VerifierAggregateId>();
@@ -35,7 +34,7 @@ impl InMemBackend {
         // Configure configure and run websocket server.
         let port: usize = thread_rng().gen_range(1_024, 65_535);
         let ws_connection = format!("0.0.0.0:{}", port);
-        let ws_handle = run_api_service(store, VerifierAggregate, port).unwrap();
+        let ws_handle = run_api_service(port).unwrap();
 
         InMemBackend {
             es_handle: es_handle,

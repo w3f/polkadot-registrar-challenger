@@ -1,27 +1,18 @@
-use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, Notification, StateWrapper};
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
+use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
-use crate::{
-    aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand},
-    manager,
-};
 use async_channel::{unbounded, Receiver, Sender};
-use eventually::{Aggregate, Repository};
+use eventually::Repository;
 use eventually_event_store_db::EventStore;
-
-use futures::StreamExt;
-
-use jsonrpc_core::{MetaIoHandler, Params, Result, Value};
+use jsonrpc_core::Result;
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
     manager::{IdProvider, NumericIdProvider},
     typed::Subscriber,
     Session, SubscriptionId,
 };
-
-use matrix_sdk::{api::r0::account::unbind_3pid, events::call};
 use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 const REGISTRAR_ID: u32 = 0;
@@ -127,20 +118,10 @@ pub trait PublicRpc {
     ) -> Result<bool>;
 }
 
+#[derive(Default)]
 pub struct PublicRpcApi {
     connection_pool: ConnectionPool,
     manager: Arc<RwLock<IdentityManager>>,
-    repository: Arc<Repository<VerifierAggregate, EventStore<VerifierAggregateId>>>,
-}
-
-impl PublicRpcApi {
-    pub fn new(store: EventStore<VerifierAggregateId>, aggregate: VerifierAggregate) -> Self {
-        PublicRpcApi {
-            connection_pool: Default::default(),
-            manager: Default::default(),
-            repository: Arc::new(Repository::new(aggregate.into(), store)),
-        }
-    }
 }
 
 impl PublicRpc for PublicRpcApi {
@@ -167,7 +148,6 @@ impl PublicRpc for PublicRpcApi {
         let watcher = self.connection_pool.watch_net_address(&net_address);
 
         let manager = Arc::clone(&self.manager);
-        let repository = Arc::clone(&self.repository);
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
@@ -257,20 +237,4 @@ impl PublicRpc for PublicRpcApi {
     ) -> Result<bool> {
         Ok(true)
     }
-}
-
-pub fn start_api() {
-    /*
-    let mut io = PubSubHandler::new(MetaIoHandler::default());
-    io.add_subscription(
-        "account_status",
-        (
-            "account_subscribeStatus",
-            move |params: Params, _: Arc<Session>, subscriber: Subscriber| {},
-        ),
-        ("account_unsubscribeStatus", move |id: SubscriptionId, _| {
-            future::ok(Value::Null)
-        }),
-    );
-    */
 }
