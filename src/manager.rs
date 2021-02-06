@@ -106,7 +106,7 @@ impl IdentityManager {
 
         Some(changes)
     }
-    pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<bool> {
+    pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
             .get_mut(&verified.net_address)
             .ok_or(anyhow!("network address not found"))
@@ -116,15 +116,19 @@ impl IdentityManager {
                     .find(|status| status.field == verified.field_status.field)
                     .ok_or(anyhow!("field not found"))
                     .map(|current_status| {
-                        if Self::update_changes(current_status, &verified).is_some() {
+                        if let Some(update_changes) =
+                            Self::update_changes(current_status, &verified)
+                        {
                             if current_status.is_not_valid() && verified.field_status.is_valid() {
+                                // Commit changes.
                                 *current_status = verified.field_status;
-                                true
+
+                                Some(update_changes)
                             } else {
-                                false
+                                None
                             }
                         } else {
-                            false
+                            None
                         }
                     })
             })

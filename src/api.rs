@@ -1,6 +1,9 @@
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, Notification, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
+use crate::{
+    aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand},
+    manager,
+};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::{Aggregate, Repository};
 use eventually_event_store_db::EventStore;
@@ -15,6 +18,7 @@ use jsonrpc_pubsub::{
     Session, SubscriptionId,
 };
 
+use matrix_sdk::{api::r0::account::unbind_3pid, events::call};
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -196,27 +200,28 @@ impl PublicRpc for PublicRpcApi {
             // Start event loop and keep the subscriber informed about any state changes.
             while let Ok(event) = watcher.recv().await {
                 match event.body {
-                    EventType::FieldStatusVerified(field_changes_verified) => {
-                        let net_address = &field_changes_verified.net_address.clone();
+                    EventType::FieldStatusVerified(verified) => {
+                        let net_address = &verified.net_address.clone();
 
-                        /*
-                        // Update the identity with the state change and create notifications (if any).
-                        let notification: Vec<Notification> =
-                            match manager.write().update_field(field_changes_verified) {
-                                Ok(try_notification) => try_notification
-                                    .map(|changes| vec![changes.into()])
-                                    .unwrap_or(vec![]),
-                                Err(err) => {
-                                    error!("{}", err);
-                                    continue;
-                                }
-                            };
+                        // Update fields and get notifications (if any)
+                        let notifications = match manager.write().update_field(verified) {
+                            Ok(try_changes) => try_changes
+                                .map(|changes| vec![changes.into()])
+                                .unwrap_or(vec![]),
+                            Err(_) => {
+                                error!(
+                                    "Failed to update field: identity {:?} does not exit",
+                                    net_address
+                                );
+                                continue;
+                            }
+                        };
 
                         // Finally, fetch the current state and send it to the subscriber.
                         match manager.read().lookup_full_state(&net_address) {
                             Some(identity_state) => {
                                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                                    StateWrapper::with_notifications(identity_state, notification),
+                                    StateWrapper::with_notifications(identity_state, notifications),
                                 ))) {
                                     debug!("Connection closed");
                                     return Ok(());
@@ -224,8 +229,6 @@ impl PublicRpc for PublicRpcApi {
                             }
                             None => error!("Identity state not found in cache"),
                         }
-                        */
-                        unimplemented!()
                     }
                     EventType::IdentityInserted(inserted) => {
                         manager.write().insert_identity(inserted.clone());
