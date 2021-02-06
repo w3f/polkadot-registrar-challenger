@@ -183,51 +183,14 @@ impl PublicRpc for PublicRpcApi {
                     return Ok(());
                 }
             } else {
-                // ... if not, fetch the current identity state from the remote RPC service.
-                /*
-                match T::fetch_account_state(&net_address) {
-                    Ok(try_state) => {
-                        if let Some(state) = try_state {
-                            let _ = repository
-                                .get(VerifierAggregateId)
-                                .await
-                                .unwrap()
-                                .handle(VerifierCommand::InsertIdentity(state.clone()))
-                                .await;
-
-                            // Send the current state to the subscriber.
-                            if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into())))
-                            {
-                                debug!("Connection closed");
-                                return Ok(());
-                            }
-                        } else {
-                            if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
-                                code: NO_PENDING_JUDGMENT_REQUEST_CODE,
-                                message: format!(
-                                    "There is no pending judgement request for this identity (for registrar #{}",
-                                    REGISTRAR_ID
-                                ),
-                            }))) {
-                                debug!("Connection closed");
-                                return Ok(());
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        error!("{}", err);
-
-                        // TODO: This should have retries.
-                        if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
-                            code: FAILED_TO_FETCH_IDENTITY_STATE,
-                            message: "Failed to fetch identity state from RPC service. This is a backend error.".to_string()
-                        }))) {
-                            debug!("Connection closed");
-                            return Ok(());
-                        }
-                    }
+                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
+                    code: FAILED_TO_FETCH_IDENTITY_STATE,
+                    message: "There is not pending judgement for this identity (registrar #0)"
+                        .to_string(),
+                }))) {
+                    debug!("Connection closed");
+                    return Ok(());
                 }
-                */
             }
 
             // Start event loop and keep the subscriber informed about any state changes.
