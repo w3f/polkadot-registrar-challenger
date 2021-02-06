@@ -118,8 +118,6 @@ impl EventEmitter for MatrixClient {
         if let RoomState::Joined(_) = room {
             match event.content {
                 MessageEventContent::Text(ref content) => {
-                    //let msg = txt_content.body;
-
                     debug!(
                         "Received message \"{}\" from {}",
                         content.body, event.sender

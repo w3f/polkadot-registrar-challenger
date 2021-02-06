@@ -128,7 +128,7 @@ impl IdentityManager {
                         else if status.is_not_valid() && verified_status.is_not_valid() {
                             Some(UpdateChanges::VerificationInvalid(verified_status.field))
                         }
-                        // Verification is valid, so commit changes. Gernerate
+                        // Verification is valid, so commit changes. Generate
                         // different notifications based on the individual
                         // challenge type.
                         else if status.is_not_valid() && verified_status.is_valid() {

@@ -4,8 +4,9 @@ use crate::event::{
 };
 use crate::manager::{
     DisplayName, FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState,
-    NetworkAddress, Validity, VerificationOutcome,
+    NetworkAddress, UpdateChanges, Validity, VerificationOutcome,
 };
+use async_channel::Sender;
 use eventually::Aggregate;
 use eventually_event_store_db::GenericEvent;
 use futures::future::BoxFuture;
@@ -37,7 +38,10 @@ impl AsRef<str> for VerifierAggregateId {
 #[derive(Debug, Clone)]
 pub enum VerifierCommand {
     InsertIdentity(IdentityState),
-    VerifyMessage(ExternalMessage),
+    VerifyMessage {
+        message: ExternalMessage,
+        callback: Option<Sender<UpdateChanges>>,
+    },
     VerifyDisplayName {
         net_address: NetworkAddress,
         display_name: DisplayName,
@@ -203,8 +207,14 @@ impl Aggregate for VerifierAggregate {
     {
         let fut = async move {
             match command {
-                VerifierCommand::VerifyMessage(external_message) => {
-                    Self::handle_verify_message(state, external_message)
+                VerifierCommand::InsertIdentity(identity) => {
+                    Ok(Some(vec![Event::from(IdentityInserted {
+                        identity: identity,
+                    })
+                    .try_into()?]))
+                }
+                VerifierCommand::VerifyMessage { message, callback } => {
+                    Self::handle_verify_message(state, message)
                 }
                 VerifierCommand::VerifyDisplayName {
                     net_address,
@@ -215,12 +225,6 @@ impl Aggregate for VerifierAggregate {
                     net_address: _,
                     display_name: _,
                 } => unimplemented!(),
-                VerifierCommand::InsertIdentity(identity) => {
-                    Ok(Some(vec![Event::from(IdentityInserted {
-                        identity: identity,
-                    })
-                    .try_into()?]))
-                }
             }
         };
 

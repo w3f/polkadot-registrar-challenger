@@ -68,7 +68,10 @@ pub async fn run_verifier_subscription(
             match event.body {
                 EventType::ExternalMessage(message) => {
                     let _ = root
-                        .handle(VerifierCommand::VerifyMessage(message))
+                        .handle(VerifierCommand::VerifyMessage {
+                            message: message,
+                            callback: None,
+                        })
                         .await
                         .map_err(|err| error!("Failed to verify message with aggregate: {}", err));
                 }
