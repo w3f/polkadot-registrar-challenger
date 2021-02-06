@@ -12,7 +12,7 @@ use matrix_sdk::{
         AnyMessageEventContent, SyncMessageEvent,
     },
     identifiers::{RoomId, UserId},
-    Client, ClientConfig, EventEmitter, JsonStore, SyncRoom, SyncSettings,
+    Client, ClientConfig, EventEmitter, RoomState, SyncSettings,
 };
 use std::convert::TryInto;
 use std::result::Result as StdResult;
@@ -21,8 +21,6 @@ use url::Url;
 
 #[derive(Debug, Fail)]
 pub enum MatrixError {
-    #[fail(display = "failed to open state store: {}", 0)]
-    StateStore(failure::Error),
     #[fail(display = "failed to create client with the given config: {}", 0)]
     ClientCreation(failure::Error),
     #[fail(display = "failed to login into the homeserver: {}", 0)]
@@ -69,12 +67,11 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
-        db: Database,
+        _db: Database,
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
-        let store = JsonStore::open(db_path).map_err(|err| MatrixError::StateStore(err.into()))?;
-        let client_config = ClientConfig::new().state_store(Box::new(store));
+        let client_config = ClientConfig::new().store_path(db_path);
 
         let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
         let client = Client::new_with_config(homeserver, client_config)
@@ -89,10 +86,11 @@ impl MatrixClient {
         // Sync up, avoid responding to old messages.
         info!("Syncing Matrix client");
         client
-            .sync(SyncSettings::default())
+            .sync_once(SyncSettings::default())
             .await
             .map_err(|err| MatrixError::Sync(err.into()))?;
 
+        /*
         // Request a list of open/pending room ids. Used to detect dead rooms.
         let pending_room_ids = db.select_room_ids().await?;
 
@@ -107,13 +105,12 @@ impl MatrixClient {
                 //let _ = client.leave_room(room_id).await;
             }
         }
+        */
 
-        let sync_client = client.clone();
-        tokio::spawn(async move {
-            sync_client
-                .sync_forever(SyncSettings::default(), |_| async {})
-                .await;
-        });
+        let settings = SyncSettings::default().token(client.sync_token().await.ok_or(
+            MatrixError::Sync(failure::err_msg("Sync token not available")),
+        )?);
+        client.sync(settings).await;
 
         let matrix = MatrixClient { client: client };
 
@@ -252,7 +249,7 @@ impl MatrixHandler {
                 use std::sync::Arc;
 
                 let room_state =
-                    SyncRoom::Joined(Arc::new(RwLock::new(Room::new(&room_id, &my_user_id))));
+                    RoomState::Joined(Arc::new(RwLock::new(Room::new(&room_id, &my_user_id))));
                 self.handle_incoming_messages(room_state, &event).await?
             }
             _ => error!("Received unrecognized message type"),
@@ -345,7 +342,7 @@ impl MatrixHandler {
     }
     async fn handle_incoming_messages<T: EventExtract>(
         &self,
-        room: SyncRoom,
+        room: RoomState,
         event: &T,
     ) -> Result<()> {
         // Do not respond to its own messages.
@@ -361,10 +358,10 @@ impl MatrixHandler {
 
         debug!("Reacting to received message");
 
-        if let SyncRoom::Joined(room) = room {
+        if let RoomState::Joined(room) = room {
             debug!("Search for address based on RoomId");
 
-            let room_id = &room.read().await.room_id;
+            let room_id = &room.room_id();
             let account = Account::from(event.sender().as_str());
 
             debug!("Fetching challenge data");
@@ -473,7 +470,11 @@ impl MatrixHandler {
 
 #[async_trait]
 impl EventEmitter for MatrixHandler {
-    async fn on_room_message(&self, room: SyncRoom, event: &SyncMessageEvent<MessageEventContent>) {
+    async fn on_room_message(
+        &self,
+        room: RoomState,
+        event: &SyncMessageEvent<MessageEventContent>,
+    ) {
         let _ = self
             .handle_incoming_messages::<SyncMessageEvent<MessageEventContent>>(room, event)
             .await
