@@ -236,6 +236,7 @@ impl PublicRpc for PublicRpcApi {
                     EventType::FieldStatusVerified(field_changes_verified) => {
                         let net_address = &field_changes_verified.net_address.clone();
 
+                        /*
                         // Update the identity with the state change and create notifications (if any).
                         let notification: Vec<Notification> =
                             match manager.write().update_field(field_changes_verified) {
@@ -260,6 +261,8 @@ impl PublicRpc for PublicRpcApi {
                             }
                             None => error!("Identity state not found in cache"),
                         }
+                        */
+                        unimplemented!()
                     }
                     EventType::IdentityInserted(inserted) => {
                         manager.write().insert_identity(inserted.clone());

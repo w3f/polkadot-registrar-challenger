@@ -104,7 +104,7 @@ impl IdentityManager {
 
         Some(changes)
     }
-    pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
+    pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<bool> {
         self.identities
             .get_mut(&verified.net_address)
             .ok_or(anyhow!("network address not found"))
@@ -112,62 +112,78 @@ impl IdentityManager {
                 statuses
                     .iter_mut()
                     .find(|status| status.field == verified.field_status.field)
-                    .map(|status| {
-                        let verified_status = verified.field_status;
-
-                        // If the current field status has already been
-                        // verified, skip (and avoid sending a new
-                        // notification).
-                        if (status.is_valid() && verified_status.is_valid())
-                            || (status.is_valid() && verified_status.is_not_valid())
-                        {
-                            None
-                        }
-                        // Return a warning that no changes have been committed
-                        // since the verification is invalid.
-                        else if status.is_not_valid() && verified_status.is_not_valid() {
-                            Some(UpdateChanges::VerificationInvalid(verified_status.field))
-                        }
-                        // Verification is valid, so commit changes. Generate
-                        // different notifications based on the individual
-                        // challenge type.
-                        else if status.is_not_valid() && verified_status.is_valid() {
-                            let field = verified_status.field.clone();
-                            *status = verified_status;
-
-                            match &status.challenge {
-                                ChallengeStatus::ExpectMessage(_)
-                                | ChallengeStatus::CheckDisplayName(_) => {
-                                    Some(UpdateChanges::VerificationValid(field))
-                                }
-                                ChallengeStatus::BackAndForth(challenge) => {
-                                    // The first message has been verified, now
-                                    // the second message must be verified.
-                                    if challenge.first_check_status == Validity::Valid
-                                        && challenge.second_check_status == Validity::Invalid
-                                    {
-                                        Some(UpdateChanges::VerificationValid(field))
-                                    }
-                                    // Both messages have been fully verified.
-                                    else if challenge.first_check_status == Validity::Valid
-                                        && challenge.second_check_status == Validity::Valid
-                                    {
-                                        Some(UpdateChanges::BackAndForthExpected(field))
-                                    }
-                                    // This case should never occur. Better safe than sorry.
-                                    else {
-                                        None
-                                    }
-                                }
+                    .ok_or(anyhow!("field not found"))
+                    .map(|current_status| {
+                        if Self::update_changes(current_status, &verified).is_some() {
+                            if current_status.is_not_valid() && verified.field_status.is_valid() {
+                                *current_status = verified.field_status;
+                                true
+                            } else {
+                                false
                             }
-                        }
-                        // This case should never occur. Better safe than sorry.
-                        else {
-                            None
+                        } else {
+                            false
                         }
                     })
-                    .ok_or(anyhow!("field not found"))
             })
+    }
+    fn update_changes(
+        current_status: &FieldStatus,
+        verified: &FieldStatusVerified,
+    ) -> Option<UpdateChanges> {
+        let verified_status = &verified.field_status;
+
+        // If the current field status has already been
+        // verified, skip (and avoid sending a new
+        // notification).
+        if (current_status.is_valid() && verified_status.is_valid())
+            || (current_status.is_valid() && verified_status.is_not_valid())
+        {
+            None
+        }
+        // Return a warning that no changes have been committed
+        // since the verification is invalid.
+        else if current_status.is_not_valid() && verified_status.is_not_valid() {
+            Some(UpdateChanges::VerificationInvalid(
+                verified_status.field.clone(),
+            ))
+        }
+        // Verification is valid, so commit changes. Generate
+        // different notifications based on the individual
+        // challenge type.
+        else if current_status.is_not_valid() && verified_status.is_valid() {
+            let field = verified_status.field.clone();
+            //*status = verified_status;
+
+            match &verified_status.challenge {
+                ChallengeStatus::ExpectMessage(_) | ChallengeStatus::CheckDisplayName(_) => {
+                    Some(UpdateChanges::VerificationValid(field.clone()))
+                }
+                ChallengeStatus::BackAndForth(challenge) => {
+                    // The first message has been verified, now
+                    // the second message must be verified.
+                    if challenge.first_check_status == Validity::Valid
+                        && challenge.second_check_status == Validity::Invalid
+                    {
+                        Some(UpdateChanges::VerificationValid(field.clone()))
+                    }
+                    // Both messages have been fully verified.
+                    else if challenge.first_check_status == Validity::Valid
+                        && challenge.second_check_status == Validity::Valid
+                    {
+                        Some(UpdateChanges::BackAndForthExpected(field.clone()))
+                    }
+                    // This case should never occur. Better safe than sorry.
+                    else {
+                        None
+                    }
+                }
+            }
+        }
+        // This case should never occur. Better safe than sorry.
+        else {
+            None
+        }
     }
     fn lookup_field_status(
         &self,
