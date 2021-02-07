@@ -24,12 +24,6 @@ impl TryFrom<Event> for GenericEvent {
 }
 
 impl Event {
-    pub fn expect_identity_info(self) -> Result<IdentityState> {
-        match self.body {
-            EventType::IdentityState(val) => Ok(val),
-            _ => Err(anyhow!("unexpected event type")),
-        }
-    }
     pub fn expect_external_message(self) -> Result<ExternalMessage> {
         match self.body {
             EventType::ExternalMessage(val) => Ok(val),
@@ -53,20 +47,16 @@ impl Event {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "content")]
 pub enum EventType {
-    #[serde(rename = "full_state_request")]
-    FullStateRequest(FullStateRequest),
-    #[serde(rename = "identity_info")]
-    IdentityState(IdentityState),
-    #[serde(rename = "error_message")]
-    ErrorMessage(ErrorMessage),
+    #[serde(rename = "identity_inserted")]
+    IdentityInserted(IdentityInserted),
+    #[serde(rename = "identity_inserted")]
+    IdentityStateChange(IdentityStateChange),
     #[serde(rename = "external_message")]
     ExternalMessage(ExternalMessage),
     #[serde(rename = "field_status_verified")]
     FieldStatusVerified(FieldStatusVerified),
     #[serde(rename = "identity_fully_verified")]
     IdentityFullyVerified(IdentityFullyVerified),
-    #[serde(rename = "identity_inserted")]
-    IdentityInserted(IdentityInserted),
 }
 
 impl From<EventType> for Event {
@@ -85,12 +75,6 @@ impl From<EventType> for Event {
 pub struct ErrorMessage {
     pub code: u32,
     pub message: String,
-}
-
-impl From<ErrorMessage> for Event {
-    fn from(val: ErrorMessage) -> Self {
-        EventType::ErrorMessage(val).into()
-    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -160,19 +144,6 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
             ExternalOrigin::Matrix => IdentityField::Matrix(address),
             ExternalOrigin::Twitter => IdentityField::Twitter(address),
         }
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-// TODO: Delete, no longer required.
-pub struct FullStateRequest {
-    pub requester: SubId,
-    pub net_address: NetworkAddress,
-}
-
-impl From<FullStateRequest> for Event {
-    fn from(val: FullStateRequest) -> Self {
-        EventType::FullStateRequest(val).into()
     }
 }
 
@@ -251,4 +222,10 @@ impl From<IdentityInserted> for Event {
     fn from(val: IdentityInserted) -> Self {
         EventType::IdentityInserted(val).into()
     }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct IdentityStateChange {
+    net_address: NetworkAddress,
+    field_status: FieldStatus,
 }

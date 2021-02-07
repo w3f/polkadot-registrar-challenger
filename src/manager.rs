@@ -1,6 +1,7 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
-    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
+    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, IdentityStateChange,
+    Notification,
 };
 use crate::Result;
 use rand::{thread_rng, Rng};
@@ -78,6 +79,7 @@ impl IdentityManager {
                 .or_insert(vec![net_address.clone()].into_iter().collect());
         }
     }
+    pub fn identity_state_changes(&self) {}
     // TODO: This should return the full identity, too.
     pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
@@ -395,12 +397,6 @@ impl NetworkAddress {
 pub struct IdentityState {
     pub net_address: NetworkAddress,
     fields: Vec<FieldStatus>,
-}
-
-impl From<IdentityState> for Event {
-    fn from(val: IdentityState) -> Self {
-        EventType::IdentityState(val).into()
-    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
