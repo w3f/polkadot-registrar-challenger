@@ -3,6 +3,8 @@ use crate::event::{
     BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
 };
 use crate::Result;
+use rand::{thread_rng, Rng};
+use std::convert::TryFrom;
 use std::fmt;
 use std::{
     collections::{HashMap, HashSet},
@@ -154,6 +156,10 @@ impl IdentityManager {
                     else {
                         None
                     }
+                }
+                ChallengeStatus::Unsupported => {
+                    error!("Attempted to get update changes from an unsupported challenge");
+                    None
                 }
             }
         }
@@ -332,7 +338,10 @@ impl IdentityManager {
                             return Some(outcome);
                         }
                         ChallengeStatus::CheckDisplayName(_) => {
-                            error!("Received a display name check in the message verifier. This is a bug");
+                            error!("Attempted to verify message of a display name check challenge");
+                        }
+                        ChallengeStatus::Unsupported => {
+                            error!("Attempted to verify message of a unsupported challenge");
                         }
                     }
                 }
@@ -397,11 +406,37 @@ impl From<IdentityState> for Event {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityAddress(String);
 
+impl From<String> for IdentityAddress {
+    fn from(val: String) -> Self {
+        IdentityAddress(val)
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct FieldStatus {
     field: IdentityField,
     is_permitted: bool,
     challenge: ChallengeStatus,
+}
+
+impl TryFrom<(IdentityField, RegistrarIdentityField)> for FieldStatus {
+    type Error = anyhow::Error;
+
+    fn try_from(val: (IdentityField, RegistrarIdentityField)) -> Result<Self> {
+        let field = val.0.clone();
+        let challenge = ChallengeStatus::try_from(val)?;
+
+        Ok(FieldStatus {
+            field: field,
+            is_permitted: {
+                match challenge {
+                    ChallengeStatus::Unsupported => false,
+                    _ => true,
+                }
+            },
+            challenge: challenge,
+        })
+    }
 }
 
 impl FieldStatus {
@@ -418,6 +453,7 @@ impl FieldStatus {
                 }
             }
             ChallengeStatus::CheckDisplayName(state) => &state.status,
+            ChallengeStatus::Unsupported => return false,
         };
 
         match status {
@@ -441,13 +477,58 @@ pub enum ChallengeStatus {
     BackAndForth(BackAndForthChallenge),
     #[serde(rename = "display_name_check")]
     CheckDisplayName(CheckDisplayNameChallenge),
+    #[serde(rename = "unsupported")]
+    Unsupported,
+}
+
+impl TryFrom<(IdentityField, RegistrarIdentityField)> for ChallengeStatus {
+    type Error = anyhow::Error;
+
+    fn try_from(val: (IdentityField, RegistrarIdentityField)) -> Result<Self> {
+        let (from, to) = val;
+
+        #[rustfmt::skip]
+        let challenge = match &from {
+            IdentityField::LegalName(_)
+            | IdentityField::PGPFingerprint(_)
+            | IdentityField::Web(_)
+            | IdentityField::Image
+            | IdentityField::Additional => {
+                ChallengeStatus::Unsupported
+            }
+            IdentityField::DisplayName(_) => {
+                ChallengeStatus::CheckDisplayName(CheckDisplayNameChallenge {
+                    status: Validity::Unconfirmed,
+                    similarities: None,
+                })
+            }
+            IdentityField::Email(_) => ChallengeStatus::BackAndForth(BackAndForthChallenge {
+                expected_message: ExpectedMessage::gen(),
+                expected_message_back: ExpectedMessage::gen(),
+                from: from,
+                to: to,
+                first_check_status: Validity::Unconfirmed,
+                second_check_status: Validity::Unconfirmed,
+            }),
+            IdentityField::Twitter(_) | IdentityField::Matrix(_) => {
+                ChallengeStatus::ExpectMessage(ExpectMessageChallenge {
+                    expected_message: ExpectedMessage::gen(),
+                    from: from,
+                    to: to,
+                    status: Validity::Unconfirmed,
+                })
+            }
+        };
+
+        Ok(challenge)
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ExpectMessageChallenge {
     pub expected_message: ExpectedMessage,
     pub from: IdentityField,
-    pub to: IdentityField,
+    pub to: RegistrarIdentityField,
     pub status: Validity,
 }
 
@@ -461,7 +542,7 @@ pub struct BackAndForthChallenge {
     #[serde(skip_serializing)]
     pub expected_message_back: ExpectedMessage,
     pub from: IdentityField,
-    pub to: IdentityField,
+    pub to: RegistrarIdentityField,
     pub first_check_status: Validity,
     pub second_check_status: Validity,
 }
@@ -509,6 +590,15 @@ impl From<String> for FieldAddress {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ExpectedMessage(String);
 
+impl ExpectedMessage {
+    fn gen() -> Self {
+        ExpectedMessage({
+            let random: [u8; 16] = thread_rng().gen();
+            hex::encode(random)
+        })
+    }
+}
+
 // TODO: Should be moved to `crate::events`
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct ProvidedMessage {
@@ -534,6 +624,17 @@ impl ExpectedMessage {
         }
 
         None
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct RegistrarIdentityField {
+    field: IdentityField,
+}
+
+impl RegistrarIdentityField {
+    fn as_type(&self) -> IdentityFieldType {
+        self.field.as_type()
     }
 }
 
@@ -608,5 +709,144 @@ impl fmt::Display for IdentityField {
         };
 
         write!(f, "{}", string)
+    }
+}
+
+// TODO:
+// #[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl NetworkAddress {
+        pub fn alice() -> Self {
+            NetworkAddress::Polkadot(IdentityAddress::from(
+                "1gfpAmeKYhEoSrEgQ5UDYTiNSeKPvxVfLVWcW73JGnX9L6M".to_string(),
+            ))
+        }
+        pub fn bob() -> Self {
+            NetworkAddress::Polkadot(IdentityAddress::from(
+                "15iMSee2Zg3kJBu3HjimR5zVLNdNHvpUeWwrp4iAL4x7KZ8P".to_string(),
+            ))
+        }
+        pub fn eve() -> Self {
+            NetworkAddress::Polkadot(IdentityAddress::from(
+                "12sgvwDcEenDwAppRquN8Yh6Bu4um5x2PRyURLwP42XVMg45".to_string(),
+            ))
+        }
+    }
+
+    impl IdentityState {
+        pub fn alice() -> Self {
+            IdentityState {
+                net_address: NetworkAddress::alice(),
+                fields: vec![
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Email(FieldAddress::from("alice@email.com".to_string())),
+                            RegistrarIdentityField::email(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Twitter(FieldAddress::from("@alice".to_string())),
+                            RegistrarIdentityField::twitter(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Matrix(FieldAddress::from(
+                                "@alice:matrix.com".to_string(),
+                            )),
+                            RegistrarIdentityField::matrix(),
+                        )
+                    })
+                    .unwrap(),
+                ],
+            }
+        }
+        pub fn bob() -> Self {
+            IdentityState {
+                net_address: NetworkAddress::bob(),
+                fields: vec![
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Email(FieldAddress::from("bob@email.com".to_string())),
+                            RegistrarIdentityField::email(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Twitter(FieldAddress::from("@bob".to_string())),
+                            RegistrarIdentityField::twitter(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Matrix(FieldAddress::from(
+                                "@bob:matrix.com".to_string(),
+                            )),
+                            RegistrarIdentityField::matrix(),
+                        )
+                    })
+                    .unwrap(),
+                ],
+            }
+        }
+        pub fn eve() -> Self {
+            IdentityState {
+                net_address: NetworkAddress::eve(),
+                fields: vec![
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Email(FieldAddress::from("eve@email.com".to_string())),
+                            RegistrarIdentityField::email(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Twitter(FieldAddress::from("@eve".to_string())),
+                            RegistrarIdentityField::twitter(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::Matrix(FieldAddress::from(
+                                "@eve:matrix.com".to_string(),
+                            )),
+                            RegistrarIdentityField::matrix(),
+                        )
+                    })
+                    .unwrap(),
+                ],
+            }
+        }
+    }
+
+    impl RegistrarIdentityField {
+        pub fn email() -> Self {
+            RegistrarIdentityField {
+                field: IdentityField::Email(FieldAddress::from(
+                    "registrar@web3.foundation".to_string(),
+                )),
+            }
+        }
+        pub fn twitter() -> Self {
+            RegistrarIdentityField {
+                field: IdentityField::Twitter(FieldAddress::from("@w3f_registrar".to_string())),
+            }
+        }
+        pub fn matrix() -> Self {
+            RegistrarIdentityField {
+                field: IdentityField::Matrix(FieldAddress::from(
+                    "@registrar:web3.foundation".to_string(),
+                )),
+            }
+        }
     }
 }

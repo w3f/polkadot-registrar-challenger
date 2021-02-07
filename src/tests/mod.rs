@@ -1,19 +1,26 @@
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
+use crate::manager::{
+    FieldAddress, FieldStatus, IdentityAddress, IdentityState, NetworkAddress,
+    RegistrarIdentityField,
+};
 use crate::system::run_api_service;
-use eventually_event_store_db::EventStoreBuilder;
+use eventually_event_store_db::{EventStore, EventStoreBuilder};
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
-use std::process::{Child, Command};
+use std::{
+    process::{Child, Command},
+    unimplemented,
+};
 
 mod api_account_status;
+mod verifier_aggregate;
 
-struct InMemBackend {
+struct InMemBackend<Id: Clone> {
     es_handle: Child,
-    ws_handle: WsServer,
-    ws_connection: String,
+    store: EventStore<Id>,
 }
 
-impl InMemBackend {
+impl<Id: Clone> InMemBackend<Id> {
     async fn run() -> Self {
         // Configure configure and run event store.
         let port: usize = thread_rng().gen_range(1_024, 65_535);
@@ -25,31 +32,33 @@ impl InMemBackend {
         .unwrap();
 
         // Build store.
-        // TODO: This needed?
-        let _store = EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", port))
+        let store = EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", port))
             .await
             .unwrap()
-            .build_store::<VerifierAggregateId>();
-
-        // Configure configure and run websocket server.
-        let port: usize = thread_rng().gen_range(1_024, 65_535);
-        let ws_connection = format!("0.0.0.0:{}", port);
-        let ws_handle = run_api_service(port).unwrap();
+            .build_store::<Id>();
 
         InMemBackend {
             es_handle: es_handle,
-            ws_handle: ws_handle,
-            ws_connection: ws_connection,
+            store: store,
         }
     }
-    fn api_connection(&self) -> &str {
-        &self.ws_connection
+    fn store(&self) -> EventStore<Id> {
+        self.store.clone()
     }
 }
 
-impl Drop for InMemBackend {
+impl<Id: Clone> Drop for InMemBackend<Id> {
     fn drop(&mut self) {
         self.es_handle.kill().unwrap();
-        // ws_handle closes itself when dropped.
     }
 }
+
+/*
+impl IdentityState {
+    fn alice_unverified() -> Self {
+        IdentityState {
+            net_address:
+        }
+    }
+}
+*/
