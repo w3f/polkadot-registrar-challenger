@@ -25,6 +25,7 @@ mod event;
 mod manager;
 mod projection;
 mod system;
+#[cfg(test)]
 mod tests;
 
 #[derive(Debug, Error)]

@@ -737,8 +737,9 @@ impl fmt::Display for IdentityField {
     }
 }
 
-// TODO:
-// #[cfg(test)]
+#[cfg(test)]
+/// This module just contains convenient functions to initialize test data. The
+/// actual tests are placed in `src/tets/`.
 mod tests {
     use super::*;
 

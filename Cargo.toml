@@ -17,11 +17,13 @@ path = "src/bin/main.rs"
 [dependencies]
 log = { version = "0.4.11", features = ["serde"] }
 env_logger = "0.7.1"
-tokio = { version = "1.1.1", features = ["macros", "time"] }
+tokio = { version = "1.2.0", features = ["macros", "time", "process"] }
+tokio-compat = "0.1.6"
 futures = "0.3.5"
+futures_01 = { package = "futures", version = "0.1" }
 serde_yaml = "0.8.15"
 eventually = { path = "../eventually-rs/eventually" }
-eventually-event-store-db = { path = "../eventually-rs/eventually-event-store-db" }
+eventually-event-store-db = { path = "../eventually-rs/eventually-event-store-db", features = ["verify-connection"] }
 async-trait = "0.1.40"
 jsonrpc-core = "17.0.0"
 jsonrpc-derive = "17.0.0"

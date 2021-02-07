@@ -7,58 +7,50 @@ use crate::system::run_api_service;
 use eventually_event_store_db::{EventStore, EventStoreBuilder};
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
-use std::{
-    process::{Child, Command},
-    unimplemented,
-};
+use std::fs::canonicalize;
+use tokio::process::{Command, Child};
+use std::process::Stdio;
 
 mod api_account_status;
 mod verifier_aggregate;
 
 struct InMemBackend<Id: Clone> {
-    es_handle: Child,
     store: EventStore<Id>,
+    _handle: Child,
 }
 
 impl<Id: Clone> InMemBackend<Id> {
     async fn run() -> Self {
-        // Configure configure and run event store.
+        println!("FRIST");
+
+        // Configure and spawn the event store in a background process.
         let port: usize = thread_rng().gen_range(1_024, 65_535);
-        let es_handle = Command::new(&format!(
-            "eventstored --mem-db --disable-admin-ui --http-port {}",
-            port
-        ))
-        .spawn()
-        .unwrap();
+        let handle = Command::new(canonicalize("/usr/bin/eventstored").unwrap())
+            .arg("--mem-db")
+            .arg("--disable-admin-ui")
+            .arg("--insecure")
+            .arg("--http-port")
+            .arg(port.to_string())
+            .kill_on_drop(true)
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
 
         // Build store.
         let store = EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", port))
             .await
             .unwrap()
+            .verify_connection(5)
+            .await
+            .unwrap()
             .build_store::<Id>();
 
         InMemBackend {
-            es_handle: es_handle,
             store: store,
+            _handle: handle,
         }
     }
     fn store(&self) -> EventStore<Id> {
         self.store.clone()
     }
 }
-
-impl<Id: Clone> Drop for InMemBackend<Id> {
-    fn drop(&mut self) {
-        self.es_handle.kill().unwrap();
-    }
-}
-
-/*
-impl IdentityState {
-    fn alice_unverified() -> Self {
-        IdentityState {
-            net_address:
-        }
-    }
-}
-*/
