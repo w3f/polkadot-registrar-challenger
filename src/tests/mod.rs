@@ -33,6 +33,8 @@ impl<Id: Clone> InMemBackend<Id> {
             .arg(port.to_string())
             .kill_on_drop(true)
             .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .stdin(Stdio::null())
             .spawn()
             .unwrap();
 
