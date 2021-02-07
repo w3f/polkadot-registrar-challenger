@@ -170,13 +170,16 @@ impl VerifierAggregate {
         };
 
         match event.body {
+            EventType::IdentityInserted(identity) => {
+                state.insert_identity(identity);
+            }
+            EventType::IdentityStateChange(changes) => {
+                state.insert_identity(changes.into());
+            }
             EventType::FieldStatusVerified(field_status_verified) => {
                 let _ = state.update_field(field_status_verified).map_err(|err| {
                     error!("{}", err);
                 });
-            }
-            EventType::IdentityInserted(identity) => {
-                state.insert_identity(identity);
             }
             EventType::IdentityFullyVerified(_) => {}
             _ => warn!("Received unrecognized event type when applying changes"),
@@ -208,10 +211,14 @@ impl Aggregate for VerifierAggregate {
         let fut = async move {
             match command {
                 VerifierCommand::InsertIdentity(identity) => {
-                    Ok(Some(vec![Event::from(IdentityInserted {
-                        identity: identity,
-                    })
-                    .try_into()?]))
+                    if let Some(changes) = state.identity_state_changes(identity.clone()) {
+                        Ok(Some(vec![Event::from(changes).try_into()?]))
+                    } else {
+                        Ok(Some(vec![Event::from(IdentityInserted {
+                            identity: identity,
+                        })
+                        .try_into()?]))
+                    }
                 }
                 VerifierCommand::VerifyMessage { message, callback } => {
                     Self::handle_verify_message(state, message)

@@ -1,6 +1,6 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
-    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, IdentityStateChange,
+    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, IdentityStateChanges,
     Notification,
 };
 use crate::Result;
@@ -79,7 +79,36 @@ impl IdentityManager {
                 .or_insert(vec![net_address.clone()].into_iter().collect());
         }
     }
-    pub fn identity_state_changes(&self) {}
+    pub fn identity_state_changes(&self, identity: IdentityState) -> Option<IdentityStateChanges> {
+        // Take value from Event wrapper.
+        let (net_address, fields) = (identity.net_address, identity.fields);
+
+        let mut changes = IdentityStateChanges {
+            net_address: net_address.clone(),
+            fields: vec![],
+        };
+
+        self.identities.get(&net_address).map(|current_fields| {
+            if current_fields == &fields {
+                return ();
+            }
+
+            current_fields.iter().for_each(|current| {
+                for field in &fields {
+                    if current != field && current.field.as_type() == field.field.as_type() {
+                        changes.fields.push(field.clone());
+                        continue;
+                    }
+                }
+            });
+        });
+
+        if changes.fields.is_empty() {
+            None
+        } else {
+            Some(changes)
+        }
+    }
     // TODO: This should return the full identity, too.
     pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
         self.identities
@@ -396,7 +425,7 @@ impl NetworkAddress {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityState {
     pub net_address: NetworkAddress,
-    fields: Vec<FieldStatus>,
+    pub fields: Vec<FieldStatus>,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
