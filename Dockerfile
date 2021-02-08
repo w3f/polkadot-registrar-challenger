@@ -4,7 +4,7 @@
 
 FROM rust:1.46.0 AS builder
 
-RUN apt-get update && apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y libssl-dev cmake
 
 # RUN rustup default nightly
 
