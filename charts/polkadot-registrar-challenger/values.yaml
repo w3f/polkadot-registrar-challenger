@@ -34,3 +34,11 @@ resources:
   limits:
     cpu: "500m"
     memory: "700Mi" 
+
+nodeRestart:
+  enabled: false
+  schedule: "0 12 * * *"    
+
+restartImage:
+  repo: web3f/pod-restarter
+  tag: v0.1.1
