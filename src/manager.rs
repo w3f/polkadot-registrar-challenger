@@ -45,6 +45,12 @@ pub struct IdentityManager {
 
 // TODO: Should logs be printed if users are not found?
 impl IdentityManager {
+    #[cfg(test)]
+    pub fn contains(&self, identity: &IdentityState) -> bool {
+        self.identities.get(&identity.net_address)
+        .map(|state| state == &identity.fields)
+        .unwrap_or(false)
+    }
     pub fn insert_identity(&mut self, identity: IdentityInserted) {
         // Take value from Event wrapper.
         let identity = identity.identity;
