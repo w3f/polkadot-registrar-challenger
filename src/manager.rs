@@ -1,7 +1,6 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
-    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted,
-    Notification,
+    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
 };
 use crate::Result;
 use futures_01::task::current;
@@ -772,7 +771,10 @@ mod tests {
                         )
                     })
                     .unwrap(),
-                ],
+                ]
+                .into_iter()
+                .map(|field| (field.field.as_type(), field))
+                .collect(),
             }
         }
         pub fn bob() -> Self {
@@ -802,7 +804,10 @@ mod tests {
                         )
                     })
                     .unwrap(),
-                ],
+                ]
+                .into_iter()
+                .map(|field| (field.field.as_type(), field))
+                .collect(),
             }
         }
         pub fn eve() -> Self {
@@ -832,7 +837,10 @@ mod tests {
                         )
                     })
                     .unwrap(),
-                ],
+                ]
+                .into_iter()
+                .map(|field| (field.field.as_type(), field))
+                .collect(),
             }
         }
     }

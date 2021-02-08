@@ -208,7 +208,7 @@ impl Aggregate for VerifierAggregate {
         let fut = async move {
             match command {
                 VerifierCommand::InsertIdentity(identity) => {
-                    if state.contains(&identity) {
+                    if !state.contains(&identity) {
                         Ok(Some(vec![Event::from(IdentityInserted {
                             identity: identity,
                         })
