@@ -14,6 +14,7 @@ use std::convert::TryFrom;
 use std::fs::canonicalize;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
+use tokio::time::{self, Duration};
 
 mod api_account_status;
 mod verifier_aggregate;
@@ -75,14 +76,14 @@ where
             .unwrap()
             .build_persistant_subscription::<Id>(id, "test_subscription11")
     }
-    async fn take_events(&self, id: Id, take: usize) -> Vec<Event> {
+    async fn get_events(&self, id: Id) -> Vec<Event> {
         self.subscription(id)
             .await
             .resume()
             .await
             .unwrap()
             .then(|persisted| async { persisted.unwrap().take().as_json::<Event>().unwrap() })
-            .take(take)
+            .take_until(time::sleep(Duration::from_secs(2)))
             .collect()
             .await
     }
