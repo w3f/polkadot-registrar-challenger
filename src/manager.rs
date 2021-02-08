@@ -564,7 +564,6 @@ pub struct BackAndForthChallenge {
     // be sent to the the end user via the API, since the message must be
     // explicitly received by the specified `from` address and sent back to the
     // service (`to` address).
-    #[serde(skip_serializing)]
     pub expected_message_back: ExpectedMessage,
     pub from: IdentityField,
     pub to: RegistrarIdentityField,
@@ -738,8 +737,8 @@ impl fmt::Display for IdentityField {
 }
 
 #[cfg(test)]
-/// This module just contains convenient functions to initialize test data. The
-/// actual tests are placed in `src/tets/`.
+/// This module just contains convenient functionality to initialize test data.
+/// The actual tests are placed in `src/tets/`.
 mod tests {
     use super::*;
 

@@ -246,3 +246,16 @@ impl From<IdentityStateChanges> for IdentityInserted {
         }
     }
 }
+
+#[cfg(test)]
+/// This module just contains convenient functionality to initialize test data.
+/// The actual tests are placed in `src/tets/`.
+mod tests {
+    use super::*;
+
+    impl From<IdentityState> for IdentityInserted {
+        fn from(val: IdentityState) -> Self {
+            IdentityInserted { identity: val }
+        }
+    }
+}
