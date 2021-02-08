@@ -577,7 +577,7 @@ impl From<String> for FieldAddress {
 pub struct ExpectedMessage(String);
 
 impl ExpectedMessage {
-    fn gen() -> Self {
+    pub fn gen() -> Self {
         ExpectedMessage({
             let random: [u8; 16] = thread_rng().gen();
             hex::encode(random)
