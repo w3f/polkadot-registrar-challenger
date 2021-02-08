@@ -174,7 +174,7 @@ async fn insert_identities_state_change() {
 }
 
 #[tokio::test]
-async fn verify_message_valid() {
+async fn verify_message_valid_message() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
     let store = be.store();
     let mut repo = Repository::new(VerifierAggregate.into(), store);
@@ -261,7 +261,7 @@ async fn verify_message_valid() {
 }
 
 #[tokio::test]
-async fn verify_message_invalid() {
+async fn verify_message_invalid_message() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
     let store = be.store();
     let mut repo = Repository::new(VerifierAggregate.into(), store);
@@ -330,7 +330,7 @@ async fn verify_message_invalid() {
 }
 
 #[tokio::test]
-async fn verify_message_valid_multiple() {
+async fn verify_message_valid_message_multiple() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
     let store = be.store();
     let mut repo = Repository::new(VerifierAggregate.into(), store);
@@ -442,6 +442,8 @@ async fn verify_message_valid_multiple() {
             net_address: alice.net_address.clone(),
             field_status: new_field_state,
         })),
+        // Since the field has been verified, no new event is created, even
+        // though a invalid message has been sent after verification.
     ];
 
     let events = be.get_events(VerifierAggregateId).await;
@@ -457,4 +459,91 @@ async fn verify_message_valid_multiple() {
     assert!(!state.contains(&alice));
     assert!(state.contains(&bob));
     assert!(state.contains(&alice_new));
+}
+
+#[tokio::test]
+async fn verify_message_invalid_sender() {
+    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let store = be.store();
+    let mut repo = Repository::new(VerifierAggregate.into(), store);
+
+    let alice = IdentityState::alice();
+    let bob = IdentityState::bob();
+
+    // Execute commands.
+    let mut root = repo.get(VerifierAggregateId).await.unwrap();
+    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
+        .await
+        .unwrap();
+
+    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
+        .await
+        .unwrap();
+
+    // Commit changes
+    repo.add(root).await.unwrap();
+
+    // Prepare message.
+    let expected_message = alice
+        .fields
+        .get(&IdentityFieldType::Matrix)
+        .map(|field| match field.challenge() {
+            ChallengeStatus::ExpectMessage(challenge) => challenge.expected_message.clone(),
+            _ => panic!(),
+        })
+        .unwrap();
+
+    // Two invalid messages, even though the message itself is valid. One
+    // message is from the wrong sender and the other sender does not exist in
+    // the current state.
+    let messages = vec![
+        ExternalMessage {
+            origin: ExternalOrigin::Matrix,
+            field_address: FieldAddress::from("@bob:matrix.org".to_string()),
+            message: ProvidedMessage::from(expected_message.clone()),
+        },
+        ExternalMessage {
+            origin: ExternalOrigin::Matrix,
+            field_address: FieldAddress::from("@eve:matrix.org".to_string()),
+            message: ProvidedMessage::from(expected_message),
+        },
+    ];
+
+    // Execute commands.
+    let mut root = repo.get(VerifierAggregateId).await.unwrap();
+    for message in messages {
+        root.handle(VerifierCommand::VerifyMessage(message))
+            .await
+            .unwrap();
+    }
+
+    // Commit changes
+    repo.add(root).await.unwrap();
+
+    // Check the resulting events.
+    let current_state = bob.fields.get(&IdentityFieldType::Matrix).unwrap().clone();
+
+    let expected = [
+        Event::from(EventType::IdentityInserted(alice.clone().into())),
+        Event::from(EventType::IdentityInserted(bob.clone().into())),
+        // Even though two messages have been sent, only one event is generated,
+        // since the service ignores messages from unknown senders.
+        Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
+            net_address: bob.net_address.clone(),
+            field_status: current_state,
+        })),
+    ];
+
+    let events = be.get_events(VerifierAggregateId).await;
+    assert_eq!(events.len(), expected.len());
+
+    for (expected, event) in expected.iter().zip(events.iter()) {
+        assert_eq!(expected.body, event.body);
+    }
+
+    // Check the resulting state.
+    let root = repo.get(VerifierAggregateId).await.unwrap();
+    let state = root.state();
+    assert!(state.contains(&alice));
+    assert!(state.contains(&bob));
 }
