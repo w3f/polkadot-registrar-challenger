@@ -721,9 +721,15 @@ impl fmt::Display for IdentityField {
 
 #[cfg(test)]
 /// This module just contains convenient functionality to initialize test data.
-/// The actual tests are placed in `src/tets/`.
+/// The actual tests are placed in `src/tests/`.
 mod tests {
     use super::*;
+
+    impl FieldStatus {
+        pub fn mut_field(&mut self) -> &mut IdentityField {
+            &mut self.field
+        }
+    }
 
     impl NetworkAddress {
         pub fn alice() -> Self {

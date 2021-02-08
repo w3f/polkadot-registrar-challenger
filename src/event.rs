@@ -224,7 +224,7 @@ impl From<IdentityInserted> for Event {
 
 #[cfg(test)]
 /// This module just contains convenient functionality to initialize test data.
-/// The actual tests are placed in `src/tets/`.
+/// The actual tests are placed in `src/tests/`.
 mod tests {
     use super::*;
 
