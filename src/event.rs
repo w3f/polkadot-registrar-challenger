@@ -9,7 +9,7 @@ use eventually_event_store_db::GenericEvent;
 use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Event {
     header: EventHeader,
     pub body: EventType,
@@ -44,13 +44,11 @@ impl Event {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "content")]
 pub enum EventType {
     #[serde(rename = "identity_inserted")]
     IdentityInserted(IdentityInserted),
-    #[serde(rename = "identity_inserted")]
-    IdentityStateChange(IdentityStateChanges),
     #[serde(rename = "external_message")]
     ExternalMessage(ExternalMessage),
     #[serde(rename = "field_status_verified")]
@@ -147,7 +145,7 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct StateWrapper {
     #[serde(flatten)]
     pub state: IdentityState,
@@ -211,7 +209,7 @@ impl From<IdentityFullyVerified> for Event {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityInserted {
     #[serde(flatten)]
@@ -221,29 +219,6 @@ pub struct IdentityInserted {
 impl From<IdentityInserted> for Event {
     fn from(val: IdentityInserted) -> Self {
         EventType::IdentityInserted(val).into()
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct IdentityStateChanges {
-    pub net_address: NetworkAddress,
-    pub fields: Vec<FieldStatus>,
-}
-
-impl From<IdentityStateChanges> for Event {
-    fn from(val: IdentityStateChanges) -> Self {
-        EventType::IdentityStateChange(val).into()
-    }
-}
-
-impl From<IdentityStateChanges> for IdentityInserted {
-    fn from(val: IdentityStateChanges) -> Self {
-        IdentityInserted {
-            identity: IdentityState {
-                net_address: val.net_address,
-                fields: val.fields,
-            },
-        }
     }
 }
 

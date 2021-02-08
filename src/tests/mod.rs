@@ -30,11 +30,10 @@ where
 {
     async fn run() -> Self {
         // Configure and spawn the event store in a background process.
-        //let port: usize = thread_rng().gen_range(1_024, 65_535);
-        let port = 4000;
+        let port: usize = thread_rng().gen_range(1_024, 65_535);
         let handle = Command::new(canonicalize("/usr/bin/eventstored").unwrap())
             .arg("--mem-db")
-            //.arg("--disable-admin-ui")
+            .arg("--disable-admin-ui")
             .arg("--insecure")
             .arg("--http-port")
             .arg(port.to_string())
