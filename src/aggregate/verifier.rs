@@ -38,10 +38,7 @@ impl AsRef<str> for VerifierAggregateId {
 #[derive(Debug, Clone)]
 pub enum VerifierCommand {
     InsertIdentity(IdentityState),
-    VerifyMessage {
-        message: ExternalMessage,
-        callback: Option<Sender<UpdateChanges>>,
-    },
+    VerifyMessage(ExternalMessage),
     VerifyDisplayName {
         net_address: NetworkAddress,
         display_name: DisplayName,
@@ -60,7 +57,7 @@ impl VerifierAggregate {
         state: &IdentityManager,
         external_message: ExternalMessage,
     ) -> Result<Option<Vec<GenericEvent>>> {
-        let (identity_field, external_message) = (
+        let (identity_field, provided_message) = (
             IdentityField::from((external_message.origin, external_message.field_address)),
             external_message.message,
         );
@@ -70,7 +67,7 @@ impl VerifierAggregate {
         // Verify the message.
         let mut c_net_address = None;
         state
-            .verify_message(&identity_field, &external_message)
+            .verify_message(&identity_field, &provided_message)
             .map(|outcome| {
                 c_net_address = Some(outcome.net_address.clone());
 
@@ -217,7 +214,7 @@ impl Aggregate for VerifierAggregate {
                         Ok(None)
                     }
                 }
-                VerifierCommand::VerifyMessage { message, callback } => {
+                VerifierCommand::VerifyMessage(message) => {
                     Self::handle_verify_message(state, message)
                 }
                 VerifierCommand::VerifyDisplayName {

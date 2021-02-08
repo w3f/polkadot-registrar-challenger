@@ -65,7 +65,7 @@ impl IdentityManager {
                     return;
                 }
 
-                // Delete all entries which have been removed the new state.
+                // Delete all entries which have been removed from the new state.
                 current_fields.retain(|field_ty, current| new_fields.contains_key(field_ty));
 
                 // Retain only entries of which the field address has changed.
@@ -426,26 +426,6 @@ pub struct FieldStatus {
     challenge: ChallengeStatus,
 }
 
-impl TryFrom<(IdentityField, RegistrarIdentityField)> for FieldStatus {
-    type Error = anyhow::Error;
-
-    fn try_from(val: (IdentityField, RegistrarIdentityField)) -> Result<Self> {
-        let field = val.0.clone();
-        let challenge = ChallengeStatus::try_from(val)?;
-
-        Ok(FieldStatus {
-            field: field,
-            is_permitted: {
-                match challenge {
-                    ChallengeStatus::Unsupported => false,
-                    _ => true,
-                }
-            },
-            challenge: challenge,
-        })
-    }
-}
-
 impl FieldStatus {
     pub fn is_valid(&self) -> bool {
         let status = match &self.challenge {
@@ -685,6 +665,26 @@ impl IdentityField {
     }
 }
 
+impl TryFrom<(IdentityField, RegistrarIdentityField)> for FieldStatus {
+    type Error = anyhow::Error;
+
+    fn try_from(val: (IdentityField, RegistrarIdentityField)) -> Result<Self> {
+        let field = val.0.clone();
+        let challenge = ChallengeStatus::try_from(val)?;
+
+        Ok(FieldStatus {
+            field: field,
+            is_permitted: {
+                match challenge {
+                    ChallengeStatus::Unsupported => false,
+                    _ => true,
+                }
+            },
+            challenge: challenge,
+        })
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IdentityFieldType {
@@ -729,6 +729,28 @@ mod tests {
         pub fn mut_field(&mut self) -> &mut IdentityField {
             &mut self.field
         }
+        pub fn challenge(&self) -> &ChallengeStatus {
+            &self.challenge
+        }
+        pub fn challenge_mut(&mut self) -> &mut ChallengeStatus {
+            &mut self.challenge
+        }
+    }
+
+    impl From<ExpectedMessage> for ProvidedMessage {
+        fn from(val: ExpectedMessage) -> Self {
+            ProvidedMessage {
+                parts: vec![
+                    ProvidedMessagePart::from(val.0)
+                ]
+            }
+        }
+    }
+
+    impl ExpectedMessage {
+        pub fn invalid() -> Self {
+            ExpectedMessage("invalid_message".to_string())
+        }
     }
 
     impl NetworkAddress {
@@ -771,7 +793,7 @@ mod tests {
                     FieldStatus::try_from({
                         (
                             IdentityField::Matrix(FieldAddress::from(
-                                "@alice:matrix.com".to_string(),
+                                "@alice:matrix.org".to_string(),
                             )),
                             RegistrarIdentityField::matrix(),
                         )
@@ -804,7 +826,7 @@ mod tests {
                     FieldStatus::try_from({
                         (
                             IdentityField::Matrix(FieldAddress::from(
-                                "@bob:matrix.com".to_string(),
+                                "@bob:matrix.org".to_string(),
                             )),
                             RegistrarIdentityField::matrix(),
                         )
@@ -837,7 +859,7 @@ mod tests {
                     FieldStatus::try_from({
                         (
                             IdentityField::Matrix(FieldAddress::from(
-                                "@eve:matrix.com".to_string(),
+                                "@eve:matrix.org".to_string(),
                             )),
                             RegistrarIdentityField::matrix(),
                         )
