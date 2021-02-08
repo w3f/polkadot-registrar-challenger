@@ -174,7 +174,8 @@ impl VerifierAggregate {
                 state.insert_identity(identity);
             }
             EventType::IdentityStateChange(changes) => {
-                state.insert_identity(changes.into());
+                //state.insert_identity(changes.into());
+                unimplemented!()
             }
             EventType::FieldStatusVerified(field_status_verified) => {
                 let _ = state.update_field(field_status_verified).map_err(|err| {
@@ -211,6 +212,8 @@ impl Aggregate for VerifierAggregate {
         let fut = async move {
             match command {
                 VerifierCommand::InsertIdentity(identity) => {
+                    unimplemented!()
+                    /*
                     if let Some(changes) = state.identity_state_changes(identity.clone()) {
                         Ok(Some(vec![Event::from(changes).try_into()?]))
                     } else {
@@ -219,6 +222,7 @@ impl Aggregate for VerifierAggregate {
                         })
                         .try_into()?]))
                     }
+                     */
                 }
                 VerifierCommand::VerifyMessage { message, callback } => {
                     Self::handle_verify_message(state, message)

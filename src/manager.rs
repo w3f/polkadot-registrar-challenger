@@ -4,6 +4,7 @@ use crate::event::{
     Notification,
 };
 use crate::Result;
+use futures_01::task::current;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use std::fmt;
@@ -38,81 +39,59 @@ impl From<UpdateChanges> for Notification {
 
 #[derive(Default, Clone)]
 pub struct IdentityManager {
-    identities: HashMap<NetworkAddress, Vec<FieldStatus>>,
+    identities: HashMap<NetworkAddress, HashMap<IdentityFieldType, FieldStatus>>,
     lookup_addresses: HashMap<IdentityField, HashSet<NetworkAddress>>,
     display_names: Vec<DisplayName>,
 }
 
 // TODO: Should logs be printed if users are not found?
 impl IdentityManager {
-    #[cfg(test)]
     pub fn contains(&self, identity: &IdentityState) -> bool {
-        self.identities.get(&identity.net_address)
-        .map(|state| state == &identity.fields)
-        .unwrap_or(false)
+        self.identities
+            .get(&identity.net_address)
+            .map(|state| state == &identity.fields)
+            .unwrap_or(false)
     }
     pub fn insert_identity(&mut self, identity: IdentityInserted) {
         // Take value from Event wrapper.
         let identity = identity.identity;
 
         // Insert identity.
-        let (net_address, fields) = (identity.net_address, identity.fields);
+        let (net_address, mut new_fields) = (identity.net_address, identity.fields);
         self.identities
             .entry(net_address.clone())
             .and_modify(|current_fields| {
-                if current_fields == &fields {
+                // Do a quick check and avoid modifications if the fields match.
+                if current_fields == &new_fields {
                     return;
                 }
 
-                for current in current_fields {
-                    for field in &fields {
-                        if current != field && current.field.as_type() == field.field.as_type() {
-                            *current = field.clone();
-                            continue;
-                        }
-                    }
+                // Delete all entries which have been removed the new state.
+                current_fields.retain(|field_ty, current| new_fields.contains_key(field_ty));
+
+                // Retain only entries of which the field address has changed.
+                new_fields.retain(|field_ty, field| {
+                    current_fields
+                        .get(field_ty)
+                        .map(|current| current.field != field.field)
+                        .unwrap_or(true)
+                });
+
+                // Insert all new entries into storage.
+                for (field_ty, new) in new_fields.clone() {
+                    current_fields.insert(field_ty, new);
                 }
             })
-            .or_insert(fields.clone());
+            .or_insert(new_fields.clone());
 
         // Create lookup tables.
-        for field in fields {
+        for (_, field) in new_fields {
             self.lookup_addresses
                 .entry(field.field.clone())
                 .and_modify(|active_addresses| {
                     active_addresses.insert(net_address.clone());
                 })
                 .or_insert(vec![net_address.clone()].into_iter().collect());
-        }
-    }
-    pub fn identity_state_changes(&self, identity: IdentityState) -> Option<IdentityStateChanges> {
-        // Take value from Event wrapper.
-        let (net_address, fields) = (identity.net_address, identity.fields);
-
-        let mut changes = IdentityStateChanges {
-            net_address: net_address.clone(),
-            fields: vec![],
-        };
-
-        self.identities.get(&net_address).map(|current_fields| {
-            if current_fields == &fields {
-                return ();
-            }
-
-            current_fields.iter().for_each(|current| {
-                for field in &fields {
-                    if current != field && current.field.as_type() == field.field.as_type() {
-                        changes.fields.push(field.clone());
-                        continue;
-                    }
-                }
-            });
-        });
-
-        if changes.fields.is_empty() {
-            None
-        } else {
-            Some(changes)
         }
     }
     // TODO: This should return the full identity, too.
@@ -122,8 +101,7 @@ impl IdentityManager {
             .ok_or(anyhow!("network address not found"))
             .and_then(|statuses| {
                 statuses
-                    .iter_mut()
-                    .find(|status| status.field == verified.field_status.field)
+                    .get_mut(&verified.field_status.field.as_type())
                     .ok_or(anyhow!("field not found"))
                     .map(|current_status| {
                         if let Some(update_changes) =
@@ -212,9 +190,7 @@ impl IdentityManager {
     ) -> Option<&FieldStatus> {
         self.identities
             .get(net_address)
-            .map(|statuses| statuses.iter().find(|status| &status.field == field))
-            // Unpack `Option<Option<T>>` to `Option<T>`
-            .and_then(|status| status)
+            .and_then(|fields| fields.get(&field.as_type()))
     }
     // Lookup all addresses which contain the specified field.
     fn lookup_addresses(&self, field: &IdentityField) -> Option<Vec<&NetworkAddress>> {
@@ -390,7 +366,7 @@ impl IdentityManager {
     pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Result<bool> {
         self.identities
             .get(net_address)
-            .map(|field_statuses| field_statuses.iter().any(|status| status.is_valid()))
+            .map(|field_statuses| field_statuses.iter().any(|(_, field)| field.is_valid()))
             .ok_or(anyhow!(
                 "failed to check the full verification status of unknown target: {:?}. This is a bug",
                 net_address
@@ -406,10 +382,9 @@ pub struct VerificationOutcome {
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "network", content = "address")]
+#[serde(rename_all = "snake_case")]
 pub enum NetworkAddress {
-    #[serde(rename = "polkadot")]
     Polkadot(IdentityAddress),
-    #[serde(rename = "kusama")]
     Kusama(IdentityAddress),
 }
 
@@ -428,10 +403,11 @@ impl NetworkAddress {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct IdentityState {
     pub net_address: NetworkAddress,
-    pub fields: Vec<FieldStatus>,
+    pub fields: HashMap<IdentityFieldType, FieldStatus>,
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -444,6 +420,7 @@ impl From<String> for IdentityAddress {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct FieldStatus {
     field: IdentityField,
     is_permitted: bool,
@@ -709,7 +686,8 @@ impl IdentityField {
     }
 }
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum IdentityFieldType {
     LegalName,
     DisplayName,
