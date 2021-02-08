@@ -3,6 +3,7 @@ use crate::event::{
     BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
 };
 use crate::Result;
+use fmt::Display;
 use futures_01::task::current;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
@@ -555,6 +556,12 @@ pub struct DisplayName(String);
 impl DisplayName {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
+    }
+}
+
+impl From<String> for DisplayName {
+    fn from(val: String) -> Self {
+        DisplayName(val)
     }
 }
 

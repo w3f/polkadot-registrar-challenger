@@ -88,24 +88,29 @@ fn jaro_words(left: &str, right: &str, delimiter: &[&str]) -> f64 {
     total as f64 / left_words.len().max(right_words.len()) as f64
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::Account;
+    use crate::manager::DisplayName;
 
     const LIMIT: f64 = 0.85;
+
+    impl<'a> From<&'a str> for DisplayName {
+        fn from(val: &'a str) -> Self {
+            DisplayName::from(val.to_string())
+        }
+    }
 
     #[test]
     fn is_too_similar() {
         let current = [
-            Account::from("dave"),
-            Account::from("Dave"),
-            Account::from("daev"),
-            Account::from("Daev"),
+            DisplayName::from("dave"),
+            DisplayName::from("Dave"),
+            DisplayName::from("daev"),
+            DisplayName::from("Daev"),
         ];
 
-        let new = Account::from("dave");
+        let new = DisplayName::from("dave");
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
@@ -113,14 +118,14 @@ mod tests {
         }
 
         let current = [
-            Account::from("David"),
-            Account::from("alice"),
-            Account::from("Alice"),
-            Account::from("bob"),
-            Account::from("Bob"),
-            Account::from("eve"),
-            Account::from("Eve"),
-            Account::from("David"),
+            DisplayName::from("David"),
+            DisplayName::from("alice"),
+            DisplayName::from("Alice"),
+            DisplayName::from("bob"),
+            DisplayName::from("Bob"),
+            DisplayName::from("eve"),
+            DisplayName::from("Eve"),
+            DisplayName::from("David"),
         ];
 
         for account in &current {
@@ -132,17 +137,17 @@ mod tests {
     #[test]
     fn is_too_similar_words() {
         let current = [
-            Account::from("adam & eve"),
-            Account::from("Adam & Eve"),
-            Account::from("aadm & Eve"),
-            Account::from("Aadm & Eve"),
-            Account::from("adam & ev"),
-            Account::from("Adam & Ev"),
-            Account::from("eve & adam"),
-            Account::from("Eve & Adam"),
+            DisplayName::from("adam & eve"),
+            DisplayName::from("Adam & Eve"),
+            DisplayName::from("aadm & Eve"),
+            DisplayName::from("Aadm & Eve"),
+            DisplayName::from("adam & ev"),
+            DisplayName::from("Adam & Ev"),
+            DisplayName::from("eve & adam"),
+            DisplayName::from("Eve & Adam"),
         ];
 
-        let new = Account::from("Adam & Eve");
+        let new = DisplayName::from("Adam & Eve");
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
@@ -150,13 +155,13 @@ mod tests {
         }
 
         let current = [
-            Account::from("alice & bob"),
-            Account::from("Alice & Bob"),
-            Account::from("jeff & john"),
-            Account::from("Jeff & John"),
+            DisplayName::from("alice & bob"),
+            DisplayName::from("Alice & Bob"),
+            DisplayName::from("jeff & john"),
+            DisplayName::from("Jeff & John"),
         ];
 
-        let new = Account::from("Adam & Eve");
+        let new = DisplayName::from("Adam & Eve");
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
@@ -167,35 +172,35 @@ mod tests {
     #[test]
     fn is_too_similar_words_special_delimiter() {
         let current = [
-            Account::from("adam & eve"),
-            Account::from("Adam & Eve"),
-            Account::from("aadm & Eve"),
-            Account::from("Aadm & Eve"),
-            Account::from("adam & ev"),
-            Account::from("Adam & Ev"),
-            Account::from("eve & adam"),
-            Account::from("Eve & Adam"),
+            DisplayName::from("adam & eve"),
+            DisplayName::from("Adam & Eve"),
+            DisplayName::from("aadm & Eve"),
+            DisplayName::from("Aadm & Eve"),
+            DisplayName::from("adam & ev"),
+            DisplayName::from("Adam & Ev"),
+            DisplayName::from("eve & adam"),
+            DisplayName::from("Eve & Adam"),
             //
-            Account::from("adam-&-eve"),
-            Account::from("Adam-&-Eve"),
-            Account::from("aadm-&-Eve"),
-            Account::from("Aadm-&-Eve"),
-            Account::from("adam-&-ev"),
-            Account::from("Adam-&-Ev"),
-            Account::from("eve-&-adam"),
-            Account::from("Eve-&-Adam"),
+            DisplayName::from("adam-&-eve"),
+            DisplayName::from("Adam-&-Eve"),
+            DisplayName::from("aadm-&-Eve"),
+            DisplayName::from("Aadm-&-Eve"),
+            DisplayName::from("adam-&-ev"),
+            DisplayName::from("Adam-&-Ev"),
+            DisplayName::from("eve-&-adam"),
+            DisplayName::from("Eve-&-Adam"),
             //
-            Account::from("adam_&_eve"),
-            Account::from("Adam_&_Eve"),
-            Account::from("aadm_&_Eve"),
-            Account::from("Aadm_&_Eve"),
-            Account::from("adam_&_ev"),
-            Account::from("Adam_&_Ev"),
-            Account::from("eve_&_adam"),
-            Account::from("Eve_&_Adam"),
+            DisplayName::from("adam_&_eve"),
+            DisplayName::from("Adam_&_Eve"),
+            DisplayName::from("aadm_&_Eve"),
+            DisplayName::from("Aadm_&_Eve"),
+            DisplayName::from("adam_&_ev"),
+            DisplayName::from("Adam_&_Ev"),
+            DisplayName::from("eve_&_adam"),
+            DisplayName::from("Eve_&_Adam"),
         ];
 
-        let new = Account::from("Adam & Eve");
+        let new = DisplayName::from("Adam & Eve");
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
@@ -203,23 +208,23 @@ mod tests {
         }
 
         let current = [
-            Account::from("alice & bob"),
-            Account::from("Alice & Bob"),
-            Account::from("jeff & john"),
-            Account::from("Jeff & John"),
+            DisplayName::from("alice & bob"),
+            DisplayName::from("Alice & Bob"),
+            DisplayName::from("jeff & john"),
+            DisplayName::from("Jeff & John"),
             //
-            Account::from("alice_&_bob"),
-            Account::from("Alice_&_Bob"),
-            Account::from("jeff_&_john"),
-            Account::from("Jeff_&_John"),
+            DisplayName::from("alice_&_bob"),
+            DisplayName::from("Alice_&_Bob"),
+            DisplayName::from("jeff_&_john"),
+            DisplayName::from("Jeff_&_John"),
             //
-            Account::from("alice-&-bob"),
-            Account::from("Alice-&-Bob"),
-            Account::from("jeff-&-john"),
-            Account::from("Jeff-&-John"),
+            DisplayName::from("alice-&-bob"),
+            DisplayName::from("Alice-&-Bob"),
+            DisplayName::from("jeff-&-john"),
+            DisplayName::from("Jeff-&-John"),
         ];
 
-        let new = Account::from("Adam & Eve");
+        let new = DisplayName::from("Adam & Eve");
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
@@ -229,9 +234,9 @@ mod tests {
 
     #[test]
     fn is_too_similar_unicode() {
-        let current = [Account::from("👻🥺👌 Alice")];
+        let current = [DisplayName::from("👻🥺👌 Alice")];
 
-        let new = Account::from("👻🥺👌 Alice");
+        let new = DisplayName::from("👻🥺👌 Alice");
 
         for account in &current {
             let res = DisplayNameHandler::is_too_similar(account, &new, LIMIT);
@@ -239,11 +244,11 @@ mod tests {
         }
 
         let current = [
-            Account::from("Alice"),
-            Account::from("👻🥺👌 Johnny 💀"),
-            Account::from("🤖👈👈 Alice"),
-            Account::from("👻🥺👌 Bob"),
-            Account::from("👻🥺👌 Eve"),
+            DisplayName::from("Alice"),
+            DisplayName::from("👻🥺👌 Johnny 💀"),
+            DisplayName::from("🤖👈👈 Alice"),
+            DisplayName::from("👻🥺👌 Bob"),
+            DisplayName::from("👻🥺👌 Eve"),
         ];
 
         for account in &current {
@@ -252,4 +257,3 @@ mod tests {
         }
     }
 }
-*/
