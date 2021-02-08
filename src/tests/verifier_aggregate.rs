@@ -2,7 +2,8 @@ use super::InMemBackend;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::event::{Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified};
 use crate::manager::{
-    ChallengeStatus, FieldAddress, IdentityField, IdentityFieldType, IdentityState, ProvidedMessage, Validity, ExpectedMessage,
+    ChallengeStatus, ExpectedMessage, FieldAddress, IdentityField, IdentityFieldType,
+    IdentityState, ProvidedMessage, Validity,
 };
 use eventually::{Repository, Subscription};
 use futures::StreamExt;
@@ -221,14 +222,18 @@ async fn verify_message_valid() {
 
     // Set the expected state.
     let mut alice_new = alice.clone();
-    let new_field_state = alice_new.fields.get_mut(&IdentityFieldType::Matrix).map(|status| {
-        match status.challenge_mut() {
-            ChallengeStatus::ExpectMessage(challenge) => challenge.status = Validity::Valid,
-            _ => panic!(),
-        }
+    let new_field_state = alice_new
+        .fields
+        .get_mut(&IdentityFieldType::Matrix)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::ExpectMessage(challenge) => challenge.status = Validity::Valid,
+                _ => panic!(),
+            }
 
-        status.clone()
-    }).unwrap();
+            status.clone()
+        })
+        .unwrap();
 
     // Check the resulting events.
     let expected = [
@@ -295,7 +300,11 @@ async fn verify_message_invalid() {
 
     // Set the expected state.
     let mut alice_new = alice.clone();
-    let current_state = alice_new.fields.get(&IdentityFieldType::Matrix).unwrap().clone();
+    let current_state = alice_new
+        .fields
+        .get(&IdentityFieldType::Matrix)
+        .unwrap()
+        .clone();
 
     // Check the resulting events.
     let expected = [

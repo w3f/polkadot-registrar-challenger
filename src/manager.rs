@@ -740,9 +740,7 @@ mod tests {
     impl From<ExpectedMessage> for ProvidedMessage {
         fn from(val: ExpectedMessage) -> Self {
             ProvidedMessage {
-                parts: vec![
-                    ProvidedMessagePart::from(val.0)
-                ]
+                parts: vec![ProvidedMessagePart::from(val.0)],
             }
         }
     }
