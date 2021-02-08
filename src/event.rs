@@ -49,8 +49,6 @@ impl Event {
 pub enum EventType {
     #[serde(rename = "identity_inserted")]
     IdentityInserted(IdentityInserted),
-    #[serde(rename = "identity_inserted")]
-    IdentityStateChange(IdentityStateChanges),
     #[serde(rename = "external_message")]
     ExternalMessage(ExternalMessage),
     #[serde(rename = "field_status_verified")]
@@ -221,18 +219,6 @@ pub struct IdentityInserted {
 impl From<IdentityInserted> for Event {
     fn from(val: IdentityInserted) -> Self {
         EventType::IdentityInserted(val).into()
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct IdentityStateChanges {
-    pub net_address: NetworkAddress,
-    pub fields: Vec<FieldStatus>,
-}
-
-impl From<IdentityStateChanges> for Event {
-    fn from(val: IdentityStateChanges) -> Self {
-        EventType::IdentityStateChange(val).into()
     }
 }
 

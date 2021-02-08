@@ -1,6 +1,6 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
-    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, IdentityStateChanges,
+    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted,
     Notification,
 };
 use crate::Result;
