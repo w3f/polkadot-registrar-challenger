@@ -4,7 +4,7 @@
 
 FROM rust:1.46.0 AS builder
 
-RUN apt-get update && apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y libssl-dev cmake
 
 # RUN rustup default nightly
 
@@ -33,7 +33,7 @@ RUN cargo build --release
 
 FROM debian:buster-slim
 
-RUN apt-get update && apt-get install -y libssl-dev ca-certificates
+RUN apt-get update && apt-get install -y libssl-dev ca-certificates sqlite3
 RUN update-ca-certificates --fresh
 
 COPY --from=builder /app/target/release/registrar-bot /usr/local/bin

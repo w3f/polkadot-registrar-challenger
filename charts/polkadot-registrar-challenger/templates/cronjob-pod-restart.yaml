@@ -1,0 +1,21 @@
+{{ if .Values.nodeRestart.enabled }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ .Release.Name }}-pod-restarter
+spec:
+  schedule: {{ .Values.nodeRestart.schedule }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ .Release.Name }}-pod-restarter
+          containers:
+          - name: {{ .Release.Name }}-pod-restarter
+            image: {{ .Values.restartImage.repo }}:{{ .Values.restartImage.tag }}
+            args:
+            - /scripts/restart_pods.sh
+            - {{ .Release.Name }}
+            - statefulset
+          restartPolicy: Never
+{{ end }}
