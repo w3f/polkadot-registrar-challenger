@@ -462,7 +462,7 @@ async fn verify_message_valid_message_multiple() {
 }
 
 #[tokio::test]
-async fn verify_message_invalid_sender() {
+async fn verify_message_invalid_origin() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
     let store = be.store();
     let mut repo = Repository::new(VerifierAggregate.into(), store);
@@ -493,9 +493,11 @@ async fn verify_message_invalid_sender() {
         })
         .unwrap();
 
-    // Two invalid messages, even though the message itself is valid. One
-    // message is from the wrong sender and the other sender does not exist in
-    // the current state.
+    // Invalid messages, even though the message itself is valid:
+    // * 1. The sender is invalid.
+    // * 2. The sender does not exist at all.
+    // * 3. The origin is wrong.
+    // * 4. The origin is wrong, even though the address itself matches the email.
     let messages = vec![
         ExternalMessage {
             origin: ExternalOrigin::Matrix,
@@ -505,6 +507,16 @@ async fn verify_message_invalid_sender() {
         ExternalMessage {
             origin: ExternalOrigin::Matrix,
             field_address: FieldAddress::from("@eve:matrix.org".to_string()),
+            message: ProvidedMessage::from(expected_message.clone()),
+        },
+        ExternalMessage {
+            origin: ExternalOrigin::Twitter,
+            field_address: FieldAddress::from("@alice".to_string()),
+            message: ProvidedMessage::from(expected_message.clone()),
+        },
+        ExternalMessage {
+            origin: ExternalOrigin::Twitter,
+            field_address: FieldAddress::from("@alice:matrix.org".to_string()),
             message: ProvidedMessage::from(expected_message),
         },
     ];
@@ -521,16 +533,26 @@ async fn verify_message_invalid_sender() {
     repo.add(root).await.unwrap();
 
     // Check the resulting events.
-    let current_state = bob.fields.get(&IdentityFieldType::Matrix).unwrap().clone();
+    let bob_current_state_matrix = bob.fields.get(&IdentityFieldType::Matrix).unwrap().clone();
+    let alice_current_state_twitter = alice
+        .fields
+        .get(&IdentityFieldType::Twitter)
+        .unwrap()
+        .clone();
 
     let expected = [
         Event::from(EventType::IdentityInserted(alice.clone().into())),
         Event::from(EventType::IdentityInserted(bob.clone().into())),
-        // Even though two messages have been sent, only one event is generated,
-        // since the service ignores messages from unknown senders.
+        // Even though multiple messages have been sent, only two events are
+        // generated, since the service ignores messages from unknown senders
+        // (and matching their corresponding origin).
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: bob.net_address.clone(),
-            field_status: current_state,
+            field_status: bob_current_state_matrix,
+        })),
+        Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
+            net_address: alice.net_address.clone(),
+            field_status: alice_current_state_twitter,
         })),
     ];
 
