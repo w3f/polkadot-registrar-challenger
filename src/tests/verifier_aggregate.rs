@@ -541,14 +541,36 @@ async fn verify_message_invalid_origin() {
     // Commit changes
     repo.add(root).await.unwrap();
 
-    // Check the resulting events.
-    let bob_current_state_matrix = bob.fields.get(&IdentityFieldType::Matrix).unwrap().clone();
-    let alice_current_state_twitter = alice
+    // Specify the expected states.
+    let mut alice_new = alice.clone();
+    let alice_invalid_state = alice_new
         .fields
-        .get(&IdentityFieldType::Twitter)
-        .unwrap()
-        .clone();
+        .get_mut(&IdentityFieldType::Twitter)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::ExpectMessage(challenge) => challenge.status = Validity::Invalid,
+                _ => panic!(),
+            }
 
+            status.clone()
+        })
+        .unwrap();
+
+    let mut bob_new = bob.clone();
+    let bob_invalid_state = bob_new
+        .fields
+        .get_mut(&IdentityFieldType::Matrix)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::ExpectMessage(challenge) => challenge.status = Validity::Invalid,
+                _ => panic!(),
+            }
+
+            status.clone()
+        })
+        .unwrap();
+
+    // Check the resulting events.
     let expected = [
         Event::from(EventType::IdentityInserted(alice.clone().into())),
         Event::from(EventType::IdentityInserted(bob.clone().into())),
@@ -557,11 +579,11 @@ async fn verify_message_invalid_origin() {
         // (and matching their corresponding origin).
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: bob.net_address.clone(),
-            field_status: bob_current_state_matrix,
+            field_status: bob_invalid_state,
         })),
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: alice.net_address.clone(),
-            field_status: alice_current_state_twitter,
+            field_status: alice_invalid_state,
         })),
     ];
 
@@ -575,8 +597,10 @@ async fn verify_message_invalid_origin() {
     // Check the resulting state.
     let root = repo.get(VerifierAggregateId).await.unwrap();
     let state = root.state();
-    assert!(state.contains(&alice));
-    assert!(state.contains(&bob));
+    assert!(!state.contains(&alice));
+    assert!(!state.contains(&bob));
+    assert!(state.contains(&alice_new));
+    assert!(state.contains(&bob_new));
 }
 
 #[tokio::test]
