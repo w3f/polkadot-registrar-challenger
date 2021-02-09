@@ -281,6 +281,7 @@ impl IdentityManager {
         Ok(())
     }
     // TODO: This should return `Result<>`
+    // TODO: Should set the status to `Invalid` if so.
     pub fn verify_message(
         &self,
         field: &IdentityField,
@@ -296,6 +297,8 @@ impl IdentityManager {
                     // event store.
                     let c_net_address = net_address.clone();
                     let mut c_field_status = field_status.clone();
+
+                    // TODO: Make quick `is_valid` check and return if so.
 
                     // Verify the message, each verified specifically based on
                     // the challenge type.
@@ -322,7 +325,14 @@ impl IdentityManager {
                                     VerificationOutcome {
                                         net_address: c_net_address,
                                         // Leave current state as is.
-                                        field_status: c_field_status,
+                                        field_status: {
+                                            // Clone the current state and overwrite the validity as `Invalid`.
+                                            let mut challenge = challenge.clone();
+                                            challenge.status = Validity::Invalid;
+                                            c_field_status.challenge =
+                                                ChallengeStatus::ExpectMessage(challenge);
+                                            c_field_status
+                                        },
                                     }
                                 };
 
@@ -333,39 +343,69 @@ impl IdentityManager {
                             // The first check must be verified before it can
                             // proceed on the seconds check.
                             let outcome = if challenge.first_check_status != Validity::Valid {
-                                VerificationOutcome {
-                                    net_address: c_net_address,
-                                    field_status: {
-                                        // Clone the current state and overwrite
-                                        // the validity of the **first** status
-                                        // as `Valid`.
-                                        let mut challenge = challenge.clone();
-                                        challenge.first_check_status = Validity::Valid;
-                                        c_field_status.challenge =
-                                            ChallengeStatus::BackAndForth(challenge);
-                                        c_field_status
-                                    },
+                                if challenge
+                                    .expected_message
+                                    .contains(&provided_message)
+                                    .is_some()
+                                {
+                                    VerificationOutcome {
+                                        net_address: c_net_address,
+                                        field_status: {
+                                            let mut challenge = challenge.clone();
+                                            challenge.first_check_status = Validity::Valid;
+                                            c_field_status.challenge =
+                                                ChallengeStatus::BackAndForth(challenge);
+                                            c_field_status
+                                        },
+                                    }
+                                } else {
+                                    VerificationOutcome {
+                                        net_address: c_net_address,
+                                        field_status: {
+                                            let mut challenge = challenge.clone();
+                                            challenge.first_check_status = Validity::Invalid;
+                                            c_field_status.challenge =
+                                                ChallengeStatus::BackAndForth(challenge);
+                                            c_field_status
+                                        },
+                                    }
                                 }
                             } else if challenge.second_check_status != Validity::Valid {
-                                VerificationOutcome {
-                                    net_address: c_net_address,
-                                    field_status: {
-                                        // Clone the current state and overwrite
-                                        // the validity of the **second** status
-                                        // as `Valid`.
-                                        let mut challenge = challenge.clone();
-                                        challenge.second_check_status = Validity::Valid;
-                                        c_field_status.challenge =
-                                            ChallengeStatus::BackAndForth(challenge);
-                                        c_field_status
-                                    },
+                                if challenge
+                                    .expected_message_back
+                                    .contains(&provided_message)
+                                    .is_some()
+                                {
+                                    VerificationOutcome {
+                                        net_address: c_net_address,
+                                        field_status: {
+                                            // Clone the current state and overwrite
+                                            // the validity of the **second** status
+                                            // as `Valid`.
+                                            let mut challenge = challenge.clone();
+                                            challenge.second_check_status = Validity::Valid;
+                                            c_field_status.challenge =
+                                                ChallengeStatus::BackAndForth(challenge);
+                                            c_field_status
+                                        },
+                                    }
+                                } else {
+                                    VerificationOutcome {
+                                        net_address: c_net_address,
+                                        field_status: {
+                                            // Clone the current state and overwrite
+                                            // the validity of the **second** status
+                                            // as `Valid`.
+                                            let mut challenge = challenge.clone();
+                                            challenge.second_check_status = Validity::Invalid;
+                                            c_field_status.challenge =
+                                                ChallengeStatus::BackAndForth(challenge);
+                                            c_field_status
+                                        },
+                                    }
                                 }
                             } else {
-                                VerificationOutcome {
-                                    net_address: c_net_address,
-                                    // Leave current state as is.
-                                    field_status: c_field_status,
-                                }
+                                return None;
                             };
 
                             return Some(outcome);
