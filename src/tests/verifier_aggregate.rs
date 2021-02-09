@@ -407,15 +407,22 @@ async fn verify_message_valid_message_multiple() {
     // Commit changes
     repo.add(root).await.unwrap();
 
-    // Set the expected state.
-    let current_state = alice
-        .fields
-        .get(&IdentityFieldType::Matrix)
-        .unwrap()
-        .clone();
-
+    // Specify the expected states.
     let mut alice_new = alice.clone();
-    let new_field_state = alice_new
+    let alice_invalid_state = alice_new
+        .fields
+        .get_mut(&IdentityFieldType::Matrix)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::ExpectMessage(challenge) => challenge.status = Validity::Invalid,
+                _ => panic!(),
+            }
+
+            status.clone()
+        })
+        .unwrap();
+
+    let alice_valid_state = alice_new
         .fields
         .get_mut(&IdentityFieldType::Matrix)
         .map(|status| {
@@ -434,15 +441,15 @@ async fn verify_message_valid_message_multiple() {
         Event::from(EventType::IdentityInserted(bob.clone().into())),
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: alice.net_address.clone(),
-            field_status: current_state.clone(),
+            field_status: alice_invalid_state.clone(),
         })),
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: alice.net_address.clone(),
-            field_status: current_state,
+            field_status: alice_invalid_state,
         })),
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: alice.net_address.clone(),
-            field_status: new_field_state,
+            field_status: alice_valid_state,
         })),
         // Since the field has been verified, no new event is created, even
         // though a invalid message has been sent after verification.
