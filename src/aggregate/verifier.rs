@@ -1,6 +1,7 @@
 use super::Error;
 use crate::event::{
-    Event, EventType, ExternalMessage, FieldStatusVerified, IdentityFullyVerified, IdentityInserted,
+    DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
+    IdentityFullyVerified, IdentityInserted,
 };
 use crate::manager::{
     DisplayName, FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState,
@@ -157,13 +158,13 @@ impl VerifierAggregate {
             ))
         }
     }
-    fn apply_state_changes(state: &mut IdentityManager, event: GenericEvent) {
+    fn apply_state_changes(state: &mut IdentityManager, event: GenericEvent) -> Result<()> {
         let event: Event = if let Ok(event) = event.as_json() {
             event
         } else {
             // This should never occur, since the `handle` method creates the events.
             error!("Failed to apply changes, event could not be deserialized");
-            return;
+            return Ok(());
         };
 
         match event.body {
@@ -171,13 +172,16 @@ impl VerifierAggregate {
                 state.insert_identity(identity);
             }
             EventType::FieldStatusVerified(field_status_verified) => {
-                let _ = state.update_field(field_status_verified).map_err(|err| {
-                    error!("{}", err);
-                });
+                state.update_field(field_status_verified)?;
             }
             EventType::IdentityFullyVerified(_) => {}
+            EventType::DisplayNamePersisted(persisted) => {
+                state.persist_display_name(persisted)?;
+            }
             _ => warn!("Received unrecognized event type when applying changes"),
         }
+
+        Ok(())
     }
 }
 
@@ -189,7 +193,7 @@ impl Aggregate for VerifierAggregate {
     type Error = Error;
 
     fn apply(mut state: Self::State, event: Self::Event) -> Result<Self::State> {
-        Self::apply_state_changes(&mut state, event);
+        Self::apply_state_changes(&mut state, event)?;
         Ok(state)
     }
 
@@ -222,9 +226,13 @@ impl Aggregate for VerifierAggregate {
                     display_name,
                 } => Self::handle_display_name(state, net_address, display_name),
                 VerifierCommand::PersistDisplayName {
-                    net_address: _,
-                    display_name: _,
-                } => unimplemented!(),
+                    net_address,
+                    display_name,
+                } => Ok(Some(vec![Event::from(DisplayNamePersisted {
+                    net_address: net_address,
+                    display_name: display_name,
+                })
+                .try_into()?])),
             }
         };
 

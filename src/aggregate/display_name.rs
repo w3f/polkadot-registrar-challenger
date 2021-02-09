@@ -7,25 +7,25 @@ use strsim::jaro;
 pub const VIOLATIONS_CAP: usize = 5;
 
 pub struct DisplayNameHandler<'a> {
-    display_names: &'a [DisplayName],
+    display_names: &'a [&'a DisplayName],
     limit: f64,
 }
 
 impl<'a> DisplayNameHandler<'a> {
-    pub fn with_state(state: &'a [DisplayName]) -> Self {
+    pub fn with_state(state: &'a [&'a DisplayName]) -> Self {
         DisplayNameHandler {
             display_names: state,
             limit: 0.5,
         }
     }
-    pub fn verify_display_name(&self, _display_name: &DisplayName) -> Vec<DisplayName> {
+    pub fn verify_display_name(&self, display_name: &DisplayName) -> Vec<DisplayName> {
         let mut violations = vec![];
 
-        for display_name in self.display_names {
-            if Self::is_too_similar(display_name, display_name, self.limit) {
+        for &persisted in self.display_names {
+            if Self::is_too_similar(persisted, display_name, self.limit) {
                 // Clone the display name, since this will get inserted into an
                 // event which requires ownership.
-                violations.push(display_name.clone());
+                violations.push(persisted.clone());
             }
 
             // Cap the violation list, prevent sending oversized buffers.

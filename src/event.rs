@@ -1,7 +1,7 @@
 use crate::api::SubId;
 use crate::manager::{
-    ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField, IdentityState,
-    NetworkAddress, ProvidedMessage,
+    DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField,
+    IdentityState, NetworkAddress, ProvidedMessage,
 };
 use crate::Result;
 use eventually_event_store_db::GenericEvent;
@@ -23,38 +23,15 @@ impl TryFrom<Event> for GenericEvent {
     }
 }
 
-impl Event {
-    pub fn expect_external_message(self) -> Result<ExternalMessage> {
-        match self.body {
-            EventType::ExternalMessage(val) => Ok(val),
-            _ => Err(anyhow!("unexpected event type")),
-        }
-    }
-    pub fn expect_field_status_verified(self) -> Result<FieldStatusVerified> {
-        match self.body {
-            EventType::FieldStatusVerified(val) => Ok(val),
-            _ => Err(anyhow!("unexpected event type")),
-        }
-    }
-    pub fn expect_field_status_verified_ref(&self) -> Result<&FieldStatusVerified> {
-        match &self.body {
-            EventType::FieldStatusVerified(val) => Ok(val),
-            _ => Err(anyhow!("unexpected event type")),
-        }
-    }
-}
-
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "content")]
+#[serde(rename_all = "snake_case")]
 pub enum EventType {
-    #[serde(rename = "identity_inserted")]
     IdentityInserted(IdentityInserted),
-    #[serde(rename = "external_message")]
     ExternalMessage(ExternalMessage),
-    #[serde(rename = "field_status_verified")]
     FieldStatusVerified(FieldStatusVerified),
-    #[serde(rename = "identity_fully_verified")]
     IdentityFullyVerified(IdentityFullyVerified),
+    DisplayNamePersisted(DisplayNamePersisted),
 }
 
 impl From<EventType> for Event {
@@ -219,6 +196,19 @@ pub struct IdentityInserted {
 impl From<IdentityInserted> for Event {
     fn from(val: IdentityInserted) -> Self {
         EventType::IdentityInserted(val).into()
+    }
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DisplayNamePersisted {
+    pub net_address: NetworkAddress,
+    pub display_name: DisplayName,
+}
+
+impl From<DisplayNamePersisted> for Event {
+    fn from(val: DisplayNamePersisted) -> Self {
+        EventType::DisplayNamePersisted(val).into()
     }
 }
 

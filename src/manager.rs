@@ -1,6 +1,7 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
-    BlankNetwork, Event, EventType, FieldStatusVerified, IdentityInserted, Notification,
+    BlankNetwork, DisplayNamePersisted, Event, EventType, FieldStatusVerified, IdentityInserted,
+    Notification,
 };
 use crate::Result;
 use fmt::Display;
@@ -41,7 +42,7 @@ impl From<UpdateChanges> for Notification {
 pub struct IdentityManager {
     identities: HashMap<NetworkAddress, HashMap<IdentityFieldType, FieldStatus>>,
     lookup_addresses: HashMap<IdentityField, HashSet<NetworkAddress>>,
-    display_names: Vec<DisplayName>,
+    display_names: HashMap<NetworkAddress, DisplayName>,
 }
 
 // TODO: Should logs be printed if users are not found?
@@ -107,14 +108,10 @@ impl IdentityManager {
                         if let Some(update_changes) =
                             Self::update_changes(current_status, &verified)
                         {
-                            if current_status.is_not_valid() && verified.field_status.is_valid() {
-                                // Commit changes.
-                                *current_status = verified.field_status;
+                            // Commit changes.
+                            *current_status = verified.field_status;
 
-                                Some(update_changes)
-                            } else {
-                                None
-                            }
+                            Some(update_changes)
                         } else {
                             None
                         }
@@ -127,9 +124,8 @@ impl IdentityManager {
     ) -> Option<UpdateChanges> {
         let verified_status = &verified.field_status;
 
-        // If the current field status has already been
-        // verified, skip (and avoid sending a new
-        // notification).
+        // If the current field status has already been verified, skip, even if
+        // the new message is invalid (and avoid sending a new notification).
         if (current_status.is_valid() && verified_status.is_valid())
             || (current_status.is_valid() && verified_status.is_not_valid())
         {
@@ -147,7 +143,6 @@ impl IdentityManager {
         // challenge type.
         else if current_status.is_not_valid() && verified_status.is_valid() {
             let field = verified_status.field.clone();
-            //*status = verified_status;
 
             match &verified_status.challenge {
                 ChallengeStatus::ExpectMessage(_) | ChallengeStatus::CheckDisplayName(_) => {
@@ -217,8 +212,9 @@ impl IdentityManager {
                 &IdentityField::DisplayName(display_name.clone()),
             )
             .ok_or(anyhow!(
-                "no identity found based on display name: \"{}\"",
-                display_name.as_str()
+                "no identity found based on display name: \"{}\", expected: {:?}",
+                display_name.as_str(),
+                net_address,
             ))?
             .clone();
 
@@ -238,7 +234,8 @@ impl IdentityManager {
             }
         };
 
-        let handler = DisplayNameHandler::with_state(&self.display_names);
+        let all_display_names = self.display_names.values().collect::<Vec<&DisplayName>>();
+        let handler = DisplayNameHandler::with_state(all_display_names.as_slice());
         let violations = handler.verify_display_name(&display_name);
 
         let outcome = if violations.is_empty() {
@@ -246,7 +243,7 @@ impl IdentityManager {
                 net_address: net_address,
                 field_status: {
                     challenge.status = Validity::Valid;
-                    challenge.similarities = Some(violations);
+                    challenge.similarities = None;
                     field_status.challenge = ChallengeStatus::CheckDisplayName(challenge);
                     field_status
                 },
@@ -254,11 +251,34 @@ impl IdentityManager {
         } else {
             VerificationOutcome {
                 net_address: net_address,
-                field_status: field_status,
+                field_status: {
+                    challenge.status = Validity::Invalid;
+                    challenge.similarities = Some(violations);
+                    field_status.challenge = ChallengeStatus::CheckDisplayName(challenge);
+                    field_status
+                },
             }
         };
 
         Ok(Some(outcome))
+    }
+    pub fn persist_display_name(&mut self, persisted: DisplayNamePersisted) -> Result<()> {
+        self.lookup_addresses(&IdentityField::DisplayName(persisted.display_name.clone()))
+            .and_then(|addresses| {
+                if addresses.contains(&&persisted.net_address) {
+                    Some(())
+                } else {
+                    None
+                }
+            })
+            .ok_or(anyhow!(
+                "attempted to persist display name of an identity which does not exist"
+            ))?;
+
+        self.display_names
+            .insert(persisted.net_address, persisted.display_name);
+
+        Ok(())
     }
     // TODO: This should return `Result<>`
     pub fn verify_message(
@@ -366,7 +386,9 @@ impl IdentityManager {
     pub fn is_fully_verified(&self, net_address: &NetworkAddress) -> Result<bool> {
         self.identities
             .get(net_address)
-            .map(|field_statuses| field_statuses.iter().any(|(_, field)| field.is_valid()))
+            .map(|field_statuses| {
+                field_statuses.iter().all(|(_, field)| field.is_valid())
+            })
             .ok_or(anyhow!(
                 "failed to check the full verification status of unknown target: {:?}. This is a bug",
                 net_address
@@ -732,6 +754,15 @@ impl fmt::Display for IdentityField {
 mod tests {
     use super::*;
 
+    impl From<(NetworkAddress, DisplayName)> for DisplayNamePersisted {
+        fn from(val: (NetworkAddress, DisplayName)) -> Self {
+            DisplayNamePersisted {
+                net_address: val.0,
+                display_name: val.1,
+            }
+        }
+    }
+
     impl FieldStatus {
         pub fn mut_field(&mut self) -> &mut IdentityField {
             &mut self.field
@@ -783,6 +814,13 @@ mod tests {
                 fields: vec![
                     FieldStatus::try_from({
                         (
+                            IdentityField::DisplayName(DisplayName::from("Alice")),
+                            RegistrarIdentityField::display_name(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
                             IdentityField::Email(FieldAddress::from("alice@email.com".to_string())),
                             RegistrarIdentityField::email(),
                         )
@@ -814,6 +852,13 @@ mod tests {
             IdentityState {
                 net_address: NetworkAddress::bob(),
                 fields: vec![
+                    FieldStatus::try_from({
+                        (
+                            IdentityField::DisplayName(DisplayName::from("Bob")),
+                            RegistrarIdentityField::display_name(),
+                        )
+                    })
+                    .unwrap(),
                     FieldStatus::try_from({
                         (
                             IdentityField::Email(FieldAddress::from("bob@email.com".to_string())),
@@ -849,6 +894,13 @@ mod tests {
                 fields: vec![
                     FieldStatus::try_from({
                         (
+                            IdentityField::DisplayName(DisplayName::from("Eve")),
+                            RegistrarIdentityField::display_name(),
+                        )
+                    })
+                    .unwrap(),
+                    FieldStatus::try_from({
+                        (
                             IdentityField::Email(FieldAddress::from("eve@email.com".to_string())),
                             RegistrarIdentityField::email(),
                         )
@@ -879,6 +931,13 @@ mod tests {
     }
 
     impl RegistrarIdentityField {
+        // The value itself is not relevant, this method is just used as a
+        // throw-away value in the `IdentityState` test implementations above.
+        pub fn display_name() -> Self {
+            RegistrarIdentityField {
+                field: IdentityField::DisplayName(DisplayName::from("Registrar")),
+            }
+        }
         pub fn email() -> Self {
             RegistrarIdentityField {
                 field: IdentityField::Email(FieldAddress::from(

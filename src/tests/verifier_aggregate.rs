@@ -1,13 +1,15 @@
 use super::InMemBackend;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
-use crate::event::{Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified};
+use crate::event::{
+    DisplayNamePersisted, Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified,
+};
 use crate::manager::{
-    ChallengeStatus, ExpectedMessage, FieldAddress, IdentityField, IdentityFieldType,
-    IdentityState, ProvidedMessage, Validity,
+    ChallengeStatus, DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
+    IdentityFieldType, IdentityState, ProvidedMessage, RegistrarIdentityField, Validity,
 };
 use eventually::{Repository, Subscription};
 use futures::StreamExt;
-use hmac::digest::generic_array::typenum::Exp;
+use std::convert::TryFrom;
 
 #[tokio::test]
 async fn insert_identities() {
@@ -568,4 +570,138 @@ async fn verify_message_invalid_origin() {
     let state = root.state();
     assert!(state.contains(&alice));
     assert!(state.contains(&bob));
+}
+
+#[tokio::test]
+async fn verify_and_persist_display_names() {
+    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let store = be.store();
+    let mut repo = Repository::new(VerifierAggregate.into(), store);
+
+    let alice = IdentityState::alice();
+    let bob = IdentityState::bob();
+    let mut eve = IdentityState::eve();
+
+    let alice_display_name = DisplayName::from("Alice");
+    let bob_display_name = DisplayName::from("Bob");
+
+    // Eve takes Alices's display name:
+    eve.fields.insert(IdentityFieldType::DisplayName, {
+        FieldStatus::try_from({
+            (
+                IdentityField::DisplayName(DisplayName::from("Alice")),
+                RegistrarIdentityField::display_name(),
+            )
+        })
+        .unwrap()
+    });
+
+    let mut root = repo.get(VerifierAggregateId).await.unwrap();
+
+    // Execute commands.
+    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
+        .await
+        .unwrap();
+
+    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
+        .await
+        .unwrap();
+
+    root.handle(VerifierCommand::InsertIdentity(eve.clone()))
+        .await
+        .unwrap();
+
+    root.handle(VerifierCommand::PersistDisplayName {
+        net_address: eve.net_address.clone(),
+        display_name: alice_display_name.clone(),
+    })
+    .await
+    .unwrap();
+
+    root.handle(VerifierCommand::VerifyDisplayName {
+        net_address: alice.net_address.clone(),
+        display_name: alice_display_name.clone(),
+    })
+    .await
+    .unwrap();
+
+    root.handle(VerifierCommand::VerifyDisplayName {
+        net_address: bob.net_address.clone(),
+        display_name: bob_display_name,
+    })
+    .await
+    .unwrap();
+
+    // Commit changes
+    repo.add(root).await.unwrap();
+
+    // Set the expected state.
+    let mut alice_new = alice.clone();
+    let alice_invalid_state = alice_new
+        .fields
+        .get_mut(&IdentityFieldType::DisplayName)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::CheckDisplayName(challenge) => {
+                    challenge.status = Validity::Invalid;
+                    challenge.similarities = Some(vec![alice_display_name.clone()])
+                }
+                _ => panic!(),
+            }
+
+            status.clone()
+        })
+        .unwrap();
+
+    let mut bob_new = bob.clone();
+    let bob_valid_state = bob_new
+        .fields
+        .get_mut(&IdentityFieldType::DisplayName)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::CheckDisplayName(challenge) => {
+                    challenge.status = Validity::Valid;
+                    challenge.similarities = None;
+                }
+                _ => panic!(),
+            }
+
+            status.clone()
+        })
+        .unwrap();
+
+    // Check the resulting events.
+    let expected = [
+        Event::from(EventType::IdentityInserted(alice.clone().into())),
+        Event::from(EventType::IdentityInserted(bob.clone().into())),
+        Event::from(EventType::IdentityInserted(eve.clone().into())),
+        Event::from(EventType::DisplayNamePersisted(DisplayNamePersisted {
+            net_address: eve.net_address.clone(),
+            display_name: alice_display_name,
+        })),
+        Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
+            net_address: alice.net_address.clone(),
+            field_status: alice_invalid_state,
+        })),
+        Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
+            net_address: bob.net_address.clone(),
+            field_status: bob_valid_state,
+        })),
+    ];
+
+    let events = be.get_events(VerifierAggregateId).await;
+    assert_eq!(events.len(), expected.len());
+
+    for (expected, event) in expected.iter().zip(events.iter()) {
+        assert_eq!(expected.body, event.body);
+    }
+
+    // Check the resulting state.
+    let root = repo.get(VerifierAggregateId).await.unwrap();
+    let state = root.state();
+    assert!(!state.contains(&alice));
+    assert!(!state.contains(&bob));
+    assert!(state.contains(&alice_new));
+    assert!(state.contains(&bob_new));
+    assert!(state.contains(&eve));
 }
