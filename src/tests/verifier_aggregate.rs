@@ -301,11 +301,19 @@ async fn verify_message_invalid_message() {
     repo.add(root).await.unwrap();
 
     // Set the expected state.
-    let current_state = alice
+    let mut alice_new = alice.clone();
+    let alice_invalid_state = alice_new
         .fields
-        .get(&IdentityFieldType::Matrix)
-        .unwrap()
-        .clone();
+        .get_mut(&IdentityFieldType::Matrix)
+        .map(|status| {
+            match status.challenge_mut() {
+                ChallengeStatus::ExpectMessage(challenge) => challenge.status = Validity::Invalid,
+                _ => panic!(),
+            }
+
+            status.clone()
+        })
+        .unwrap();
 
     // Check the resulting events.
     let expected = [
@@ -313,7 +321,7 @@ async fn verify_message_invalid_message() {
         Event::from(EventType::IdentityInserted(bob.clone().into())),
         Event::from(EventType::FieldStatusVerified(FieldStatusVerified {
             net_address: alice.net_address.clone(),
-            field_status: current_state,
+            field_status: alice_invalid_state,
         })),
     ];
 
@@ -327,8 +335,9 @@ async fn verify_message_invalid_message() {
     // Check the resulting state.
     let root = repo.get(VerifierAggregateId).await.unwrap();
     let state = root.state();
-    assert!(state.contains(&alice));
+    assert!(!state.contains(&alice));
     assert!(state.contains(&bob));
+    assert!(state.contains(&alice_new));
 }
 
 #[tokio::test]
