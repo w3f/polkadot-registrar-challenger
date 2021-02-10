@@ -5,7 +5,6 @@ use crate::event::{
 };
 use crate::Result;
 use fmt::Display;
-use futures_01::task::current;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use std::fmt;
