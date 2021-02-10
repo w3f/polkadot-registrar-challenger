@@ -457,7 +457,13 @@ impl NetworkAddress {
             BlankNetwork::Kusama => NetworkAddress::Kusama(address),
         }
     }
-    pub fn net_address_str(&self) -> &str {
+    pub fn net_str(&self) -> &str {
+        match self {
+            NetworkAddress::Polkadot(_) => "polkadot",
+            NetworkAddress::Kusama(_) => "kusama",
+        }
+    }
+    pub fn address_str(&self) -> &str {
         match self {
             NetworkAddress::Polkadot(address) => address.0.as_str(),
             NetworkAddress::Kusama(address) => address.0.as_str(),

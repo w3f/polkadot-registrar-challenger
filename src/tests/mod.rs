@@ -8,16 +8,54 @@ use crate::system::run_api_service;
 use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription};
 use futures::StreamExt;
+use jsonrpc_client_transports::transports::ws::connect;
+use jsonrpc_client_transports::RawClient;
+use jsonrpc_core::delegates::IoDelegate;
+use jsonrpc_core::IoHandler;
+use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use std::fs::canonicalize;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tokio::time::{self, Duration};
 
+mod api;
 mod api_account_status;
 mod verifier_aggregate;
+
+fn gen_port() -> usize {
+    thread_rng().gen_range(1_024, 65_535)
+}
+
+struct ApiBackend {
+    pub server: WsServer,
+    //client: RawClient,
+}
+
+impl ApiBackend {
+    async fn run() -> Self {
+        let port = gen_port();
+        let server = run_api_service(port).unwrap();
+        time::sleep(Duration::from_secs(2)).await;
+        /*
+        let client = connect::<RawClient>(&format!("ws://localhost:{}", port).parse().unwrap())
+            .await
+            .unwrap();
+         */
+
+        ApiBackend {
+            server: server,
+            //client: client,
+        }
+    }
+    fn client(&self) -> &RawClient {
+        //&self.client
+        unimplemented!()
+    }
+}
 
 struct InMemBackend<Id: Clone> {
     store: EventStore<Id>,
@@ -31,7 +69,7 @@ where
 {
     async fn run() -> Self {
         // Configure and spawn the event store in a background process.
-        let port: usize = thread_rng().gen_range(1_024, 65_535);
+        let port: usize = gen_port();
         let handle = Command::new(canonicalize("/usr/bin/eventstored").unwrap())
             .arg("--mem-db")
             .arg("--disable-admin-ui")

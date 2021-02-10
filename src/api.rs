@@ -1,6 +1,9 @@
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
+use crate::{
+    aggregate::verifier::{VerifierAggregate, VerifierAggregateId},
+    system::run_api_service,
+};
 use async_channel::{unbounded, Receiver, Sender};
 use eventually::Repository;
 use eventually_event_store_db::EventStore;
@@ -17,7 +20,6 @@ use std::sync::Arc;
 
 const REGISTRAR_ID: u32 = 0;
 const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
-const FAILED_TO_FETCH_IDENTITY_STATE: u32 = 1000;
 
 // TODO: Remove this type since it is no longer necessary.
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -42,18 +44,15 @@ impl ConnectionPool {
             .map(|state| state.sender.clone())
     }
     fn watch_net_address(&self, net_address: &NetworkAddress) -> Receiver<Event> {
-        self.pool
-            .read()
-            .get(net_address)
-            .map(|state| state.receiver.clone())
-            .or_else(|| {
-                let state = ConnectionInfo::new();
-                let receiver = state.receiver.clone();
-                self.pool.write().insert(net_address.clone(), state);
-                Some(receiver)
-            })
-            // Always returns `Some(...)`.
-            .unwrap()
+        let mut writer = self.pool.write();
+        if let Some(info) = writer.get(net_address) {
+            info.receiver.clone()
+        } else {
+            let info = ConnectionInfo::new();
+            let receiver = info.receiver.clone();
+            writer.insert(net_address.clone(), info);
+            receiver
+        }
     }
 }
 
@@ -135,8 +134,8 @@ impl PublicRpc for PublicRpcApi {
         address: IdentityAddress,
     ) {
         // Assign an ID to the subscriber.
-        let sub_id: SubId = NumericIdProvider::new().next_id().into();
-        let sink = match subscriber.assign_id(SubscriptionId::Number(sub_id.0)) {
+        let sub_id = NumericIdProvider::new().next_id();
+        let sink = match subscriber.assign_id(SubscriptionId::Number(sub_id)) {
             Ok(sink) => sink,
             Err(_) => {
                 debug!("Connection has already been terminated");
@@ -155,8 +154,6 @@ impl PublicRpc for PublicRpcApi {
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
         tokio::spawn(async move {
-            let _handler = Arc::new(());
-
             // Check the state for the requested identity and respond
             // immediately with the current state.
             let try_state = manager.read().lookup_full_state(&net_address);
@@ -168,7 +165,7 @@ impl PublicRpc for PublicRpcApi {
                 }
             } else {
                 if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
-                    code: FAILED_TO_FETCH_IDENTITY_STATE,
+                    code: NO_PENDING_JUDGMENT_REQUEST_CODE,
                     message: "There is not pending judgement for this identity (registrar #0)"
                         .to_string(),
                 }))) {
