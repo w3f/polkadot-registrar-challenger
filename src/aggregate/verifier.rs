@@ -3,14 +3,10 @@ use crate::event::{
     DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
     IdentityFullyVerified, IdentityInserted,
 };
-use crate::manager::{
-    DisplayName, FieldStatus, IdentityAddress, IdentityField, IdentityManager, IdentityState,
-    NetworkAddress, UpdateChanges, Validity, VerificationOutcome,
-};
-use async_channel::Sender;
+use crate::manager::{DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress};
 use eventually::Aggregate;
 use eventually_event_store_db::GenericEvent;
-use futures::{future::BoxFuture, TryFutureExt};
+use futures::future::BoxFuture;
 use std::convert::{TryFrom, TryInto};
 
 type Result<T> = std::result::Result<T, Error>;
@@ -37,6 +33,7 @@ impl AsRef<str> for VerifierAggregateId {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum VerifierCommand {
     InsertIdentity(IdentityState),
     VerifyMessage(ExternalMessage),

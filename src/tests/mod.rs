@@ -1,29 +1,18 @@
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId};
 use crate::event::Event;
-use crate::manager::{
-    FieldAddress, FieldStatus, IdentityAddress, IdentityState, NetworkAddress,
-    RegistrarIdentityField,
-};
 use crate::system::run_api_service;
 use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription};
 use futures::StreamExt;
-use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
-use jsonrpc_core::delegates::IoDelegate;
-use jsonrpc_core::IoHandler;
-use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use std::fs::canonicalize;
 use std::process::Stdio;
-use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tokio::time::{self, Duration};
 
 mod api;
-mod api_account_status;
 mod verifier_aggregate;
 
 fn gen_port() -> usize {

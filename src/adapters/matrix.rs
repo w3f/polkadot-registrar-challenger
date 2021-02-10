@@ -2,7 +2,6 @@ use crate::event::{ExternalMessage, ExternalOrigin};
 use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
 use crate::Result;
 use async_channel::{Receiver, Sender};
-use futures::TryFutureExt;
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
 use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};

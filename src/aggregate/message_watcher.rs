@@ -40,12 +40,6 @@ pub enum MessageWatcherCommand {
 #[derive(Debug, Clone)]
 pub struct MessageWatcher;
 
-impl MessageWatcher {
-    fn new() -> Self {
-        MessageWatcher
-    }
-}
-
 impl Aggregate for MessageWatcher {
     type Id = MessageWatcherId;
     type State = ();

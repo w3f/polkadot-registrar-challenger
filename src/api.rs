@@ -1,12 +1,6 @@
 use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
-use crate::{
-    aggregate::verifier::{VerifierAggregate, VerifierAggregateId},
-    system::run_api_service,
-};
 use async_channel::{unbounded, Receiver, Sender};
-use eventually::Repository;
-use eventually_event_store_db::EventStore;
 use jsonrpc_core::Result;
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
@@ -18,7 +12,6 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-const REGISTRAR_ID: u32 = 0;
 const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
 
 // TODO: Remove this type since it is no longer necessary.
@@ -52,14 +45,6 @@ impl ConnectionPool {
             let receiver = info.receiver.clone();
             writer.insert(net_address.clone(), info);
             receiver
-        }
-    }
-}
-
-impl ConnectionPool {
-    fn new() -> Self {
-        ConnectionPool {
-            pool: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }

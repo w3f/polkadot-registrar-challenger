@@ -1,10 +1,8 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
-    BlankNetwork, DisplayNamePersisted, Event, EventType, FieldStatusVerified, IdentityInserted,
-    Notification,
+    BlankNetwork, DisplayNamePersisted, FieldStatusVerified, IdentityInserted, Notification,
 };
 use crate::Result;
-use fmt::Display;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use std::fmt;
@@ -67,7 +65,7 @@ impl IdentityManager {
                 }
 
                 // Delete all entries which have been removed from the new state.
-                current_fields.retain(|field_ty, current| new_fields.contains_key(field_ty));
+                current_fields.retain(|field_ty, _current| new_fields.contains_key(field_ty));
 
                 // Retain only entries of which the field address has changed.
                 new_fields.retain(|field_ty, field| {

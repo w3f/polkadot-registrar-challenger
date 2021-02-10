@@ -1,7 +1,6 @@
-use crate::api::SubId;
 use crate::manager::{
-    DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityAddress, IdentityField,
-    IdentityState, NetworkAddress, ProvidedMessage,
+    DisplayName, FieldAddress, FieldStatus, IdentityField, IdentityState, NetworkAddress,
+    ProvidedMessage,
 };
 use crate::Result;
 use eventually_event_store_db::GenericEvent;

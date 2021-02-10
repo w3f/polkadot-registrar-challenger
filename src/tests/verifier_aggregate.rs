@@ -7,7 +7,7 @@ use crate::manager::{
     ChallengeStatus, DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
     IdentityFieldType, IdentityState, ProvidedMessage, RegistrarIdentityField, Validity,
 };
-use eventually::{Repository, Subscription};
+use eventually::Repository;
 use futures::StreamExt;
 use std::convert::TryFrom;
 
