@@ -138,7 +138,7 @@ impl PublicRpc for PublicRpcApi {
         // (e.g. Polkadot address).
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
-        tokio::spawn(async move {
+        tokio_02::spawn(async move {
             // Check the state for the requested identity and respond
             // immediately with the current state.
             let try_state = manager.read().lookup_full_state(&net_address);

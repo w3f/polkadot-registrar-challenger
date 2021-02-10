@@ -3,6 +3,7 @@ use crate::system::run_api_service;
 use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription};
 use futures::StreamExt;
+use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
@@ -21,28 +22,29 @@ fn gen_port() -> usize {
 
 struct ApiBackend {
     pub server: WsServer,
-    //client: RawClient,
+    client: RawClient,
 }
 
 impl ApiBackend {
     async fn run() -> Self {
         let port = gen_port();
         let server = run_api_service(port).unwrap();
-        time::sleep(Duration::from_secs(2)).await;
-        /*
-        let client = connect::<RawClient>(&format!("ws://localhost:{}", port).parse().unwrap())
+
+        // Let the server spin up.
+        tokio_02::time::delay_for(Duration::from_secs(2)).await;
+
+        // Create a client
+        let client = connect::<RawClient>(&format!("ws://0.0.0.0:{}", port).parse().unwrap())
             .await
             .unwrap();
-         */
 
         ApiBackend {
             server: server,
-            //client: client,
+            client: client,
         }
     }
     fn client(&self) -> &RawClient {
-        //&self.client
-        unimplemented!()
+        &self.client
     }
 }
 
