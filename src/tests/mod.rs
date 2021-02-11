@@ -5,6 +5,7 @@ use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription
 use futures::{future::Join, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
+use jsonrpc_core::{Params, Value};
 use jsonrpc_ws_server::Server as WsServer;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
@@ -26,8 +27,7 @@ struct ApiBackend {
 
 impl ApiBackend {
     async fn run() -> Self {
-        //let port = gen_port();
-        let port = 5_000;
+        let port = gen_port();
 
         std::thread::spawn(move || {
             let mut rt = tokio_02::runtime::Runtime::new().unwrap();
@@ -47,8 +47,20 @@ impl ApiBackend {
 
         ApiBackend { client: client }
     }
-    fn client(&self) -> &RawClient {
-        &self.client
+    async fn get_messages(
+        mut self,
+        subscribe: &str,
+        params: Params,
+        notification: &str,
+        unsubscribe: &str,
+    ) -> Vec<Value> {
+        self.client
+            .subscribe(subscribe, params, notification, unsubscribe)
+            .unwrap()
+            .then(|v| async { v.unwrap() })
+            .take_until(tokio_02::time::delay_for(Duration::from_secs(2)))
+            .collect()
+            .await
     }
 }
 
