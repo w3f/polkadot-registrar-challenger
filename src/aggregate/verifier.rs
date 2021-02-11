@@ -160,8 +160,7 @@ impl VerifierAggregate {
             event
         } else {
             // This should never occur, since the `handle` method creates the events.
-            error!("Failed to apply changes, event could not be deserialized");
-            return Ok(());
+            return Err(anyhow!("Failed to apply changes, event could not be deserialized").into());
         };
 
         match event.body {

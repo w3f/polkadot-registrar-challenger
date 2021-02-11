@@ -126,7 +126,8 @@ fn subscribe_status_pending_judgement_request() {
         ];
 
         // No pending judgement request is available at first.
-        let mut stream = api.client()
+        let mut stream = api
+            .client()
             .subscribe(
                 "account_subscribeStatus",
                 Params::Array(vec![
@@ -135,7 +136,8 @@ fn subscribe_status_pending_judgement_request() {
                 ]),
                 "account_status",
                 "account_unsubscribeStatus",
-            ).unwrap();
+            )
+            .unwrap();
 
         let mut counter = 0;
         while let Some(message) = stream.next().await {

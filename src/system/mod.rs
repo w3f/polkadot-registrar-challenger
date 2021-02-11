@@ -3,12 +3,12 @@ use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
-use crate::api::{PublicRpc, PublicRpcApi};
+use crate::api::{ConnectionPool, PublicRpc, PublicRpcApi};
 use crate::event::{Event, EventType, ExternalMessage};
+use crate::projection::SessionNotifier;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
-use eventually::Repository;
-use eventually::Subscription;
+use eventually::{Projector, Repository, Subscription};
 use eventually_event_store_db::{EventStore, EventSubscription};
 use futures::stream::StreamExt;
 use jsonrpc_pubsub::{PubSubHandler, Session};
@@ -16,7 +16,11 @@ use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 
 #[allow(dead_code)]
-pub fn run_api_service(port: usize) -> Result<WsServer> {
+/// Must be started in a tokio v0.2 runtime context.
+pub fn run_api_service(
+    subscription: EventSubscription<VerifierAggregateId>,
+    port: usize,
+) -> Result<WsServer> {
     let mut io = PubSubHandler::default();
     io.extend_with(PublicRpcApi::default().to_delegate());
 
@@ -26,19 +30,34 @@ pub fn run_api_service(port: usize) -> Result<WsServer> {
     })
     .start(&format!("0.0.0.0:{}", port).parse()?)?;
 
+    tokio_02::spawn(async move {
+        let pool = ConnectionPool::default();
+        let projection = Arc::new(tokio_02::sync::RwLock::new(SessionNotifier::from_pool(
+            pool,
+        )));
+        let mut projector = Projector::new(projection, subscription);
+
+        // TODO: Consider exiting the entire program if this returns error.
+        projector
+            .run()
+            .await
+            .map_err(|err| error!("Session notifier exited: {:?}", err))
+            .unwrap();
+    });
+
     Ok(handle)
 }
 
 #[allow(dead_code)]
 pub async fn run_verifier_subscription(
-    subscriber: EventSubscription<MessageWatcherId>,
+    subscription: EventSubscription<MessageWatcherId>,
     store: EventStore<VerifierAggregateId>,
 ) -> Result<()> {
     info!("Starting message subscription");
 
     let repository = Repository::new(VerifierAggregate.into(), store);
 
-    subscriber
+    subscription
         .resume()
         .await?
         .for_each(|persisted| async {
