@@ -3448,6 +3448,7 @@ dependencies = [
  "libc",
  "memchr",
  "mio 0.7.7",
+ "num_cpus",
  "once_cell",
  "pin-project-lite 0.2.4",
  "signal-hook-registry",

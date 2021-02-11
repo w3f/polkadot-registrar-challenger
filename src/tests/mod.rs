@@ -47,8 +47,11 @@ impl ApiBackend {
 
         ApiBackend { client: client }
     }
+    fn client(&self) -> &RawClient {
+        &self.client
+    }
     async fn get_messages(
-        mut self,
+        &self,
         subscribe: &str,
         params: Params,
         notification: &str,
