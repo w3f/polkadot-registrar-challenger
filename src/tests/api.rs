@@ -1,5 +1,6 @@
 use super::ApiBackend;
 use crate::manager::IdentityState;
+use futures::StreamExt;
 use jsonrpc_core::{Params, Value};
 
 #[test]
@@ -10,9 +11,8 @@ fn api_service() {
 
         let alice = IdentityState::alice();
 
-        /*
         let client = be.client();
-        let _stream = client
+        let mut stream = client
             .subscribe(
                 "account_subscribeStatus",
                 Params::Array(vec![
@@ -23,12 +23,12 @@ fn api_service() {
                 "account_unsubscribeStatus",
             )
             .unwrap();
-         */
 
-        tokio_02::time::delay_for(tokio_02::time::Duration::from_secs(100_000)).await;
+        while let Some(m) = stream.next().await {
+            println!(">> {:?}", m.unwrap());
+        }
 
         println!("GOT HERE");
-        //be.close();
     });
 }
 

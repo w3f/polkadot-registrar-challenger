@@ -21,8 +21,7 @@ fn gen_port() -> usize {
 }
 
 struct ApiBackend {
-    //pub server: WsServer,
-//client: RawClient,
+    client: RawClient,
 }
 
 impl ApiBackend {
@@ -42,23 +41,14 @@ impl ApiBackend {
         tokio_02::time::delay_for(Duration::from_secs(2)).await;
 
         // Create a client
-        /*
         let client = connect::<RawClient>(&format!("ws://127.0.0.1:{}", port).parse().unwrap())
             .await
             .unwrap();
-        */
 
-        ApiBackend {
-            //server: server,
-            //client: client,
-        }
+        ApiBackend { client: client }
     }
     fn client(&self) -> &RawClient {
-        //&self.client
-        unimplemented!()
-    }
-    fn close(mut self) {
-        //self.server.close();
+        &self.client
     }
 }
 
