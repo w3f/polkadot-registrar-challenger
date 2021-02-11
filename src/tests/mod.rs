@@ -2,7 +2,7 @@ use crate::event::Event;
 use crate::system::run_api_service;
 use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription};
-use futures::StreamExt;
+use futures::{future::Join, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
 use jsonrpc_ws_server::Server as WsServer;
@@ -21,30 +21,44 @@ fn gen_port() -> usize {
 }
 
 struct ApiBackend {
-    pub server: WsServer,
-    client: RawClient,
+    //pub server: WsServer,
+//client: RawClient,
 }
 
 impl ApiBackend {
     async fn run() -> Self {
-        let port = gen_port();
-        let server = run_api_service(port).unwrap();
+        //let port = gen_port();
+        let port = 5_000;
+
+        std::thread::spawn(move || {
+            let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+            rt.block_on(async move {
+                let server = run_api_service(port).unwrap();
+                server.wait().unwrap();
+            })
+        });
 
         // Let the server spin up.
         tokio_02::time::delay_for(Duration::from_secs(2)).await;
 
         // Create a client
-        let client = connect::<RawClient>(&format!("ws://0.0.0.0:{}", port).parse().unwrap())
+        /*
+        let client = connect::<RawClient>(&format!("ws://127.0.0.1:{}", port).parse().unwrap())
             .await
             .unwrap();
+        */
 
         ApiBackend {
-            server: server,
-            client: client,
+            //server: server,
+            //client: client,
         }
     }
     fn client(&self) -> &RawClient {
-        &self.client
+        //&self.client
+        unimplemented!()
+    }
+    fn close(mut self) {
+        //self.server.close();
     }
 }
 

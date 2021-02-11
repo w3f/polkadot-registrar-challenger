@@ -138,78 +138,85 @@ impl PublicRpc for PublicRpcApi {
         // (e.g. Polkadot address).
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
-        tokio_02::spawn(async move {
-            // Check the state for the requested identity and respond
-            // immediately with the current state.
-            let try_state = manager.read().lookup_full_state(&net_address);
-            if let Some(state) = try_state {
-                // Send the current state to the subscriber.
-                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
-                    debug!("Connection closed");
-                    return Ok(());
+        std::thread::spawn(move || {
+            let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+            rt.block_on(async move {
+                // Check the state for the requested identity and respond
+                // immediately with the current state.
+                let try_state = manager.read().lookup_full_state(&net_address);
+                if let Some(state) = try_state {
+                    // Send the current state to the subscriber.
+                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(state.into()))) {
+                        debug!("Connection closed");
+                        return Ok(());
+                    }
+                } else {
+                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
+                        code: NO_PENDING_JUDGMENT_REQUEST_CODE,
+                        message: "There is not pending judgement for this identity (registrar #0)"
+                            .to_string(),
+                    }))) {
+                        debug!("Connection closed");
+                        return Ok(());
+                    }
                 }
-            } else {
-                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
-                    code: NO_PENDING_JUDGMENT_REQUEST_CODE,
-                    message: "There is not pending judgement for this identity (registrar #0)"
-                        .to_string(),
-                }))) {
-                    debug!("Connection closed");
-                    return Ok(());
-                }
-            }
 
-            // Start event loop and keep the subscriber informed about any state changes.
-            while let Ok(event) = watcher.recv().await {
-                match event.body {
-                    EventType::FieldStatusVerified(verified) => {
-                        let net_address = &verified.net_address.clone();
+                // Start event loop and keep the subscriber informed about any state changes.
+                while let Ok(event) = watcher.recv().await {
+                    match event.body {
+                        EventType::FieldStatusVerified(verified) => {
+                            let net_address = &verified.net_address.clone();
 
-                        // Update fields and get notifications (if any)
-                        let notifications = match manager.write().update_field(verified) {
-                            Ok(try_changes) => try_changes
-                                .map(|changes| vec![changes.into()])
-                                .unwrap_or(vec![]),
-                            Err(_) => {
-                                error!(
-                                    "Failed to update field: identity {:?} does not exit",
-                                    net_address
-                                );
+                            // Update fields and get notifications (if any)
+                            let notifications = match manager.write().update_field(verified) {
+                                Ok(try_changes) => try_changes
+                                    .map(|changes| vec![changes.into()])
+                                    .unwrap_or(vec![]),
+                                Err(_) => {
+                                    error!(
+                                        "Failed to update field: identity {:?} does not exit",
+                                        net_address
+                                    );
 
-                                continue;
-                            }
-                        };
-
-                        // Finally, fetch the current state and send it to the subscriber.
-                        match manager.read().lookup_full_state(&net_address) {
-                            Some(identity_state) => {
-                                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                                    StateWrapper::with_notifications(identity_state, notifications),
-                                ))) {
-                                    debug!("Connection closed");
-                                    return Ok(());
+                                    continue;
                                 }
-                            }
-                            None => error!("Identity state not found in cache"),
-                        }
-                    }
-                    EventType::IdentityInserted(inserted) => {
-                        manager.write().insert_identity(inserted.clone());
+                            };
 
-                        if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                            StateWrapper::from(inserted.identity),
-                        ))) {
-                            debug!("Connection closed");
-                            return Ok(());
+                            // Finally, fetch the current state and send it to the subscriber.
+                            match manager.read().lookup_full_state(&net_address) {
+                                Some(identity_state) => {
+                                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
+                                        StateWrapper::with_notifications(
+                                            identity_state,
+                                            notifications,
+                                        ),
+                                    ))) {
+                                        debug!("Connection closed");
+                                        return Ok(());
+                                    }
+                                }
+                                None => error!("Identity state not found in cache"),
+                            }
                         }
-                    }
-                    _ => {
-                        warn!("Received unexpected event")
+                        EventType::IdentityInserted(inserted) => {
+                            manager.write().insert_identity(inserted.clone());
+
+                            if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
+                                StateWrapper::from(inserted.identity),
+                            ))) {
+                                debug!("Connection closed");
+                                return Ok(());
+                            }
+                        }
+                        _ => {
+                            warn!("Received unexpected event")
+                        }
                     }
                 }
-            }
 
-            crate::Result::<()>::Ok(())
+                crate::Result::<()>::Ok(())
+            })
+            .unwrap();
         });
     }
     fn unsubscribe_account_status(

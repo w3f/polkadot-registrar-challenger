@@ -2,26 +2,34 @@ use super::ApiBackend;
 use crate::manager::IdentityState;
 use jsonrpc_core::{Params, Value};
 
-#[tokio_02::test]
-async fn api_service() {
-    env_logger::init();
+#[test]
+fn api_service() {
+    let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+    rt.block_on(async move {
+        let be = ApiBackend::run().await;
 
-    let be = ApiBackend::run().await;
+        let alice = IdentityState::alice();
 
-    let alice = IdentityState::alice();
+        /*
+        let client = be.client();
+        let _stream = client
+            .subscribe(
+                "account_subscribeStatus",
+                Params::Array(vec![
+                    Value::String(alice.net_address.net_str().to_string()),
+                    Value::String(alice.net_address.address_str().to_string()),
+                ]),
+                "account_status",
+                "account_unsubscribeStatus",
+            )
+            .unwrap();
+         */
 
-    let client = be.client();
-    let _stream = client
-        .subscribe(
-            "account_subscribeStatus",
-            Params::Array(vec![
-                Value::String(alice.net_address.net_str().to_string()),
-                Value::String(alice.net_address.address_str().to_string()),
-            ]),
-            "account_status",
-            "account_unsubscribeStatus",
-        )
-        .unwrap();
+        tokio_02::time::delay_for(tokio_02::time::Duration::from_secs(100_000)).await;
+
+        println!("GOT HERE");
+        //be.close();
+    });
 }
 
 /*
