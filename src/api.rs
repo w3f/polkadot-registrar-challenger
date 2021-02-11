@@ -12,7 +12,7 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-const NO_PENDING_JUDGMENT_REQUEST_CODE: u32 = 1000;
+const REGISTRAR_IDX: usize = 0;
 
 // TODO: Remove this type since it is no longer necessary.
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
@@ -151,11 +151,9 @@ impl PublicRpc for PublicRpcApi {
                         return Ok(());
                     }
                 } else {
-                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(ErrorMessage {
-                        code: NO_PENDING_JUDGMENT_REQUEST_CODE,
-                        message: "There is not pending judgement for this identity (registrar #0)"
-                            .to_string(),
-                    }))) {
+                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Err(
+                        ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
+                    ))) {
                         debug!("Connection closed");
                         return Ok(());
                     }

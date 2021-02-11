@@ -46,9 +46,18 @@ impl From<EventType> for Event {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub struct ErrorMessage {
-    pub code: u32,
-    pub message: String,
+#[serde(rename_all = "snake_case", tag = "type", content = "message")]
+pub enum ErrorMessage {
+    NoPendingJudgementRequest(String),
+}
+
+impl ErrorMessage {
+    pub fn no_pending_judgement_request(registrar_idx: usize) -> Self {
+        ErrorMessage::NoPendingJudgementRequest(format!(
+            "This identity does not have a pending judgement request for registrar #{}",
+            registrar_idx
+        ))
+    }
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
