@@ -1,8 +1,10 @@
-use eventstore::{Client, EventData, ResolvedEvent};
+use eventstore::{Client, EventData, ReadResult, RecordedEvent, ResolvedEvent};
 use futures::TryStreamExt;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error as StdError;
 use std::fmt::Debug;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 pub mod display_name;
 mod message_watcher;
@@ -96,7 +98,7 @@ impl<P> Projector<P>
 where
     P: 'static + Send + Projection + Default,
     <P as Projection>::Id: Send + Sync + Default + AsRef<str>,
-    <P as Projection>::Event: Send + Sync + TryFrom<ResolvedEvent>,
+    <P as Projection>::Event: Send + Sync + TryFrom<RecordedEvent>,
     <P as Projection>::Error: 'static + Send + Sync + StdError,
 {
     fn new(client: Client) -> Self {
@@ -105,24 +107,33 @@ where
             client: client,
         }
     }
-    async fn run(self) -> Result<(), anyhow::Error> {
+    async fn run_blocking(self) {
         let mut projection = self.projection;
         let client = self.client;
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
+            let mut latest_revision = 0;
+
             let subscribe = client.subscribe_to_stream_from(<P as Projection>::Id::default());
             let mut stream = subscribe.execute_event_appeared_only().await?;
 
             while let Ok(event) = stream.try_next().await {
                 match event {
                     Some(resolved) => {
-                        // Parse event.
-                        let event = <P as Projection>::Event::try_from(resolved).map_err(|_| {
-                            anyhow!("Failed to convert eventstore native type to local time")
-                        })?;
+                        if let Some(recorded) = resolved.event {
+                            latest_revision = recorded.revision;
 
-                        // Project event.
-                        projection.project(event).await?;
+                            // Parse event.
+                            let event =
+                                <P as Projection>::Event::try_from(recorded).map_err(|_| {
+                                    anyhow!("Failed to convert eventstore event into native type")
+                                })?;
+
+                            // Project event.
+                            projection.project(event).await?;
+                        } else {
+                            warn!("Did not receive a recorded event");
+                        }
                     }
                     _ => {}
                 }
@@ -131,6 +142,96 @@ where
             Result::<(), anyhow::Error>::Ok(())
         });
 
-        Ok(())
+        let msg = format!(
+            "Projection for stream '{}' has exited unexpectedly",
+            <P as Projection>::Id::default().as_ref()
+        );
+        error!("{}", &msg);
+        let _ = handle.await.expect(&msg);
+    }
+}
+
+#[async_trait]
+pub trait Snapshot {
+    type Id;
+    type State;
+    type Error;
+
+    fn qualifies(&self) -> bool;
+    async fn snapshot(&self) -> Self::State;
+    async fn restore(state: Self::State) -> Self;
+}
+
+pub struct Snapshoter<S> {
+    // The stateful type, such as an aggregate or a projection.
+    stateful: Arc<RwLock<S>>,
+    client: Client,
+}
+
+impl<S> Snapshoter<S>
+where
+    S: 'static + Send + Sync + Snapshot,
+    <S as Snapshot>::Id: Default + AsRef<str>,
+    <S as Snapshot>::State: TryInto<EventData> + TryFrom<RecordedEvent>,
+{
+    async fn new(mut stateful: Arc<RwLock<S>>, client: Client) -> Result<Self, anyhow::Error> {
+        info!(
+            "Restoring snapshot from {}",
+            <S as Snapshot>::Id::default().as_ref()
+        );
+
+        match client
+            .read_stream(<S as Snapshot>::Id::default())
+            .backward()
+            .execute(1)
+            .await?
+        {
+            ReadResult::Ok(mut stream) => {
+                while let Some(resolved) = stream.try_next().await? {
+                    info!("Snapshot found, restoring");
+
+                    if let Some(recorded) = resolved.event {
+                        let mut s = stateful.write().await;
+                        *s =
+                            S::restore(<S as Snapshot>::State::try_from(recorded).map_err(
+                                |_| anyhow!("Failed to convert snapshot into native type"),
+                            )?)
+                            .await;
+                    }
+                }
+            }
+            ReadResult::StreamNotFound(name) => {
+                warn!(
+                    "No snapshots found on stream '{}', starting from scratch",
+                    name
+                );
+            }
+        }
+
+        Ok(Snapshoter {
+            stateful: stateful,
+            client: client,
+        })
+    }
+    async fn run_blocking(self) {
+        let stateful = self.stateful;
+        let client = self.client;
+
+        let handle = tokio::spawn(async move {
+            loop {
+                {
+                    if !stateful.read().await.qualifies() {
+                        continue;
+                    }
+                }
+            }
+        });
+
+        let msg = format!(
+            "Snapshoter for stream '{}' has exited unexpectedly",
+            <S as Snapshot>::Id::default().as_ref()
+        );
+        error!("{}", &msg);
+        let _ = handle.await.expect(&msg);
     }
 }
