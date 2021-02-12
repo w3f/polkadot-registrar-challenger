@@ -1,5 +1,6 @@
-use eventstore::{Client, EventData};
-use std::convert::TryInto;
+use eventstore::{Client, EventData, ResolvedEvent};
+use futures::TryStreamExt;
+use std::convert::{TryFrom, TryInto};
 use std::error::Error as StdError;
 use std::fmt::Debug;
 
@@ -21,12 +22,11 @@ pub struct Error(#[from] anyhow::Error);
 #[async_trait]
 pub trait Aggregate {
     type Id;
-    type State;
     type Event;
     type Command;
     type Error;
 
-    async fn apply(&mut self, event: Self::Event) -> Result<Self::State, Self::Error>;
+    async fn apply(&mut self, event: Self::Event) -> Result<(), Self::Error>;
     async fn handle(&self, command: Self::Command)
         -> Result<Option<Vec<Self::Event>>, Self::Error>;
 }
@@ -57,7 +57,7 @@ where
             self.client
                 .write_events(<A as Aggregate>::Id::default())
                 .send_iter(
-                   to_store 
+                    to_store
                         .into_iter()
                         .map(|event| {
                             event.try_into().map_err(|_| {
@@ -73,6 +73,63 @@ where
                 self.aggregate.apply(event).await?;
             }
         }
+
+        Ok(())
+    }
+}
+
+#[async_trait]
+pub trait Projection {
+    type Id;
+    type Event;
+    type Error;
+
+    async fn project(&mut self, event: Self::Event) -> Result<(), Self::Error>;
+}
+
+pub struct Projector<P> {
+    projection: P,
+    client: Client,
+}
+
+impl<P> Projector<P>
+where
+    P: 'static + Send + Projection + Default,
+    <P as Projection>::Id: Send + Sync + Default + AsRef<str>,
+    <P as Projection>::Event: Send + Sync + TryFrom<ResolvedEvent>,
+    <P as Projection>::Error: 'static + Send + Sync + StdError,
+{
+    fn new(client: Client) -> Self {
+        Projector {
+            projection: Default::default(),
+            client: client,
+        }
+    }
+    async fn run(self) -> Result<(), anyhow::Error> {
+        let mut projection = self.projection;
+        let client = self.client;
+
+        tokio::spawn(async move {
+            let subscribe = client.subscribe_to_stream_from(<P as Projection>::Id::default());
+            let mut stream = subscribe.execute_event_appeared_only().await?;
+
+            while let Ok(event) = stream.try_next().await {
+                match event {
+                    Some(resolved) => {
+                        // Parse event.
+                        let event = <P as Projection>::Event::try_from(resolved).map_err(|_| {
+                            anyhow!("Failed to convert eventstore native type to local time")
+                        })?;
+
+                        // Project event.
+                        projection.project(event).await?;
+                    }
+                    _ => {}
+                }
+            }
+
+            Result::<(), anyhow::Error>::Ok(())
+        });
 
         Ok(())
     }
