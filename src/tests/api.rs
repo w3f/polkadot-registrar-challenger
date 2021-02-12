@@ -114,9 +114,12 @@ fn subscribe_status_pending_judgement_request() {
     let reg_aggr = regulator.new_child(Thread::Aggregate);
     let reg_stream = regulator.new_child(Thread::Stream);
 
+    let pool = ConnectionPool::default();
+    let t_pool = pool.clone();
+
     let mut rt = tokio_02::runtime::Runtime::new().unwrap();
     rt.spawn(async move {
-        let api = ApiBackend::run(ConnectionPool::default()).await;
+        let api = ApiBackend::run(t_pool).await;
         let alice = IdentityState::alice();
 
         reg_stream.wait();
@@ -156,6 +159,7 @@ fn subscribe_status_pending_judgement_request() {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async move {
         let es = InMemBackend::<VerifierAggregateId>::run().await;
+        es.run_session_notifier(pool).await;
         let store = es.store();
         let mut repo = Repository::new(VerifierAggregate.into(), store);
 
@@ -165,6 +169,9 @@ fn subscribe_status_pending_judgement_request() {
         root.handle(VerifierCommand::InsertIdentity(alice.clone()))
             .await
             .unwrap();
+
+        // Commit changes
+        repo.add(root).await.unwrap();
 
         reg_aggr.yield_time_to(Thread::Stream);
     });

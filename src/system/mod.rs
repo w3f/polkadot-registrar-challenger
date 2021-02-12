@@ -28,7 +28,14 @@ pub async fn run_session_notifier(
     projector
         .run()
         .await
-        .map_err(|err| error!("Session notifier exited: {:?}", err))
+        .map_err(|err| {
+            error!("Session notifier exited: {:?}", err);
+            err
+        })
+        .map_err(|err| {
+            println!(">>>> {:?}", err);
+            err
+        })
         .unwrap();
 }
 

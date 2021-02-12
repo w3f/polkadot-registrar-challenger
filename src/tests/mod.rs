@@ -1,6 +1,7 @@
+use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::Event;
-use crate::system::run_api_service;
+use crate::system::{run_api_service, run_session_notifier};
 use eventually::Subscription;
 use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription};
 use futures::{future::Join, StreamExt};
@@ -116,16 +117,30 @@ where
     fn store(&self) -> EventStore<Id> {
         self.store.clone()
     }
-    async fn subscription(&self, id: Id) -> EventSubscription<Id> {
+    async fn run_session_notifier(&self, pool: ConnectionPool) {
+        let subscription = self.subscription(VerifierAggregateId).await;
+        tokio::spawn(async move {
+            run_session_notifier(pool, subscription).await;
+        });
+    }
+    async fn subscription<Sid>(&self, id: Sid) -> EventSubscription<Sid>
+    where
+        Sid: 'static + Send + Sync + Eq + TryFrom<String> + Clone + AsRef<str>,
+    {
         EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", self.port))
             .await
             .unwrap()
             .verify_connection(5)
             .await
             .unwrap()
-            .build_persistant_subscription::<Id>(id, "test_subscription11")
+            .build_persistant_subscription::<Sid>(id, "test_subscription11")
+            .await
+            .unwrap()
     }
-    async fn get_events(&self, id: Id) -> Vec<Event> {
+    async fn get_events<Sid>(&self, id: Sid) -> Vec<Event>
+    where
+        Sid: 'static + Send + Sync + Eq + TryFrom<String> + Clone + AsRef<str>,
+    {
         self.subscription(id)
             .await
             .resume()

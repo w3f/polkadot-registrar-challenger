@@ -24,7 +24,7 @@ impl From<u64> for SubId {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ConnectionPool {
     pool: Arc<RwLock<HashMap<NetworkAddress, ConnectionInfo>>>,
 }
