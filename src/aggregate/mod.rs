@@ -93,6 +93,7 @@ pub trait Projection {
 pub struct Projector<P> {
     projection: P,
     client: Client,
+    latest_revision: Arc<RwLock<u64>>,
 }
 
 impl<P> Projector<P>
@@ -106,23 +107,26 @@ where
         Projector {
             projection: Default::default(),
             client: client,
+            latest_revision: Arc::new(RwLock::new(0)),
         }
     }
     async fn run_blocking(self) {
         let mut projection = self.projection;
         let client = self.client;
+        let latest_revision = Arc::clone(&self.latest_revision);
 
         let handle = tokio::spawn(async move {
-            let mut latest_revision = 0;
+            let subscribe = client
+                .subscribe_to_stream_from(<P as Projection>::Id::default())
+                .start_position(*latest_revision.read().await);
 
-            let subscribe = client.subscribe_to_stream_from(<P as Projection>::Id::default());
             let mut stream = subscribe.execute_event_appeared_only().await?;
 
             while let Ok(event) = stream.try_next().await {
                 match event {
                     Some(resolved) => {
                         if let Some(recorded) = resolved.event {
-                            latest_revision = recorded.revision;
+                            *latest_revision.write().await = recorded.revision;
 
                             // Parse event.
                             let event =
