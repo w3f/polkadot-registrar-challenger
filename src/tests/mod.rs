@@ -1,3 +1,4 @@
+use crate::api::ConnectionPool;
 use crate::event::Event;
 use crate::system::run_api_service;
 use eventually::Subscription;
@@ -26,13 +27,13 @@ struct ApiBackend {
 }
 
 impl ApiBackend {
-    async fn run() -> Self {
+    async fn run(pool: ConnectionPool) -> Self {
         let port = gen_port();
 
         std::thread::spawn(move || {
             let mut rt = tokio_02::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
-                let server = run_api_service(port).unwrap();
+                let server = run_api_service(pool, port).unwrap();
                 server.wait().unwrap();
             })
         });

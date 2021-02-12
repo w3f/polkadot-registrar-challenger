@@ -108,6 +108,15 @@ pub struct PublicRpcApi {
     manager: Arc<RwLock<IdentityManager>>,
 }
 
+impl PublicRpcApi {
+    pub fn with_pool(pool: ConnectionPool) -> Self {
+        PublicRpcApi {
+            connection_pool: pool,
+            manager: Default::default(),
+        }
+    }
+}
+
 impl PublicRpc for PublicRpcApi {
     type Metadata = Arc<Session>;
 

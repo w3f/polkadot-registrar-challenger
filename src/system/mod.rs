@@ -15,35 +15,34 @@ use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 
+pub async fn run_session_notifier(
+    pool: ConnectionPool,
+    subscription: EventSubscription<VerifierAggregateId>,
+) {
+    let projection = Arc::new(tokio_02::sync::RwLock::new(SessionNotifier::with_pool(
+        pool,
+    )));
+    let mut projector = Projector::new(projection, subscription);
+
+    // TODO: Consider exiting the entire program if this returns error.
+    projector
+        .run()
+        .await
+        .map_err(|err| error!("Session notifier exited: {:?}", err))
+        .unwrap();
+}
+
 #[allow(dead_code)]
 /// Must be started in a tokio v0.2 runtime context.
-pub fn run_api_service(
-    subscription: EventSubscription<VerifierAggregateId>,
-    port: usize,
-) -> Result<WsServer> {
+pub fn run_api_service(pool: ConnectionPool, port: usize) -> Result<WsServer> {
     let mut io = PubSubHandler::default();
-    io.extend_with(PublicRpcApi::default().to_delegate());
+    io.extend_with(PublicRpcApi::with_pool(pool).to_delegate());
 
     // TODO: Might consider setting `max_connections`.
     let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
         Arc::new(Session::new(context.sender().clone()))
     })
     .start(&format!("0.0.0.0:{}", port).parse()?)?;
-
-    tokio_02::spawn(async move {
-        let pool = ConnectionPool::default();
-        let projection = Arc::new(tokio_02::sync::RwLock::new(SessionNotifier::from_pool(
-            pool,
-        )));
-        let mut projector = Projector::new(projection, subscription);
-
-        // TODO: Consider exiting the entire program if this returns error.
-        projector
-            .run()
-            .await
-            .map_err(|err| error!("Session notifier exited: {:?}", err))
-            .unwrap();
-    });
 
     Ok(handle)
 }

@@ -1,5 +1,6 @@
 use super::{ApiBackend, InMemBackend};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
+use crate::api::ConnectionPool;
 use crate::event::ErrorMessage;
 use crate::manager::IdentityState;
 use eventually::Repository;
@@ -78,7 +79,7 @@ impl Default for Thread {
 fn subscribe_status_no_judgement_request() {
     let mut rt = tokio_02::runtime::Runtime::new().unwrap();
     rt.block_on(async move {
-        let api = ApiBackend::run().await;
+        let api = ApiBackend::run(ConnectionPool::default()).await;
 
         let alice = IdentityState::alice();
 
@@ -115,7 +116,7 @@ fn subscribe_status_pending_judgement_request() {
 
     let mut rt = tokio_02::runtime::Runtime::new().unwrap();
     rt.spawn(async move {
-        let api = ApiBackend::run().await;
+        let api = ApiBackend::run(ConnectionPool::default()).await;
         let alice = IdentityState::alice();
 
         reg_stream.wait();

@@ -13,7 +13,7 @@ pub struct SessionNotifier {
 }
 
 impl SessionNotifier {
-    pub fn from_pool(pool: ConnectionPool) -> Self {
+    pub fn with_pool(pool: ConnectionPool) -> Self {
         SessionNotifier {
             connection_pool: pool,
         }
