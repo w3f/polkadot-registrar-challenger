@@ -5,6 +5,7 @@ use std::error::Error as StdError;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio::time::{interval, Duration};
 
 pub mod display_name;
 mod message_watcher;
@@ -171,10 +172,11 @@ pub struct Snapshoter<S> {
 impl<S> Snapshoter<S>
 where
     S: 'static + Send + Sync + Snapshot,
-    <S as Snapshot>::Id: Default + AsRef<str>,
-    <S as Snapshot>::State: TryInto<EventData> + TryFrom<RecordedEvent>,
+    <S as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
+    <S as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
+    <S as Snapshot>::Error: 'static + Send + Sync,
 {
-    async fn new(mut stateful: Arc<RwLock<S>>, client: Client) -> Result<Self, anyhow::Error> {
+    async fn new(stateful: Arc<RwLock<S>>, client: Client) -> Result<Self, anyhow::Error> {
         info!(
             "Restoring snapshot from {}",
             <S as Snapshot>::Id::default().as_ref()
@@ -218,13 +220,29 @@ where
         let client = self.client;
 
         let handle = tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(1));
             loop {
+                interval.tick().await;
+
                 {
                     if !stateful.read().await.qualifies() {
                         continue;
                     }
                 }
+
+                let state = stateful.read().await.snapshot().await;
+                let event = state.try_into().map_err(|_| {
+                    anyhow!("Failed to convert native snapshot into evenstore event")
+                })?;
+
+                let _ = client
+                    .write_events(<S as Snapshot>::Id::default())
+                    .send_event(event)
+                    .await?;
             }
+
+            #[allow(unreachable_code)]
+            Result::<(), anyhow::Error>::Ok(())
         });
 
         let msg = format!(
