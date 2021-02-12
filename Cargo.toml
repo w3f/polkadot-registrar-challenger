@@ -20,6 +20,7 @@ env_logger = "0.7.1"
 tokio = { version = "1.2.0", features = ["macros", "time", "process", "rt-multi-thread" ] }
 tokio_02 = { version = "0.2", package = "tokio", features = ["macros", "time", "process"] }
 futures = "0.3.5"
+eventstore = "0.9.9"
 serde_yaml = "0.8.15"
 eventually = { path = "../eventually-rs/eventually" }
 eventually-event-store-db = { path = "../eventually-rs/eventually-event-store-db", features = ["verify-connection"] }
