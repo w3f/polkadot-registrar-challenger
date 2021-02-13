@@ -1,7 +1,5 @@
-use super::Error;
+use super::{Aggregate, Error};
 use crate::event::{Event, ExternalMessage};
-use eventually::Aggregate;
-use eventually_event_store_db::GenericEvent;
 use futures::future::BoxFuture;
 use std::convert::AsRef;
 use std::convert::{TryFrom, TryInto};
@@ -40,34 +38,25 @@ pub enum MessageWatcherCommand {
 #[derive(Debug, Clone)]
 pub struct MessageWatcher;
 
+#[async_trait]
 impl Aggregate for MessageWatcher {
     type Id = MessageWatcherId;
     type State = ();
-    type Event = GenericEvent;
+    type Event = Event;
     type Command = MessageWatcherCommand;
     type Error = Error;
 
-    fn apply(state: Self::State, _event: Self::Event) -> Result<Self::State> {
-        Ok(state)
+    fn state(&self) -> &Self::State {
+        &()
     }
 
-    fn handle<'a, 's>(
-        &'a self,
-        _id: &'s Self::Id,
-        _state: &'s Self::State,
-        command: Self::Command,
-    ) -> BoxFuture<Result<Option<Vec<Self::Event>>>>
-    where
-        's: 'a,
-    {
-        let fut = async move {
-            match command {
-                MessageWatcherCommand::AddMessage(message) => {
-                    Ok(Some(vec![Event::from(message).try_into()?]))
-                }
-            }
-        };
+    async fn apply(&mut self, _event: Self::Event) -> Result<()> {
+        Ok(())
+    }
 
-        Box::pin(fut)
+    async fn handle(&self, command: Self::Command) -> Result<Option<Vec<Self::Event>>> {
+        match command {
+            MessageWatcherCommand::AddMessage(message) => Ok(Some(vec![Event::from(message)])),
+        }
     }
 }

@@ -745,52 +745,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eventually"
-version = "0.4.0"
-dependencies = [
- "eventually-core",
- "eventually-util",
-]
-
-[[package]]
-name = "eventually-core"
-version = "0.4.0"
-dependencies = [
- "anyhow",
- "futures 0.3.12",
- "serde",
- "thiserror",
-]
-
-[[package]]
-name = "eventually-event-store-db"
-version = "0.9.0"
-dependencies = [
- "bytes 1.0.1",
- "eventstore",
- "eventually",
- "futures 0.3.12",
- "serde",
- "serde_json",
- "thiserror",
- "tokio 1.2.0",
- "tokio-compat",
- "uuid 0.8.2",
-]
-
-[[package]]
-name = "eventually-util"
-version = "0.4.0"
-dependencies = [
- "anyhow",
- "eventually-core",
- "futures 0.3.12",
- "parking_lot 0.11.1",
- "thiserror",
- "tokio 0.2.25",
-]
-
-[[package]]
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2652,8 +2606,7 @@ dependencies = [
  "async-trait",
  "base64 0.12.3",
  "env_logger",
- "eventually",
- "eventually-event-store-db",
+ "eventstore",
  "futures 0.3.12",
  "hex",
  "hmac 0.9.0",
@@ -3468,33 +3421,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-compat"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "107b625135aa7b9297dd2d99ccd6ca6ab124a5d1230778e159b9095adca4c722"
-dependencies = [
- "futures 0.1.30",
- "futures-core",
- "futures-util",
- "pin-project-lite 0.1.11",
- "tokio 0.2.25",
- "tokio-current-thread",
- "tokio-executor",
- "tokio-reactor",
- "tokio-timer",
-]
-
-[[package]]
-name = "tokio-current-thread"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1de0e32a83f131e002238d7ccde18211c0a5397f60cbfffcb112868c2e0e20e"
-dependencies = [
- "futures 0.1.30",
- "tokio-executor",
-]
-
-[[package]]
 name = "tokio-executor"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3610,18 +3536,6 @@ dependencies = [
  "mio 0.6.23",
  "tokio-io",
  "tokio-reactor",
-]
-
-[[package]]
-name = "tokio-timer"
-version = "0.2.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93044f2d313c95ff1cb7809ce9a7a05735b012288a888b62d4434fd58c94f296"
-dependencies = [
- "crossbeam-utils 0.7.2",
- "futures 0.1.30",
- "slab",
- "tokio-executor",
 ]
 
 [[package]]

@@ -3,7 +3,6 @@ use crate::manager::{
     ProvidedMessage,
 };
 use crate::Result;
-use eventually_event_store_db::GenericEvent;
 
 use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,11 +13,25 @@ pub struct Event {
     pub body: EventType,
 }
 
-impl TryFrom<Event> for GenericEvent {
+impl TryFrom<eventstore::RecordedEvent> for Event {
+    type Error = anyhow::Error;
+
+    fn try_from(val: eventstore::RecordedEvent) -> Result<Self> {
+        val.as_json::<Event>().map_err(|err| {
+            anyhow!(
+                "failed to deserialize 'RecordedEvent' to 'Event': {:?}",
+                err
+            )
+        })
+    }
+}
+
+impl TryFrom<Event> for eventstore::EventData {
     type Error = anyhow::Error;
 
     fn try_from(val: Event) -> Result<Self> {
-        GenericEvent::serialize(val).map_err(|err| err.into())
+        eventstore::EventData::json("registrar-event", val)
+            .map_err(|err| anyhow!("failed to serialize 'Event' to 'EventData': {:?}", err))
     }
 }
 
@@ -31,6 +44,7 @@ pub enum EventType {
     FieldStatusVerified(FieldStatusVerified),
     IdentityFullyVerified(IdentityFullyVerified),
     DisplayNamePersisted(DisplayNamePersisted),
+    ExportedIdentityState(Vec<IdentityState>),
 }
 
 impl From<EventType> for Event {

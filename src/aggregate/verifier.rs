@@ -1,34 +1,30 @@
-use super::Error;
+use super::{Aggregate, Snapshot};
 use crate::event::{
-    DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
+    self, DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
     IdentityFullyVerified, IdentityInserted,
 };
 use crate::manager::{DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress};
-use eventually::Aggregate;
-use eventually_event_store_db::GenericEvent;
+use crate::Result;
 use futures::future::BoxFuture;
+use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
-
-type Result<T> = std::result::Result<T, Error>;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct VerifierAggregateId;
-
-impl TryFrom<String> for VerifierAggregateId {
-    type Error = Error;
-
-    fn try_from(value: String) -> Result<Self> {
-        if value == "field_verifications" {
-            Ok(VerifierAggregateId)
-        } else {
-            Err(anyhow!("Invalid aggregate Id, expected: 'field_verifications'").into())
-        }
-    }
-}
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
+pub struct VerifierAggregateSnapshotsId;
 
 impl AsRef<str> for VerifierAggregateId {
     fn as_ref(&self) -> &str {
-        "field_verifications"
+        "identity_state_changes"
+    }
+}
+
+impl AsRef<str> for VerifierAggregateSnapshotsId {
+    fn as_ref(&self) -> &str {
+        "identity_state_changes_snapshots"
     }
 }
 
@@ -48,13 +44,33 @@ pub enum VerifierCommand {
 }
 
 #[derive(Debug, Clone)]
-pub struct VerifierAggregate;
+pub struct VerifierAggregate {
+    state: IdentityManager,
+    events_generated: usize,
+    snapshot_every: usize,
+}
+
+impl Default for VerifierAggregate {
+    fn default() -> Self {
+        VerifierAggregate {
+            state: Default::default(),
+            events_generated: 0,
+            snapshot_every: 50,
+        }
+    }
+}
 
 impl VerifierAggregate {
+    pub fn set_snapshot_every(self, snapshot_every: usize) -> Self {
+        VerifierAggregate {
+            snapshot_every: snapshot_every,
+            ..Default::default()
+        }
+    }
     fn handle_verify_message(
-        state: &IdentityManager,
+        &self,
         external_message: ExternalMessage,
-    ) -> Result<Option<Vec<GenericEvent>>> {
+    ) -> Result<Option<Vec<Event>>> {
         let (identity_field, provided_message) = (
             IdentityField::from((external_message.origin, external_message.field_address)),
             external_message.message,
@@ -64,7 +80,7 @@ impl VerifierAggregate {
 
         // Verify the message.
         let mut c_net_address = None;
-        state
+        self.state
             .verify_message(&identity_field, &provided_message)
             .map(|outcome| {
                 c_net_address = Some(outcome.net_address.clone());
@@ -82,7 +98,7 @@ impl VerifierAggregate {
         // therefore `Some(..)`), then check whether the full identity has been
         // verified and create an event if that's the case.
         if let Some(net_address) = c_net_address {
-            state.is_fully_verified(&net_address).map(|it_is| {
+            self.state.is_fully_verified(&net_address).map(|it_is| {
                 if it_is {
                     events.push(
                         IdentityFullyVerified {
@@ -97,24 +113,19 @@ impl VerifierAggregate {
         if events.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(
-                events
-                    .into_iter()
-                    .map(|event| event.try_into().map_err(|err| Error::from(err)))
-                    .collect::<Result<Vec<GenericEvent>>>()?,
-            ))
+            Ok(Some(events))
         }
     }
     fn handle_display_name(
-        state: &IdentityManager,
+        &self,
         net_address: NetworkAddress,
         display_name: DisplayName,
-    ) -> Result<Option<Vec<GenericEvent>>> {
+    ) -> Result<Option<Vec<Event>>> {
         let mut events: Vec<Event> = vec![];
 
         // Verify the display name.
         let mut c_net_address = None;
-        state
+        self.state
             .verify_display_name(net_address, display_name)?
             .map(|outcome| {
                 c_net_address = Some(outcome.net_address.clone());
@@ -132,7 +143,7 @@ impl VerifierAggregate {
         // therefore `Some(..)`), then check whether the full identity has been
         // verified and create an event if that's the case.
         if let Some(net_address) = c_net_address {
-            state.is_fully_verified(&net_address).map(|it_is| {
+            self.state.is_fully_verified(&net_address).map(|it_is| {
                 if it_is {
                     events.push(
                         IdentityFullyVerified {
@@ -147,32 +158,20 @@ impl VerifierAggregate {
         if events.is_empty() {
             Ok(None)
         } else {
-            Ok(Some(
-                events
-                    .into_iter()
-                    .map(|event| event.try_into().map_err(|err| Error::from(err)))
-                    .collect::<Result<Vec<GenericEvent>>>()?,
-            ))
+            Ok(Some(events))
         }
     }
-    fn apply_state_changes(state: &mut IdentityManager, event: GenericEvent) -> Result<()> {
-        let event: Event = if let Ok(event) = event.as_json() {
-            event
-        } else {
-            // This should never occur, since the `handle` method creates the events.
-            return Err(anyhow!("Failed to apply changes, event could not be deserialized").into());
-        };
-
+    fn apply_state_changes(&mut self, event: Event) -> Result<()> {
         match event.body {
             EventType::IdentityInserted(identity) => {
-                state.insert_identity(identity);
+                self.state.insert_identity(identity);
             }
             EventType::FieldStatusVerified(field_status_verified) => {
-                state.update_field(field_status_verified)?;
+                self.state.update_field(field_status_verified)?;
             }
             EventType::IdentityFullyVerified(_) => {}
             EventType::DisplayNamePersisted(persisted) => {
-                state.persist_display_name(persisted)?;
+                self.state.persist_display_name(persisted)?;
             }
             _ => warn!("Received unrecognized event type when applying changes"),
         }
@@ -181,57 +180,85 @@ impl VerifierAggregate {
     }
 }
 
+#[async_trait]
 impl Aggregate for VerifierAggregate {
     type Id = VerifierAggregateId;
+    type Event = Event;
     type State = IdentityManager;
-    type Event = GenericEvent;
     type Command = VerifierCommand;
-    type Error = Error;
+    type Error = anyhow::Error;
 
-    fn apply(mut state: Self::State, event: Self::Event) -> Result<Self::State> {
-        Self::apply_state_changes(&mut state, event)?;
-        Ok(state)
+    fn state(&self) -> &Self::State {
+        &self.state
     }
 
-    fn handle<'a, 's>(
-        &'a self,
-        _id: &'s Self::Id,
-        state: &'s Self::State,
-        command: Self::Command,
-    ) -> BoxFuture<Result<Option<Vec<Self::Event>>>>
-    where
-        's: 'a,
-    {
-        let fut = async move {
-            match command {
-                VerifierCommand::InsertIdentity(identity) => {
-                    if !state.contains(&identity) {
-                        Ok(Some(vec![Event::from(IdentityInserted {
-                            identity: identity,
-                        })
-                        .try_into()?]))
-                    } else {
-                        Ok(None)
-                    }
+    async fn apply(&mut self, event: Self::Event) -> Result<()> {
+        self.events_generated += 1;
+        self.apply_state_changes(event)
+    }
+
+    async fn handle(&self, command: Self::Command) -> Result<Option<Vec<Self::Event>>> {
+        match command {
+            VerifierCommand::InsertIdentity(identity) => {
+                if !self.state.contains(&identity) {
+                    Ok(Some(vec![Event::from(IdentityInserted {
+                        identity: identity,
+                    })]))
+                } else {
+                    Ok(None)
                 }
-                VerifierCommand::VerifyMessage(message) => {
-                    Self::handle_verify_message(state, message)
-                }
-                VerifierCommand::VerifyDisplayName {
-                    net_address,
-                    display_name,
-                } => Self::handle_display_name(state, net_address, display_name),
-                VerifierCommand::PersistDisplayName {
-                    net_address,
-                    display_name,
-                } => Ok(Some(vec![Event::from(DisplayNamePersisted {
-                    net_address: net_address,
-                    display_name: display_name,
-                })
-                .try_into()?])),
+            }
+            VerifierCommand::VerifyMessage(message) => self.handle_verify_message(message),
+            VerifierCommand::VerifyDisplayName {
+                net_address,
+                display_name,
+            } => self.handle_display_name(net_address, display_name),
+            VerifierCommand::PersistDisplayName {
+                net_address,
+                display_name,
+            } => Ok(Some(vec![Event::from(DisplayNamePersisted {
+                net_address: net_address,
+                display_name: display_name,
+            })])),
+        }
+    }
+}
+
+#[async_trait]
+impl Snapshot for VerifierAggregate {
+    type Id = VerifierAggregateSnapshotsId;
+    type State = Event;
+    type Error = anyhow::Error;
+
+    fn qualifies(&self) -> bool {
+        if self.events_generated % self.snapshot_every == 0 {
+            true
+        } else {
+            false
+        }
+    }
+    async fn snapshot(&self) -> Self::State {
+        Event::from(EventType::ExportedIdentityState(self.state.export_state()))
+    }
+    async fn restore(state: Self::State) -> Result<Self> {
+        let state = match state.body {
+            EventType::ExportedIdentityState(state) => state,
+            _ => {
+                return Err(anyhow!(
+                    "expected 'EventType::ExportedIdentityState' type to restore state"
+                ))
             }
         };
 
-        Box::pin(fut)
+        let mut manager = IdentityManager::default();
+
+        for entry in state {
+            manager.insert_identity(IdentityInserted { identity: entry });
+        }
+
+        Ok(VerifierAggregate {
+            state: manager,
+            ..Default::default()
+        })
     }
 }

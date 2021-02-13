@@ -8,13 +8,12 @@ use crate::event::{Event, EventType, ExternalMessage};
 use crate::projection::SessionNotifier;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
-use eventually::{Projector, Repository, Subscription};
-use eventually_event_store_db::{EventStore, EventSubscription};
 use futures::stream::StreamExt;
 use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 
+/*
 pub async fn run_session_notifier(
     pool: ConnectionPool,
     subscription: EventSubscription<VerifierAggregateId>,
@@ -188,3 +187,4 @@ where
 
     Err(anyhow!("The {} client has shut down", name))
 }
+*/
