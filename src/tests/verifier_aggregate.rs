@@ -1,5 +1,6 @@
 use super::InMemBackend;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
+use crate::aggregate::{with_snapshot_service, Repository};
 use crate::event::{
     DisplayNamePersisted, Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified,
 };
@@ -7,7 +8,6 @@ use crate::manager::{
     ChallengeStatus, DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
     IdentityFieldType, IdentityState, ProvidedMessage, RegistrarIdentityField, Validity,
 };
-use crate::aggregate::{with_snapshot_service, Repository};
 use futures::StreamExt;
 use std::convert::TryFrom;
 
@@ -21,8 +21,12 @@ async fn insert_identities() {
     let bob = IdentityState::bob();
 
     // Execute commands.
-    repo.apply(VerifierCommand::InsertIdentity(alice.clone())).await.unwrap();
-    repo.apply(VerifierCommand::InsertIdentity(bob.clone())).await.unwrap();
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
+        .await
+        .unwrap();
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
+        .await
+        .unwrap();
 
     // Check the resulting events.
     let expected = [

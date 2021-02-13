@@ -26,7 +26,12 @@ impl TryFrom<eventstore::RecordedEvent> for Event {
     type Error = anyhow::Error;
 
     fn try_from(val: eventstore::RecordedEvent) -> Result<Self> {
-        val.as_json::<Event>().map_err(|err| anyhow!("failed to deserialize 'RecordedEvent' to 'Event': {:?}", err))
+        val.as_json::<Event>().map_err(|err| {
+            anyhow!(
+                "failed to deserialize 'RecordedEvent' to 'Event': {:?}",
+                err
+            )
+        })
     }
 }
 
@@ -34,7 +39,8 @@ impl TryFrom<Event> for eventstore::EventData {
     type Error = anyhow::Error;
 
     fn try_from(val: Event) -> Result<Self> {
-        eventstore::EventData::json("registrar-event", val).map_err(|err| anyhow!("failed to serialize 'Event' to 'EventData': {:?}", err))
+        eventstore::EventData::json("registrar-event", val)
+            .map_err(|err| anyhow!("failed to serialize 'Event' to 'EventData': {:?}", err))
     }
 }
 

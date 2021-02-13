@@ -1,9 +1,8 @@
 use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::Event;
-use futures::{Stream, FutureExt};
 use eventstore::Client;
-use futures::{future::Join, StreamExt};
+use futures::{future::Join, FutureExt, Stream, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
 use jsonrpc_core::{Params, Value};
@@ -71,10 +70,10 @@ impl ApiBackend {
 struct InMemBackend {
     store: Client,
     port: usize,
+    _handle: Child,
 }
 
-impl InMemBackend
-{
+impl InMemBackend {
     async fn run() -> Self {
         // Configure and spawn the event store in a background process.
         let port: usize = gen_port();
@@ -98,11 +97,18 @@ impl InMemBackend
         tokio::time::sleep(Duration::from_secs(2)).await;
 
         // Build store.
-        let store = Client::create(format!("esdb://localhost:{}?tls=false", port).parse().unwrap()).await.unwrap();
+        let store = Client::create(
+            format!("esdb://localhost:{}?tls=false", port)
+                .parse()
+                .unwrap(),
+        )
+        .await
+        .unwrap();
 
         InMemBackend {
             store: store,
             port: port,
+            _handle: handle,
         }
     }
     fn store(&self) -> Client {
@@ -116,40 +122,30 @@ impl InMemBackend
         });
     }
     */
-    async fn subscription<Id>(&self, id: Id) -> Box<dyn Stream<Item = Event>>
+    async fn subscription<Id>(&self, id: Id) -> impl Stream<Item = Event>
     where
         Id: Send + Sync + Eq + AsRef<str> + Default,
     {
-        let stream = self
-            .store
+        self.store
             .subscribe_to_stream_from(Id::default())
             .execute_event_appeared_only()
             .await
             .unwrap()
-            .then(|resolved| async {match resolved.unwrap().event {
-                Some(recorded) => {
-                    Event::try_from(recorded).unwrap()
+            .then(|resolved| async {
+                match resolved.unwrap().event {
+                    Some(recorded) => Event::try_from(recorded).unwrap(),
+                    _ => panic!(),
                 }
-                _ => panic!(),
-            }});
-
-        Box::new(stream)
+            })
     }
     async fn get_events<Id>(&self, id: Id) -> Vec<Event>
     where
         Id: Send + Sync + Eq + AsRef<str> + Default,
     {
-        unimplemented!()
-        /*
         self.subscription(id)
             .await
-            .resume()
-            .await
-            .unwrap()
-            .then(|persisted| async { persisted.unwrap().take().as_json::<Event>().unwrap() })
             .take_until(time::sleep(Duration::from_secs(2)))
             .collect()
             .await
-        */
     }
 }

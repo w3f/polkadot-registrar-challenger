@@ -1,4 +1,4 @@
-use eventstore::{Client, EventData, ReadResult, RecordedEvent, ResolvedEvent};
+use eventstore::{Client, EventData, ExpectedVersion, ReadResult, RecordedEvent, ResolvedEvent};
 use futures::join;
 use futures::TryStreamExt;
 use std::convert::{TryFrom, TryInto};
@@ -86,7 +86,12 @@ where
         self.aggregate.state()
     }
     pub async fn apply(&mut self, command: <A as Aggregate>::Command) -> Result<(), Error> {
-        if let Some(events) = self.aggregate.handle(command).await.map_err(|err| anyhow!("failed to handle aggregate command: {:?}", err))? {
+        if let Some(events) = self
+            .aggregate
+            .handle(command)
+            .await
+            .map_err(|err| anyhow!("failed to handle aggregate command: {:?}", err))?
+        {
             let to_store = events.clone();
 
             // Send events to the store.
@@ -97,18 +102,34 @@ where
                         .into_iter()
                         .map(|event| {
                             event.try_into().map_err(|_| {
-                                anyhow!("Failed to convert event into eventstore native format").into()
+                                anyhow!("Failed to convert event into eventstore native format")
+                                    .into()
                             })
                         })
                         .collect::<Result<Vec<EventData>, Error>>()?,
                 )
                 .await
-                .map_err(|err| anyhow!("failed to  process events: {:?}", err))?
-                .map_err(|err| anyhow!("failed to send aggregate events to the eventstore: {:?}", err))?;
+                .map_err(|err| {
+                    anyhow!(
+                        "failed to send aggregate events to the eventstore: {:?}",
+                        err
+                    )
+                })?
+                .map_err(|err| {
+                    anyhow!(
+                        "failed to send aggregate events to the eventstore: {:?}",
+                        err
+                    )
+                })?;
 
             // Apply events locally.
             for event in events {
-                self.aggregate.apply(event).await.map_err(|err| anyhow!("Failed to apply aggregate events to the local state: {:?}", err))?;
+                self.aggregate.apply(event).await.map_err(|err| {
+                    anyhow!(
+                        "Failed to apply aggregate events to the local state: {:?}",
+                        err
+                    )
+                })?;
             }
         }
 
@@ -155,7 +176,10 @@ where
                 .subscribe_to_stream_from(<P as Projection>::Id::default())
                 .start_position(*latest_revision.read().await);
 
-            let mut stream = subscribe.execute_event_appeared_only().await.map_err(|err| anyhow!("failed to open stream to projection: {:?}", err))?;
+            let mut stream = subscribe
+                .execute_event_appeared_only()
+                .await
+                .map_err(|err| anyhow!("failed to open stream to projection: {:?}", err))?;
 
             while let Ok(event) = stream.try_next().await {
                 match event {
@@ -170,7 +194,10 @@ where
                                 })?;
 
                             // Project event.
-                            (*projection.write().await).project(event).await.map_err(|err| anyhow!("failed to run projection: {:?}", err))?;
+                            (*projection.write().await)
+                                .project(event)
+                                .await
+                                .map_err(|err| anyhow!("failed to run projection: {:?}", err))?;
                         } else {
                             warn!("Did not receive a recorded event");
                         }
@@ -229,7 +256,9 @@ where
             .map_err(|err| anyhow!("failed to open stream to retrieve latest snapshot: {:?}"))?
         {
             ReadResult::Ok(mut stream) => {
-                while let Some(resolved) = stream.try_next().await.map_err(|err| anyhow!("failed to retrieve snapshot from the eventstore: {:?}", err))? {
+                while let Some(resolved) = stream.try_next().await.map_err(|err| {
+                    anyhow!("failed to retrieve snapshot from the eventstore: {:?}", err)
+                })? {
                     info!("Snapshot found, restoring");
 
                     if let Some(recorded) = resolved.event {
@@ -278,7 +307,8 @@ where
                 let _ = client
                     .write_events(<S as Snapshot>::Id::default())
                     .send_event(event)
-                    .await.map_err(|err| anyhow!("failed to send snapshot to the eventstore: {:?}"))?;
+                    .await
+                    .map_err(|err| anyhow!("failed to send snapshot to the eventstore: {:?}"))?;
             }
 
             #[allow(unreachable_code)]
