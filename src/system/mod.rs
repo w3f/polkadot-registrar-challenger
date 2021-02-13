@@ -15,6 +15,7 @@ use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 
+/*
 pub async fn run_session_notifier(
     pool: ConnectionPool,
     subscription: EventSubscription<VerifierAggregateId>,
@@ -188,3 +189,4 @@ where
 
     Err(anyhow!("The {} client has shut down", name))
 }
+*/

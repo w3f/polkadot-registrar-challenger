@@ -35,7 +35,7 @@ impl From<UpdateChanges> for Notification {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct IdentityManager {
     identities: HashMap<NetworkAddress, HashMap<IdentityFieldType, FieldStatus>>,
     lookup_addresses: HashMap<IdentityField, HashSet<NetworkAddress>>,

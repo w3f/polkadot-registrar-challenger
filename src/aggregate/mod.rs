@@ -1,4 +1,5 @@
 use eventstore::{Client, EventData, ReadResult, RecordedEvent, ResolvedEvent};
+use futures::join;
 use futures::TryStreamExt;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error as StdError;
@@ -14,7 +15,23 @@ pub mod verifier;
 // Expose publicly
 pub use message_watcher::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 
-use crate::event::ErrorMessage;
+pub async fn run_projection_with_snapshot_service<P>(client: Client) -> Result<(), anyhow::Error>
+where
+    P: 'static + Send + Sync + Projection + Snapshot + Default,
+    <P as Projection>::Id: Send + Sync + Default + AsRef<str>,
+    <P as Projection>::Event: Send + Sync + TryFrom<RecordedEvent>,
+    <P as Projection>::Error: 'static + Send + Sync + StdError,
+    <P as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
+    <P as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
+    <P as Snapshot>::Error: 'static + Send + Sync,
+{
+    let projection = Arc::new(RwLock::new(P::default()));
+    let snapshot_service = Snapshoter::new(Arc::clone(&projection), client.clone()).await?;
+    let projector = Projector::new(projection, client);
+
+    join!(snapshot_service.run_blocking(), projector.run_blocking());
+    Ok(())
+}
 
 /// This wrapper type is required for the use of `eventually`, since
 /// `anyhow::Error` does not implement `std::error::Error`.
@@ -91,21 +108,21 @@ pub trait Projection {
 }
 
 pub struct Projector<P> {
-    projection: P,
+    projection: Arc<RwLock<P>>,
     client: Client,
     latest_revision: Arc<RwLock<u64>>,
 }
 
 impl<P> Projector<P>
 where
-    P: 'static + Send + Projection + Default,
+    P: 'static + Send + Sync + Projection + Default,
     <P as Projection>::Id: Send + Sync + Default + AsRef<str>,
     <P as Projection>::Event: Send + Sync + TryFrom<RecordedEvent>,
     <P as Projection>::Error: 'static + Send + Sync + StdError,
 {
-    fn new(client: Client) -> Self {
+    fn new(projection: Arc<RwLock<P>>, client: Client) -> Self {
         Projector {
-            projection: Default::default(),
+            projection: projection,
             client: client,
             latest_revision: Arc::new(RwLock::new(0)),
         }
@@ -135,7 +152,7 @@ where
                                 })?;
 
                             // Project event.
-                            projection.project(event).await?;
+                            (*projection.write().await).project(event).await?;
                         } else {
                             warn!("Did not receive a recorded event");
                         }
