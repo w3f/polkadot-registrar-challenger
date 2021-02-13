@@ -15,6 +15,18 @@ pub mod verifier;
 // Expose publicly
 pub use message_watcher::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 
+pub async fn with_snapshot_service<S>(client: Client) -> Result<Arc<RwLock<S>>, anyhow::Error>
+where
+    S: 'static + Send + Sync + Snapshot + Default,
+    <S as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
+    <S as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
+    <S as Snapshot>::Error: 'static + Send + Sync,
+{
+    let stateful = Arc::new(RwLock::new(S::default()));
+    let service = Snapshoter::new(Arc::clone(&stateful), client).await?;
+    Ok(stateful)
+}
+
 pub async fn run_projection_with_snapshot_service<P>(client: Client) -> Result<(), anyhow::Error>
 where
     P: 'static + Send + Sync + Projection + Snapshot + Default,
@@ -26,10 +38,10 @@ where
     <P as Snapshot>::Error: 'static + Send + Sync,
 {
     let projection = Arc::new(RwLock::new(P::default()));
-    let snapshot_service = Snapshoter::new(Arc::clone(&projection), client.clone()).await?;
+    let service = Snapshoter::new(Arc::clone(&projection), client.clone()).await?;
     let projector = Projector::new(projection, client);
 
-    join!(snapshot_service.run_blocking(), projector.run_blocking());
+    join!(service.run_blocking(), projector.run_blocking());
     Ok(())
 }
 
