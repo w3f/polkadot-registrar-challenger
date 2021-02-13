@@ -44,6 +44,15 @@ pub struct IdentityManager {
 
 // TODO: Should logs be printed if users are not found?
 impl IdentityManager {
+    pub fn export_state(&self) -> Vec<IdentityState> {
+        self.identities
+            .iter()
+            .map(|(net_address, fields)| IdentityState {
+                net_address: net_address.clone(),
+                fields: fields.clone(),
+            })
+            .collect()
+    }
     pub fn contains(&self, identity: &IdentityState) -> bool {
         self.identities
             .get(&identity.net_address)

@@ -1,17 +1,20 @@
-use super::Aggregate;
+use super::{Aggregate, Snapshot};
 use crate::event::{
-    DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
+    self, DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
     IdentityFullyVerified, IdentityInserted,
 };
 use crate::manager::{DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress};
 use crate::Result;
 use futures::future::BoxFuture;
+use std::cell::Cell;
 use std::convert::{TryFrom, TryInto};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct VerifierAggregateId;
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
-pub struct VerifierAggregateSnapshots;
+pub struct VerifierAggregateSnapshotsId;
 
 impl AsRef<str> for VerifierAggregateId {
     fn as_ref(&self) -> &str {
@@ -19,7 +22,7 @@ impl AsRef<str> for VerifierAggregateId {
     }
 }
 
-impl AsRef<str> for VerifierAggregateSnapshots {
+impl AsRef<str> for VerifierAggregateSnapshotsId {
     fn as_ref(&self) -> &str {
         "identity_state_changes_snapshots"
     }
@@ -40,9 +43,19 @@ pub enum VerifierCommand {
     },
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct VerifierAggregate {
     state: IdentityManager,
+    events_generated: usize,
+}
+
+impl Default for VerifierAggregate {
+    fn default() -> Self {
+        VerifierAggregate {
+            state: Default::default(),
+            events_generated: 0,
+        }
+    }
 }
 
 impl VerifierAggregate {
@@ -172,6 +185,7 @@ impl Aggregate for VerifierAggregate {
     }
 
     async fn apply(&mut self, event: Self::Event) -> Result<()> {
+        self.events_generated += 1;
         self.apply_state_changes(event)
     }
 
@@ -198,6 +212,36 @@ impl Aggregate for VerifierAggregate {
                 net_address: net_address,
                 display_name: display_name,
             })])),
+        }
+    }
+}
+
+#[async_trait]
+impl Snapshot for VerifierAggregate {
+    type Id = VerifierAggregateSnapshotsId;
+    type State = Vec<IdentityState>;
+    type Error = anyhow::Error;
+
+    fn qualifies(&self, snapshot_every: usize) -> bool {
+        if self.events_generated % snapshot_every == 0 {
+            true
+        } else {
+            false
+        }
+    }
+    async fn snapshot(&self) -> Self::State {
+        self.state.export_state()
+    }
+    async fn restore(state: Self::State) -> Self {
+        let mut manager = IdentityManager::default();
+
+        for entry in state {
+            manager.insert_identity(IdentityInserted { identity: entry });
+        }
+
+        VerifierAggregate {
+            state: manager,
+            events_generated: 0,
         }
     }
 }

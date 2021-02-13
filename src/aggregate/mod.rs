@@ -20,7 +20,10 @@ pub struct Error(#[from] anyhow::Error);
 // Expose publicly
 pub use message_watcher::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 
-pub async fn with_snapshot_service<S>(client: Client) -> Result<Arc<RwLock<S>>, Error>
+pub async fn with_snapshot_service<S>(
+    client: Client,
+    snapshot_every: usize,
+) -> Result<Arc<RwLock<S>>, Error>
 where
     S: 'static + Send + Sync + Snapshot + Default,
     <S as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
@@ -28,11 +31,14 @@ where
     <S as Snapshot>::Error: 'static + Send + Sync,
 {
     let stateful = Arc::new(RwLock::new(S::default()));
-    let service = Snapshoter::new(Arc::clone(&stateful), client).await?;
+    let service = Snapshoter::new(Arc::clone(&stateful), client, snapshot_every).await?;
     Ok(stateful)
 }
 
-pub async fn run_projection_with_snapshot_service<P>(client: Client) -> Result<(), Error>
+pub async fn run_projection_with_snapshot_service<P>(
+    client: Client,
+    snapshot_every: usize,
+) -> Result<(), Error>
 where
     P: 'static + Send + Sync + Projection + Snapshot + Default,
     <P as Projection>::Id: Send + Sync + Default + AsRef<str>,
@@ -43,7 +49,7 @@ where
     <P as Snapshot>::Error: 'static + Send + Sync,
 {
     let projection = Arc::new(RwLock::new(P::default()));
-    let service = Snapshoter::new(Arc::clone(&projection), client.clone()).await?;
+    let service = Snapshoter::new(Arc::clone(&projection), client.clone(), snapshot_every).await?;
     let projector = Projector::new(projection, client);
 
     join!(service.run_blocking(), projector.run_blocking());
@@ -224,7 +230,7 @@ pub trait Snapshot {
     type State;
     type Error;
 
-    fn qualifies(&self) -> bool;
+    fn qualifies(&self, every: usize) -> bool;
     async fn snapshot(&self) -> Self::State;
     async fn restore(state: Self::State) -> Self;
 }
@@ -233,6 +239,7 @@ pub struct Snapshoter<S> {
     // The stateful type, such as an aggregate or a projection.
     stateful: Arc<RwLock<S>>,
     client: Client,
+    snapshot_every: usize,
 }
 
 impl<S> Snapshoter<S>
@@ -242,7 +249,11 @@ where
     <S as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
     <S as Snapshot>::Error: 'static + Send + Sync,
 {
-    async fn new(stateful: Arc<RwLock<S>>, client: Client) -> Result<Self, Error> {
+    async fn new(
+        stateful: Arc<RwLock<S>>,
+        client: Client,
+        snapshot_every: usize,
+    ) -> Result<Self, Error> {
         info!(
             "Restoring snapshot from {}",
             <S as Snapshot>::Id::default().as_ref()
@@ -282,11 +293,13 @@ where
         Ok(Snapshoter {
             stateful: stateful,
             client: client,
+            snapshot_every: snapshot_every,
         })
     }
     async fn run_blocking(self) {
         let stateful = self.stateful;
         let client = self.client;
+        let snapshot_every = self.snapshot_every;
 
         let handle = tokio::spawn(async move {
             let mut interval = interval(Duration::from_secs(1));
@@ -294,7 +307,7 @@ where
                 interval.tick().await;
 
                 {
-                    if !stateful.read().await.qualifies() {
+                    if !stateful.read().await.qualifies(snapshot_every) {
                         continue;
                     }
                 }
