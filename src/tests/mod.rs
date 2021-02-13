@@ -1,9 +1,8 @@
 use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::Event;
-use crate::system::{run_api_service, run_session_notifier};
-use eventually::Subscription;
-use eventually_event_store_db::{EventStore, EventStoreBuilder, EventSubscription};
+use futures::{Stream, FutureExt};
+use eventstore::Client;
 use futures::{future::Join, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
@@ -34,8 +33,8 @@ impl ApiBackend {
         std::thread::spawn(move || {
             let mut rt = tokio_02::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
-                let server = run_api_service(pool, port).unwrap();
-                server.wait().unwrap();
+                //let server = run_api_service(pool, port).unwrap();
+                //server.wait().unwrap();
             })
         });
 
@@ -69,15 +68,12 @@ impl ApiBackend {
     }
 }
 
-struct InMemBackend<Id: Clone> {
-    store: EventStore<Id>,
+struct InMemBackend {
+    store: Client,
     port: usize,
-    _handle: Child,
 }
 
-impl<Id> InMemBackend<Id>
-where
-    Id: 'static + Send + Sync + Eq + TryFrom<String> + Clone + AsRef<str>,
+impl InMemBackend
 {
     async fn run() -> Self {
         // Configure and spawn the event store in a background process.
@@ -99,48 +95,52 @@ where
             .spawn()
             .unwrap();
 
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
         // Build store.
-        let store = EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", port))
-            .await
-            .unwrap()
-            .verify_connection(5)
-            .await
-            .unwrap()
-            .build_store::<Id>();
+        let store = Client::create(format!("esdb://localhost:{}?tls=false", port).parse().unwrap()).await.unwrap();
 
         InMemBackend {
             store: store,
             port: port,
-            _handle: handle,
         }
     }
-    fn store(&self) -> EventStore<Id> {
+    fn store(&self) -> Client {
         self.store.clone()
     }
+    /*
     async fn run_session_notifier(&self, pool: ConnectionPool) {
         let subscription = self.subscription(VerifierAggregateId).await;
         tokio::spawn(async move {
             run_session_notifier(pool, subscription).await;
         });
     }
-    async fn subscription<Sid>(&self, id: Sid) -> EventSubscription<Sid>
+    */
+    async fn subscription<Id>(&self, id: Id) -> Box<dyn Stream<Item = Event>>
     where
-        Sid: 'static + Send + Sync + Eq + TryFrom<String> + Clone + AsRef<str>,
+        Id: Send + Sync + Eq + AsRef<str> + Default,
     {
-        EventStoreBuilder::new(&format!("esdb://localhost:{}?tls=false", self.port))
+        let stream = self
+            .store
+            .subscribe_to_stream_from(Id::default())
+            .execute_event_appeared_only()
             .await
             .unwrap()
-            .verify_connection(5)
-            .await
-            .unwrap()
-            .build_persistant_subscription::<Sid>(id, "test_subscription11")
-            .await
-            .unwrap()
+            .then(|resolved| async {match resolved.unwrap().event {
+                Some(recorded) => {
+                    Event::try_from(recorded).unwrap()
+                }
+                _ => panic!(),
+            }});
+
+        Box::new(stream)
     }
-    async fn get_events<Sid>(&self, id: Sid) -> Vec<Event>
+    async fn get_events<Id>(&self, id: Id) -> Vec<Event>
     where
-        Sid: 'static + Send + Sync + Eq + TryFrom<String> + Clone + AsRef<str>,
+        Id: Send + Sync + Eq + AsRef<str> + Default,
     {
+        unimplemented!()
+        /*
         self.subscription(id)
             .await
             .resume()
@@ -150,5 +150,6 @@ where
             .take_until(time::sleep(Duration::from_secs(2)))
             .collect()
             .await
+        */
     }
 }

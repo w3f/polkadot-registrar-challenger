@@ -10,6 +10,7 @@ use matrix_sdk::api::r0::account::request_registration_token_via_email;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+/*
 struct Regulator<T> {
     inner: Arc<RegulatorLock<T>>,
 }
@@ -176,6 +177,7 @@ fn subscribe_status_pending_judgement_request() {
         reg_aggr.yield_time_to(Thread::Stream);
     });
 }
+*/
 
 /*
 {"id":1,"jsonrpc":"2.0","method":"account_subscribeStatus"}

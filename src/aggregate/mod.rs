@@ -160,7 +160,7 @@ where
                             // Parse event.
                             let event =
                                 <P as Projection>::Event::try_from(recorded).map_err(|_| {
-                                    anyhow!("Failed to convert eventstore event into native type")
+                                    anyhow!("failed to convert eventstore event into native type")
                                 })?;
 
                             // Project event.
