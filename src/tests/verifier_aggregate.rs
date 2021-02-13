@@ -1,6 +1,9 @@
 use super::InMemBackend;
-use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::Repository;
+use crate::aggregate::{
+    verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand},
+    Snapshot,
+};
 use crate::event::{
     DisplayNamePersisted, Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified,
 };
@@ -17,7 +20,8 @@ async fn insert_identities() {
 
     let be = InMemBackend::run().await;
     let store = be.store();
-    let mut repo = Repository::<VerifierAggregate>::new_with_snapshot_service(store.clone(), 1)
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
         .await
         .unwrap();
 
@@ -53,7 +57,8 @@ async fn insert_identities() {
     // Check snapshot.
     drop(repo);
 
-    let mut repo = Repository::<VerifierAggregate>::new_with_snapshot_service(store, 1)
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store)
         .await
         .unwrap();
 

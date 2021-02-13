@@ -47,6 +47,7 @@ pub enum VerifierCommand {
 pub struct VerifierAggregate {
     state: IdentityManager,
     events_generated: usize,
+    snapshot_every: usize,
 }
 
 impl Default for VerifierAggregate {
@@ -54,11 +55,18 @@ impl Default for VerifierAggregate {
         VerifierAggregate {
             state: Default::default(),
             events_generated: 0,
+            snapshot_every: 50,
         }
     }
 }
 
 impl VerifierAggregate {
+    pub fn set_snapshot_every(self, snapshot_every: usize) -> Self {
+        VerifierAggregate {
+            snapshot_every: snapshot_every,
+            ..Default::default()
+        }
+    }
     fn handle_verify_message(
         &self,
         external_message: ExternalMessage,
@@ -222,8 +230,8 @@ impl Snapshot for VerifierAggregate {
     type State = Event;
     type Error = anyhow::Error;
 
-    fn qualifies(&self, snapshot_every: usize) -> bool {
-        if self.events_generated % snapshot_every == 0 {
+    fn qualifies(&self) -> bool {
+        if self.events_generated % self.snapshot_every == 0 {
             true
         } else {
             false
@@ -250,7 +258,7 @@ impl Snapshot for VerifierAggregate {
 
         Ok(VerifierAggregate {
             state: manager,
-            events_generated: 0,
+            ..Default::default()
         })
     }
 }

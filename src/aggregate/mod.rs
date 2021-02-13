@@ -37,12 +37,11 @@ pub trait Aggregate {
 pub struct Repository<A> {
     aggregate: A,
     client: Client,
-    snapshot_every: usize,
 }
 
 impl<A> Repository<A>
 where
-    A: 'static + Send + Sync + Aggregate + Snapshot + Default,
+    A: 'static + Send + Sync + Aggregate + Snapshot,
     <A as Aggregate>::Id: Send + Sync + AsRef<str> + Default,
     <A as Aggregate>::Event: Send + Sync + TryInto<EventData> + Clone,
     <A as Aggregate>::Error: 'static + Send + Sync + Debug,
@@ -51,10 +50,9 @@ where
     <A as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
     pub async fn new_with_snapshot_service(
+        mut aggregate: A,
         client: Client,
-        snapshot_every: usize,
     ) -> Result<Self, anyhow::Error> {
-        let mut aggregate = A::default();
         let mut snapshot_found = false;
 
         // Check if there is a snapshot available in the eventstore.
@@ -102,7 +100,6 @@ where
         Ok(Repository {
             aggregate: aggregate,
             client: client,
-            snapshot_every: snapshot_every,
         })
     }
     pub fn state(&self) -> &<A as Aggregate>::State {
@@ -162,7 +159,7 @@ where
         }
 
         // Create a snapshot, if dictated.
-        if self.aggregate.qualifies(self.snapshot_every) {
+        if self.aggregate.qualifies() {
             let state = self.aggregate.snapshot().await;
             let event = state
                 .try_into()
@@ -272,7 +269,7 @@ pub trait Snapshot: Sized {
     type State;
     type Error;
 
-    fn qualifies(&self, every: usize) -> bool;
+    fn qualifies(&self) -> bool;
     async fn snapshot(&self) -> Self::State;
     async fn restore(state: Self::State) -> Result<Self, Self::Error>;
 }
