@@ -16,8 +16,6 @@ use std::convert::TryFrom;
 
 #[tokio::test]
 async fn insert_identities() {
-    env_logger::init();
-
     let be = InMemBackend::run().await;
     let store = be.store();
     let aggregate = VerifierAggregate::default().set_snapshot_every(1);
@@ -56,10 +54,8 @@ async fn insert_identities() {
     assert!(state.contains(&bob));
 
     // Check snapshot.
-    drop(repo);
-
     let aggregate = VerifierAggregate::default().set_snapshot_every(1);
-    let mut repo = Repository::new_with_snapshot_service(aggregate, store)
+    let repo = Repository::new_with_snapshot_service(aggregate, store)
         .await
         .unwrap();
 
@@ -113,10 +109,8 @@ async fn insert_identities_duplicate() {
     assert!(state.contains(&bob));
 
     // Check snapshot.
-    drop(repo);
-
     let aggregate = VerifierAggregate::default().set_snapshot_every(1);
-    let mut repo = Repository::new_with_snapshot_service(aggregate, store)
+    let repo = Repository::new_with_snapshot_service(aggregate, store)
         .await
         .unwrap();
 
@@ -125,28 +119,27 @@ async fn insert_identities_duplicate() {
     assert!(state.contains(&bob));
 }
 
-/*
 #[tokio::test]
 async fn insert_identities_state_change() {
-    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let be = InMemBackend::run().await;
     let store = be.store();
-    let mut repo = Repository::new(VerifierAggregate.into(), store);
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+        .await
+        .unwrap();
+
 
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
 
     // Execute commands.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
         .await
         .unwrap();
 
-    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
         .await
         .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Modify entry of identity.
     let mut alice_new = alice.clone();
@@ -160,13 +153,9 @@ async fn insert_identities_state_change() {
         .unwrap();
 
     // Execute commands with new identity state.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-    root.handle(VerifierCommand::InsertIdentity(alice_new.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(alice_new.clone()))
         .await
         .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Check the resulting events.
     let expected = [
@@ -183,13 +172,24 @@ async fn insert_identities_state_change() {
     }
 
     // Check the resulting state.
-    let root = repo.get(VerifierAggregateId).await.unwrap();
-    let state = root.state();
+    let state = repo.state();
+    assert!(!state.contains(&alice));
+    assert!(state.contains(&bob));
+    assert!(state.contains(&alice_new));
+
+    // Check snapshot.
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let repo = Repository::new_with_snapshot_service(aggregate, store)
+        .await
+        .unwrap();
+
+    let state = repo.state();
     assert!(!state.contains(&alice));
     assert!(state.contains(&bob));
     assert!(state.contains(&alice_new));
 }
 
+/*
 #[tokio::test]
 async fn verify_message_valid_message() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
