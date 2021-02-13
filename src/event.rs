@@ -3,7 +3,6 @@ use crate::manager::{
     ProvidedMessage,
 };
 use crate::Result;
-use eventually_event_store_db::GenericEvent;
 
 use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -12,14 +11,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct Event {
     header: EventHeader,
     pub body: EventType,
-}
-
-impl TryFrom<Event> for GenericEvent {
-    type Error = anyhow::Error;
-
-    fn try_from(val: Event) -> Result<Self> {
-        GenericEvent::serialize(val).map_err(|err| err.into())
-    }
 }
 
 impl TryFrom<eventstore::RecordedEvent> for Event {

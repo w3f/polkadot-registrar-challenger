@@ -3,7 +3,6 @@ use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, Verifie
 use crate::api::ConnectionPool;
 use crate::event::ErrorMessage;
 use crate::manager::IdentityState;
-use eventually::Repository;
 use futures::StreamExt;
 use jsonrpc_core::types::{to_value, Params, Value};
 use matrix_sdk::api::r0::account::request_registration_token_via_email;

@@ -22,8 +22,6 @@ tokio_02 = { version = "0.2", package = "tokio", features = ["macros", "time", "
 futures = "0.3.5"
 eventstore = { version = "0.9.9", git = "https://github.com/EventStore/EventStoreDB-Client-Rust.git" }
 serde_yaml = "0.8.15"
-eventually = { path = "../eventually-rs/eventually" }
-eventually-event-store-db = { path = "../eventually-rs/eventually-event-store-db", features = ["verify-connection"] }
 async-trait = "0.1.40"
 jsonrpc-core = "17.0.0"
 jsonrpc-derive = "17.0.0"
