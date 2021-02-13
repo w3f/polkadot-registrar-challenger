@@ -280,28 +280,26 @@ async fn verify_message_valid_message() {
     assert!(state.contains(&alice_new));
 }
 
-/*
 #[tokio::test]
 async fn verify_message_invalid_message() {
-    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let be = InMemBackend::run().await;
     let store = be.store();
-    let mut repo = Repository::new(VerifierAggregate.into(), store);
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+        .await
+        .unwrap();
 
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
 
     // Execute commands.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
         .await
         .unwrap();
 
-    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
         .await
         .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Prepare message.
     let message = ExternalMessage {
@@ -311,13 +309,9 @@ async fn verify_message_invalid_message() {
     };
 
     // Execute commands.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-    root.handle(VerifierCommand::VerifyMessage(message))
+    repo.apply(VerifierCommand::VerifyMessage(message))
         .await
         .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Set the expected state.
     let mut alice_new = alice.clone();
@@ -352,8 +346,18 @@ async fn verify_message_invalid_message() {
     }
 
     // Check the resulting state.
-    let root = repo.get(VerifierAggregateId).await.unwrap();
-    let state = root.state();
+    let state = repo.state();
+    assert!(!state.contains(&alice));
+    assert!(state.contains(&bob));
+    assert!(state.contains(&alice_new));
+
+    // Check snapshot
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let repo = Repository::new_with_snapshot_service(aggregate, store)
+        .await
+        .unwrap();
+
+    let state = repo.state();
     assert!(!state.contains(&alice));
     assert!(state.contains(&bob));
     assert!(state.contains(&alice_new));
@@ -361,25 +365,24 @@ async fn verify_message_invalid_message() {
 
 #[tokio::test]
 async fn verify_message_valid_message_multiple() {
-    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let be = InMemBackend::run().await;
     let store = be.store();
-    let mut repo = Repository::new(VerifierAggregate.into(), store);
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+        .await
+        .unwrap();
 
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
 
     // Execute commands.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
         .await
         .unwrap();
 
-    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
         .await
         .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Prepare message.
     let expected_message = alice
@@ -425,15 +428,11 @@ async fn verify_message_valid_message_multiple() {
     ];
 
     // Execute commands.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
     for message in messages {
-        root.handle(VerifierCommand::VerifyMessage(message))
+        repo.apply(VerifierCommand::VerifyMessage(message))
             .await
             .unwrap();
     }
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Specify the expected states.
     let mut alice_new = alice.clone();
@@ -491,13 +490,24 @@ async fn verify_message_valid_message_multiple() {
     }
 
     // Check the resulting state.
-    let root = repo.get(VerifierAggregateId).await.unwrap();
-    let state = root.state();
+    let state = repo.state();
+    assert!(!state.contains(&alice));
+    assert!(state.contains(&bob));
+    assert!(state.contains(&alice_new));
+
+    // Check snapshot.
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let repo = Repository::new_with_snapshot_service(aggregate, store)
+        .await
+        .unwrap();
+
+    let state = repo.state();
     assert!(!state.contains(&alice));
     assert!(state.contains(&bob));
     assert!(state.contains(&alice_new));
 }
 
+/*
 #[tokio::test]
 async fn verify_message_invalid_origin() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
