@@ -163,8 +163,13 @@ impl VerifierAggregate {
 impl Aggregate for VerifierAggregate {
     type Id = VerifierAggregateId;
     type Event = Event;
+    type State = IdentityManager;
     type Command = VerifierCommand;
     type Error = anyhow::Error;
+
+    fn state(&self) -> &Self::State {
+        &self.state
+    }
 
     async fn apply(&mut self, event: Self::Event) -> Result<()> {
         self.apply_state_changes(event)

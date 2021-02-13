@@ -7,33 +7,22 @@ use crate::manager::{
     ChallengeStatus, DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
     IdentityFieldType, IdentityState, ProvidedMessage, RegistrarIdentityField, Validity,
 };
-use eventually::Repository;
+use crate::aggregate::{with_snapshot_service, Repository};
 use futures::StreamExt;
 use std::convert::TryFrom;
 
-/*
 #[tokio::test]
 async fn insert_identities() {
-    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let be = InMemBackend::run().await;
     let store = be.store();
-    let mut repo = Repository::new(VerifierAggregate.into(), store);
+    let mut repo = Repository::<VerifierAggregate>::new(store);
 
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
 
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-
     // Execute commands.
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
-        .await
-        .unwrap();
-
-    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
-        .await
-        .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone())).await.unwrap();
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone())).await.unwrap();
 
     // Check the resulting events.
     let expected = [
@@ -49,12 +38,12 @@ async fn insert_identities() {
     }
 
     // Check the resulting state.
-    let root = repo.get(VerifierAggregateId).await.unwrap();
-    let state = root.state();
+    let state = repo.state();
     assert!(state.contains(&alice));
     assert!(state.contains(&bob));
 }
 
+/*
 #[tokio::test]
 async fn insert_identities_duplicate() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
