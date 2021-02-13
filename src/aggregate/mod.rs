@@ -64,14 +64,16 @@ pub trait Aggregate {
     type Command;
     type Error;
 
+    fn state(&self) -> &Self::State;
     async fn apply(&mut self, event: Self::Event) -> Result<(), Self::Error>;
     async fn handle(&self, command: Self::Command)
         -> Result<Option<Vec<Self::Event>>, Self::Error>;
 }
 
 pub struct Repository<A> {
-    aggregate: Arc<RwLock<A>>,
+    aggregate: A,
     client: Client,
+    snapshot_every: usize,
 }
 
 impl<A> Repository<A>
@@ -88,22 +90,64 @@ where
         client: Client,
         snapshot_every: usize,
     ) -> Result<Self, anyhow::Error> {
-        let aggregate = with_snapshot_service::<A>(client.clone(), snapshot_every).await?;
+        let mut aggregate = A::default();
+        let mut snapshot_found = false;
+
+        // Check if there is a snapshot available in the eventstore.
+        match client
+            .read_stream(<A as Snapshot>::Id::default())
+            .start_from_end_of_stream()
+            .execute(1)
+            .await
+            .map_err(|err| {
+                anyhow!(
+                    "failed to open stream to retrieve latest snapshot: {:?}",
+                    err
+                )
+            })? {
+            ReadResult::Ok(mut stream) => {
+                while let Some(resolved) = stream.try_next().await.map_err(|err| {
+                    anyhow!("failed to retrieve snapshot from the eventstore: {:?}", err)
+                })? {
+                    if let Some(recorded) = resolved.event {
+                        info!("Snapshot found, restoring");
+
+                        aggregate =
+                            A::restore(<A as Snapshot>::State::try_from(recorded).map_err(
+                                |_| anyhow!("failed to convert snapshot into native type"),
+                            )?)
+                            .await
+                            .map_err(|err| anyhow!("failed to restore from snapshot: {:?}", err))?;
+
+                        info!("Snapshot restored");
+                        snapshot_found = true;
+                        break;
+                    }
+                }
+            }
+            ReadResult::StreamNotFound(_) => {}
+        }
+
+        if !snapshot_found {
+            warn!(
+                "No snapshots found on stream '{}', starting from scratch",
+                <A as Snapshot>::Id::default().as_ref()
+            );
+        }
 
         Ok(Repository {
             aggregate: aggregate,
             client: client,
+            snapshot_every: snapshot_every,
         })
     }
-    pub fn aggregate(&self) -> Arc<RwLock<A>> {
-        Arc::clone(&self.aggregate)
+    pub fn state(&self) -> &<A as Aggregate>::State {
+        <A as Aggregate>::state(&self.aggregate)
     }
     pub async fn apply(&mut self, command: <A as Aggregate>::Command) -> Result<(), Error> {
         let events = {
             if let Some(events) = self
                 .aggregate
-                .read()
-                .await
                 .handle(command)
                 .await
                 .map_err(|err| anyhow!("failed to handle aggregate command: {:?}", err))?
@@ -144,14 +188,33 @@ where
             })?;
 
         // Apply events locally.
-        let mut writer = self.aggregate.write().await;
         for event in events {
-            writer.apply(event).await.map_err(|err| {
+            self.aggregate.apply(event).await.map_err(|err| {
                 anyhow!(
                     "Failed to apply aggregate events to the local state: {:?}",
                     err
                 )
             })?;
+        }
+
+        // Create a snapshot, if dictated.
+        if self.aggregate.qualifies(self.snapshot_every) {
+            let state = self.aggregate.snapshot().await;
+            let event = state
+                .try_into()
+                .map_err(|_| anyhow!("Failed to convert native snapshot into evenstore event"))?;
+
+            let _ = self
+                .client
+                .write_events(<A as Snapshot>::Id::default())
+                .send_event(event)
+                .await
+                .map_err(|err| anyhow!("failed to send snapshot to the eventstore: {:?}", err))?;
+
+            info!(
+                "Created snapshot on stream '{}'",
+                <A as Snapshot>::Id::default().as_ref()
+            );
         }
 
         Ok(())
@@ -250,6 +313,7 @@ pub trait Snapshot: Sized {
     async fn restore(state: Self::State) -> Result<Self, Self::Error>;
 }
 
+// TODO: Deprecate this.
 pub struct Snapshoter<S> {
     // The stateful type, such as an aggregate or a projection.
     stateful: Arc<RwLock<S>>,
@@ -276,11 +340,15 @@ where
 
         match client
             .read_stream(<S as Snapshot>::Id::default())
-            .backward()
+            .start_from_end_of_stream()
             .execute(1)
             .await
-            .map_err(|err| anyhow!("failed to open stream to retrieve latest snapshot: {:?}"))?
-        {
+            .map_err(|err| {
+                anyhow!(
+                    "failed to open stream to retrieve latest snapshot: {:?}",
+                    err
+                )
+            })? {
             ReadResult::Ok(mut stream) => {
                 while let Some(resolved) = stream.try_next().await.map_err(|err| {
                     anyhow!("failed to retrieve snapshot from the eventstore: {:?}", err)

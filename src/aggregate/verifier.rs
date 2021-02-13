@@ -59,9 +59,6 @@ impl Default for VerifierAggregate {
 }
 
 impl VerifierAggregate {
-    pub fn state(&self) -> &IdentityManager {
-        &self.state
-    }
     fn handle_verify_message(
         &self,
         external_message: ExternalMessage,
@@ -182,6 +179,10 @@ impl Aggregate for VerifierAggregate {
     type State = IdentityManager;
     type Command = VerifierCommand;
     type Error = anyhow::Error;
+
+    fn state(&self) -> &Self::State {
+        &self.state
+    }
 
     async fn apply(&mut self, event: Self::Event) -> Result<()> {
         self.events_generated += 1;

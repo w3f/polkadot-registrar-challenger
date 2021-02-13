@@ -13,6 +13,8 @@ use std::convert::TryFrom;
 
 #[tokio::test]
 async fn insert_identities() {
+    env_logger::init();
+
     let be = InMemBackend::run().await;
     let store = be.store();
     let mut repo = Repository::<VerifierAggregate>::new_with_snapshot_service(store.clone(), 1)
@@ -44,9 +46,7 @@ async fn insert_identities() {
     }
 
     // Check the resulting state.
-    let aggregate = repo.aggregate();
-    let reader = aggregate.read().await;
-    let state = reader.state();
+    let state = repo.state();
     assert!(state.contains(&alice));
     assert!(state.contains(&bob));
 
@@ -57,9 +57,7 @@ async fn insert_identities() {
         .await
         .unwrap();
 
-    let aggregate = repo.aggregate();
-    let reader = aggregate.read().await;
-    let state = reader.state();
+    let state = repo.state();
     assert!(state.contains(&alice));
     assert!(state.contains(&bob));
 }
