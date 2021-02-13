@@ -28,7 +28,7 @@ where
     S: 'static + Send + Sync + Snapshot + Default,
     <S as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
     <S as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
-    <S as Snapshot>::Error: 'static + Send + Sync,
+    <S as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
     let stateful = Arc::new(RwLock::new(S::default()));
     let service = Snapshoter::new(Arc::clone(&stateful), client, snapshot_every).await?;
@@ -46,7 +46,7 @@ where
     <P as Projection>::Error: 'static + Send + Sync + StdError,
     <P as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
     <P as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
-    <P as Snapshot>::Error: 'static + Send + Sync,
+    <P as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
     let projection = Arc::new(RwLock::new(P::default()));
     let service = Snapshoter::new(Arc::clone(&projection), client.clone(), snapshot_every).await?;
@@ -64,79 +64,94 @@ pub trait Aggregate {
     type Command;
     type Error;
 
-    fn state(&self) -> &Self::State;
     async fn apply(&mut self, event: Self::Event) -> Result<(), Self::Error>;
     async fn handle(&self, command: Self::Command)
         -> Result<Option<Vec<Self::Event>>, Self::Error>;
 }
 
 pub struct Repository<A> {
-    aggregate: A,
+    aggregate: Arc<RwLock<A>>,
     client: Client,
 }
 
 impl<A> Repository<A>
 where
-    A: Aggregate + Default,
+    A: 'static + Send + Sync + Aggregate + Snapshot + Default,
     <A as Aggregate>::Id: Send + Sync + AsRef<str> + Default,
     <A as Aggregate>::Event: Send + Sync + TryInto<EventData> + Clone,
     <A as Aggregate>::Error: 'static + Send + Sync + Debug,
+    <A as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
+    <A as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
+    <A as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
-    pub fn new(client: Client) -> Self {
-        Repository {
-            aggregate: Default::default(),
+    pub async fn new_with_snapshot_service(
+        client: Client,
+        snapshot_every: usize,
+    ) -> Result<Self, anyhow::Error> {
+        let aggregate = with_snapshot_service::<A>(client.clone(), snapshot_every).await?;
+
+        Ok(Repository {
+            aggregate: aggregate,
             client: client,
-        }
+        })
     }
-    pub fn state(&self) -> &<A as Aggregate>::State {
-        self.aggregate.state()
+    pub fn aggregate(&self) -> Arc<RwLock<A>> {
+        Arc::clone(&self.aggregate)
     }
     pub async fn apply(&mut self, command: <A as Aggregate>::Command) -> Result<(), Error> {
-        if let Some(events) = self
-            .aggregate
-            .handle(command)
-            .await
-            .map_err(|err| anyhow!("failed to handle aggregate command: {:?}", err))?
-        {
-            let to_store = events.clone();
-
-            // Send events to the store.
-            self.client
-                .write_events(<A as Aggregate>::Id::default())
-                .send_iter(
-                    to_store
-                        .into_iter()
-                        .map(|event| {
-                            event.try_into().map_err(|_| {
-                                anyhow!("Failed to convert event into eventstore native format")
-                                    .into()
-                            })
-                        })
-                        .collect::<Result<Vec<EventData>, Error>>()?,
-                )
+        let events = {
+            if let Some(events) = self
+                .aggregate
+                .read()
                 .await
-                .map_err(|err| {
-                    anyhow!(
-                        "failed to send aggregate events to the eventstore: {:?}",
-                        err
-                    )
-                })?
-                .map_err(|err| {
-                    anyhow!(
-                        "failed to send aggregate events to the eventstore: {:?}",
-                        err
-                    )
-                })?;
-
-            // Apply events locally.
-            for event in events {
-                self.aggregate.apply(event).await.map_err(|err| {
-                    anyhow!(
-                        "Failed to apply aggregate events to the local state: {:?}",
-                        err
-                    )
-                })?;
+                .handle(command)
+                .await
+                .map_err(|err| anyhow!("failed to handle aggregate command: {:?}", err))?
+            {
+                events
+            } else {
+                return Ok(());
             }
+        };
+
+        let to_store = events.clone();
+
+        // Send events to the store.
+        self.client
+            .write_events(<A as Aggregate>::Id::default())
+            .send_iter(
+                to_store
+                    .into_iter()
+                    .map(|event| {
+                        event.try_into().map_err(|_| {
+                            anyhow!("Failed to convert event into eventstore native format").into()
+                        })
+                    })
+                    .collect::<Result<Vec<EventData>, Error>>()?,
+            )
+            .await
+            .map_err(|err| {
+                anyhow!(
+                    "failed to send aggregate events to the eventstore: {:?}",
+                    err
+                )
+            })?
+            .map_err(|err| {
+                anyhow!(
+                    "failed to send aggregate events to the eventstore: {:?}",
+                    err
+                )
+            })?;
+
+        // Apply events locally.
+        let mut writer = self.aggregate.write().await;
+        for event in events {
+            writer.apply(event).await.map_err(|err| {
+                anyhow!(
+                    "Failed to apply aggregate events to the local state: {:?}",
+                    err
+                )
+            })?;
         }
 
         Ok(())
@@ -225,14 +240,14 @@ where
 }
 
 #[async_trait]
-pub trait Snapshot {
+pub trait Snapshot: Sized {
     type Id;
     type State;
     type Error;
 
     fn qualifies(&self, every: usize) -> bool;
     async fn snapshot(&self) -> Self::State;
-    async fn restore(state: Self::State) -> Self;
+    async fn restore(state: Self::State) -> Result<Self, Self::Error>;
 }
 
 pub struct Snapshoter<S> {
@@ -247,7 +262,7 @@ where
     S: 'static + Send + Sync + Snapshot,
     <S as Snapshot>::Id: Send + Sync + Default + AsRef<str>,
     <S as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
-    <S as Snapshot>::Error: 'static + Send + Sync,
+    <S as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
     async fn new(
         stateful: Arc<RwLock<S>>,
@@ -276,9 +291,10 @@ where
                         let mut s = stateful.write().await;
                         *s =
                             S::restore(<S as Snapshot>::State::try_from(recorded).map_err(
-                                |_| anyhow!("Failed to convert snapshot into native type"),
+                                |_| anyhow!("failed to convert snapshot into native type"),
                             )?)
-                            .await;
+                            .await
+                            .map_err(|err| anyhow!("failed to restore from snapshot: {:?}", err))?;
                     }
                 }
             }

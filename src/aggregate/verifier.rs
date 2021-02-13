@@ -59,6 +59,9 @@ impl Default for VerifierAggregate {
 }
 
 impl VerifierAggregate {
+    pub fn state(&self) -> &IdentityManager {
+        &self.state
+    }
     fn handle_verify_message(
         &self,
         external_message: ExternalMessage,
@@ -180,10 +183,6 @@ impl Aggregate for VerifierAggregate {
     type Command = VerifierCommand;
     type Error = anyhow::Error;
 
-    fn state(&self) -> &Self::State {
-        &self.state
-    }
-
     async fn apply(&mut self, event: Self::Event) -> Result<()> {
         self.events_generated += 1;
         self.apply_state_changes(event)
@@ -219,7 +218,7 @@ impl Aggregate for VerifierAggregate {
 #[async_trait]
 impl Snapshot for VerifierAggregate {
     type Id = VerifierAggregateSnapshotsId;
-    type State = Vec<IdentityState>;
+    type State = Event;
     type Error = anyhow::Error;
 
     fn qualifies(&self, snapshot_every: usize) -> bool {
@@ -230,18 +229,27 @@ impl Snapshot for VerifierAggregate {
         }
     }
     async fn snapshot(&self) -> Self::State {
-        self.state.export_state()
+        Event::from(EventType::ExportedIdentityState(self.state.export_state()))
     }
-    async fn restore(state: Self::State) -> Self {
+    async fn restore(state: Self::State) -> Result<Self> {
+        let state = match state.body {
+            EventType::ExportedIdentityState(state) => state,
+            _ => {
+                return Err(anyhow!(
+                    "expected 'EventType::ExportedIdentityState' type to restore state"
+                ))
+            }
+        };
+
         let mut manager = IdentityManager::default();
 
         for entry in state {
             manager.insert_identity(IdentityInserted { identity: entry });
         }
 
-        VerifierAggregate {
+        Ok(VerifierAggregate {
             state: manager,
             events_generated: 0,
-        }
+        })
     }
 }

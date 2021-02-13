@@ -53,6 +53,7 @@ pub enum EventType {
     FieldStatusVerified(FieldStatusVerified),
     IdentityFullyVerified(IdentityFullyVerified),
     DisplayNamePersisted(DisplayNamePersisted),
+    ExportedIdentityState(Vec<IdentityState>),
 }
 
 impl From<EventType> for Event {
