@@ -646,12 +646,14 @@ async fn verify_message_invalid_origin() {
     assert!(state.contains(&bob_new));
 }
 
-/*
 #[tokio::test]
 async fn verify_and_persist_display_names() {
-    let be = InMemBackend::<VerifierAggregateId>::run().await;
+    let be = InMemBackend::run().await;
     let store = be.store();
-    let mut repo = Repository::new(VerifierAggregate.into(), store);
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+        .await
+        .unwrap();
 
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
@@ -671,44 +673,39 @@ async fn verify_and_persist_display_names() {
         .unwrap()
     });
 
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-
     // Execute commands.
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
         .await
         .unwrap();
 
-    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
         .await
         .unwrap();
 
-    root.handle(VerifierCommand::InsertIdentity(eve.clone()))
+    repo.apply(VerifierCommand::InsertIdentity(eve.clone()))
         .await
         .unwrap();
 
-    root.handle(VerifierCommand::PersistDisplayName {
+    repo.apply(VerifierCommand::PersistDisplayName {
         net_address: eve.net_address.clone(),
         display_name: alice_display_name.clone(),
     })
     .await
     .unwrap();
 
-    root.handle(VerifierCommand::VerifyDisplayName {
+    repo.apply(VerifierCommand::VerifyDisplayName {
         net_address: alice.net_address.clone(),
         display_name: alice_display_name.clone(),
     })
     .await
     .unwrap();
 
-    root.handle(VerifierCommand::VerifyDisplayName {
+    repo.apply(VerifierCommand::VerifyDisplayName {
         net_address: bob.net_address.clone(),
         display_name: bob_display_name,
     })
     .await
     .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
 
     // Set the expected state.
     let mut alice_new = alice.clone();
@@ -772,12 +769,23 @@ async fn verify_and_persist_display_names() {
     }
 
     // Check the resulting state.
-    let root = repo.get(VerifierAggregateId).await.unwrap();
-    let state = root.state();
+    let state = repo.state();
+    assert!(!state.contains(&alice));
+    assert!(!state.contains(&bob));
+    assert!(state.contains(&alice_new));
+    assert!(state.contains(&bob_new));
+    assert!(state.contains(&eve));
+
+    // Check snapshot.
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let repo = Repository::new_with_snapshot_service(aggregate, store)
+        .await
+        .unwrap();
+
+    let state = repo.state();
     assert!(!state.contains(&alice));
     assert!(!state.contains(&bob));
     assert!(state.contains(&alice_new));
     assert!(state.contains(&bob_new));
     assert!(state.contains(&eve));
 }
-*/
