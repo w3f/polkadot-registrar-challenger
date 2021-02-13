@@ -32,6 +32,64 @@ async fn insert_identities() {
     repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
         .await
         .unwrap();
+
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
+        .await
+        .unwrap();
+
+    // Check the resulting events.
+    let expected = [
+        Event::from(EventType::IdentityInserted(alice.clone().into())),
+        Event::from(EventType::IdentityInserted(bob.clone().into())),
+    ];
+
+    let events = be.get_events(VerifierAggregateId).await;
+    assert_eq!(events.len(), expected.len());
+
+    for (expected, event) in expected.iter().zip(events.iter()) {
+        assert_eq!(expected.body, event.body);
+    }
+
+    // Check the resulting state.
+    let state = repo.state();
+    assert!(state.contains(&alice));
+    assert!(state.contains(&bob));
+
+    // Check snapshot.
+    drop(repo);
+
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store)
+        .await
+        .unwrap();
+
+    let state = repo.state();
+    assert!(state.contains(&alice));
+    assert!(state.contains(&bob));
+}
+
+#[tokio::test]
+async fn insert_identities_duplicate() {
+    let be = InMemBackend::run().await;
+    let store = be.store();
+    let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+        .await
+        .unwrap();
+
+    let alice = IdentityState::alice();
+    let bob = IdentityState::bob();
+
+    // Execute commands.
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
+        .await
+        .unwrap();
+
+    // Add duplicate identity
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
+        .await
+        .unwrap();
+
     repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
         .await
         .unwrap();
@@ -68,63 +126,6 @@ async fn insert_identities() {
 }
 
 /*
-#[tokio::test]
-async fn insert_identities_duplicate() {
-    let be = InMemBackend::<VerifierAggregateId>::run().await;
-    let store = be.store();
-    let mut repo = Repository::new(VerifierAggregate.into(), store);
-
-    let alice = IdentityState::alice();
-    let bob = IdentityState::bob();
-
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-
-    // Execute commands.
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
-        .await
-        .unwrap();
-
-    // Add duplicate identity
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
-        .await
-        .unwrap();
-
-    root.handle(VerifierCommand::InsertIdentity(bob.clone()))
-        .await
-        .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
-
-    // Add duplicate identity after committed changes.
-    let mut root = repo.get(VerifierAggregateId).await.unwrap();
-    root.handle(VerifierCommand::InsertIdentity(alice.clone()))
-        .await
-        .unwrap();
-
-    // Commit changes
-    repo.add(root).await.unwrap();
-
-    // Check the resulting events.
-    let expected = [
-        Event::from(EventType::IdentityInserted(alice.clone().into())),
-        Event::from(EventType::IdentityInserted(bob.clone().into())),
-    ];
-
-    let events = be.get_events(VerifierAggregateId).await;
-    assert_eq!(events.len(), expected.len());
-
-    for (expected, event) in expected.iter().zip(events.iter()) {
-        assert_eq!(expected.body, event.body);
-    }
-
-    // Check the resulting state.
-    let root = repo.get(VerifierAggregateId).await.unwrap();
-    let state = root.state();
-    assert!(state.contains(&alice));
-    assert!(state.contains(&bob));
-}
-
 #[tokio::test]
 async fn insert_identities_state_change() {
     let be = InMemBackend::<VerifierAggregateId>::run().await;
