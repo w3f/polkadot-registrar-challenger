@@ -5,39 +5,28 @@ use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, Verifie
 use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 use crate::api::{ConnectionPool, PublicRpc, PublicRpcApi};
 use crate::event::{Event, EventType, ExternalMessage};
-use crate::projection::SessionNotifier;
+use crate::projection::{Projector, SessionNotifier};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
 use futures::stream::StreamExt;
 use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
+use eventstore::Client;
+use tokio::sync::RwLock;
 
-/*
-pub async fn run_session_notifier(
+///  This is currently separated from `run_api_service` since the RPC
+///  implementation still relies on tokio v0.2.
+pub async fn run_session_notifier_blocking(
     pool: ConnectionPool,
-    subscription: EventSubscription<VerifierAggregateId>,
+    client: Client,
 ) {
-    let projection = Arc::new(tokio_02::sync::RwLock::new(SessionNotifier::with_pool(
-        pool,
-    )));
-    let mut projector = Projector::new(projection, subscription);
-
-    // TODO: Consider exiting the entire program if this returns error.
-    projector
-        .run()
-        .await
-        .map_err(|err| {
-            error!("Session notifier exited: {:?}", err);
-            err
-        })
-        .map_err(|err| {
-            println!(">>>> {:?}", err);
-            err
-        })
-        .unwrap();
+    let projection = Arc::new(RwLock::new(SessionNotifier::with_pool(pool)));
+    let projector = Projector::new(projection, client);
+    projector.run_blocking().await;
 }
 
+/*
 #[allow(dead_code)]
 /// Must be started in a tokio v0.2 runtime context.
 pub fn run_api_service(pool: ConnectionPool, port: usize) -> Result<WsServer> {

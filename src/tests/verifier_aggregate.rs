@@ -2,7 +2,6 @@ use super::InMemBackend;
 use crate::aggregate::Repository;
 use crate::aggregate::{
     verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand},
-    Snapshot,
 };
 use crate::event::{
     DisplayNamePersisted, Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified,
@@ -11,8 +10,6 @@ use crate::manager::{
     ChallengeStatus, DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
     IdentityFieldType, IdentityState, ProvidedMessage, RegistrarIdentityField, Validity,
 };
-use futures::StreamExt;
-use std::convert::TryFrom;
 
 #[tokio::test]
 async fn insert_identities() {

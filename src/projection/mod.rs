@@ -34,15 +34,15 @@ where
     <P as Projection>::Event: Send + Sync + TryFrom<RecordedEvent>,
     <P as Projection>::Error: 'static + Send + Sync + Debug,
 {
-    fn new(projection: Arc<RwLock<P>>, client: Client) -> Self {
+    pub fn new(projection: Arc<RwLock<P>>, client: Client) -> Self {
         Projector {
             projection: projection,
             client: client,
             latest_revision: Arc::new(RwLock::new(0)),
         }
     }
-    async fn run_blocking(self) {
-        let mut projection = self.projection;
+    pub async fn run_blocking(self) {
+        let projection = self.projection;
         let client = self.client;
         let latest_revision = Arc::clone(&self.latest_revision);
 
