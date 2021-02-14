@@ -8,6 +8,7 @@ use crate::manager::{
     ChallengeStatus, DisplayName, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
     IdentityFieldType, IdentityState, ProvidedMessage, RegistrarIdentityField, Validity,
 };
+use std::convert::TryFrom;
 
 #[tokio::test]
 async fn insert_identities() {

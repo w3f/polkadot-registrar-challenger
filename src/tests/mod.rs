@@ -1,6 +1,7 @@
 use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::Event;
+use crate::system::run_api_service_blocking;
 use eventstore::Client;
 use futures::{future::Join, FutureExt, Stream, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
@@ -13,6 +14,7 @@ use std::fs::canonicalize;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
 use tokio::time::{self, Duration};
+use tokio::task::JoinHandle;
 
 mod api;
 mod verifier_aggregate;
@@ -21,31 +23,18 @@ fn gen_port() -> usize {
     thread_rng().gen_range(1_024, 65_535)
 }
 
-struct ApiBackend {
+// Must be called in a tokio v0.2 context.
+struct ApiClient {
     client: RawClient,
 }
 
-impl ApiBackend {
-    async fn run(pool: ConnectionPool) -> Self {
-        let port = gen_port();
-
-        std::thread::spawn(move || {
-            let mut rt = tokio_02::runtime::Runtime::new().unwrap();
-            rt.block_on(async move {
-                //let server = run_api_service(pool, port).unwrap();
-                //server.wait().unwrap();
-            })
-        });
-
-        // Let the server spin up.
-        tokio_02::time::delay_for(Duration::from_secs(2)).await;
-
-        // Create a client
-        let client = connect::<RawClient>(&format!("ws://127.0.0.1:{}", port).parse().unwrap())
-            .await
-            .unwrap();
-
-        ApiBackend { client: client }
+impl ApiClient {
+    async fn new(rpc_port: usize) -> ApiClient {
+        ApiClient {
+            client: connect::<RawClient>(&format!("ws://127.0.0.1:{}", rpc_port).parse().unwrap())
+                .await
+                .unwrap(),
+        }
     }
     fn client(&self) -> &RawClient {
         &self.client
@@ -64,6 +53,21 @@ impl ApiBackend {
             .take_until(tokio_02::time::delay_for(Duration::from_secs(2)))
             .collect()
             .await
+    }
+}
+
+struct ApiBackend;
+
+impl ApiBackend {
+    async fn run(store: Client) -> usize {
+        let rpc_port = gen_port();
+        tokio::spawn(run_api_service_blocking(
+            ConnectionPool::default(),
+            rpc_port,
+            store,
+        ));
+
+        rpc_port
     }
 }
 

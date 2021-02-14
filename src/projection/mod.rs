@@ -84,11 +84,10 @@ where
             Result::<(), Error>::Ok(())
         });
 
-        let msg = format!(
+        let _ = handle.await.unwrap();
+        error!(
             "Projection for stream '{}' has exited unexpectedly",
             <P as Projection>::Id::default().as_ref()
         );
-        error!("{}", &msg);
-        let _ = handle.await.expect(&msg);
     }
 }

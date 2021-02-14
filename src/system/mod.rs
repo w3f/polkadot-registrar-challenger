@@ -17,7 +17,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{self, Duration};
 
-pub async fn run_api_service_blocking(pool: ConnectionPool, port: usize, client: Client) {
+// TODO: Maybe rename `client` to `store`?
+pub async fn run_api_service_blocking(pool: ConnectionPool, rpc_port: usize, client: Client) {
     // `ConnectionPool` uses `Arc` underneath.
     let t_pool = pool.clone();
 
@@ -42,7 +43,7 @@ pub async fn run_api_service_blocking(pool: ConnectionPool, port: usize, client:
             let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
                 Arc::new(Session::new(context.sender().clone()))
             })
-            .start(&format!("0.0.0.0:{}", port).parse()?)?;
+            .start(&format!("0.0.0.0:{}", rpc_port).parse()?)?;
 
             handle.wait().unwrap();
             error!("The RPC API server exited unexpectedly");
