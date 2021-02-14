@@ -1,7 +1,7 @@
 use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::Event;
-use crate::system::run_api_service_blocking;
+use crate::system::run_rpc_api_service_blocking;
 use eventstore::Client;
 use futures::{future::Join, FutureExt, Stream, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
@@ -16,8 +16,8 @@ use tokio::process::{Child, Command};
 use tokio::time::{self, Duration};
 use tokio::task::JoinHandle;
 
-mod api;
-mod verifier_aggregate;
+mod rpc_api_service;
+mod aggregate_verifier;
 
 fn gen_port() -> usize {
     thread_rng().gen_range(1_024, 65_535)
@@ -61,7 +61,7 @@ struct ApiBackend;
 impl ApiBackend {
     async fn run(store: Client) -> usize {
         let rpc_port = gen_port();
-        tokio::spawn(run_api_service_blocking(
+        tokio::spawn(run_rpc_api_service_blocking(
             ConnectionPool::default(),
             rpc_port,
             store,

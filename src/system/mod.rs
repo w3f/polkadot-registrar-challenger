@@ -18,7 +18,7 @@ use tokio::sync::RwLock;
 use tokio::time::{self, Duration};
 
 // TODO: Maybe rename `client` to `store`?
-pub async fn run_api_service_blocking(pool: ConnectionPool, rpc_port: usize, client: Client) {
+pub async fn run_rpc_api_service_blocking(pool: ConnectionPool, rpc_port: usize, client: Client) {
     // `ConnectionPool` uses `Arc` underneath.
     let t_pool = pool.clone();
 
