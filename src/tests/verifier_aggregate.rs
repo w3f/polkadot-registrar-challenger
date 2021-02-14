@@ -1,8 +1,6 @@
 use super::InMemBackend;
+use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::Repository;
-use crate::aggregate::{
-    verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand},
-};
 use crate::event::{
     DisplayNamePersisted, Event, EventType, ExternalMessage, ExternalOrigin, FieldStatusVerified,
 };

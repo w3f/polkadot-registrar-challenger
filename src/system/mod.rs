@@ -8,38 +8,67 @@ use crate::event::{Event, EventType, ExternalMessage};
 use crate::projection::{Projector, SessionNotifier};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
+use eventstore::Client;
+use futures::join;
 use futures::stream::StreamExt;
 use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
-use eventstore::Client;
 use tokio::sync::RwLock;
+use tokio::time::{self, Duration};
 
-///  This is currently separated from `run_api_service` since the RPC
-///  implementation still relies on tokio v0.2.
-pub async fn run_session_notifier_blocking(
-    pool: ConnectionPool,
-    client: Client,
-) {
-    let projection = Arc::new(RwLock::new(SessionNotifier::with_pool(pool)));
-    let projector = Projector::new(projection, client);
-    projector.run_blocking().await;
+pub async fn run_api_service_blocking(pool: ConnectionPool, port: usize, client: Client) {
+    // `ConnectionPool` uses `Arc` underneath.
+    let t_pool = pool.clone();
+
+    // Start the session notifier. It listens to identity state changes from the
+    // eventstore and sends all updates to the RPC API, in order to inform
+    // users.
+    let handle1 = tokio::spawn(async move {
+        let projection = Arc::new(RwLock::new(SessionNotifier::with_pool(pool)));
+        let projector = Projector::new(projection, client.clone());
+        projector.run_blocking().await;
+    });
+
+    // Start the RPC service in its own OS thread, since it requires a tokio
+    // v0.2 runtime.
+    std::thread::spawn(move || {
+        let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            let mut io = PubSubHandler::default();
+            io.extend_with(PublicRpcApi::with_pool(t_pool).to_delegate());
+
+            // TODO: Might consider setting `max_connections`.
+            let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
+                Arc::new(Session::new(context.sender().clone()))
+            })
+            .start(&format!("0.0.0.0:{}", port).parse()?)?;
+
+            handle.wait().unwrap();
+            error!("The RPC API server exited unexpectedly");
+
+            Result::Ok(())
+        })
+        .map_err(|err| {
+            error!("Failed to start RPC API server: {:?}", err);
+            err
+        })
+        .unwrap();
+    });
+
+    handle1
+        .await
+        .map_err(|err| {
+            error!("The RPC API session notifier exited unexpectedly");
+            err
+        })
+        .unwrap();
 }
 
 /*
 #[allow(dead_code)]
 /// Must be started in a tokio v0.2 runtime context.
 pub fn run_api_service(pool: ConnectionPool, port: usize) -> Result<WsServer> {
-    let mut io = PubSubHandler::default();
-    io.extend_with(PublicRpcApi::with_pool(pool).to_delegate());
-
-    // TODO: Might consider setting `max_connections`.
-    let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
-        Arc::new(Session::new(context.sender().clone()))
-    })
-    .start(&format!("0.0.0.0:{}", port).parse()?)?;
-
-    Ok(handle)
 }
 
 #[allow(dead_code)]
