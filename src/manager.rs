@@ -45,6 +45,7 @@ pub struct IdentityManager {
     identities: HashMap<NetworkAddress, HashMap<IdentityFieldType, FieldStatus>>,
     lookup_addresses: HashMap<IdentityField, HashSet<NetworkAddress>>,
     display_names: HashMap<NetworkAddress, DisplayName>,
+    on_chain_challenges: HashMap<NetworkAddress, OnChainChallenge>,
 }
 
 // TODO: Should logs be printed if users are not found?
@@ -54,6 +55,7 @@ impl IdentityManager {
             .iter()
             .map(|(net_address, fields)| IdentityState {
                 net_address: net_address.clone(),
+                on_chain_challenge: self.on_chain_challenges.get(net_address).unwrap().clone(),
                 fields: fields.clone(),
             })
             .collect()
@@ -64,6 +66,7 @@ impl IdentityManager {
             .map(|state| state == &identity.fields)
             .unwrap_or(false)
     }
+    // TODO: Rename variable to `inserted`
     pub fn insert_identity(&mut self, identity: IdentityInserted) {
         // Take value from Event wrapper.
         let identity = identity.identity;
@@ -105,6 +108,11 @@ impl IdentityManager {
                 })
                 .or_insert(vec![net_address.clone()].into_iter().collect());
         }
+
+        // Create on-chain challenge.
+        self.on_chain_challenges
+            .entry(net_address)
+            .or_insert(identity.on_chain_challenge.clone());
     }
     // TODO: This should return the full identity, too.
     pub fn update_field(&mut self, verified: FieldStatusVerified) -> Result<Option<UpdateChanges>> {
@@ -209,6 +217,7 @@ impl IdentityManager {
             .get(net_address)
             .map(|fields| IdentityState {
                 net_address: net_address.clone(),
+                on_chain_challenge: self.on_chain_challenges.get(&net_address).unwrap().clone(),
                 fields: fields.clone(),
             })
     }
@@ -486,6 +495,7 @@ impl NetworkAddress {
 #[serde(rename_all = "snake_case")]
 pub struct IdentityState {
     pub net_address: NetworkAddress,
+    pub on_chain_challenge: OnChainChallenge,
     pub fields: HashMap<IdentityFieldType, FieldStatus>,
 }
 
@@ -532,6 +542,18 @@ impl FieldStatus {
     /// Convenience method for improved readability.
     pub fn is_not_valid(&self) -> bool {
         !self.is_valid()
+    }
+}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub struct OnChainChallenge(String);
+
+impl OnChainChallenge {
+    pub fn gen() -> Self {
+        OnChainChallenge({
+            let random: [u8; 16] = thread_rng().gen();
+            format!("w3f_registrar:{}", hex::encode(random))
+        })
     }
 }
 
@@ -869,6 +891,7 @@ mod tests {
         pub fn alice() -> Self {
             IdentityState {
                 net_address: NetworkAddress::alice(),
+                on_chain_challenge: OnChainChallenge::gen(),
                 fields: vec![
                     FieldStatus::try_from({
                         (
@@ -909,6 +932,7 @@ mod tests {
         pub fn bob() -> Self {
             IdentityState {
                 net_address: NetworkAddress::bob(),
+                on_chain_challenge: OnChainChallenge::gen(),
                 fields: vec![
                     FieldStatus::try_from({
                         (
@@ -949,6 +973,7 @@ mod tests {
         pub fn eve() -> Self {
             IdentityState {
                 net_address: NetworkAddress::eve(),
+                on_chain_challenge: OnChainChallenge::gen(),
                 fields: vec![
                     FieldStatus::try_from({
                         (
