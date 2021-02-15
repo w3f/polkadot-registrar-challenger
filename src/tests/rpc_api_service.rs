@@ -1,15 +1,22 @@
 use super::{ApiBackend, ApiClient, InMemBackend};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
+use crate::aggregate::Repository;
 use crate::api::ConnectionPool;
 use crate::event::ErrorMessage;
 use crate::manager::IdentityState;
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 use jsonrpc_core::types::{to_value, Params, Value};
 use matrix_sdk::api::r0::account::request_registration_token_via_email;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::mpsc::channel;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
-use std::sync::mpsc::channel;
+
+/*
+{"id":1,"jsonrpc":"2.0","method":"account_subscribeStatus"}
+
+{"id":1,"jsonrpc":"2.0","method":"account_subscribeStatus","params":["polkadot","1gfpAmeKYhEoSrEgQ5UDYTiNSeKPvxVfLVWcW73JGnX9L6M"]}
+*/
 
 struct Regulator {
     token: Arc<AtomicBool>,
@@ -22,12 +29,12 @@ impl Regulator {
         (
             TokenV1 {
                 shared: Arc::clone(&token),
-                my_token: true
+                my_token: true,
             },
             TokenV02 {
                 shared: Arc::clone(&token),
-                my_token: false 
-            }
+                my_token: false,
+            },
         )
     }
 }
@@ -54,6 +61,11 @@ impl TokenV1 {
     async fn wait(&self) {
         while self.shared.load(Ordering::Relaxed) != self.my_token {
             tokio::time::sleep(Duration::from_millis(50)).await
+        }
+    }
+    async fn wait_forever(&self) {
+        loop {
+            tokio::time::sleep(Duration::from_millis(1_000)).await
         }
     }
 }
@@ -97,7 +109,6 @@ fn subscribe_status_no_judgement_request() {
         let be = InMemBackend::run().await;
         let store = be.store();
         let port = ApiBackend::run(store).await;
-
         t_shared_port.store(port, Ordering::Relaxed);
 
         // Let the server spin up.
@@ -138,31 +149,62 @@ fn subscribe_status_no_judgement_request() {
     });
 }
 
-/*
 #[test]
 fn subscribe_status_pending_judgement_request() {
-    let regulator = Regulator::new();
-    let reg_aggr = regulator.new_child(Thread::Aggregate);
-    let reg_stream = regulator.new_child(Thread::Stream);
+    let shared_port = Arc::new(AtomicUsize::new(0));
+    let (tokenv1, tokenv2) = Regulator::new();
 
-    let pool = ConnectionPool::default();
-    let t_pool = pool.clone();
+    tokenv1.me_first();
 
-    let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+    // Run the API service (tokio v1).
+    let t_shared_port = Arc::clone(&shared_port);
+    let rt = tokio::runtime::Runtime::new().unwrap();
     rt.spawn(async move {
-        let api = ApiBackend::run(t_pool).await;
-        let alice = IdentityState::alice();
+        let be = InMemBackend::run().await;
+        let store = be.store();
+        let port = ApiBackend::run(store.clone()).await;
+        t_shared_port.store(port, Ordering::Relaxed);
 
-        reg_stream.wait();
+        // Let the server spin up.
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokenv1.rotate().await;
+
+        let alice = IdentityState::alice();
+        let bob = IdentityState::bob();
+
+        let aggregate = VerifierAggregate::default().set_snapshot_every(1);
+        let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+            .await
+            .unwrap();
+
+        // Execute commands.
+        repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
+            .await
+            .unwrap();
+
+        repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
+            .await
+            .unwrap();
+
+        tokenv1.rotate().await;
+        tokenv1.wait_forever().await;
+    });
+
+    // Make tests with the client (tokio v0.2).
+    let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+    rt.block_on(async move {
+        tokenv2.wait().await;
+
+        let client = ApiClient::new(shared_port.load(Ordering::Relaxed)).await;
+        let alice = IdentityState::alice();
 
         #[rustfmt::skip]
         let expected = [
             to_value(ErrorMessage::no_pending_judgement_request(0)).unwrap(),
         ];
 
-        // No pending judgement request is available at first.
-        let mut stream = api
-            .client()
+        let mut stream = client
+            .raw()
             .subscribe(
                 "account_subscribeStatus",
                 Params::Array(vec![
@@ -174,43 +216,12 @@ fn subscribe_status_pending_judgement_request() {
             )
             .unwrap();
 
-        let mut counter = 0;
-        while let Some(message) = stream.next().await {
-            //assert_eq!(message.unwrap(), expected[counter]);
-            println!(">>> {:?}", message.unwrap());
+        assert_eq!(stream.next().await.unwrap().unwrap(), expected[0]);
+        println!("ROTATE");
+        tokenv2.rotate().await;
+        println!("RIGHT BACK");
 
-            reg_stream.yield_and_exit(Thread::Aggregate);
-
-            counter += 1;
-        }
-    });
-
-    reg_aggr.yield_time_to(Thread::Stream);
-
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async move {
-        let es = InMemBackend::<VerifierAggregateId>::run().await;
-        es.run_session_notifier(pool).await;
-        let store = es.store();
-        let mut repo = Repository::new(VerifierAggregate.into(), store);
-
-        let alice = IdentityState::alice();
-
-        let mut root = repo.get(VerifierAggregateId).await.unwrap();
-        root.handle(VerifierCommand::InsertIdentity(alice.clone()))
-            .await
-            .unwrap();
-
-        // Commit changes
-        repo.add(root).await.unwrap();
-
-        reg_aggr.yield_time_to(Thread::Stream);
+        let event = stream.next().await;
+        println!(">>> {:?}", event);
     });
 }
-*/
-
-/*
-{"id":1,"jsonrpc":"2.0","method":"account_subscribeStatus"}
-
-{"id":1,"jsonrpc":"2.0","method":"account_subscribeStatus","params":["polkadot","1gfpAmeKYhEoSrEgQ5UDYTiNSeKPvxVfLVWcW73JGnX9L6M"]}
-*/

@@ -13,11 +13,11 @@ use std::convert::TryFrom;
 use std::fs::canonicalize;
 use std::process::Stdio;
 use tokio::process::{Child, Command};
-use tokio::time::{self, Duration};
 use tokio::task::JoinHandle;
+use tokio::time::{self, Duration};
 
-mod rpc_api_service;
 mod aggregate_verifier;
+mod rpc_api_service;
 
 fn gen_port() -> usize {
     thread_rng().gen_range(1_024, 65_535)
@@ -36,7 +36,7 @@ impl ApiClient {
                 .unwrap(),
         }
     }
-    fn client(&self) -> &RawClient {
+    fn raw(&self) -> &RawClient {
         &self.client
     }
     async fn get_messages(

@@ -47,15 +47,22 @@ where
         let latest_revision = Arc::clone(&self.latest_revision);
 
         let handle = tokio::spawn(async move {
-            let subscribe = client
-                .subscribe_to_stream_from(<P as Projection>::Id::default())
-                .start_position(*latest_revision.read().await);
+            let mut subscribe = client
+                .subscribe_to_stream_from(<P as Projection>::Id::default());
 
+            // Don't skip the very first event (event `0`).
+            if *latest_revision.read().await > 0 {
+                subscribe = subscribe
+                    .start_position(*latest_revision.read().await);
+            }
+
+            // Create stream.
             let mut stream = subscribe
                 .execute_event_appeared_only()
                 .await
                 .map_err(|err| anyhow!("failed to open stream to projection: {:?}", err))?;
 
+            // Run the projector on each received event.
             while let Ok(event) = stream.try_next().await {
                 match event {
                     Some(resolved) => {

@@ -25,6 +25,7 @@ impl Projection for SessionNotifier {
 
     async fn project(&mut self, event: Self::Event) -> Result<(), Error> {
         let net_address = match event.body {
+            EventType::IdentityInserted(ref inserted) => &inserted.identity.net_address,
             EventType::FieldStatusVerified(ref field_status) => &field_status.net_address,
             EventType::IdentityFullyVerified(ref verified) => &verified.net_address,
             _ => return Ok(()),
