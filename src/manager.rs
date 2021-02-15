@@ -501,7 +501,8 @@ impl From<String> for IdentityAddress {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct FieldStatus {
-    field: IdentityField,
+    // TODO: Only make pub for tests.
+    pub field: IdentityField,
     is_permitted: bool,
     challenge: ChallengeStatus,
 }
