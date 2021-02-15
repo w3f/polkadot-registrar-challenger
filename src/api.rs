@@ -209,7 +209,7 @@ impl PublicRpc for PublicRpcApi {
                             manager.write().insert_identity(inserted.clone());
 
                             if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                                StateWrapper::from(inserted.identity),
+                                StateWrapper::newly_inserted_notification(inserted.identity),
                             ))) {
                                 debug!("Connection closed");
                                 return Ok(());

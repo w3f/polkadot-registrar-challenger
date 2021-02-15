@@ -47,13 +47,11 @@ where
         let latest_revision = Arc::clone(&self.latest_revision);
 
         let handle = tokio::spawn(async move {
-            let mut subscribe = client
-                .subscribe_to_stream_from(<P as Projection>::Id::default());
+            let mut subscribe = client.subscribe_to_stream_from(<P as Projection>::Id::default());
 
             // Don't skip the very first event (event `0`).
             if *latest_revision.read().await > 0 {
-                subscribe = subscribe
-                    .start_position(*latest_revision.read().await);
+                subscribe = subscribe.start_position(*latest_revision.read().await);
             }
 
             // Create stream.

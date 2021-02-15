@@ -12,6 +12,7 @@ use std::{
 };
 
 pub enum UpdateChanges {
+    NewIdentityInserted(NetworkAddress),
     VerificationValid(IdentityField),
     VerificationInvalid(IdentityField),
     BackAndForthExpected(IdentityField),
@@ -20,15 +21,19 @@ pub enum UpdateChanges {
 impl From<UpdateChanges> for Notification {
     fn from(val: UpdateChanges) -> Self {
         match val {
+            UpdateChanges::NewIdentityInserted(net_address) => Notification::Info(format!(
+                "New judgement request for identity {} found.",
+                net_address.address_str()
+            )),
             UpdateChanges::VerificationValid(field) => {
-                Notification::Success(format!("The {} field has been verified", field))
+                Notification::Success(format!("The {} field has been verified.", field))
             }
             UpdateChanges::VerificationInvalid(field) => {
-                Notification::Warn(format!("The {} field has failed verification", field))
+                Notification::Warn(format!("The {} field has failed verification.", field))
             }
             UpdateChanges::BackAndForthExpected(field) => Notification::Info(format!(
                 "The first challenge of the {0} field has been verified. \
-                An additional challenge has been sent to {0}",
+                An additional challenge has been sent directly to {0}",
                 field
             )),
         }

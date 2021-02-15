@@ -1,6 +1,6 @@
 use crate::manager::{
     DisplayName, FieldAddress, FieldStatus, IdentityField, IdentityState, NetworkAddress,
-    ProvidedMessage,
+    ProvidedMessage, UpdateChanges,
 };
 use crate::Result;
 
@@ -156,6 +156,14 @@ impl StateWrapper {
         StateWrapper {
             state: state,
             notifications: notifications,
+        }
+    }
+    // Convenience method which creates a "newly inserted" notification for the user.
+    pub fn newly_inserted_notification(state: IdentityState) -> Self {
+        let net_address = state.net_address.clone();
+        StateWrapper {
+            state: state,
+            notifications: vec![UpdateChanges::NewIdentityInserted(net_address).into()],
         }
     }
 }

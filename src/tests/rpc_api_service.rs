@@ -2,9 +2,10 @@ use super::{ApiBackend, ApiClient, InMemBackend};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::Repository;
 use crate::api::ConnectionPool;
-use crate::event::ErrorMessage;
+use crate::event::{ErrorMessage, StateWrapper};
 use crate::manager::IdentityState;
-use futures::{StreamExt, TryStreamExt};
+use futures::select;
+use futures::{future::FusedFuture, Stream, StreamExt, TryStreamExt};
 use jsonrpc_core::types::{to_value, Params, Value};
 use matrix_sdk::api::r0::account::request_registration_token_via_email;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -17,6 +18,15 @@ use std::time::Duration;
 
 {"id":1,"jsonrpc":"2.0","method":"account_subscribeStatus","params":["polkadot","1gfpAmeKYhEoSrEgQ5UDYTiNSeKPvxVfLVWcW73JGnX9L6M"]}
 */
+
+async fn ensure_empty_stream<S, T>(mut stream: S)
+where
+    S: Stream<Item = T> + Unpin,
+{
+    if let Ok(_) = tokio_02::time::timeout(Duration::from_secs(2), stream.next()).await {
+        panic!("Stream is not empty");
+    }
+}
 
 struct Regulator {
     token: Arc<AtomicBool>,
@@ -150,9 +160,14 @@ fn subscribe_status_no_judgement_request() {
 }
 
 #[test]
-fn subscribe_status_pending_judgement_request() {
+fn subscribe_status_newly_inserted_identity() {
     let shared_port = Arc::new(AtomicUsize::new(0));
     let (tokenv1, tokenv2) = Regulator::new();
+
+    let alice = IdentityState::alice();
+    let bob = IdentityState::bob();
+    let t_alice = alice.clone();
+    let t_bob = bob.clone();
 
     tokenv1.me_first();
 
@@ -168,9 +183,6 @@ fn subscribe_status_pending_judgement_request() {
         // Let the server spin up.
         tokio::time::sleep(Duration::from_secs(2)).await;
         tokenv1.rotate().await;
-
-        let alice = IdentityState::alice();
-        let bob = IdentityState::bob();
 
         let aggregate = VerifierAggregate::default().set_snapshot_every(1);
         let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
@@ -196,11 +208,13 @@ fn subscribe_status_pending_judgement_request() {
         tokenv2.wait().await;
 
         let client = ApiClient::new(shared_port.load(Ordering::Relaxed)).await;
-        let alice = IdentityState::alice();
+        let alice = t_alice;
+        let bob = t_bob;
 
         #[rustfmt::skip]
         let expected = [
             to_value(ErrorMessage::no_pending_judgement_request(0)).unwrap(),
+            to_value(StateWrapper::newly_inserted_notification(alice.clone())).unwrap(),
         ];
 
         let mut stream = client
@@ -217,11 +231,12 @@ fn subscribe_status_pending_judgement_request() {
             .unwrap();
 
         assert_eq!(stream.next().await.unwrap().unwrap(), expected[0]);
-        println!("ROTATE");
         tokenv2.rotate().await;
-        println!("RIGHT BACK");
 
-        let event = stream.next().await;
-        println!(">>> {:?}", event);
+        // Check result on newly  inserted identity.
+        assert_eq!(stream.next().await.unwrap().unwrap(), expected[1]);
+
+        // Client only subscribed to Alice, so no notification about Bob.
+        ensure_empty_stream(stream).await;
     });
 }
