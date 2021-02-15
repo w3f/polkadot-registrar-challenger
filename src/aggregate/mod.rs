@@ -49,6 +49,7 @@ where
     <A as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
     <A as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
+    // TODO: Rename "client" to "store".
     pub async fn new_with_snapshot_service(
         mut aggregate: A,
         client: Client,

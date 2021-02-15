@@ -758,6 +758,19 @@ pub enum IdentityField {
     Additional,
 }
 
+// TODO: Remove
+#[cfg(test)]
+impl IdentityField {
+    pub fn inner(&self) -> FieldAddress {
+        match self {
+            IdentityField::Email(addr) => addr.clone(),
+            IdentityField::Twitter(addr) => addr.clone(),
+            IdentityField::Matrix(addr) => addr.clone(),
+            _ => panic!(),
+        }
+    }
+}
+
 impl IdentityField {
     fn as_type(&self) -> IdentityFieldType {
         match self {

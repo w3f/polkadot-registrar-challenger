@@ -1,7 +1,14 @@
-use crate::aggregate::verifier::VerifierAggregateId;
 use crate::api::ConnectionPool;
 use crate::event::Event;
 use crate::system::run_rpc_api_service_blocking;
+use crate::{
+    aggregate::{
+        verifier::{VerifierAggregateId, VerifierAggregateSnapshotsId, VerifierCommand},
+        Repository,
+    },
+    event::{ExternalMessage, ExternalOrigin},
+    manager::{ChallengeStatus, ExpectedMessage, IdentityFieldType, IdentityState, Validity},
+};
 use eventstore::Client;
 use futures::{future::Join, FutureExt, Stream, StreamExt};
 use jsonrpc_client_transports::transports::ws::connect;
@@ -18,6 +25,110 @@ use tokio::time::{self, Duration};
 
 mod aggregate_verifier;
 mod rpc_api_service;
+
+#[tokio::test]
+#[ignore]
+async fn generate_random_data() {
+    env_logger::init();
+
+    use crate::aggregate::verifier::{VerifierAggregate, VerifierCommand};
+    use crate::aggregate::Repository;
+    use crate::event::{ExternalMessage, ExternalOrigin};
+    use crate::manager::{
+        ChallengeStatus, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
+        IdentityFieldType, IdentityState, RegistrarIdentityField,
+    };
+
+    fn random(between: usize) -> usize {
+        thread_rng().gen_range(0, between)
+    }
+
+    let be = InMemBackend::run().await;
+    let store = be.store();
+    ApiBackend::run_fixed_port(8080, store.clone()).await;
+
+    let aggregate = VerifierAggregate::default();
+    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
+        .await
+        .unwrap();
+
+    // Add identities.
+    let mut alice = IdentityState::alice();
+    let bob = IdentityState::bob();
+
+    alice.fields.insert(
+        IdentityFieldType::LegalName,
+        FieldStatus::try_from({
+            (
+                IdentityField::LegalName(FieldAddress::from("Alice Doe".to_string())),
+                // Throwaway value
+                RegistrarIdentityField::display_name(),
+            )
+        })
+        .unwrap(),
+    );
+
+    // Insert identities.
+    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
+        .await
+        .unwrap();
+
+    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
+        .await
+        .unwrap();
+
+    // Run forever
+    println!("STARTING LOOP");
+    loop {
+        println!("GO");
+        let field_ty = match random(2) {
+            0 => IdentityFieldType::Email,
+            1 => IdentityFieldType::Twitter,
+            2 => IdentityFieldType::Matrix,
+            _ => panic!(),
+        };
+
+        let expected = alice
+            .fields
+            .get(&field_ty)
+            .map(|field| match field.challenge() {
+                ChallengeStatus::ExpectMessage(challenge) => {
+                    Some((challenge.from.inner(), challenge.expected_message.clone()))
+                }
+                ChallengeStatus::BackAndForth(challenge) => {
+                    let msg = match random(1) {
+                        0 => challenge.expected_message.clone(),
+                        1 => ExpectedMessage::gen(),
+                        _ => panic!(),
+                    };
+
+                    Some((challenge.from.inner().clone(), msg))
+                }
+                _ => None,
+            });
+
+        if let Some(expected) = expected {
+            if let Some((from, msg)) = expected {
+                repo.apply(VerifierCommand::VerifyMessage(ExternalMessage {
+                    origin: {
+                        match field_ty {
+                            IdentityFieldType::Email => ExternalOrigin::Email,
+                            IdentityFieldType::Matrix => ExternalOrigin::Matrix,
+                            IdentityFieldType::Twitter => ExternalOrigin::Twitter,
+                            _ => panic!(),
+                        }
+                    },
+                    field_address: from,
+                    message: msg.into(),
+                }))
+                .await
+                .unwrap();
+            }
+        }
+
+        time::sleep(Duration::from_secs(5)).await;
+    }
+}
 
 fn gen_port() -> usize {
     thread_rng().gen_range(1_024, 65_535)
@@ -68,6 +179,13 @@ impl ApiBackend {
         ));
 
         rpc_port
+    }
+    async fn run_fixed_port(rpc_port: usize, store: Client) {
+        tokio::spawn(run_rpc_api_service_blocking(
+            ConnectionPool::default(),
+            rpc_port,
+            store,
+        ));
     }
 }
 

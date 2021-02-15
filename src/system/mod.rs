@@ -35,6 +35,13 @@ pub async fn run_rpc_api_service_blocking(pool: ConnectionPool, rpc_port: usize,
     // v0.2 runtime.
     std::thread::spawn(move || {
         let mut rt = tokio_02::runtime::Runtime::new().unwrap();
+
+        // TODO: Remove this.
+        #[cfg(not(test))]
+        let listen_on = format!("0.0.0.0:{}", rpc_port);
+        #[cfg(test)]
+        let listen_on = format!("127.0.0.1:{}", rpc_port);
+
         rt.block_on(async move {
             let mut io = PubSubHandler::default();
             io.extend_with(PublicRpcApi::with_pool(t_pool).to_delegate());
@@ -43,7 +50,8 @@ pub async fn run_rpc_api_service_blocking(pool: ConnectionPool, rpc_port: usize,
             let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
                 Arc::new(Session::new(context.sender().clone()))
             })
-            .start(&format!("0.0.0.0:{}", rpc_port).parse()?)?;
+            // TODO: Remove this
+            .start(&listen_on.parse()?)?;
 
             handle.wait().unwrap();
             error!("The RPC API server exited unexpectedly");
