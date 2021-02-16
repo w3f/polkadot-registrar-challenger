@@ -44,6 +44,7 @@ pub enum VerifierCommand {
 }
 
 #[derive(Debug, Clone)]
+// TODO: Should be able to set shared `Arc` state.
 pub struct VerifierAggregate {
     state: IdentityManager,
     events_generated: usize,

@@ -29,11 +29,12 @@ use tokio::time::{self, Duration};
 mod aggregate_verifier;
 mod rpc_api_service;
 
+/// Generates (kind of) random events. Primarily used for manual testing in
+/// order to see whether the front end can process new messages and display
+/// notifications.
 #[tokio::test]
 #[ignore]
 async fn generate_random_data() {
-    env_logger::init();
-
     use crate::aggregate::verifier::{VerifierAggregate, VerifierCommand};
     use crate::aggregate::Repository;
     use crate::event::{ExternalMessage, ExternalOrigin};
@@ -46,15 +47,21 @@ async fn generate_random_data() {
         thread_rng().gen_range(0, between)
     }
 
+    env_logger::init();
+
+    // Setup backend. Keep a handle to the state for being able to wipe it
+    // later on (see infinite loop below).
     let be = InMemBackend::run().await;
     let store = be.store();
     let manager = Arc::new(parking_lot::RwLock::new(IdentityManager::default()));
     ApiBackend::run_fixed_port(8080, store.clone(), Arc::clone(&manager)).await;
 
-    let aggregate = VerifierAggregate::default();
-    let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
-        .await
-        .unwrap();
+    // Setup aggregate and repository.
+    // TODO: Set shared state in `VerifierAggregate` directly.
+    let mut repo =
+        Repository::new_with_snapshot_service(VerifierAggregate::default(), store.clone())
+            .await
+            .unwrap();
 
     // Add identities.
     let mut alice = IdentityState::alice();
@@ -83,8 +90,8 @@ async fn generate_random_data() {
 
     // Run forever
     loop {
-        // 10% chance to reset identity.
-        if random(101) <= 10 {
+        // 10% chance to reset state.
+        if random(10) <= 1 {
             repo.wipe();
             *manager.write() = IdentityManager::default();
 
@@ -101,21 +108,23 @@ async fn generate_random_data() {
             continue;
         }
 
-        let field_ty = match random(101) {
-            0..=33 => IdentityFieldType::Email,
-            34..=67 => IdentityFieldType::Twitter,
-            68..=100 => IdentityFieldType::Matrix,
+        // Chose a random field to modify.
+        let field_ty = match random(3) {
+            0 => IdentityFieldType::Email,
+            1 => IdentityFieldType::Twitter,
+            2 => IdentityFieldType::Matrix,
             _ => panic!(),
         };
 
+        // Set challenge status.
         let expected = alice
             .fields
             .get(&field_ty)
             .map(|field| match field.challenge() {
                 ChallengeStatus::ExpectMessage(challenge) => {
-                    let msg = match random(101) {
-                        0..=50 => challenge.expected_message.clone(),
-                        51..=100 => ExpectedMessage::gen(),
+                    let msg = match random(2) {
+                        0 => challenge.expected_message.clone(),
+                        1 => ExpectedMessage::gen(),
                         _ => panic!(),
                     };
 
@@ -130,9 +139,11 @@ async fn generate_random_data() {
 
                     Some((challenge.from.inner(), msg))
                 }
+                // Ignore those.
                 _ => None,
             });
 
+        // Apply changes.
         if let Some(expected) = expected {
             if let Some((from, msg)) = expected {
                 repo.apply(VerifierCommand::VerifyMessage(ExternalMessage {
