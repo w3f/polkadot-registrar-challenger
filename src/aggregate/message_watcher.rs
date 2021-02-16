@@ -46,6 +46,11 @@ impl Aggregate for MessageWatcher {
     type Command = MessageWatcherCommand;
     type Error = Error;
 
+    #[cfg(test)]
+    fn wipe(&mut self) {
+        unimplemented!()
+    }
+
     fn state(&self) -> &Self::State {
         &()
     }

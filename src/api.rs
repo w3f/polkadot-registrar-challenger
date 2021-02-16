@@ -102,17 +102,16 @@ pub trait PublicRpc {
     ) -> Result<bool>;
 }
 
-#[derive(Default)]
 pub struct PublicRpcApi {
     connection_pool: ConnectionPool,
     manager: Arc<RwLock<IdentityManager>>,
 }
 
 impl PublicRpcApi {
-    pub fn with_pool(pool: ConnectionPool) -> Self {
+    pub fn new(pool: ConnectionPool, manager: Arc<RwLock<IdentityManager>>) -> Self {
         PublicRpcApi {
             connection_pool: pool,
-            manager: Default::default(),
+            manager: manager,
         }
     }
 }
@@ -182,8 +181,7 @@ impl PublicRpc for PublicRpcApi {
                                 Err(err) => {
                                     error!(
                                         "Failed to update field: identity {:?}: {:?}",
-                                        net_address,
-                                        err
+                                        net_address, err
                                     );
 
                                     continue;

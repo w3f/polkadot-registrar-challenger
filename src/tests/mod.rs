@@ -1,4 +1,3 @@
-use crate::api::ConnectionPool;
 use crate::event::Event;
 use crate::system::run_rpc_api_service_blocking;
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
     event::{ExternalMessage, ExternalOrigin},
     manager::{ChallengeStatus, ExpectedMessage, IdentityFieldType, IdentityState, Validity},
 };
+use crate::{api::ConnectionPool, manager::IdentityManager};
 use eventstore::Client;
 use futures::{future::Join, FutureExt, Stream, StreamExt};
 use hmac::digest::generic_array::typenum::Exp;
@@ -16,10 +16,12 @@ use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
 use jsonrpc_core::{Params, Value};
 use jsonrpc_ws_server::Server as WsServer;
+use lock_api::RwLock;
 use rand::{thread_rng, Rng};
 use std::convert::TryFrom;
 use std::fs::canonicalize;
 use std::process::Stdio;
+use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
@@ -46,7 +48,8 @@ async fn generate_random_data() {
 
     let be = InMemBackend::run().await;
     let store = be.store();
-    ApiBackend::run_fixed_port(8080, store.clone()).await;
+    let manager = Arc::new(parking_lot::RwLock::new(IdentityManager::default()));
+    ApiBackend::run_fixed_port(8080, store.clone(), Arc::clone(&manager)).await;
 
     let aggregate = VerifierAggregate::default();
     let mut repo = Repository::new_with_snapshot_service(aggregate, store.clone())
@@ -79,13 +82,28 @@ async fn generate_random_data() {
         .unwrap();
 
     // Run forever
-    println!("STARTING LOOP");
     loop {
-        println!("GO");
-        let field_ty = match random(2) {
-            0 => IdentityFieldType::Email,
-            1 => IdentityFieldType::Twitter,
-            2 => IdentityFieldType::Matrix,
+        if random(101) <= 10 {
+            repo.wipe();
+            *manager.write() = IdentityManager::default();
+
+            // Insert identities.
+            repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
+                .await
+                .unwrap();
+
+            repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
+                .await
+                .unwrap();
+
+            time::sleep(Duration::from_secs(random(10) as u64)).await;
+            continue;
+        }
+
+        let field_ty = match random(101) {
+            0..=33 => IdentityFieldType::Email,
+            34..=67 => IdentityFieldType::Twitter,
+            68..=100 => IdentityFieldType::Matrix,
             _ => panic!(),
         };
 
@@ -94,18 +112,18 @@ async fn generate_random_data() {
             .get(&field_ty)
             .map(|field| match field.challenge() {
                 ChallengeStatus::ExpectMessage(challenge) => {
-                    let msg = match random(1) {
-                        0 => challenge.expected_message.clone(),
-                        1 => ExpectedMessage::gen(),
+                    let msg = match random(101) {
+                        0..=50 => challenge.expected_message.clone(),
+                        51..=100 => ExpectedMessage::gen(),
                         _ => panic!(),
                     };
 
                     Some((challenge.from.inner(), msg))
                 }
                 ChallengeStatus::BackAndForth(challenge) => {
-                    let msg = match random(1) {
-                        0 => challenge.expected_message.clone(),
-                        1 => ExpectedMessage::gen(),
+                    let msg = match random(101) {
+                        0..=50 => challenge.expected_message.clone(),
+                        51..=100 => ExpectedMessage::gen(),
                         _ => panic!(),
                     };
 
@@ -116,7 +134,6 @@ async fn generate_random_data() {
 
         if let Some(expected) = expected {
             if let Some((from, msg)) = expected {
-                println!("APPLYING: {:?}", from);
                 repo.apply(VerifierCommand::VerifyMessage(ExternalMessage {
                     origin: {
                         match field_ty {
@@ -180,19 +197,26 @@ struct ApiBackend;
 impl ApiBackend {
     async fn run(store: Client) -> usize {
         let rpc_port = gen_port();
+        let manager = Arc::new(parking_lot::RwLock::new(IdentityManager::default()));
         tokio::spawn(run_rpc_api_service_blocking(
             ConnectionPool::default(),
             rpc_port,
             store,
+            manager,
         ));
 
         rpc_port
     }
-    async fn run_fixed_port(rpc_port: usize, store: Client) {
+    async fn run_fixed_port(
+        rpc_port: usize,
+        store: Client,
+        manager: Arc<parking_lot::RwLock<IdentityManager>>,
+    ) {
         tokio::spawn(run_rpc_api_service_blocking(
             ConnectionPool::default(),
             rpc_port,
             store,
+            manager,
         ));
     }
 }

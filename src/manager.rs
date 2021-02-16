@@ -67,6 +67,7 @@ impl IdentityManager {
             .unwrap_or(false)
     }
     // TODO: Rename variable to `inserted`
+    // TODO: Should return notifications.
     pub fn insert_identity(&mut self, identity: IdentityInserted) {
         // Take value from Event wrapper.
         let identity = identity.identity;
@@ -137,6 +138,8 @@ impl IdentityManager {
                     })
             })
     }
+    // TODO: Should return Vec<UpdateChanges>
+    // TODO: Should return Result
     fn update_changes(
         current_status: &FieldStatus,
         verified: &FieldStatusVerified,
@@ -145,43 +148,68 @@ impl IdentityManager {
 
         // If the current field status has already been verified, skip, even if
         // the new message is invalid (and avoid sending a new notification).
-        if (current_status.is_valid() && verified_status.is_valid())
-            || (current_status.is_valid() && verified_status.is_not_valid())
-        {
+        if current_status.is_valid() {
             None
         }
-        // Return a warning that no changes have been committed
-        // since the verification is invalid.
-        else if current_status.is_not_valid() && verified_status.is_not_valid() {
-            Some(UpdateChanges::VerificationInvalid(
-                verified_status.field.clone(),
-            ))
-        }
+        // TODO: Outdated comment:
         // Verification is valid, so commit changes. Generate
         // different notifications based on the individual
         // challenge type.
-        else if current_status.is_not_valid() && verified_status.is_valid() {
+        else if current_status.is_not_valid() {
             let field = verified_status.field.clone();
 
             match &verified_status.challenge {
-                ChallengeStatus::ExpectMessage(_) | ChallengeStatus::CheckDisplayName(_) => {
-                    Some(UpdateChanges::VerificationValid(field.clone()))
+                ChallengeStatus::ExpectMessage(challenge) => {
+                    match challenge.status {
+                        Validity::Valid => Some(UpdateChanges::VerificationValid(field.clone())),
+                        Validity::Invalid => {
+                            Some(UpdateChanges::VerificationInvalid(field.clone()))
+                        }
+                        // TODO: This should technically never occur.
+                        Validity::Unconfirmed => None,
+                    }
                 }
-                ChallengeStatus::BackAndForth(challenge) => {
-                    // The first message has been verified, now
-                    // the second message must be verified.
-                    if challenge.first_check_status == Validity::Valid
-                        && challenge.second_check_status == Validity::Invalid
-                    {
-                        Some(UpdateChanges::VerificationValid(field.clone()))
+                ChallengeStatus::CheckDisplayName(new_status) => {
+                    match new_status.status {
+                        Validity::Valid => Some(UpdateChanges::VerificationValid(field.clone())),
+                        Validity::Invalid => {
+                            Some(UpdateChanges::VerificationInvalid(field.clone()))
+                        }
+                        // TODO: This should technically never occur.
+                        Validity::Unconfirmed => None,
                     }
-                    // Both messages have been fully verified.
-                    else if challenge.first_check_status == Validity::Valid
-                        && challenge.second_check_status == Validity::Valid
-                    {
-                        Some(UpdateChanges::BackAndForthExpected(field.clone()))
+                }
+                ChallengeStatus::BackAndForth(new_challenge_status) => {
+                    let curr_challenge_status = match &current_status.challenge {
+                        ChallengeStatus::BackAndForth(challenge) => challenge,
+                        _ => return None,
+                    };
+
+                    // Must verify first challenge, first.
+                    if curr_challenge_status.first_check_status != Validity::Valid {
+                        match new_challenge_status.first_check_status {
+                            Validity::Valid => {
+                                Some(UpdateChanges::VerificationValid(field.clone()))
+                            }
+                            Validity::Invalid => {
+                                Some(UpdateChanges::VerificationInvalid(field.clone()))
+                            }
+                            Validity::Unconfirmed => None,
+                        }
+                    } else if curr_challenge_status.second_check_status != Validity::Valid {
+                        match new_challenge_status.second_check_status {
+                            Validity::Valid => {
+                                // TODO: This should be returned, too.
+                                //Some(UpdateChanges::VerificationValid(field.clone()))
+                                Some(UpdateChanges::BackAndForthExpected(field.clone()))
+                            }
+                            Validity::Invalid => {
+                                Some(UpdateChanges::VerificationInvalid(field.clone()))
+                            }
+                            Validity::Unconfirmed => None,
+                        }
                     }
-                    // This case should never occur. Better safe than sorry.
+                    // TODO: This case should never occur.
                     else {
                         None
                     }
@@ -927,7 +955,7 @@ mod tests {
                             )),
                             RegistrarIdentityField::matrix(),
                         )
-                    })
+                    }),
                 ]
                 .into_iter()
                 .map(|field| (field.field.as_type(), field))
@@ -964,7 +992,7 @@ mod tests {
                             )),
                             RegistrarIdentityField::matrix(),
                         )
-                    })
+                    }),
                 ]
                 .into_iter()
                 .map(|field| (field.field.as_type(), field))
@@ -1001,7 +1029,7 @@ mod tests {
                             )),
                             RegistrarIdentityField::matrix(),
                         )
-                    })
+                    }),
                 ]
                 .into_iter()
                 .map(|field| (field.field.as_type(), field))

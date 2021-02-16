@@ -1,4 +1,3 @@
-use crate::adapters::email::SmtpImapClientBuilder;
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
@@ -6,6 +5,7 @@ use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
 use crate::api::{ConnectionPool, PublicRpc, PublicRpcApi};
 use crate::event::{Event, EventType, ExternalMessage};
 use crate::projection::{Projector, SessionNotifier};
+use crate::{adapters::email::SmtpImapClientBuilder, manager::IdentityManager};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
 use async_channel::Receiver;
 use eventstore::Client;
@@ -14,25 +14,33 @@ use futures::stream::StreamExt;
 use jsonrpc_pubsub::{PubSubHandler, Session};
 use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tokio::time::{self, Duration};
 
 // TODO: Maybe rename `client` to `store`?
-pub async fn run_rpc_api_service_blocking(pool: ConnectionPool, rpc_port: usize, client: Client) {
+pub async fn run_rpc_api_service_blocking(
+    pool: ConnectionPool,
+    rpc_port: usize,
+    client: Client,
+    manager: Arc<parking_lot::RwLock<IdentityManager>>,
+) {
     // `ConnectionPool` uses `Arc` underneath.
     let t_pool = pool.clone();
 
     // Start the session notifier. It listens to identity state changes from the
     // eventstore and sends all updates to the RPC API, in order to inform
     // users.
+    let t_manager = Arc::clone(&manager);
     let handle1 = tokio::spawn(async move {
-        let projection = Arc::new(RwLock::new(SessionNotifier::with_pool(pool)));
+        let projection = Arc::new(tokio::sync::RwLock::new(SessionNotifier::new(
+            pool, t_manager,
+        )));
         let projector = Projector::new(projection, client.clone());
         projector.run_blocking().await;
     });
 
     // Start the RPC service in its own OS thread, since it requires a tokio
     // v0.2 runtime.
+    let t_manager = Arc::clone(&manager);
     std::thread::spawn(move || {
         let mut rt = tokio_02::runtime::Runtime::new().unwrap();
 
@@ -44,7 +52,7 @@ pub async fn run_rpc_api_service_blocking(pool: ConnectionPool, rpc_port: usize,
 
         rt.block_on(async move {
             let mut io = PubSubHandler::default();
-            io.extend_with(PublicRpcApi::with_pool(t_pool).to_delegate());
+            io.extend_with(PublicRpcApi::new(t_pool, t_manager).to_delegate());
 
             // TODO: Might consider setting `max_connections`.
             let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {

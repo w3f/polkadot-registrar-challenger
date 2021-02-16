@@ -188,6 +188,11 @@ impl Aggregate for VerifierAggregate {
     type Command = VerifierCommand;
     type Error = anyhow::Error;
 
+    #[cfg(test)]
+    fn wipe(&mut self) {
+        self.state = Default::default();
+    }
+
     fn state(&self) -> &Self::State {
         &self.state
     }

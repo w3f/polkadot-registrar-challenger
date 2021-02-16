@@ -28,6 +28,9 @@ pub trait Aggregate {
     type Command;
     type Error;
 
+    // TODO: Remove
+    #[cfg(test)]
+    fn wipe(&mut self);
     fn state(&self) -> &Self::State;
     async fn apply(&mut self, event: Self::Event) -> Result<(), Self::Error>;
     async fn handle(&self, command: Self::Command)
@@ -49,6 +52,11 @@ where
     <A as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
     <A as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
+    // TODO: Remove
+    #[cfg(test)]
+    pub fn wipe(&mut self) {
+        self.aggregate.wipe()
+    }
     // TODO: Rename "client" to "store".
     pub async fn new_with_snapshot_service(
         mut aggregate: A,

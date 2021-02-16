@@ -29,7 +29,7 @@ pub struct Projector<P> {
 
 impl<P> Projector<P>
 where
-    P: 'static + Send + Sync + Projection + Default,
+    P: 'static + Send + Sync + Projection,
     <P as Projection>::Id: Send + Sync + Default + AsRef<str>,
     <P as Projection>::Event: Send + Sync + TryFrom<RecordedEvent>,
     <P as Projection>::Error: 'static + Send + Sync + Debug,
