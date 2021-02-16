@@ -388,17 +388,6 @@ dependencies = [
 [[package]]
 name = "chrono"
 version = "0.4.19"
-dependencies = [
- "libc",
- "num-integer",
- "num-traits",
- "time 0.1.44",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "chrono"
-version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "670ad68c9088c2a963aaa298cb369688cf3f9465ce5e2d4ca10e6e0098a1ce73"
 dependencies = [
@@ -617,7 +606,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91549a51bb0241165f13d57fc4c72cef063b4088fb078b019ecbf464a45f22e4"
 dependencies = [
  "base64 0.9.3",
- "chrono 0.4.19 (registry+https://github.com/rust-lang/crates.io-index)",
+ "chrono",
  "encoding",
  "lazy_static",
  "rand 0.4.6",
@@ -1314,10 +1303,12 @@ dependencies = [
 [[package]]
 name = "imap"
 version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c617c55def8c42129e0dd503f11d7ee39d73f5c7e01eff55768b3879ff1d107d"
 dependencies = [
  "base64 0.13.0",
  "bufstream",
- "chrono 0.4.19",
+ "chrono",
  "imap-proto",
  "lazy_static",
  "native-tls",
