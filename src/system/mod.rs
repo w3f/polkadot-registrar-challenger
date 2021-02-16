@@ -43,11 +43,6 @@ pub async fn run_rpc_api_service_blocking(
     let t_manager = Arc::clone(&manager);
     std::thread::spawn(move || {
         let mut rt = tokio_02::runtime::Runtime::new().unwrap();
-
-        // TODO: Remove this.
-        #[cfg(not(test))]
-        let listen_on = format!("0.0.0.0:{}", rpc_port);
-        #[cfg(test)]
         let listen_on = format!("127.0.0.1:{}", rpc_port);
 
         rt.block_on(async move {
