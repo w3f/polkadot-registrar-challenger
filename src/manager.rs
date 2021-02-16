@@ -545,6 +545,24 @@ impl FieldStatus {
     }
 }
 
+impl From<(IdentityField, RegistrarIdentityField)> for FieldStatus {
+    fn from(val: (IdentityField, RegistrarIdentityField)) -> Self {
+        let field = val.0.clone();
+        let challenge = ChallengeStatus::from(val);
+
+        FieldStatus {
+            field: field,
+            is_permitted: {
+                match challenge {
+                    ChallengeStatus::Unsupported => false,
+                    _ => true,
+                }
+            },
+            challenge: challenge,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainChallenge(String);
 
@@ -571,10 +589,8 @@ pub enum ChallengeStatus {
     Unsupported,
 }
 
-impl TryFrom<(IdentityField, RegistrarIdentityField)> for ChallengeStatus {
-    type Error = anyhow::Error;
-
-    fn try_from(val: (IdentityField, RegistrarIdentityField)) -> Result<Self> {
+impl From<(IdentityField, RegistrarIdentityField)> for ChallengeStatus {
+    fn from(val: (IdentityField, RegistrarIdentityField)) -> Self {
         let (from, to) = val;
 
         #[rustfmt::skip]
@@ -610,7 +626,7 @@ impl TryFrom<(IdentityField, RegistrarIdentityField)> for ChallengeStatus {
             }
         };
 
-        Ok(challenge)
+        challenge
     }
 }
 
@@ -787,26 +803,6 @@ impl IdentityField {
     }
 }
 
-impl TryFrom<(IdentityField, RegistrarIdentityField)> for FieldStatus {
-    type Error = anyhow::Error;
-
-    fn try_from(val: (IdentityField, RegistrarIdentityField)) -> Result<Self> {
-        let field = val.0.clone();
-        let challenge = ChallengeStatus::try_from(val)?;
-
-        Ok(FieldStatus {
-            field: field,
-            is_permitted: {
-                match challenge {
-                    ChallengeStatus::Unsupported => false,
-                    _ => true,
-                }
-            },
-            challenge: challenge,
-        })
-    }
-}
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IdentityFieldType {
@@ -906,28 +902,25 @@ mod tests {
                 net_address: NetworkAddress::alice(),
                 on_chain_challenge: OnChainChallenge::gen(),
                 fields: vec![
-                    FieldStatus::try_from({
+                    FieldStatus::from({
                         (
                             IdentityField::DisplayName(DisplayName::from("Alice")),
                             RegistrarIdentityField::display_name(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Email(FieldAddress::from("alice@email.com".to_string())),
                             RegistrarIdentityField::email(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Twitter(FieldAddress::from("@alice".to_string())),
                             RegistrarIdentityField::twitter(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Matrix(FieldAddress::from(
                                 "@alice:matrix.org".to_string(),
@@ -935,7 +928,6 @@ mod tests {
                             RegistrarIdentityField::matrix(),
                         )
                     })
-                    .unwrap(),
                 ]
                 .into_iter()
                 .map(|field| (field.field.as_type(), field))
@@ -947,28 +939,25 @@ mod tests {
                 net_address: NetworkAddress::bob(),
                 on_chain_challenge: OnChainChallenge::gen(),
                 fields: vec![
-                    FieldStatus::try_from({
+                    FieldStatus::from({
                         (
                             IdentityField::DisplayName(DisplayName::from("Bob")),
                             RegistrarIdentityField::display_name(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Email(FieldAddress::from("bob@email.com".to_string())),
                             RegistrarIdentityField::email(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Twitter(FieldAddress::from("@bob".to_string())),
                             RegistrarIdentityField::twitter(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Matrix(FieldAddress::from(
                                 "@bob:matrix.org".to_string(),
@@ -976,7 +965,6 @@ mod tests {
                             RegistrarIdentityField::matrix(),
                         )
                     })
-                    .unwrap(),
                 ]
                 .into_iter()
                 .map(|field| (field.field.as_type(), field))
@@ -988,28 +976,25 @@ mod tests {
                 net_address: NetworkAddress::eve(),
                 on_chain_challenge: OnChainChallenge::gen(),
                 fields: vec![
-                    FieldStatus::try_from({
+                    FieldStatus::from({
                         (
                             IdentityField::DisplayName(DisplayName::from("Eve")),
                             RegistrarIdentityField::display_name(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Email(FieldAddress::from("eve@email.com".to_string())),
                             RegistrarIdentityField::email(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Twitter(FieldAddress::from("@eve".to_string())),
                             RegistrarIdentityField::twitter(),
                         )
-                    })
-                    .unwrap(),
-                    FieldStatus::try_from({
+                    }),
+                    FieldStatus::from({
                         (
                             IdentityField::Matrix(FieldAddress::from(
                                 "@eve:matrix.org".to_string(),
@@ -1017,7 +1002,6 @@ mod tests {
                             RegistrarIdentityField::matrix(),
                         )
                     })
-                    .unwrap(),
                 ]
                 .into_iter()
                 .map(|field| (field.field.as_type(), field))

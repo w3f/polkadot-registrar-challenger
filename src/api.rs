@@ -179,10 +179,11 @@ impl PublicRpc for PublicRpcApi {
                                 Ok(try_changes) => try_changes
                                     .map(|changes| vec![changes.into()])
                                     .unwrap_or(vec![]),
-                                Err(_) => {
+                                Err(err) => {
                                     error!(
-                                        "Failed to update field: identity {:?} does not exit",
-                                        net_address
+                                        "Failed to update field: identity {:?}: {:?}",
+                                        net_address,
+                                        err
                                     );
 
                                     continue;

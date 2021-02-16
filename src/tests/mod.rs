@@ -11,6 +11,7 @@ use crate::{
 };
 use eventstore::Client;
 use futures::{future::Join, FutureExt, Stream, StreamExt};
+use hmac::digest::generic_array::typenum::Exp;
 use jsonrpc_client_transports::transports::ws::connect;
 use jsonrpc_client_transports::RawClient;
 use jsonrpc_core::{Params, Value};
@@ -93,7 +94,13 @@ async fn generate_random_data() {
             .get(&field_ty)
             .map(|field| match field.challenge() {
                 ChallengeStatus::ExpectMessage(challenge) => {
-                    Some((challenge.from.inner(), challenge.expected_message.clone()))
+                    let msg = match random(1) {
+                        0 => challenge.expected_message.clone(),
+                        1 => ExpectedMessage::gen(),
+                        _ => panic!(),
+                    };
+
+                    Some((challenge.from.inner(), msg))
                 }
                 ChallengeStatus::BackAndForth(challenge) => {
                     let msg = match random(1) {
@@ -102,13 +109,14 @@ async fn generate_random_data() {
                         _ => panic!(),
                     };
 
-                    Some((challenge.from.inner().clone(), msg))
+                    Some((challenge.from.inner(), msg))
                 }
                 _ => None,
             });
 
         if let Some(expected) = expected {
             if let Some((from, msg)) = expected {
+                println!("APPLYING: {:?}", from);
                 repo.apply(VerifierCommand::VerifyMessage(ExternalMessage {
                     origin: {
                         match field_ty {
@@ -126,7 +134,7 @@ async fn generate_random_data() {
             }
         }
 
-        time::sleep(Duration::from_secs(5)).await;
+        time::sleep(Duration::from_secs(random(10) as u64)).await;
     }
 }
 
