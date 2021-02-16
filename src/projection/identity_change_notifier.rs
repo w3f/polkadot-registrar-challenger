@@ -26,7 +26,6 @@ impl Projection for SessionNotifier {
     type Event = Event;
     type Error = Error;
 
-    // TODO: This should handle the full identity state, and only send notifications to the RPC API.
     async fn project(&mut self, event: Self::Event) -> Result<(), Error> {
         // Clone due to partial move.
         let full_event = event.clone();

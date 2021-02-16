@@ -146,6 +146,7 @@ impl PublicRpc for PublicRpcApi {
         // (e.g. Polkadot address).
         //
         // Messages are generated in `crate::projection::identity_change_notifier`.
+        // TODO: Handle zombie threads.
         std::thread::spawn(move || {
             let mut rt = tokio_02::runtime::Runtime::new().unwrap();
             rt.block_on(async move {

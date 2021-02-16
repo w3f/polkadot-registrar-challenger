@@ -21,10 +21,15 @@ pub async fn run_rpc_api_service_blocking(
     pool: ConnectionPool,
     rpc_port: usize,
     client: Client,
+    #[cfg(test)]
     manager: Arc<parking_lot::RwLock<IdentityManager>>,
 ) {
     // `ConnectionPool` uses `Arc` underneath.
     let t_pool = pool.clone();
+
+    // Requires `parking_lot` due to different tokio versions.
+    #[cfg(not(test))]
+    let manager = Arc::new(parking_lot::RwLock::new(IdentityManager::default()));
 
     // Start the session notifier. It listens to identity state changes from the
     // eventstore and sends all updates to the RPC API, in order to inform

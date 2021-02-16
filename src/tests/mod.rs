@@ -83,6 +83,7 @@ async fn generate_random_data() {
 
     // Run forever
     loop {
+        // 10% chance to reset identity.
         if random(101) <= 10 {
             repo.wipe();
             *manager.write() = IdentityManager::default();
