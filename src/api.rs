@@ -1,6 +1,5 @@
 use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
-use async_channel::{unbounded, Receiver, Sender};
 use jsonrpc_core::Result;
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
@@ -8,9 +7,10 @@ use jsonrpc_pubsub::{
     typed::Subscriber,
     Session, SubscriptionId,
 };
-use parking_lot::RwLock;
+use parking_lot::{RwLock, RwLockReadGuard};
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio_02::sync::watch::{channel, Receiver, Sender};
 
 const REGISTRAR_IDX: usize = 0;
 
@@ -30,13 +30,13 @@ pub struct ConnectionPool {
 }
 
 impl ConnectionPool {
-    pub fn notify_net_address(&self, net_address: &NetworkAddress) -> Option<Sender<Event>> {
+    pub fn broadcast(&self, net_address: &NetworkAddress, state: StateWrapper) {
         self.pool
             .read()
             .get(net_address)
-            .map(|state| state.sender.clone())
+            .map(|info| info.sender.broadcast(Some(state)));
     }
-    fn watch_net_address(&self, net_address: &NetworkAddress) -> Receiver<Event> {
+    fn watch_net_address(&self, net_address: &NetworkAddress) -> Receiver<Option<StateWrapper>> {
         let mut writer = self.pool.write();
         if let Some(info) = writer.get(net_address) {
             info.receiver.clone()
@@ -50,13 +50,13 @@ impl ConnectionPool {
 }
 
 struct ConnectionInfo {
-    sender: Sender<Event>,
-    receiver: Receiver<Event>,
+    sender: Sender<Option<StateWrapper>>,
+    receiver: Receiver<Option<StateWrapper>>,
 }
 
 impl ConnectionInfo {
     fn new() -> Self {
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = channel(None);
 
         ConnectionInfo {
             sender: sender,
@@ -137,7 +137,7 @@ impl PublicRpc for PublicRpcApi {
         };
 
         let net_address = NetworkAddress::from(network, address);
-        let watcher = self.connection_pool.watch_net_address(&net_address);
+        let mut watcher = self.connection_pool.watch_net_address(&net_address);
 
         let manager = Arc::clone(&self.manager);
 
@@ -168,55 +168,16 @@ impl PublicRpc for PublicRpcApi {
                 }
 
                 // Start event loop and keep the subscriber informed about any state changes.
-                while let Ok(event) = watcher.recv().await {
-                    match event.body {
-                        EventType::FieldStatusVerified(verified) => {
-                            let net_address = &verified.net_address.clone();
+                while let Some(current_state) = watcher.recv().await {
+                    let current_state = match current_state {
+                        Some(current_state) => current_state,
+                        None => continue,
+                    };
 
-                            // Update fields and get notifications (if any)
-                            let notifications = match manager.write().update_field(verified) {
-                                Ok(try_changes) => try_changes
-                                    .map(|changes| vec![changes.into()])
-                                    .unwrap_or(vec![]),
-                                Err(err) => {
-                                    error!(
-                                        "Failed to update field: identity {:?}: {:?}",
-                                        net_address, err
-                                    );
-
-                                    continue;
-                                }
-                            };
-
-                            // Finally, fetch the current state and send it to the subscriber.
-                            match manager.read().lookup_full_state(&net_address) {
-                                Some(identity_state) => {
-                                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                                        StateWrapper::with_notifications(
-                                            identity_state,
-                                            notifications,
-                                        ),
-                                    ))) {
-                                        debug!("Connection closed");
-                                        return Ok(());
-                                    }
-                                }
-                                None => error!("Identity state not found in cache"),
-                            }
-                        }
-                        EventType::IdentityInserted(inserted) => {
-                            manager.write().insert_identity(inserted.clone());
-
-                            if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(
-                                StateWrapper::newly_inserted_notification(inserted.identity),
-                            ))) {
-                                debug!("Connection closed");
-                                return Ok(());
-                            }
-                        }
-                        _ => {
-                            warn!("Received unexpected event")
-                        }
+                    // Notify client.
+                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(current_state))) {
+                        debug!("Connection closed");
+                        return Ok(());
                     }
                 }
 

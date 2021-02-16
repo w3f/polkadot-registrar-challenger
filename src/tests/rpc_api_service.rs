@@ -2,7 +2,7 @@ use super::{ApiBackend, ApiClient, InMemBackend};
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
 use crate::aggregate::Repository;
 use crate::api::ConnectionPool;
-use crate::event::{ErrorMessage, ExternalMessage, ExternalOrigin, StateWrapper};
+use crate::event::{ErrorMessage, ExternalMessage, ExternalOrigin, IdentityInserted, StateWrapper};
 use crate::manager::{
     ChallengeStatus, FieldAddress, IdentityFieldType, IdentityState, ProvidedMessage,
     UpdateChanges, Validity,
@@ -170,7 +170,6 @@ fn subscribe_status_newly_inserted_identity_in_steps() {
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
     let t_alice = alice.clone();
-    let t_bob = bob.clone();
 
     tokenv1.me_first();
 
@@ -212,12 +211,11 @@ fn subscribe_status_newly_inserted_identity_in_steps() {
 
         let client = ApiClient::new(shared_port.load(Ordering::Relaxed)).await;
         let alice = t_alice;
-        let bob = t_bob;
 
         #[rustfmt::skip]
         let expected = [
             to_value(ErrorMessage::no_pending_judgement_request(0)).unwrap(),
-            to_value(StateWrapper::newly_inserted_notification(alice.clone())).unwrap(),
+            to_value(StateWrapper::newly_inserted_notification(IdentityInserted { identity: alice.clone()} )).unwrap(),
         ];
 
         let mut stream = client
@@ -252,7 +250,6 @@ fn subscribe_status_verified_changes_in_steps() {
     let alice = IdentityState::alice();
     let bob = IdentityState::bob();
     let t_alice = alice.clone();
-    let t_bob = bob.clone();
 
     tokenv1.me_first();
 
@@ -317,7 +314,6 @@ fn subscribe_status_verified_changes_in_steps() {
 
         let client = ApiClient::new(shared_port.load(Ordering::Relaxed)).await;
         let alice = t_alice;
-        let bob = t_bob;
 
         // Get the expected field.
         let field = alice
@@ -345,7 +341,7 @@ fn subscribe_status_verified_changes_in_steps() {
         #[rustfmt::skip]
         let expected = [
             to_value(ErrorMessage::no_pending_judgement_request(0)).unwrap(),
-            to_value(StateWrapper::newly_inserted_notification(alice.clone())).unwrap(),
+            to_value(StateWrapper::newly_inserted_notification(IdentityInserted { identity: alice.clone()} )).unwrap(),
             to_value(StateWrapper::with_notifications(alice_new.clone(), vec![UpdateChanges::VerificationValid(field).into()])).unwrap(),
         ];
 

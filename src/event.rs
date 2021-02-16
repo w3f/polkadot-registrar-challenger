@@ -159,10 +159,10 @@ impl StateWrapper {
         }
     }
     // Convenience method which creates a "newly inserted" notification for the user.
-    pub fn newly_inserted_notification(state: IdentityState) -> Self {
-        let net_address = state.net_address.clone();
+    pub fn newly_inserted_notification(state: IdentityInserted) -> Self {
+        let net_address = state.identity.net_address.clone();
         StateWrapper {
-            state: state,
+            state: state.identity,
             notifications: vec![UpdateChanges::NewIdentityInserted(net_address).into()],
         }
     }

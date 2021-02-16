@@ -1,7 +1,7 @@
 use super::Projection;
 use crate::aggregate::Error;
 use crate::api::ConnectionPool;
-use crate::event::{Event, EventType};
+use crate::event::{Event, EventType, Notification, StateWrapper};
 use crate::{aggregate::verifier::VerifierAggregateId, manager::IdentityManager};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -28,33 +28,39 @@ impl Projection for SessionNotifier {
 
     // TODO: This should handle the full identity state, and only send notifications to the RPC API.
     async fn project(&mut self, event: Self::Event) -> Result<(), Error> {
+        // Clone due to partial move.
+        let full_event = event.clone();
         let net_address = match event.body {
-            EventType::IdentityInserted(ref inserted) => &inserted.identity.net_address,
-            EventType::FieldStatusVerified(ref field_status) => &field_status.net_address,
+            EventType::IdentityInserted(ref inserted) => inserted.identity.net_address.clone(),
+            EventType::FieldStatusVerified(ref field_status) => field_status.net_address.clone(),
             // TODO: Does this need any special handling?
-            EventType::IdentityFullyVerified(ref verified) => &verified.net_address,
+            EventType::IdentityFullyVerified(ref verified) => verified.net_address.clone(),
             _ => return Ok(()),
         };
 
-        let mut was_processed = false;
-        if let Some(notifier) = self.connection_pool.notify_net_address(net_address) {
-            if let Err(_) = notifier.send(event.clone()).await {
-                info!("All connections to RPC sessions are closed");
-            } else {
-                was_processed = true;
+        match event.body {
+            EventType::IdentityInserted(inserted) => {
+                self.manager.write().insert_identity(inserted.clone());
+                self.connection_pool.broadcast(
+                    &net_address,
+                    StateWrapper::newly_inserted_notification(inserted),
+                );
             }
-        }
+            EventType::FieldStatusVerified(verified) => {
+                let notifications: Vec<Notification> = {
+                    self.manager
+                        .write()
+                        .update_field(verified)?
+                        .map(|changes| vec![changes.into()])
+                        .unwrap_or(vec![])
+                };
 
-        if !was_processed {
-            match event.body {
-                EventType::IdentityInserted(inserted) => {
-                    self.manager.write().insert_identity(inserted);
+                if let Some(state) = self.manager.read().lookup_full_state(&net_address) {
+                    let state = StateWrapper::with_notifications(state, notifications);
+                    self.connection_pool.broadcast(&net_address, state);
                 }
-                EventType::FieldStatusVerified(verified) => {
-                    self.manager.write().update_field(verified)?;
-                }
-                _ => return Ok(()),
             }
+            _ => return Ok(()),
         }
 
         Ok(())
