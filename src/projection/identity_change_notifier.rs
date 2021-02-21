@@ -28,7 +28,6 @@ impl Projection for SessionNotifier {
 
     async fn project(&mut self, event: Self::Event) -> Result<(), Error> {
         // Clone due to partial move.
-        let full_event = event.clone();
         let net_address = match event.body {
             EventType::IdentityInserted(ref inserted) => inserted.identity.net_address.clone(),
             EventType::FieldStatusVerified(ref field_status) => field_status.net_address.clone(),

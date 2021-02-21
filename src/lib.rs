@@ -22,6 +22,7 @@ mod api;
 mod event;
 mod manager;
 mod projection;
+mod remark_watcher;
 mod system;
 #[cfg(test)]
 mod tests;

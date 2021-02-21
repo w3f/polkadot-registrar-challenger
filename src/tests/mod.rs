@@ -67,16 +67,16 @@ async fn generate_random_data() {
     let mut alice = IdentityState::alice();
     let bob = IdentityState::bob();
 
+    // Set custom field.
     alice.fields.insert(
         IdentityFieldType::LegalName,
-        FieldStatus::try_from({
+        FieldStatus::from({
             (
                 IdentityField::LegalName(FieldAddress::from("Alice Doe".to_string())),
                 // Throwaway value
                 RegistrarIdentityField::display_name(),
             )
-        })
-        .unwrap(),
+        }),
     );
 
     // Insert identities.

@@ -1,5 +1,7 @@
-use crate::event::{BlankNetwork, ErrorMessage, Event, EventType, StateWrapper};
+use crate::event::{BlankNetwork, ErrorMessage, StateWrapper};
 use crate::manager::{IdentityAddress, IdentityManager, NetworkAddress};
+use futures::select_biased;
+use futures::FutureExt;
 use jsonrpc_core::Result;
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{
@@ -7,9 +9,10 @@ use jsonrpc_pubsub::{
     typed::Subscriber,
     Session, SubscriptionId,
 };
-use parking_lot::{RwLock, RwLockReadGuard};
-use std::collections::HashMap;
+use parking_lot::RwLock;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio_02::sync::watch::{channel, Receiver, Sender};
 
 const REGISTRAR_IDX: usize = 0;
@@ -105,6 +108,7 @@ pub trait PublicRpc {
 pub struct PublicRpcApi {
     connection_pool: ConnectionPool,
     manager: Arc<RwLock<IdentityManager>>,
+    active_sessions: Arc<RwLock<HashSet<SubscriptionId>>>,
 }
 
 impl PublicRpcApi {
@@ -112,6 +116,7 @@ impl PublicRpcApi {
         PublicRpcApi {
             connection_pool: pool,
             manager: manager,
+            active_sessions: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 }
@@ -121,14 +126,15 @@ impl PublicRpc for PublicRpcApi {
 
     fn subscribe_account_status(
         &self,
-        _: Self::Metadata,
+        session: Self::Metadata,
         subscriber: Subscriber<AccountStatusResponse>,
         network: BlankNetwork,
         address: IdentityAddress,
     ) {
         // Assign an ID to the subscriber.
-        let sub_id = NumericIdProvider::new().next_id();
-        let sink = match subscriber.assign_id(SubscriptionId::Number(sub_id)) {
+        let sub_id = SubscriptionId::Number(NumericIdProvider::new().next_id());
+        self.active_sessions.write().insert(sub_id.clone());
+        let sink = match subscriber.assign_id(sub_id.clone()) {
             Ok(sink) => sink,
             Err(_) => {
                 debug!("Connection has already been terminated");
@@ -140,6 +146,14 @@ impl PublicRpc for PublicRpcApi {
         let mut watcher = self.connection_pool.watch_net_address(&net_address);
 
         let manager = Arc::clone(&self.manager);
+        let active_sessions = Arc::clone(&self.active_sessions);
+
+        // Remove tracker of subscriber if session drops.
+        let t_sessions = active_sessions.clone();
+        let t_sub_id = sub_id.clone();
+        session.on_drop(move || {
+            t_sessions.write().remove(&t_sub_id);
+        });
 
         // Spawn a task to handle notifications intended for all subscribers to
         // a specific topic, aka. state changes of a specific network address
@@ -168,18 +182,36 @@ impl PublicRpc for PublicRpcApi {
                     }
                 }
 
-                // Start event loop and keep the subscriber informed about any state changes.
-                while let Some(current_state) = watcher.recv().await {
-                    let current_state = match current_state {
-                        Some(current_state) => current_state,
-                        None => continue,
-                    };
+                let mut recv = watcher.recv().boxed().fuse();
+                let mut session_active = async {
+                    tokio_02::time::delay_for(Duration::from_secs(1)).await;
+                    active_sessions.read().contains(&sub_id)
+                }.boxed().fuse();
 
-                    // Notify client.
-                    if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(current_state))) {
-                        debug!("Connection closed");
-                        return Ok(());
-                    }
+                // Start event loop and keep the subscriber informed about any state changes.
+                loop {
+                    select_biased! {
+                        current_state = recv => {
+                            if let Some(current_state) = current_state {
+                                let current_state = match current_state {
+                                    Some(current_state) => current_state,
+                                    None => continue,
+                                };
+
+                                // Notify client.
+                                if let Err(_) = sink.notify(Ok(AccountStatusResponse::Ok(current_state))) {
+                                    debug!("Connection closed");
+                                    return Ok(());
+                                }
+                            }
+                        },
+                        is_active = session_active => {
+                            if !is_active {
+                                debug!("Ending thread for subscription ID: {:?}", sub_id);
+                                break;
+                            }
+                        }
+                    };
                 }
 
                 crate::Result::<()>::Ok(())
@@ -190,8 +222,9 @@ impl PublicRpc for PublicRpcApi {
     fn unsubscribe_account_status(
         &self,
         _: Option<Self::Metadata>,
-        _: SubscriptionId,
+        id: SubscriptionId,
     ) -> Result<bool> {
+        self.active_sessions.write().remove(&id);
         Ok(true)
     }
 }
