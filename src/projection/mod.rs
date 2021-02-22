@@ -19,6 +19,8 @@ pub trait Projection {
     type Event;
     type Error;
 
+    fn latest_revision(&self) -> u64;
+    fn update_revision(&mut self, revision: u64);
     async fn project(&mut self, event: Self::Event) -> Result<(), Self::Error>;
 }
 
