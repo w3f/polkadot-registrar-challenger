@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
 mod identity_change_notifier;
+mod message_verifier;
 pub use identity_change_notifier::SessionNotifier;
 
 #[async_trait]

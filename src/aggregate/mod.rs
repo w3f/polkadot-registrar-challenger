@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
 pub mod display_name;
-mod message_watcher;
+pub mod message_watcher;
 pub mod verifier;
 
 // TODO: Add this to crate root.

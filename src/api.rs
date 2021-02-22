@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
+// TODO: Move to `broadcast` rather than `watch`?
 use tokio_02::sync::watch::{channel, Receiver, Sender};
 
 const REGISTRAR_IDX: usize = 0;

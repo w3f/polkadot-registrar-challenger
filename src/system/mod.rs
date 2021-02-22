@@ -79,14 +79,8 @@ pub async fn run_rpc_api_service_blocking(
 
 /*
 #[allow(dead_code)]
-/// Must be started in a tokio v0.2 runtime context.
-pub fn run_api_service(pool: ConnectionPool, port: usize) -> Result<WsServer> {
-}
-
-#[allow(dead_code)]
 pub async fn run_verifier_subscription(
-    subscription: EventSubscription<MessageWatcherId>,
-    store: EventStore<VerifierAggregateId>,
+    client: Client,
 ) -> Result<()> {
     info!("Starting message subscription");
 
