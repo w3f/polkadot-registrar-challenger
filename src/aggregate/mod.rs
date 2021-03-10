@@ -1,3 +1,4 @@
+use crate::Result;
 use eventstore::{Client, EventData, ExpectedVersion, ReadResult, RecordedEvent, ResolvedEvent};
 use futures::join;
 use futures::TryStreamExt;
@@ -11,11 +12,7 @@ use tokio::time::{interval, Duration};
 pub mod display_name;
 pub mod message_watcher;
 pub mod verifier;
-
-// TODO: Add this to crate root.
-#[derive(Error, Debug)]
-#[error(transparent)]
-pub struct Error(#[from] anyhow::Error);
+pub mod remark;
 
 // Expose publicly
 pub use message_watcher::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
@@ -32,9 +29,9 @@ pub trait Aggregate {
     #[cfg(test)]
     fn wipe(&mut self);
     fn state(&self) -> &Self::State;
-    async fn apply(&mut self, event: Self::Event) -> Result<(), Self::Error>;
+    async fn apply(&mut self, event: Self::Event) -> std::result::Result<(), Self::Error>;
     async fn handle(&self, command: Self::Command)
-        -> Result<Option<Vec<Self::Event>>, Self::Error>;
+        -> std::result::Result<Option<Vec<Self::Event>>, Self::Error>;
 }
 
 pub struct Repository<A> {
@@ -61,7 +58,7 @@ where
     pub async fn new_with_snapshot_service(
         mut aggregate: A,
         client: Client,
-    ) -> Result<Self, anyhow::Error> {
+    ) -> Result<Self> {
         let mut snapshot_found = false;
 
         // Check if there is a snapshot available in the eventstore.
@@ -114,7 +111,7 @@ where
     pub fn state(&self) -> &<A as Aggregate>::State {
         <A as Aggregate>::state(&self.aggregate)
     }
-    pub async fn apply(&mut self, command: <A as Aggregate>::Command) -> Result<(), Error> {
+    pub async fn apply(&mut self, command: <A as Aggregate>::Command) -> Result<()> {
         let events = {
             if let Some(events) = self
                 .aggregate
@@ -141,7 +138,7 @@ where
                             anyhow!("Failed to convert event into eventstore native format").into()
                         })
                     })
-                    .collect::<Result<Vec<EventData>, Error>>()?,
+                    .collect::<Result<Vec<EventData>>>()?,
             )
             .await
             .map_err(|err| {
@@ -199,5 +196,5 @@ pub trait Snapshot: Sized {
 
     fn qualifies(&self) -> bool;
     async fn snapshot(&self) -> Self::State;
-    async fn restore(state: Self::State) -> Result<Self, Self::Error>;
+    async fn restore(state: Self::State) -> std::result::Result<Self, Self::Error>;
 }

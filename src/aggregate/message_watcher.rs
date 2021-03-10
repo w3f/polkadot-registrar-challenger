@@ -1,16 +1,15 @@
-use super::{Aggregate, Error};
+use super::Aggregate;
+use crate::Result;
 use crate::event::{Event, ExternalMessage};
 use futures::future::BoxFuture;
 use std::convert::AsRef;
 use std::convert::{TryFrom, TryInto};
 
-type Result<T> = std::result::Result<T, Error>;
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct MessageWatcherId;
 
 impl TryFrom<String> for MessageWatcherId {
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn try_from(value: String) -> Result<Self> {
         if value == "external_messages" {
@@ -44,7 +43,7 @@ impl Aggregate for MessageWatcher {
     type State = ();
     type Event = Event;
     type Command = MessageWatcherCommand;
-    type Error = Error;
+    type Error = anyhow::Error;
 
     #[cfg(test)]
     fn wipe(&mut self) {

@@ -1,5 +1,5 @@
 use super::Projection;
-use crate::aggregate::Error;
+use crate::Result;
 use crate::api::ConnectionPool;
 use crate::event::{Event, EventType, Notification, StateWrapper};
 use crate::{aggregate::verifier::VerifierAggregateId, manager::IdentityManager};
@@ -24,7 +24,7 @@ impl SessionNotifier {
 impl Projection for SessionNotifier {
     type Id = VerifierAggregateId;
     type Event = Event;
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn latest_revision(&self) -> u64 {
         unimplemented!()
@@ -32,7 +32,7 @@ impl Projection for SessionNotifier {
     fn update_revision(&mut self, revision: u64) {
         unimplemented!()
     }
-    async fn project(&mut self, event: Self::Event) -> Result<(), Error> {
+    async fn project(&mut self, event: Self::Event) -> Result<()> {
         // Clone due to partial move.
         let net_address = match event.body {
             EventType::IdentityInserted(ref inserted) => inserted.identity.net_address.clone(),

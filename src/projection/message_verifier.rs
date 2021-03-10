@@ -1,7 +1,8 @@
 use super::Projection;
+use crate::Result;
 use crate::aggregate::message_watcher::MessageWatcherId;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierCommand};
-use crate::aggregate::{Error, Repository};
+use crate::aggregate::Repository;
 use crate::event::{Event, EventType};
 
 pub struct MessageVerifier {
@@ -12,7 +13,7 @@ pub struct MessageVerifier {
 impl Projection for MessageVerifier {
     type Id = MessageWatcherId;
     type Event = Event;
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn latest_revision(&self) -> u64 {
         unimplemented!()
@@ -20,7 +21,7 @@ impl Projection for MessageVerifier {
     fn update_revision(&mut self, revision: u64) {
         unimplemented!()
     }
-    async fn project(&mut self, event: Self::Event) -> Result<(), Error> {
+    async fn project(&mut self, event: Self::Event) -> Result<()> {
         let message = match event.body {
             EventType::ExternalMessage(message) => message,
             _ => {

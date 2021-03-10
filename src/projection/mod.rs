@@ -1,4 +1,4 @@
-use crate::aggregate::Error;
+use crate::Result;
 use eventstore::{Client, EventData, ExpectedVersion, ReadResult, RecordedEvent, ResolvedEvent};
 use futures::join;
 use futures::TryStreamExt;
@@ -21,7 +21,7 @@ pub trait Projection {
 
     fn latest_revision(&self) -> u64;
     fn update_revision(&mut self, revision: u64);
-    async fn project(&mut self, event: Self::Event) -> Result<(), Self::Error>;
+    async fn project(&mut self, event: Self::Event) -> std::result::Result<(), Self::Error>;
 }
 
 pub struct Projector<P> {
@@ -95,7 +95,9 @@ where
                 warn!("Projection stream disconnected, reconnecting...");
             }
 
-            Result::<(), Error>::Ok(())
+            // For type inference.
+            #[allow(dead_code)]
+            Result::Ok(())
         });
 
         let _ = handle.await.unwrap();
