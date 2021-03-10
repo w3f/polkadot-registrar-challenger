@@ -45,6 +45,7 @@ pub enum EventType {
     IdentityFullyVerified(IdentityFullyVerified),
     DisplayNamePersisted(DisplayNamePersisted),
     ExportedIdentityState(Vec<IdentityState>),
+    RemarkFound(RemarkFound),
 }
 
 impl From<EventType> for Event {
@@ -239,6 +240,21 @@ pub struct DisplayNamePersisted {
 impl From<DisplayNamePersisted> for Event {
     fn from(val: DisplayNamePersisted) -> Self {
         EventType::DisplayNamePersisted(val).into()
+    }
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct OnChainRemark(String);
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct RemarkFound {
+    pub net_address: NetworkAddress,
+    pub remark: OnChainRemark,
+}
+
+impl From<RemarkFound> for Event {
+    fn from(val: RemarkFound) -> Self {
+        EventType::RemarkFound(val).into()
     }
 }
 

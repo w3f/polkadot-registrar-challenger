@@ -1,6 +1,6 @@
 use super::Aggregate;
-use crate::Result;
 use crate::event::{Event, ExternalMessage};
+use crate::Result;
 use futures::future::BoxFuture;
 use std::convert::AsRef;
 use std::convert::{TryFrom, TryInto};

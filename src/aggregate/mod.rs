@@ -11,8 +11,8 @@ use tokio::time::{interval, Duration};
 
 pub mod display_name;
 pub mod message_watcher;
-pub mod verifier;
 pub mod remark;
+pub mod verifier;
 
 // Expose publicly
 pub use message_watcher::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
@@ -30,8 +30,10 @@ pub trait Aggregate {
     fn wipe(&mut self);
     fn state(&self) -> &Self::State;
     async fn apply(&mut self, event: Self::Event) -> std::result::Result<(), Self::Error>;
-    async fn handle(&self, command: Self::Command)
-        -> std::result::Result<Option<Vec<Self::Event>>, Self::Error>;
+    async fn handle(
+        &self,
+        command: Self::Command,
+    ) -> std::result::Result<Option<Vec<Self::Event>>, Self::Error>;
 }
 
 pub struct Repository<A> {
@@ -55,10 +57,7 @@ where
         self.aggregate.wipe()
     }
     // TODO: Rename "client" to "store".
-    pub async fn new_with_snapshot_service(
-        mut aggregate: A,
-        client: Client,
-    ) -> Result<Self> {
+    pub async fn new_with_snapshot_service(mut aggregate: A, client: Client) -> Result<Self> {
         let mut snapshot_found = false;
 
         // Check if there is a snapshot available in the eventstore.

@@ -1,7 +1,7 @@
 use super::Projection;
-use crate::Result;
 use crate::api::ConnectionPool;
 use crate::event::{Event, EventType, Notification, StateWrapper};
+use crate::Result;
 use crate::{aggregate::verifier::VerifierAggregateId, manager::IdentityManager};
 use parking_lot::RwLock;
 use std::sync::Arc;

@@ -1,9 +1,9 @@
 use super::Projection;
-use crate::Result;
 use crate::aggregate::message_watcher::MessageWatcherId;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierCommand};
 use crate::aggregate::Repository;
 use crate::event::{Event, EventType};
+use crate::Result;
 
 pub struct MessageVerifier {
     repository: Repository<VerifierAggregate>,
