@@ -3829,6 +3829,7 @@ dependencies = [
  "mailparse",
  "matrix-sdk",
  "native-tls",
+ "parity-scale-codec",
  "parking_lot 0.11.1",
  "rand 0.7.3",
  "reqwest",

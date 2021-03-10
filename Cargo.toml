@@ -22,6 +22,7 @@ tokio_02 = { version = "0.2", package = "tokio", features = ["macros", "time", "
 futures = "0.3.5"
 eventstore = { version = "0.9.9", git = "https://github.com/EventStore/EventStoreDB-Client-Rust.git" }
 substrate-subxt = "0.14.0"
+parity-scale-codec = "1.0.0"
 frame-system = "2.0.0"
 sp-runtime = "2.0.0"
 serde_yaml = "0.8.15"
