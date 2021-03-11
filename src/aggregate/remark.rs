@@ -33,7 +33,8 @@ impl Aggregate for RemarkWatcher {
     }
 
     async fn apply(&mut self, _event: Self::Event) -> Result<()> {
-        unimplemented!()
+        // No state is managed for remarks.
+        Ok(())
     }
 
     async fn handle(&self, command: Self::Command) -> Result<Option<Vec<Self::Event>>> {

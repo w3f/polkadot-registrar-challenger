@@ -12,6 +12,7 @@ use tokio::time::{interval, Duration};
 mod identity_change_notifier;
 mod message_verifier;
 pub use identity_change_notifier::SessionNotifier;
+mod judgment_giver;
 
 #[async_trait]
 pub trait Projection {
@@ -52,6 +53,7 @@ where
         let handle = tokio::spawn(async move {
             loop {
                 let mut subscribe =
+                // TODO: Why uUse `default` here?
                     client.subscribe_to_stream_from(<P as Projection>::Id::default());
 
                 // Don't skip the very first event (event `0`).

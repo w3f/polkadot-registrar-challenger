@@ -8,6 +8,7 @@ use std::convert::{TryFrom, TryInto};
 #[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub struct MessageWatcherId;
 
+// TODO: Required?
 impl TryFrom<String> for MessageWatcherId {
     type Error = anyhow::Error;
 
