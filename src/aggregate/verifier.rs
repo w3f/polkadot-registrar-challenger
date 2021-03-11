@@ -99,16 +99,24 @@ impl VerifierAggregate {
         // therefore `Some(..)`), then check whether the full identity has been
         // verified and create an event if that's the case.
         if let Some(net_address) = c_net_address {
-            self.state.is_fully_verified(&net_address).map(|it_is| {
-                if it_is {
-                    events.push(
-                        IdentityFullyVerified {
-                            net_address: net_address,
-                        }
-                        .into(),
-                    );
-                }
-            })?;
+            if self.state.is_fully_verified(&net_address)? {
+                let challenge = self
+                    .state
+                    .get_on_chain_challenge(&net_address)
+                    .ok_or(anyhow!(
+                        "failed to find challenge for {}",
+                        net_address.address_str()
+                    ))?
+                    .clone();
+
+                events.push(
+                    IdentityFullyVerified {
+                        net_address: net_address,
+                        on_chain_challenge: challenge,
+                    }
+                    .into(),
+                );
+            };
         }
 
         if events.is_empty() {
@@ -144,16 +152,24 @@ impl VerifierAggregate {
         // therefore `Some(..)`), then check whether the full identity has been
         // verified and create an event if that's the case.
         if let Some(net_address) = c_net_address {
-            self.state.is_fully_verified(&net_address).map(|it_is| {
-                if it_is {
-                    events.push(
-                        IdentityFullyVerified {
-                            net_address: net_address,
-                        }
-                        .into(),
-                    );
-                }
-            })?;
+            if self.state.is_fully_verified(&net_address)? {
+                let challenge = self
+                    .state
+                    .get_on_chain_challenge(&net_address)
+                    .ok_or(anyhow!(
+                        "failed to find challenge for {}",
+                        net_address.address_str()
+                    ))?
+                    .clone();
+
+                events.push(
+                    IdentityFullyVerified {
+                        net_address: net_address,
+                        on_chain_challenge: challenge,
+                    }
+                    .into(),
+                );
+            };
         }
 
         if events.is_empty() {

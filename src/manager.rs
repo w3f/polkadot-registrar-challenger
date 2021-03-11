@@ -66,6 +66,12 @@ impl IdentityManager {
             .map(|state| state == &identity.fields)
             .unwrap_or(false)
     }
+    pub fn get_on_chain_challenge(
+        &self,
+        net_address: &NetworkAddress,
+    ) -> Option<&OnChainChallenge> {
+        self.on_chain_challenges.get(net_address)
+    }
     // TODO: Rename variable to `inserted`
     // TODO: Should return notifications.
     pub fn insert_identity(&mut self, identity: IdentityInserted) {

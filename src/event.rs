@@ -1,6 +1,6 @@
 use crate::manager::{
     DisplayName, FieldAddress, FieldStatus, IdentityField, IdentityState, NetworkAddress,
-    ProvidedMessage, UpdateChanges,
+    OnChainChallenge, ProvidedMessage, UpdateChanges,
 };
 use crate::Result;
 
@@ -209,6 +209,7 @@ impl From<FieldStatusVerified> for Event {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub struct IdentityFullyVerified {
     pub net_address: NetworkAddress,
+    pub on_chain_challenge: OnChainChallenge,
 }
 
 impl From<IdentityFullyVerified> for Event {
