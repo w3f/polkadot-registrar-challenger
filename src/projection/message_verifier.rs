@@ -15,12 +15,6 @@ impl Projection for MessageVerifier {
     type Event = Event;
     type Error = anyhow::Error;
 
-    fn latest_revision(&self) -> u64 {
-        unimplemented!()
-    }
-    fn update_revision(&mut self, revision: u64) {
-        unimplemented!()
-    }
     async fn project(&mut self, event: Self::Event) -> Result<()> {
         let message = match event.body {
             EventType::ExternalMessage(message) => message,
