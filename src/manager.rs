@@ -12,6 +12,7 @@ use std::{
     vec,
 };
 
+// TODO: Rename to `ChangeLog`.
 pub enum UpdateChanges {
     NewIdentityInserted(NetworkAddress),
     VerificationValid(IdentityField),
@@ -553,6 +554,7 @@ pub struct FieldStatus {
 }
 
 impl FieldStatus {
+    // TODO: rename to "is_verified"?
     pub fn is_valid(&self) -> bool {
         let status = match &self.challenge {
             ChallengeStatus::ExpectMessage(state) => &state.status,
@@ -700,6 +702,7 @@ pub struct CheckDisplayNameChallenge {
 }
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+// TODO: Rename to "Verification"?
 pub enum Validity {
     #[serde(rename = "valid")]
     Valid,

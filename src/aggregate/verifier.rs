@@ -3,7 +3,7 @@ use crate::event::{
     self, DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
     IdentityFullyVerified, IdentityInserted,
 };
-use crate::manager::{DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress};
+use crate::manager::{DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress, UpdateChanges};
 use crate::Result;
 use futures::future::BoxFuture;
 use std::cell::Cell;
@@ -184,7 +184,14 @@ impl VerifierAggregate {
                 self.state.insert_identity(identity);
             }
             EventType::FieldStatusVerified(field_status_verified) => {
-                self.state.update_field(field_status_verified)?;
+                if let Some(change) = self.state.update_field(field_status_verified)? {
+                    match change {
+                        UpdateChanges::BackAndForthExpected(_) => {
+                            // TODO: Send email to user.
+                        }
+                        _ => {}
+                    }
+                }
             }
             EventType::IdentityFullyVerified(_) => {}
             EventType::DisplayNamePersisted(persisted) => {
