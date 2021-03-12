@@ -1,6 +1,7 @@
 use crate::aggregate::display_name::DisplayNameHandler;
 use crate::event::{
     BlankNetwork, DisplayNamePersisted, FieldStatusVerified, IdentityInserted, Notification,
+    RemarkFound,
 };
 use crate::Result;
 use rand::{thread_rng, Rng};
@@ -606,6 +607,12 @@ impl OnChainChallenge {
             let random: [u8; 16] = thread_rng().gen();
             format!("w3f_registrar:{}", hex::encode(random))
         })
+    }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+    pub fn matches_remark(&self, remark: &RemarkFound) -> bool {
+        self.0.as_str() == remark.as_str()
     }
 }
 

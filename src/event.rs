@@ -247,10 +247,22 @@ impl From<DisplayNamePersisted> for Event {
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct OnChainRemark(String);
 
+impl OnChainRemark {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct RemarkFound {
     pub net_address: NetworkAddress,
     pub remark: OnChainRemark,
+}
+
+impl RemarkFound {
+    pub fn as_str(&self) -> &str {
+        self.remark.0.as_str()
+    }
 }
 
 impl From<RemarkFound> for Event {
