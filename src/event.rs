@@ -46,6 +46,7 @@ pub enum EventType {
     DisplayNamePersisted(DisplayNamePersisted),
     ExportedIdentityState(Vec<IdentityState>),
     RemarkFound(RemarkFound),
+    JudgementGiven(JudgementGiven),
 }
 
 impl From<EventType> for Event {
@@ -269,6 +270,11 @@ impl From<RemarkFound> for Event {
     fn from(val: RemarkFound) -> Self {
         EventType::RemarkFound(val).into()
     }
+}
+
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct JudgementGiven {
+    pub net_address: NetworkAddress,
 }
 
 #[cfg(test)]

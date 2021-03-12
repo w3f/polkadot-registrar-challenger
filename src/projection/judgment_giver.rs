@@ -14,7 +14,6 @@ impl Projection for JudgmentGiver {
     type Event = Event;
     type Error = anyhow::Error;
 
-    // TODO: Cleanup after judgement confirmation.
     async fn project(&mut self, event: Self::Event) -> std::result::Result<(), Self::Error> {
         match event.body {
             EventType::IdentityFullyVerified(identity) => {
@@ -23,11 +22,12 @@ impl Projection for JudgmentGiver {
                 // via the API so this case must be handled.
                 if let Some(remark) = self.remarks.get(&identity.net_address) {
                     if identity.on_chain_challenge.matches_remark(&remark) {
-                        // TODO: Send judgement to watcher.
                         info!(
                             "Valid remark found for {}, submitting valid judgement",
                             identity.net_address.address_str()
                         );
+
+                        // TODO: Send judgement to watcher.
                     } else {
                         warn!(
                             "Invalid remark challenge for {}, received: {}, expected: {}",
@@ -51,6 +51,8 @@ impl Projection for JudgmentGiver {
                             "Valid remark found for {}, submitting valid judgement",
                             found.net_address.address_str()
                         );
+
+                        // TODO: Send judgement to watcher.
                     } else {
                         warn!(
                             "Invalid remark challenge for {}, received: {}, expected: {}",
@@ -64,6 +66,10 @@ impl Projection for JudgmentGiver {
                 } else {
                     self.remarks.insert(found.net_address.clone(), found);
                 }
+            }
+            EventType::JudgementGiven(given) => {
+                self.remarks.remove(&given.net_address);
+                self.pending.remove(&given.net_address);
             }
             _ => {}
         }
