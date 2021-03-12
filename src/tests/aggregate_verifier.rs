@@ -360,6 +360,8 @@ async fn verify_message_invalid_message() {
 }
 
 #[tokio::test]
+// TODO: Test for the same message received from multiple accounts.
+// TODO: Test when two requests use the same account with different messages.
 async fn verify_message_valid_message_multiple() {
     let be = InMemBackend::run().await;
     let store = be.store();
