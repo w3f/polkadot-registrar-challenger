@@ -69,7 +69,13 @@ struct SubscribeAccountStatus {
 }
 
 pub struct WsAccountStatusServer {
-    watcher: HashMap<NetworkAddress, (IdentityState, Vec<Recipient<SubscribeAccountStatus>>)>,
+    subscribers: HashMap<
+        NetworkAddress,
+        (
+            Option<IdentityState>,
+            Vec<Recipient<MessageResult<StateWrapper>>>,
+        ),
+    >,
 }
 
 impl Actor for WsAccountStatusServer {
@@ -83,14 +89,27 @@ impl Actor for WsAccountStatusServer {
 impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
     type Result = ();
 
+    #[rustfmt::skip]
     fn handle(&mut self, msg: SubscribeAccountStatus, ctx: &mut Self::Context) -> Self::Result {
-        if let Some((state, _)) = self.watcher.get_mut(&msg.net_address) {
-            msg.recipient
-                .do_send(MessageResult::Ok(StateWrapper::from(state.clone())));
-        } else {
-            msg.recipient.do_send(MessageResult::Err(
-                ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
-            ));
-        }
+        let (recipient, net_address) = (msg.recipient, msg.net_address);
+
+        self.subscribers
+            .entry(net_address)
+            .and_modify(|(state, recipients)| {
+                if let Some(state) = state {
+                    recipient.do_send(MessageResult::Ok(
+                        StateWrapper::from(state.clone())
+                    ));
+                } else {
+                    recipient.do_send(MessageResult::Err(
+                        ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
+                    ));
+                }
+
+                recipients.push(recipient.clone());
+            })
+            .or_insert(
+                (None, vec![recipient])
+            );
     }
 }
