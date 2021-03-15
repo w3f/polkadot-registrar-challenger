@@ -89,7 +89,6 @@ impl Actor for WsAccountStatusServer {
 impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
     type Result = ();
 
-    #[rustfmt::skip]
     fn handle(&mut self, msg: SubscribeAccountStatus, ctx: &mut Self::Context) -> Self::Result {
         let (recipient, net_address) = (msg.recipient, msg.net_address);
 
@@ -97,19 +96,27 @@ impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
             .entry(net_address)
             .and_modify(|(state, recipients)| {
                 if let Some(state) = state {
-                    recipient.do_send(MessageResult::Ok(
-                        StateWrapper::from(state.clone())
-                    ));
+                    if recipient
+                        .do_send(MessageResult::Ok(StateWrapper::from(state.clone())))
+                        .is_err()
+                    {
+                        return;
+                    };
                 } else {
-                    recipient.do_send(MessageResult::Err(
-                        ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
-                    ));
+                    if recipient
+                        .do_send(MessageResult::Err(
+                            ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
+                        ))
+                        .is_err()
+                    {
+                        return;
+                    };
                 }
 
+                // Only insert the recipient if the connection has not been
+                // dropped (handled by early `return`).
                 recipients.push(recipient.clone());
             })
-            .or_insert(
-                (None, vec![recipient])
-            );
+            .or_insert((None, vec![recipient]));
     }
 }
