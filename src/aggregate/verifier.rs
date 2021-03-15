@@ -3,7 +3,9 @@ use crate::event::{
     self, DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
     IdentityFullyVerified, IdentityInserted,
 };
-use crate::manager::{DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress, UpdateChanges};
+use crate::manager::{
+    DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress, UpdateChanges,
+};
 use crate::Result;
 use futures::future::BoxFuture;
 use std::cell::Cell;

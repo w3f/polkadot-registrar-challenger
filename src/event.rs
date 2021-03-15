@@ -61,6 +61,7 @@ impl From<EventType> for Event {
     }
 }
 
+// TODO: Move to api module?
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "message")]
 pub enum ErrorMessage {
@@ -146,6 +147,7 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
     }
 }
 
+// TODO: Move to API mode?
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct StateWrapper {
     #[serde(flatten)]

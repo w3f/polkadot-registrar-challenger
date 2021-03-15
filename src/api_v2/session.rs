@@ -1,7 +1,14 @@
-use crate::manager::NetworkAddress;
+use crate::event::{ErrorMessage, StateWrapper};
+use crate::manager::{IdentityState, NetworkAddress};
 use actix::prelude::*;
+use actix_broker::{BrokerIssue, BrokerSubscribe};
 use actix_web_actors::ws;
-use actix_broker::BrokerIssue;
+use std::collections::HashMap;
+
+// TODO: Set via config.
+const REGISTRAR_IDX: usize = 0;
+
+type MessageResult<T> = Result<T, ErrorMessage>;
 
 struct WsAccountStatusSession;
 
@@ -27,7 +34,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                 } else {
                     ctx.text("Invalid message type");
                 }
-            },
+            }
             ws::Message::Ping(b) => {
                 ctx.pong(&b);
             }
@@ -43,5 +50,29 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "()")]
 struct SubscribeAccountStatus {
-    net_address: NetworkAddress
+    net_address: NetworkAddress,
+}
+
+pub struct WsAccountStatusServer {
+    watcher: HashMap<NetworkAddress, (IdentityState, Vec<Recipient<SubscribeAccountStatus>>)>,
+}
+
+impl Actor for WsAccountStatusServer {
+    type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Self::Context) {
+        self.subscribe_system_async::<SubscribeAccountStatus>(ctx);
+    }
+}
+
+impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: SubscribeAccountStatus, ctx: &mut Self::Context) -> Self::Result {
+        if let Some((state, _)) = self.watcher.get_mut(&msg.net_address) {
+            //Ok(StateWrapper::from(state.clone()))
+        } else {
+            //Err(ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX))
+        }
+    }
 }
