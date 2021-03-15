@@ -10,7 +10,6 @@ extern crate serde;
 extern crate async_trait;
 
 use manager::NetworkAddress;
-
 use std::env;
 use std::fs;
 
