@@ -8,12 +8,25 @@ use std::collections::HashMap;
 // TODO: Set via config.
 const REGISTRAR_IDX: usize = 0;
 
-type MessageResult<T> = Result<T, ErrorMessage>;
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+enum MessageResult<T> {
+    Ok(T),
+    Err(ErrorMessage),
+}
 
 struct WsAccountStatusSession;
 
 impl Actor for WsAccountStatusSession {
     type Context = ws::WebsocketContext<Self>;
+}
+
+impl Handler<MessageResult<StateWrapper>> for WsAccountStatusSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: MessageResult<StateWrapper>, ctx: &mut Self::Context) {
+        unimplemented!()
+    }
 }
 
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSession {
@@ -29,6 +42,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
             ws::Message::Text(txt) => {
                 if let Ok(net_address) = serde_json::from_str::<NetworkAddress>(txt.as_str()) {
                     self.issue_system_async(SubscribeAccountStatus {
+                        recipient: ctx.address().recipient(),
                         net_address: net_address,
                     });
                 } else {
@@ -50,6 +64,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "()")]
 struct SubscribeAccountStatus {
+    recipient: Recipient<MessageResult<StateWrapper>>,
     net_address: NetworkAddress,
 }
 
@@ -70,9 +85,12 @@ impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
 
     fn handle(&mut self, msg: SubscribeAccountStatus, ctx: &mut Self::Context) -> Self::Result {
         if let Some((state, _)) = self.watcher.get_mut(&msg.net_address) {
-            //Ok(StateWrapper::from(state.clone()))
+            msg.recipient
+                .do_send(MessageResult::Ok(StateWrapper::from(state.clone())));
         } else {
-            //Err(ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX))
+            msg.recipient.do_send(MessageResult::Err(
+                ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
+            ));
         }
     }
 }
