@@ -8,8 +8,9 @@ use std::collections::HashMap;
 // TODO: Set via config.
 const REGISTRAR_IDX: usize = 0;
 
-#[derive(Debug, Clone, Message)]
+#[derive(Debug, Clone, Serialize, Message)]
 #[rtype(result = "()")]
+#[serde(untagged)]
 enum MessageResult<T> {
     Ok(T),
     Err(ErrorMessage),
@@ -25,7 +26,11 @@ impl Handler<MessageResult<StateWrapper>> for WsAccountStatusSession {
     type Result = ();
 
     fn handle(&mut self, msg: MessageResult<StateWrapper>, ctx: &mut Self::Context) {
-        unimplemented!()
+        if let Ok(payload) = serde_json::to_string(&msg) {
+            ctx.text(payload)
+        } else {
+            error!("Failed to send account state message to client: deserialization error");
+        }
     }
 }
 
@@ -89,7 +94,7 @@ impl Actor for WsAccountStatusServer {
 impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
     type Result = ();
 
-    fn handle(&mut self, msg: SubscribeAccountStatus, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: SubscribeAccountStatus, _ctx: &mut Self::Context) -> Self::Result {
         let (recipient, net_address) = (msg.recipient, msg.net_address);
 
         self.subscribers
