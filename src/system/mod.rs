@@ -1,7 +1,9 @@
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
-use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
+use crate::aggregate::{
+    Aggregate, MessageWatcher, MessageWatcherCommand, MessageWatcherId, Repository,
+};
 use crate::api::{ConnectionPool, PublicRpc, PublicRpcApi};
 use crate::api_v2::session::WsAccountStatusSession;
 use crate::event::{Event, EventType, ExternalMessage};
@@ -37,7 +39,6 @@ pub async fn run_rest_api_server_blocking(addr: &str) -> Result<()> {
 }
 
 /*
-#[allow(dead_code)]
 pub async fn run_verifier_subscription(
     client: Client,
 ) -> Result<()> {
@@ -80,12 +81,9 @@ pub async fn run_verifier_subscription(
 
     Ok(())
 }
+*/
 
-#[allow(dead_code)]
-async fn run_matrix_listener(
-    config: MatrixConfig,
-    store: EventStore<MessageWatcherId>,
-) -> Result<()> {
+async fn run_matrix_listener(config: MatrixConfig, repo: Repository<MessageWatcher>) -> Result<()> {
     info!("Configuring Matrix client");
 
     let (client, recv) = MatrixClient::new(
@@ -99,14 +97,10 @@ async fn run_matrix_listener(
     info!("Starting Matrix client");
     client.start().await;
 
-    messages_event_loop(store, recv, "email").await
+    messages_event_loop(repo, recv, "email").await
 }
 
-#[allow(dead_code)]
-async fn run_email_listener(
-    config: EmailConfig,
-    store: EventStore<MessageWatcherId>,
-) -> Result<()> {
+async fn run_email_listener(config: EmailConfig, repo: Repository<MessageWatcher>) -> Result<()> {
     info!("Configuring email client");
 
     let (client, recv) = SmtpImapClientBuilder::new()
@@ -121,13 +115,12 @@ async fn run_email_listener(
     info!("Starting email client");
     client.start().await;
 
-    messages_event_loop(store, recv, "email").await
+    messages_event_loop(repo, recv, "email").await
 }
 
-#[allow(dead_code)]
 async fn run_twitter_listener(
     config: TwitterConfig,
-    store: EventStore<MessageWatcherId>,
+    repo: Repository<MessageWatcher>,
 ) -> Result<()> {
     info!("Configuring Twitter client");
 
@@ -142,32 +135,24 @@ async fn run_twitter_listener(
     info!("Starting Twitter client");
     client.start().await;
 
-    messages_event_loop(store, recv, "Twitter").await
+    messages_event_loop(repo, recv, "Twitter").await
 }
 
 /// For each message received by an adapter, send a command to the aggregate and
 /// let it handle it. This aggregate does not actually need to maintain a state.
-#[allow(dead_code)]
 async fn messages_event_loop<T>(
-    store: EventStore<MessageWatcherId>,
+    mut repo: Repository<MessageWatcher>,
     recv: Receiver<T>,
     name: &str,
 ) -> Result<()>
 where
     T: Into<ExternalMessage>,
 {
-    let repository = Repository::new(MessageWatcher.into(), store);
-
     info!("Starting event loop for incoming {} messages", name);
     while let Ok(message) = recv.recv().await {
-        let mut root = repository.get(MessageWatcherId).await.unwrap();
-
-        let _ = root
-            .handle(MessageWatcherCommand::AddMessage(message.into()))
-            .await
-            .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
+        repo.apply(MessageWatcherCommand::AddMessage(message.into()))
+            .await?;
     }
 
     Err(anyhow!("The {} client has shut down", name))
 }
-*/

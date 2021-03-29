@@ -1,11 +1,11 @@
-use super::Aggregate;
+use super::{Aggregate, Snapshot};
 use crate::event::{Event, ExternalMessage};
 use crate::Result;
 use futures::future::BoxFuture;
 use std::convert::AsRef;
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct MessageWatcherId;
 
 // TODO: Required?
@@ -63,5 +63,23 @@ impl Aggregate for MessageWatcher {
         match command {
             MessageWatcherCommand::AddMessage(message) => Ok(Some(vec![Event::from(message)])),
         }
+    }
+}
+
+// Since no state is maintained, no snapshot implementation is required.
+#[async_trait]
+impl Snapshot for MessageWatcher {
+    type Id = MessageWatcherId;
+    type State = Event;
+    type Error = anyhow::Error;
+
+    fn qualifies(&self) -> bool {
+        unimplemented!()
+    }
+    async fn snapshot(&self) -> Self::State {
+        unimplemented!()
+    }
+    async fn restore(state: Self::State) -> Result<Self> {
+        unimplemented!()
     }
 }
