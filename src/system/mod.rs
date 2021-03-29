@@ -83,7 +83,7 @@ pub async fn run_verifier_subscription(
 }
 */
 
-async fn run_matrix_listener(config: MatrixConfig, repo: Repository<MessageWatcher>) -> Result<()> {
+pub async fn run_matrix_listener_blocking(config: MatrixConfig, repo: Repository<MessageWatcher>) -> Result<()> {
     info!("Configuring Matrix client");
 
     let (client, recv) = MatrixClient::new(
@@ -100,7 +100,7 @@ async fn run_matrix_listener(config: MatrixConfig, repo: Repository<MessageWatch
     messages_event_loop(repo, recv, "email").await
 }
 
-async fn run_email_listener(config: EmailConfig, repo: Repository<MessageWatcher>) -> Result<()> {
+pub async fn run_email_listener_blocking(config: EmailConfig, repo: Repository<MessageWatcher>) -> Result<()> {
     info!("Configuring email client");
 
     let (client, recv) = SmtpImapClientBuilder::new()
@@ -118,7 +118,7 @@ async fn run_email_listener(config: EmailConfig, repo: Repository<MessageWatcher
     messages_event_loop(repo, recv, "email").await
 }
 
-async fn run_twitter_listener(
+pub async fn run_twitter_listener_blocking(
     config: TwitterConfig,
     repo: Repository<MessageWatcher>,
 ) -> Result<()> {
