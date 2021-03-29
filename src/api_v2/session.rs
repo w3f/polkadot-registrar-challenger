@@ -16,7 +16,8 @@ enum MessageResult<T> {
     Err(ErrorMessage),
 }
 
-struct WsAccountStatusSession;
+#[derive(Default)]
+pub struct WsAccountStatusSession;
 
 impl Actor for WsAccountStatusSession {
     type Context = ws::WebsocketContext<Self>;
@@ -121,7 +122,7 @@ impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
                 }
 
                 // Only insert the recipient if the connection has not been
-                // dropped (handled by early `return`).
+                // dropped (handled by early `return`'s).
                 recipients.push(recipient.clone());
             })
             .or_insert((None, vec![recipient]));
