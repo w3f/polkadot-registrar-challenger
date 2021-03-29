@@ -125,3 +125,53 @@ impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
             .or_insert((None, vec![recipient]));
     }
 }
+
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+struct AddAccountState {
+    state: StateWrapper,
+}
+
+impl Handler<AddAccountState> for WsAccountStatusServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: AddAccountState, _ctx: &mut Self::Context) -> Self::Result {
+        let identity = msg.state;
+
+        self.subscribers
+            .entry(identity.state.net_address.clone())
+            .and_modify(|(state, recipients)| {
+                if state.is_some() {
+                    debug!(
+                        "Account state for {} has already been added to the websocket handler",
+                        identity.state.net_address.address_str()
+                    );
+                    return;
+                }
+
+                // Set account state.
+                *state = Some(identity.state.clone());
+
+                // Notify each subscriber
+                let to_notify = std::mem::take(recipients);
+                for recipient in to_notify {
+                    if recipient
+                        .do_send(MessageResult::Ok(identity.clone()))
+                        .is_ok()
+                    {
+                        // The recipient still has a subscription open, so add
+                        // them back for future notifications.
+                        recipients.push(recipient);
+                    }
+                }
+            })
+            .or_insert((Some(identity.state), vec![]));
+    }
+}
+
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+// TODO
+struct DeleteAccountState {
+    state: IdentityState,
+}
