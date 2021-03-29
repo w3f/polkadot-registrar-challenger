@@ -22,6 +22,7 @@ impl Actor for WsAccountStatusSession {
     type Context = ws::WebsocketContext<Self>;
 }
 
+// Response message received from the server is sent directly to the subscriber.
 impl Handler<MessageResult<StateWrapper>> for WsAccountStatusSession {
     type Result = ();
 
@@ -34,6 +35,7 @@ impl Handler<MessageResult<StateWrapper>> for WsAccountStatusSession {
     }
 }
 
+// Handle messages from the subscriber.
 impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSession {
     fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
         let msg = if let Ok(msg) = msg {
@@ -141,14 +143,6 @@ impl Handler<AddAccountState> for WsAccountStatusServer {
         self.subscribers
             .entry(identity.state.net_address.clone())
             .and_modify(|(state, recipients)| {
-                if state.is_some() {
-                    debug!(
-                        "Account state for {} has already been added to the websocket handler",
-                        identity.state.net_address.address_str()
-                    );
-                    return;
-                }
-
                 // Set account state.
                 *state = Some(identity.state.clone());
 
