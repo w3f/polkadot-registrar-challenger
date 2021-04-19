@@ -40,41 +40,6 @@ pub struct WsAccountStatusSession {
     >,
 }
 
-impl Actor for WsAccountStatusSession {
-    type Context = ws::WebsocketContext<Self>;
-}
-
-// Handle messages from the subscriber.
-impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSession {
-    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
-        let msg = if let Ok(msg) = msg {
-            msg
-        } else {
-            ctx.stop();
-            return;
-        };
-
-        match msg {
-            ws::Message::Text(txt) => {
-                if let Ok(net_address) = serde_json::from_str::<NetworkAddress>(txt.as_str()) {
-                    self.handle_new_account_subscription(net_address, ctx.address().recipient());
-                } else {
-                    // TODO: Should be `MessageResult`
-                    ctx.text("Invalid message type");
-                }
-            }
-            ws::Message::Ping(b) => {
-                ctx.pong(&b);
-            }
-            ws::Message::Close(reason) => {
-                ctx.close(reason);
-                ctx.stop();
-            }
-            _ => {}
-        }
-    }
-}
-
 impl WsAccountStatusSession {
     // Handle account state subscriptions from clients.
     fn handle_new_account_subscription(
@@ -108,6 +73,41 @@ impl WsAccountStatusSession {
                 recipients.push(recipient.clone());
             })
             .or_insert((None, vec![recipient]));
+    }
+}
+
+impl Actor for WsAccountStatusSession {
+    type Context = ws::WebsocketContext<Self>;
+}
+
+// Handle messages from the subscriber.
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSession {
+    fn handle(&mut self, msg: Result<ws::Message, ws::ProtocolError>, ctx: &mut Self::Context) {
+        let msg = if let Ok(msg) = msg {
+            msg
+        } else {
+            ctx.stop();
+            return;
+        };
+
+        match msg {
+            ws::Message::Text(txt) => {
+                if let Ok(net_address) = serde_json::from_str::<NetworkAddress>(txt.as_str()) {
+                    self.handle_new_account_subscription(net_address, ctx.address().recipient());
+                } else {
+                    // TODO: Should be `MessageResult`
+                    ctx.text("Invalid message type");
+                }
+            }
+            ws::Message::Ping(b) => {
+                ctx.pong(&b);
+            }
+            ws::Message::Close(reason) => {
+                ctx.close(reason);
+                ctx.stop();
+            }
+            _ => {}
+        }
     }
 }
 
