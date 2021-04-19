@@ -38,6 +38,17 @@ pub async fn run_rest_api_server_blocking(addr: &str) -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn server() {
+    let mut system = actix::System::new("");
+
+    system.block_on(async {
+        run_rest_api_server_blocking("localhost:8080").await;
+    });
+
+    system.run();
+}
+
 /*
 pub async fn run_verifier_subscription(
     client: Client,

@@ -72,7 +72,20 @@ impl WsAccountStatusSession {
                 // dropped (handled by early `return`'s).
                 recipients.push(recipient.clone());
             })
-            .or_insert((None, vec![recipient]));
+            .or_insert_with(|| {
+                if recipient
+                    .do_send(MessageResult::Err(
+                        ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
+                    ))
+                    .is_err()
+                {
+                    (None, vec![])
+                } else {
+                    // Only insert the recipient if the connection has not been
+                    // dropped.
+                    (None, vec![recipient])
+                }
+            });
     }
 }
 

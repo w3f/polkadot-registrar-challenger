@@ -1,5 +1,4 @@
 use crate::event::Event;
-use crate::system::run_rpc_api_service_blocking;
 use crate::{
     aggregate::{
         verifier::{VerifierAggregateId, VerifierAggregateSnapshotsId, VerifierCommand},
@@ -27,145 +26,6 @@ use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
 
 mod aggregate_verifier;
-mod rpc_api_service;
-
-/// Generates (kind of) random events. Primarily used for manual testing in
-/// order to see whether the front end can process new messages and display
-/// notifications.
-#[tokio::test]
-#[ignore]
-async fn generate_random_data() {
-    use crate::aggregate::verifier::{VerifierAggregate, VerifierCommand};
-    use crate::aggregate::Repository;
-    use crate::event::{ExternalMessage, ExternalOrigin};
-    use crate::manager::{
-        ChallengeStatus, ExpectedMessage, FieldAddress, FieldStatus, IdentityField,
-        IdentityFieldType, IdentityState, RegistrarIdentityField,
-    };
-
-    fn random(between: usize) -> usize {
-        thread_rng().gen_range(0, between)
-    }
-
-    env_logger::init();
-
-    // Setup backend. Keep a handle to the state for being able to wipe it
-    // later on (see infinite loop below).
-    let be = InMemBackend::run().await;
-    let store = be.store();
-    let manager = Arc::new(parking_lot::RwLock::new(IdentityManager::default()));
-    ApiBackend::run_fixed_port(8080, store.clone(), Arc::clone(&manager)).await;
-
-    // Setup aggregate and repository.
-    // TODO: Set shared state in `VerifierAggregate` directly.
-    let mut repo =
-        Repository::new_with_snapshot_service(VerifierAggregate::default(), store.clone())
-            .await
-            .unwrap();
-
-    // Add identities.
-    let mut alice = IdentityState::alice();
-    let bob = IdentityState::bob();
-
-    // Set custom field.
-    alice.fields.insert(
-        IdentityFieldType::LegalName,
-        FieldStatus::from({
-            (
-                IdentityField::LegalName(FieldAddress::from("Alice Doe".to_string())),
-                // Throwaway value
-                RegistrarIdentityField::display_name(),
-            )
-        }),
-    );
-
-    // Insert identities.
-    repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
-        .await
-        .unwrap();
-
-    repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
-        .await
-        .unwrap();
-
-    // Run forever
-    loop {
-        // 10% chance to reset state.
-        if random(10) <= 1 {
-            repo.wipe();
-            *manager.write() = IdentityManager::default();
-
-            // Insert identities.
-            repo.apply(VerifierCommand::InsertIdentity(alice.clone()))
-                .await
-                .unwrap();
-
-            repo.apply(VerifierCommand::InsertIdentity(bob.clone()))
-                .await
-                .unwrap();
-
-            time::sleep(Duration::from_secs(random(10) as u64)).await;
-            continue;
-        }
-
-        // Chose a random field to modify.
-        let field_ty = match random(3) {
-            0 => IdentityFieldType::Email,
-            1 => IdentityFieldType::Twitter,
-            2 => IdentityFieldType::Matrix,
-            _ => panic!(),
-        };
-
-        // Set challenge status.
-        let expected = alice
-            .fields
-            .get(&field_ty)
-            .map(|field| match field.challenge() {
-                ChallengeStatus::ExpectMessage(challenge) => {
-                    let msg = match random(2) {
-                        0 => challenge.expected_message.clone(),
-                        1 => ExpectedMessage::gen(),
-                        _ => panic!(),
-                    };
-
-                    Some((challenge.from.inner(), msg))
-                }
-                ChallengeStatus::BackAndForth(challenge) => {
-                    let msg = match random(101) {
-                        0..=50 => challenge.expected_message.clone(),
-                        51..=100 => ExpectedMessage::gen(),
-                        _ => panic!(),
-                    };
-
-                    Some((challenge.from.inner(), msg))
-                }
-                // Ignore those.
-                _ => None,
-            });
-
-        // Apply changes.
-        if let Some(expected) = expected {
-            if let Some((from, msg)) = expected {
-                repo.apply(VerifierCommand::VerifyMessage(ExternalMessage {
-                    origin: {
-                        match field_ty {
-                            IdentityFieldType::Email => ExternalOrigin::Email,
-                            IdentityFieldType::Matrix => ExternalOrigin::Matrix,
-                            IdentityFieldType::Twitter => ExternalOrigin::Twitter,
-                            _ => panic!(),
-                        }
-                    },
-                    field_address: from,
-                    message: msg.into(),
-                }))
-                .await
-                .unwrap();
-            }
-        }
-
-        time::sleep(Duration::from_secs(random(10) as u64)).await;
-    }
-}
 
 fn gen_port() -> usize {
     thread_rng().gen_range(1_024, 65_535)
@@ -201,35 +61,6 @@ impl ApiClient {
             .take_until(tokio_02::time::delay_for(Duration::from_secs(2)))
             .collect()
             .await
-    }
-}
-
-struct ApiBackend;
-
-impl ApiBackend {
-    async fn run(store: Client) -> usize {
-        let rpc_port = gen_port();
-        let manager = Arc::new(parking_lot::RwLock::new(IdentityManager::default()));
-        tokio::spawn(run_rpc_api_service_blocking(
-            ConnectionPool::default(),
-            rpc_port,
-            store,
-            manager,
-        ));
-
-        rpc_port
-    }
-    async fn run_fixed_port(
-        rpc_port: usize,
-        store: Client,
-        manager: Arc<parking_lot::RwLock<IdentityManager>>,
-    ) {
-        tokio::spawn(run_rpc_api_service_blocking(
-            ConnectionPool::default(),
-            rpc_port,
-            store,
-            manager,
-        ));
     }
 }
 
