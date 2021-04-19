@@ -4,6 +4,7 @@ use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use std::collections::HashMap;
 
+#[derive(Default)]
 pub struct LookupServer {
     identities: HashMap<NetworkAddress, IdentityState>,
 }
@@ -27,12 +28,23 @@ struct DeleteAccountState {
     state: IdentityState,
 }
 
+impl SystemService for LookupServer {}
+impl Supervised for LookupServer {}
+
 impl Actor for LookupServer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // TODO: Use arbiter instead?
         self.subscribe_system_async::<AddAccountState>(ctx);
+    }
+}
+
+impl Handler<RequestAccountState> for LookupServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: RequestAccountState, _ctx: &mut Self::Context) -> Self::Result {
+        unimplemented!()
     }
 }
 

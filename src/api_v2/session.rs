@@ -1,9 +1,8 @@
-use super::MessageResult;
 use super::lookup_server::{LookupServer, RequestAccountState};
+use super::MessageResult;
 use crate::event::{ErrorMessage, StateWrapper};
 use crate::manager::{IdentityState, NetworkAddress};
 use actix::prelude::*;
-use actix::SystemService;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use actix_web_actors::ws;
 use std::collections::HashMap;
@@ -67,8 +66,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                         .send(RequestAccountState {
                             net_address: net_address,
                         })
-                        .into_actor(self)
-                        .wait(ctx);
+                        .into_actor(self);
                 } else {
                     // TODO: Should be `MessageResult`
                     ctx.text("Invalid message type");
