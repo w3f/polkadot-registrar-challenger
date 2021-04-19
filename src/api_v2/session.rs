@@ -16,24 +16,32 @@ enum MessageResult<T> {
     Err(ErrorMessage),
 }
 
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+struct AddAccountState {
+    state: StateWrapper,
+}
+
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+// TODO
+struct DeleteAccountState {
+    state: IdentityState,
+}
+
 #[derive(Default)]
-pub struct WsAccountStatusSession;
+pub struct WsAccountStatusSession {
+    subscribers: HashMap<
+        NetworkAddress,
+        (
+            Option<IdentityState>,
+            Vec<Recipient<MessageResult<StateWrapper>>>,
+        ),
+    >,
+}
 
 impl Actor for WsAccountStatusSession {
     type Context = ws::WebsocketContext<Self>;
-}
-
-// Response message received from the server is sent directly to the subscriber.
-impl Handler<MessageResult<StateWrapper>> for WsAccountStatusSession {
-    type Result = ();
-
-    fn handle(&mut self, msg: MessageResult<StateWrapper>, ctx: &mut Self::Context) {
-        if let Ok(payload) = serde_json::to_string(&msg) {
-            ctx.text(payload)
-        } else {
-            error!("Failed to send account state message to client: deserialization error");
-        }
-    }
 }
 
 // Handle messages from the subscriber.
@@ -49,11 +57,9 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
         match msg {
             ws::Message::Text(txt) => {
                 if let Ok(net_address) = serde_json::from_str::<NetworkAddress>(txt.as_str()) {
-                    self.issue_system_async(SubscribeAccountStatus {
-                        recipient: ctx.address().recipient(),
-                        net_address: net_address,
-                    });
+                    self.handle_new_account_subscription(net_address, ctx.address().recipient());
                 } else {
+                    // TODO: Should be `MessageResult`
                     ctx.text("Invalid message type");
                 }
             }
@@ -69,38 +75,13 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
     }
 }
 
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
-struct SubscribeAccountStatus {
-    recipient: Recipient<MessageResult<StateWrapper>>,
-    net_address: NetworkAddress,
-}
-
-pub struct WsAccountStatusServer {
-    subscribers: HashMap<
-        NetworkAddress,
-        (
-            Option<IdentityState>,
-            Vec<Recipient<MessageResult<StateWrapper>>>,
-        ),
-    >,
-}
-
-impl Actor for WsAccountStatusServer {
-    type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Self::Context) {
-        self.subscribe_system_async::<SubscribeAccountStatus>(ctx);
-    }
-}
-
-// Handle account state subscriptions from clients.
-impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
-    type Result = ();
-
-    fn handle(&mut self, msg: SubscribeAccountStatus, _ctx: &mut Self::Context) -> Self::Result {
-        let (recipient, net_address) = (msg.recipient, msg.net_address);
-
+impl WsAccountStatusSession {
+    // Handle account state subscriptions from clients.
+    fn handle_new_account_subscription(
+        &mut self,
+        net_address: NetworkAddress,
+        recipient: Recipient<MessageResult<StateWrapper>>,
+    ) {
         self.subscribers
             .entry(net_address)
             .and_modify(|(state, recipients)| {
@@ -130,14 +111,21 @@ impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
     }
 }
 
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
-struct AddAccountState {
-    state: StateWrapper,
+// Response message received from the server is sent directly to the subscriber.
+impl Handler<MessageResult<StateWrapper>> for WsAccountStatusSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: MessageResult<StateWrapper>, ctx: &mut Self::Context) {
+        if let Ok(payload) = serde_json::to_string(&msg) {
+            ctx.text(payload)
+        } else {
+            error!("Failed to send account state message to client: deserialization error");
+        }
+    }
 }
 
 // Handle added account states, created by the event store listener.
-impl Handler<AddAccountState> for WsAccountStatusServer {
+impl Handler<AddAccountState> for WsAccountStatusSession {
     type Result = ();
 
     fn handle(&mut self, msg: AddAccountState, _ctx: &mut Self::Context) -> Self::Result {
@@ -164,11 +152,4 @@ impl Handler<AddAccountState> for WsAccountStatusServer {
             })
             .or_insert((Some(identity.state), vec![]));
     }
-}
-
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
-// TODO
-struct DeleteAccountState {
-    state: IdentityState,
 }

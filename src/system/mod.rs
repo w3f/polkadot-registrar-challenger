@@ -83,7 +83,10 @@ pub async fn run_verifier_subscription(
 }
 */
 
-pub async fn run_matrix_listener_blocking(config: MatrixConfig, repo: Repository<MessageWatcher>) -> Result<()> {
+pub async fn run_matrix_listener_blocking(
+    config: MatrixConfig,
+    repo: Repository<MessageWatcher>,
+) -> Result<()> {
     info!("Configuring Matrix client");
 
     let (client, recv) = MatrixClient::new(
@@ -100,7 +103,10 @@ pub async fn run_matrix_listener_blocking(config: MatrixConfig, repo: Repository
     messages_event_loop(repo, recv, "email").await
 }
 
-pub async fn run_email_listener_blocking(config: EmailConfig, repo: Repository<MessageWatcher>) -> Result<()> {
+pub async fn run_email_listener_blocking(
+    config: EmailConfig,
+    repo: Repository<MessageWatcher>,
+) -> Result<()> {
     info!("Configuring email client");
 
     let (client, recv) = SmtpImapClientBuilder::new()
