@@ -94,6 +94,7 @@ impl Actor for WsAccountStatusServer {
     }
 }
 
+// Handle account state subscriptions from clients.
 impl Handler<SubscribeAccountStatus> for WsAccountStatusServer {
     type Result = ();
 
@@ -135,6 +136,7 @@ struct AddAccountState {
     state: StateWrapper,
 }
 
+// Handle added account states, created by the event store listener.
 impl Handler<AddAccountState> for WsAccountStatusServer {
     type Result = ();
 
