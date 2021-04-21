@@ -1,18 +1,17 @@
 use super::session::{StateNotification, REGISTRAR_IDX};
 use super::JsonResult;
-use crate::event::{ErrorMessage, Notification, StateWrapper};
-use crate::event::{FieldStatusVerified, IdentityInserted};
+use crate::event::{ErrorMessage, FieldStatusVerified, IdentityInserted, StateWrapper};
 use crate::manager::{IdentityManager, IdentityState, NetworkAddress};
 use crate::Result;
 use actix::prelude::*;
-use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
+use actix_broker::BrokerSubscribe;
 use std::collections::HashMap;
 
 pub type RecipientAccountState = Recipient<StateNotification>;
 
 // TODO: Rename (reference "subscribe")
 #[derive(Debug, Clone, Message)]
-#[rtype(result = "JsonResult<IdentityState>")]
+#[rtype(result = "JsonResult<StateWrapper>")]
 pub struct RequestAccountState {
     pub recipient: RecipientAccountState,
     pub net_address: NetworkAddress,
@@ -36,7 +35,6 @@ pub enum AddIdentityState {
 
 #[derive(Default)]
 pub struct LookupServer {
-    identities: HashMap<NetworkAddress, IdentityState>,
     manager: IdentityManager,
     listeners: HashMap<NetworkAddress, Vec<RecipientAccountState>>,
 }
@@ -85,7 +83,7 @@ impl LookupServer {
             }
         };
 
-        // Notify clients.
+        // Notify listeners.
         if let Some(listeners) = self.listeners.get_mut(&net_address) {
             // Temporary storage for recipients (to get around Rust's borrowing rules).
             let mut tmp = vec![];
@@ -122,7 +120,7 @@ impl Actor for LookupServer {
 }
 
 impl Handler<RequestAccountState> for LookupServer {
-    type Result = JsonResult<IdentityState>;
+    type Result = JsonResult<StateWrapper>;
 
     fn handle(&mut self, msg: RequestAccountState, _ctx: &mut Self::Context) -> Self::Result {
         let (recipient, net_address) = (msg.recipient, msg.net_address);
@@ -131,12 +129,10 @@ impl Handler<RequestAccountState> for LookupServer {
         self.subscribe_net_address(net_address.clone(), recipient);
 
         // Return current state.
-        if let Some(state) = self.identities.get(&net_address) {
-            JsonResult::Ok(state.clone())
+        if let Some(state) = self.manager.lookup_full_state(&net_address) {
+            JsonResult::Ok(StateWrapper::from(state.clone()))
         } else {
-            JsonResult::<IdentityState>::Err(ErrorMessage::no_pending_judgement_request(
-                REGISTRAR_IDX,
-            ))
+            JsonResult::Err(ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX))
         }
     }
 }

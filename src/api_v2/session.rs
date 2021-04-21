@@ -47,7 +47,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                             net_address: net_address,
                         })
                         .into_actor(self)
-                        .then(|res, b, ctx| {
+                        .then(|res, _, ctx| {
                             // Handle response and notify client about current state of the identity.
                             if let Ok(state) = res {
                                 if let Ok(txt) = serde_json::to_string(&JsonResult::Ok(
@@ -84,6 +84,10 @@ impl Handler<StateNotification> for WsAccountStatusSession {
     type Result = ();
 
     fn handle(&mut self, msg: StateNotification, ctx: &mut Self::Context) {
-        unimplemented!()
+        if let Ok(txt) = serde_json::to_string(&JsonResult::Ok(msg.0)) {
+            ctx.text(txt);
+        } else {
+            error!("Failed to deserialize identity state response on subscription request");
+        }
     }
 }
