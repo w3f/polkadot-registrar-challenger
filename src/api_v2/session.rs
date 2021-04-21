@@ -48,10 +48,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                         .into_actor(self)
                         .then(|res, b, ctx| {
                             if let Ok(state) = res {
-                                if let Ok(raw) = serde_json::to_string(&JsonResult::Ok(
+                                if let Ok(txt) = serde_json::to_string(&JsonResult::Ok(
                                     state
                                 )) {
-                                    ctx.text(raw);
+                                    ctx.text(txt);
                                 } else {
                                     error!("Failed to deserialize identity state response on subscription request");
                                 }

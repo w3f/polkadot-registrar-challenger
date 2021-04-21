@@ -10,7 +10,7 @@ pub type RecipientAccountState = Recipient<StateNotification>;
 
 // TODO: Rename (reference "subscribe")
 #[derive(Debug, Clone, Message)]
-#[rtype(result = "JsonResult<StateWrapper>")]
+#[rtype(result = "JsonResult<IdentityState>")]
 pub struct RequestAccountState {
     pub recipient: RecipientAccountState,
     pub net_address: NetworkAddress,
@@ -87,7 +87,7 @@ impl Actor for LookupServer {
 }
 
 impl Handler<RequestAccountState> for LookupServer {
-    type Result = JsonResult<StateWrapper>;
+    type Result = JsonResult<IdentityState>;
 
     fn handle(&mut self, msg: RequestAccountState, _ctx: &mut Self::Context) -> Self::Result {
         let (recipient, net_address) = (msg.recipient, msg.net_address);
@@ -97,9 +97,9 @@ impl Handler<RequestAccountState> for LookupServer {
 
         // Return current state.
         if let Some(state) = self.identities.get(&net_address) {
-            JsonResult::Ok(StateWrapper::from(state.clone()))
+            JsonResult::Ok(state.clone())
         } else {
-            JsonResult::<StateWrapper>::Err(ErrorMessage::no_pending_judgement_request(
+            JsonResult::<IdentityState>::Err(ErrorMessage::no_pending_judgement_request(
                 REGISTRAR_IDX,
             ))
         }
