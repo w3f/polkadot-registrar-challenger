@@ -3,6 +3,7 @@ use super::JsonResult;
 use crate::event::{ErrorMessage, Notification, StateWrapper};
 use crate::event::{FieldStatusVerified, IdentityInserted};
 use crate::manager::{IdentityManager, IdentityState, NetworkAddress};
+use crate::Result;
 use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use std::collections::HashMap;
@@ -26,7 +27,7 @@ struct DeleteAccountState {
 
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "()")]
-pub enum AddAccountState {
+pub enum AddIdentityState {
     // A new identity has been inserted.
     IdentityInserted(IdentityInserted),
     // A specific field was verified.
@@ -51,9 +52,9 @@ impl LookupServer {
             .and_modify(|recipients| recipients.push(recipient.clone()))
             .or_insert(vec![recipient]);
     }
-    fn update_identity(&mut self, update: AddAccountState) {
+    fn update_identity(&mut self, update: AddIdentityState) -> Result<()> {
         let (net_address, state) = match update {
-            AddAccountState::IdentityInserted(inserted) => {
+            AddIdentityState::IdentityInserted(inserted) => {
                 // Insert new identity into the manager.
                 self.manager.insert_identity(inserted.clone());
 
@@ -62,18 +63,20 @@ impl LookupServer {
                     StateWrapper::newly_inserted_notification(inserted),
                 )
             }
-            AddAccountState::FieldStatusVerified(verified) => {
+            AddIdentityState::FieldStatusVerified(verified) => {
                 let net_address = verified.net_address.clone();
 
                 // Update single field.
                 let notifications = self
                     .manager
-                    .update_field(verified)
-                    .unwrap()
+                    .update_field(verified)?
                     .map(|changes| vec![changes.into()])
                     .unwrap_or(vec![]);
 
-                let state = self.manager.lookup_full_state(&net_address).unwrap();
+                let state = self
+                    .manager
+                    .lookup_full_state(&net_address)
+                    .ok_or(anyhow!("Failed to lookup state after updating identity"))?;
 
                 (
                     net_address.clone(),
@@ -101,6 +104,8 @@ impl LookupServer {
             // Add back the recipients.
             *listeners = tmp;
         }
+
+        Ok(())
     }
 }
 
@@ -112,7 +117,7 @@ impl Actor for LookupServer {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // TODO: Use arbiter instead?
-        self.subscribe_system_async::<AddAccountState>(ctx);
+        self.subscribe_system_async::<AddIdentityState>(ctx);
     }
 }
 
@@ -137,10 +142,15 @@ impl Handler<RequestAccountState> for LookupServer {
 }
 
 // Handle added account states, created by the event store listener.
-impl Handler<AddAccountState> for LookupServer {
+impl Handler<AddIdentityState> for LookupServer {
     type Result = ();
 
-    fn handle(&mut self, msg: AddAccountState, _ctx: &mut Self::Context) -> Self::Result {
-        self.update_identity(msg);
+    fn handle(&mut self, msg: AddIdentityState, _ctx: &mut Self::Context) -> Self::Result {
+        let _ = self.update_identity(msg).map_err(|err| {
+            error!(
+                "Error when adding identity to websocket handler, this is a bug: {:?}",
+                err
+            )
+        });
     }
 }
