@@ -1,4 +1,4 @@
-use super::session::REGISTRAR_IDX;
+use super::session::{StateNotification, REGISTRAR_IDX};
 use super::JsonResult;
 use crate::event::{ErrorMessage, StateWrapper};
 use crate::manager::{IdentityState, NetworkAddress};
@@ -6,10 +6,11 @@ use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use std::collections::HashMap;
 
-pub type RecipientAccountState = Recipient<JsonResult<StateWrapper>>;
+pub type RecipientAccountState = Recipient<StateNotification>;
 
+// TODO: Rename (reference "subscribe")
 #[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
+#[rtype(result = "JsonResult<StateWrapper>")]
 pub struct RequestAccountState {
     pub recipient: RecipientAccountState,
     pub net_address: NetworkAddress,
@@ -56,7 +57,10 @@ impl LookupServer {
             // Notify the subscriber and, if still active, add them back for
             // future notifications.
             for recipient in listeners.drain(..) {
-                if recipient.do_send(JsonResult::Ok(state.clone())).is_ok() {
+                if recipient
+                    .do_send(StateNotification::from(state.clone()))
+                    .is_ok()
+                {
                     tmp.push(recipient);
                 }
             }
@@ -65,7 +69,7 @@ impl LookupServer {
             *listeners = tmp;
         }
 
-        // Update state.
+        // Update state (discard the notifications).
         self.identities.insert(net_address, state.state);
     }
 }
@@ -78,28 +82,27 @@ impl Actor for LookupServer {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // TODO: Use arbiter instead?
-        self.subscribe_system_async::<RequestAccountState>(ctx);
         self.subscribe_system_async::<AddAccountState>(ctx);
     }
 }
 
 impl Handler<RequestAccountState> for LookupServer {
-    type Result = ();
+    type Result = JsonResult<StateWrapper>;
 
     fn handle(&mut self, msg: RequestAccountState, _ctx: &mut Self::Context) -> Self::Result {
         let (recipient, net_address) = (msg.recipient, msg.net_address);
 
-        // Notify recipient.
-        if let Some(state) = self.identities.get(&net_address) {
-            self.issue_system_async(JsonResult::Ok(StateWrapper::from(state.clone())));
-        } else {
-            self.issue_system_async(JsonResult::<StateWrapper>::Err(
-                ErrorMessage::no_pending_judgement_request(REGISTRAR_IDX),
-            ));
-        }
-
         // Add client as subscriber.
         self.subscribe_net_address(net_address.clone(), recipient);
+
+        // Return current state.
+        if let Some(state) = self.identities.get(&net_address) {
+            JsonResult::Ok(StateWrapper::from(state.clone()))
+        } else {
+            JsonResult::<StateWrapper>::Err(ErrorMessage::no_pending_judgement_request(
+                REGISTRAR_IDX,
+            ))
+        }
     }
 }
 

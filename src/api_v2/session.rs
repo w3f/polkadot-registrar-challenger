@@ -10,10 +10,18 @@ use std::collections::HashMap;
 // TODO: Set via config.
 pub const REGISTRAR_IDX: usize = 0;
 
-#[derive(Default)]
-pub struct WsAccountStatusSession {
-    watch: Option<NetworkAddress>,
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+pub struct StateNotification(StateWrapper);
+
+impl From<StateWrapper> for StateNotification {
+    fn from(val: StateWrapper) -> Self {
+        StateNotification(val)
+    }
 }
+
+#[derive(Default)]
+pub struct WsAccountStatusSession;
 
 impl Actor for WsAccountStatusSession {
     type Context = ws::WebsocketContext<Self>;
@@ -32,15 +40,26 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
         match msg {
             ws::Message::Text(txt) => {
                 if let Ok(net_address) = serde_json::from_str::<NetworkAddress>(txt.as_str()) {
-                    // Specify which network address to watch for.
-                    self.watch = Some(net_address.clone());
-
                     LookupServer::from_registry()
                         .send(RequestAccountState {
                             recipient: ctx.address().recipient(),
                             net_address: net_address,
                         })
-                        .into_actor(self);
+                        .into_actor(self)
+                        .then(|res, b, ctx| {
+                            if let Ok(state) = res {
+                                if let Ok(raw) = serde_json::to_string(&JsonResult::Ok(
+                                    state
+                                )) {
+                                    ctx.text(raw);
+                                } else {
+                                    error!("Failed to deserialize identity state response on subscription request");
+                                }
+                            }
+
+                            fut::ready(())
+                        })
+                        .wait(ctx);
                 } else {
                     // TODO: Should be `MessageResult`
                     ctx.text("Invalid message type");
@@ -59,10 +78,10 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 }
 
 // Response message received from the server is sent directly to the subscriber.
-impl Handler<JsonResult<StateWrapper>> for WsAccountStatusSession {
+impl Handler<StateNotification> for WsAccountStatusSession {
     type Result = ();
 
-    fn handle(&mut self, msg: JsonResult<StateWrapper>, ctx: &mut Self::Context) {
+    fn handle(&mut self, msg: StateNotification, ctx: &mut Self::Context) {
         unimplemented!()
     }
 }
