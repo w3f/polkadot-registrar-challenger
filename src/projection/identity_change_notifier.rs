@@ -1,8 +1,11 @@
 use super::Projection;
 use crate::api::ConnectionPool;
+use crate::api_v2::lookup_server::AddIdentityState;
 use crate::event::{Event, EventType, Notification, StateWrapper};
 use crate::Result;
 use crate::{aggregate::verifier::VerifierAggregateId, manager::IdentityManager};
+use actix::prelude::*;
+use actix_broker::BrokerIssue;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -20,6 +23,11 @@ impl SessionNotifier {
     }
 }
 
+// Required to issue messages to the broker.
+impl Actor for SessionNotifier {
+    type Context = Context<Self>;
+}
+
 #[async_trait]
 impl Projection for SessionNotifier {
     type Id = VerifierAggregateId;
@@ -27,39 +35,17 @@ impl Projection for SessionNotifier {
     type Error = anyhow::Error;
 
     async fn project(&mut self, event: Self::Event) -> Result<()> {
-        // Clone due to partial move.
-        let net_address = match event.body {
-            EventType::IdentityInserted(ref inserted) => inserted.identity.net_address.clone(),
-            EventType::FieldStatusVerified(ref field_status) => field_status.net_address.clone(),
-            // TODO: Does this need any special handling?
-            EventType::IdentityFullyVerified(ref verified) => verified.net_address.clone(),
+        // Process actor message.
+        let add_identity = match event.body {
+            EventType::IdentityInserted(inserted) => AddIdentityState::IdentityInserted(inserted),
+            EventType::FieldStatusVerified(verified) => {
+                AddIdentityState::FieldStatusVerified(verified)
+            }
             _ => return Ok(()),
         };
 
-        match event.body {
-            EventType::IdentityInserted(inserted) => {
-                self.manager.write().insert_identity(inserted.clone());
-                self.connection_pool.broadcast(
-                    &net_address,
-                    StateWrapper::newly_inserted_notification(inserted),
-                );
-            }
-            EventType::FieldStatusVerified(verified) => {
-                let notifications: Vec<Notification> = {
-                    self.manager
-                        .write()
-                        .update_field(verified)?
-                        .map(|changes| vec![changes.into()])
-                        .unwrap_or(vec![])
-                };
-
-                if let Some(state) = self.manager.read().lookup_full_state(&net_address) {
-                    let state = StateWrapper::with_notifications(state, notifications);
-                    self.connection_pool.broadcast(&net_address, state);
-                }
-            }
-            _ => return Ok(()),
-        }
+        // Send identity to the websocket broker.
+        self.issue_system_async::<AddIdentityState>(add_identity);
 
         Ok(())
     }

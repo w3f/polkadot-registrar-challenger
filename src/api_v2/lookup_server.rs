@@ -137,7 +137,8 @@ impl Handler<RequestAccountState> for LookupServer {
     }
 }
 
-// Handle added account states, created by the event store listener.
+// Handle added account states, created by the event store listener
+// (projection).
 impl Handler<AddIdentityState> for LookupServer {
     type Result = ();
 
