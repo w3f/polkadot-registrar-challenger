@@ -9,9 +9,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
-mod identity_change_notifier;
 mod message_verifier;
-pub use identity_change_notifier::SessionNotifier;
+mod session_notifier;
+pub use session_notifier::SessionNotifier;
 mod judgment_giver;
 
 #[async_trait]
