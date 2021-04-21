@@ -40,6 +40,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
         match msg {
             ws::Message::Text(txt) => {
                 if let Ok(net_address) = serde_json::from_str::<NetworkAddress>(txt.as_str()) {
+                    // Subscribe the the specified network address.
                     LookupServer::from_registry()
                         .send(RequestAccountState {
                             recipient: ctx.address().recipient(),
@@ -47,6 +48,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                         })
                         .into_actor(self)
                         .then(|res, b, ctx| {
+                            // Handle response and notify client about current state of the identity.
                             if let Ok(state) = res {
                                 if let Ok(txt) = serde_json::to_string(&JsonResult::Ok(
                                     state
