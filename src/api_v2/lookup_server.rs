@@ -19,18 +19,14 @@ pub struct RequestAccountState {
 
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "()")]
-struct AddAccountState {
-    state: StateWrapper,
-}
-
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
 // TODO
 struct DeleteAccountState {
     state: IdentityState,
 }
 
-pub enum IdentityUpdateType {
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+pub enum AddAccountState {
     // A new identity has been inserted.
     IdentityInserted(IdentityInserted),
     // A specific field was verified.
@@ -55,35 +51,9 @@ impl LookupServer {
             .and_modify(|recipients| recipients.push(recipient.clone()))
             .or_insert(vec![recipient]);
     }
-    fn update_state(&mut self, state: StateWrapper) {
-        let net_address = state.state.net_address.clone();
-
-        // Notify clients.
-        if let Some(listeners) = self.listeners.get_mut(&net_address) {
-            // Temporary storage for recipients (to get around Rust's borrowing rules).
-            let mut tmp = vec![];
-
-            // Notify the subscriber and, if still active, add them back for
-            // future notifications.
-            for recipient in listeners.drain(..) {
-                if recipient
-                    .do_send(StateNotification::from(state.clone()))
-                    .is_ok()
-                {
-                    tmp.push(recipient);
-                }
-            }
-
-            // Add back the recipients.
-            *listeners = tmp;
-        }
-
-        // Update state (discard the notifications).
-        self.identities.insert(net_address, state.state);
-    }
-    fn update_identity(&mut self, update: IdentityUpdateType) {
+    fn update_identity(&mut self, update: AddAccountState) {
         let (net_address, state) = match update {
-            IdentityUpdateType::IdentityInserted(inserted) => {
+            AddAccountState::IdentityInserted(inserted) => {
                 // Insert new identity into the manager.
                 self.manager.insert_identity(inserted.clone());
 
@@ -92,7 +62,7 @@ impl LookupServer {
                     StateWrapper::newly_inserted_notification(inserted),
                 )
             }
-            IdentityUpdateType::FieldStatusVerified(verified) => {
+            AddAccountState::FieldStatusVerified(verified) => {
                 let net_address = verified.net_address.clone();
 
                 // Update single field.
@@ -171,6 +141,6 @@ impl Handler<AddAccountState> for LookupServer {
     type Result = ();
 
     fn handle(&mut self, msg: AddAccountState, _ctx: &mut Self::Context) -> Self::Result {
-        self.update_state(msg.state)
+        self.update_identity(msg);
     }
 }
