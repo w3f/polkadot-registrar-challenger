@@ -8,7 +8,7 @@ use actix_web_actors::ws;
 use std::collections::HashMap;
 
 // TODO: Set via config.
-const REGISTRAR_IDX: usize = 0;
+pub const REGISTRAR_IDX: usize = 0;
 
 #[derive(Default)]
 pub struct WsAccountStatusSession {
@@ -37,6 +37,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 
                     LookupServer::from_registry()
                         .send(RequestAccountState {
+                            recipient: ctx.address().recipient(),
                             net_address: net_address,
                         })
                         .into_actor(self);
