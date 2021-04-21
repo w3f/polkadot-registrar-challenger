@@ -1,12 +1,30 @@
+use super::JsonResult;
 use crate::event::{ErrorMessage, StateWrapper};
 use crate::manager::{IdentityState, NetworkAddress};
 use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
+use async_channel::Receiver;
 use std::collections::HashMap;
+
+type RecipientAccountState = Receiver<JsonResult<StateWrapper>>;
 
 #[derive(Default)]
 pub struct LookupServer {
     identities: HashMap<NetworkAddress, IdentityState>,
+    listeners: HashMap<NetworkAddress, Vec<RecipientAccountState>>,
+}
+
+impl LookupServer {
+    fn subscribe_net_address(
+        &mut self,
+        net_address: NetworkAddress,
+        recipient: RecipientAccountState,
+    ) {
+        self.listeners
+            .entry(net_address)
+            .and_modify(|recipients| recipients.push(recipient.clone()))
+            .or_insert(vec![recipient]);
+    }
 }
 
 #[derive(Debug, Clone, Message)]
@@ -36,6 +54,7 @@ impl Actor for LookupServer {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // TODO: Use arbiter instead?
+        self.subscribe_system_async::<RequestAccountState>(ctx);
         self.subscribe_system_async::<AddAccountState>(ctx);
     }
 }
