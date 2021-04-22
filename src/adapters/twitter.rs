@@ -31,7 +31,7 @@ pub struct TwitterMessage {
 impl From<TwitterMessage> for ExternalMessage {
     fn from(val: TwitterMessage) -> Self {
         ExternalMessage {
-            origin: ExternalOrigin::Twitter,
+            origin: ExternalOrigin::Twitter(()),
             field_address: FieldAddress::from(val.sender),
             message: ProvidedMessage {
                 parts: vec![ProvidedMessagePart::from(val.message)],

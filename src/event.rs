@@ -1,9 +1,9 @@
+use crate::adapters::email::EmailId;
 use crate::manager::{
     DisplayName, FieldAddress, FieldStatus, IdentityField, IdentityState, NetworkAddress,
     OnChainChallenge, ProvidedMessage, UpdateChanges,
 };
 use crate::Result;
-
 use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -128,11 +128,13 @@ impl From<ExternalMessage> for Event {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum ExternalOrigin {
     #[serde(rename = "email")]
-    Email,
+    Email(EmailId),
+    // Matrix does not have a ID to track. This part is handled by the Matrix
+    // SDK (which syncs a tracking token).
     #[serde(rename = "matrix")]
     Matrix,
     #[serde(rename = "twitter")]
-    Twitter,
+    Twitter(()),
 }
 
 impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
@@ -140,9 +142,9 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
         let (origin, address) = val;
 
         match origin {
-            ExternalOrigin::Email => IdentityField::Email(address),
+            ExternalOrigin::Email(_) => IdentityField::Email(address),
             ExternalOrigin::Matrix => IdentityField::Matrix(address),
-            ExternalOrigin::Twitter => IdentityField::Twitter(address),
+            ExternalOrigin::Twitter(_) => IdentityField::Twitter(address),
         }
     }
 }

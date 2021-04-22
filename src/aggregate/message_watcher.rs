@@ -1,8 +1,9 @@
 use super::{Aggregate, Snapshot};
-use crate::event::{Event, ExternalMessage};
+use crate::adapters::email::EmailId;
+use crate::event::{Event, EventType, ExternalMessage, ExternalOrigin};
 use crate::Result;
-use std::convert::AsRef;
-use std::convert::TryFrom;
+use std::collections::HashSet;
+use std::convert::{AsRef, TryFrom};
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct MessageWatcherId;
@@ -35,7 +36,11 @@ pub enum MessageWatcherCommand {
 /// the event store. No state must be maintained. The message themselves are
 /// verified by the `VerifiedAggregate`.
 #[derive(Debug, Clone)]
-pub struct MessageWatcher;
+pub struct MessageWatcher {
+    email_tracker: HashSet<EmailId>,
+    matrix_tracker: HashSet<()>,
+    twitter_tracker: HashSet<()>,
+}
 
 #[async_trait]
 impl Aggregate for MessageWatcher {
@@ -50,13 +55,54 @@ impl Aggregate for MessageWatcher {
         &()
     }
 
-    async fn apply(&mut self, _event: Self::Event) -> Result<()> {
+    // TODO: Track messages.
+    async fn apply(&mut self, event: Self::Event) -> Result<()> {
+        match event.body {
+            EventType::ExternalMessage(message) => {
+                match message.origin {
+                    ExternalOrigin::Email(id) => {
+                        self.email_tracker.insert(id);
+                    }
+                    // Matrix does not have a ID to track. This part is handled
+                    // by the Matrix SDK (which syncs a tracking token).
+                    ExternalOrigin::Matrix => {}
+                    ExternalOrigin::Twitter(_) => {
+                        // TODO
+                    }
+                }
+            }
+            _ => {
+                return Err(anyhow!(
+                    "received invalid type when applying event in MessageWatcher. \
+            This is a bug"
+                ))
+            }
+        }
+
         Ok(())
     }
 
+    // TODO: Filter out existing messages.
     async fn handle(&self, command: Self::Command) -> Result<Option<Vec<Self::Event>>> {
         match command {
-            MessageWatcherCommand::AddMessage(message) => Ok(Some(vec![Event::from(message)])),
+            MessageWatcherCommand::AddMessage(message) => {
+                // Only create events for messages which are not tracked
+                match message.origin {
+                    ExternalOrigin::Email(id) => {
+                        if self.email_tracker.contains(&id) {
+                            return Ok(None);
+                        }
+                    }
+                    // Matrix does not have a ID to track. This part is handled
+                    // by the Matrix SDK (which syncs a tracking token).
+                    ExternalOrigin::Matrix => {}
+                    ExternalOrigin::Twitter(_) => {
+                        // TODO
+                    }
+                }
+
+                Ok(Some(vec![Event::from(message)]))
+            }
         }
     }
 }
