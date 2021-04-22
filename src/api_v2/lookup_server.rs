@@ -33,6 +33,10 @@ pub enum AddIdentityState {
     FieldStatusVerified(FieldStatusVerified),
 }
 
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+pub struct JudgementCompleted(NetworkAddress);
+
 #[derive(Default)]
 pub struct LookupServer {
     manager: IdentityManager,
@@ -149,5 +153,13 @@ impl Handler<AddIdentityState> for LookupServer {
                 err
             )
         });
+    }
+}
+
+impl Handler<JudgementCompleted> for LookupServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: JudgementCompleted, _ctx: &mut Self::Context) -> Self::Result {
+        unimplemented!()
     }
 }

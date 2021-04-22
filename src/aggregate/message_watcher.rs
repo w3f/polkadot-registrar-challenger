@@ -73,8 +73,7 @@ impl Aggregate for MessageWatcher {
             }
             _ => {
                 return Err(anyhow!(
-                    "received invalid type when applying event in MessageWatcher. \
-            This is a bug"
+                    "received invalid type when applying event in MessageWatcher. This is a bug"
                 ))
             }
         }

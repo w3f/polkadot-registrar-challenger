@@ -1,11 +1,16 @@
 use super::Projection;
 use crate::event::{Event, EventType, RemarkFound};
 use crate::manager::{NetworkAddress, OnChainChallenge};
+use actix::prelude::*;
 use std::collections::HashMap;
 
 pub struct JudgmentGiver {
     remarks: HashMap<NetworkAddress, RemarkFound>,
     pending: HashMap<NetworkAddress, OnChainChallenge>,
+}
+
+impl Actor for JudgmentGiver {
+    type Context = Context<Self>;
 }
 
 #[async_trait]
