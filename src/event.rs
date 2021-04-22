@@ -264,12 +264,6 @@ pub struct RemarkFound {
     pub remark: OnChainRemark,
 }
 
-impl RemarkFound {
-    pub fn as_str(&self) -> &str {
-        self.remark.0.as_str()
-    }
-}
-
 impl From<RemarkFound> for Event {
     fn from(val: RemarkFound) -> Self {
         EventType::RemarkFound(val).into()

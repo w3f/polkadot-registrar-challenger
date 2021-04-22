@@ -1,6 +1,8 @@
 use super::session::{StateNotification, REGISTRAR_IDX};
 use super::JsonResult;
-use crate::event::{ErrorMessage, FieldStatusVerified, IdentityInserted, StateWrapper};
+use crate::event::{
+    ErrorMessage, FieldStatusVerified, IdentityInserted, RemarkFound, StateWrapper,
+};
 use crate::manager::{IdentityManager, IdentityState, NetworkAddress};
 use crate::Result;
 use actix::prelude::*;
@@ -36,6 +38,12 @@ pub enum AddIdentityState {
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "()")]
 pub struct JudgementCompleted(NetworkAddress);
+
+impl From<RemarkFound> for JudgementCompleted {
+    fn from(val: RemarkFound) -> Self {
+        JudgementCompleted(val.net_address)
+    }
+}
 
 #[derive(Default)]
 pub struct LookupServer {

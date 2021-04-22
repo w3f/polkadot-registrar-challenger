@@ -1,7 +1,9 @@
 use super::Projection;
+use crate::api_v2::lookup_server::JudgementCompleted;
 use crate::event::{Event, EventType, RemarkFound};
 use crate::manager::{NetworkAddress, OnChainChallenge};
 use actix::prelude::*;
+use actix_broker::BrokerIssue;
 use std::collections::HashMap;
 
 pub struct JudgmentGiver {
@@ -25,8 +27,8 @@ impl Projection for JudgmentGiver {
                 // It's very unlikely that the remark is set on-chain before the
                 // identity is verified. However, the challenge can be fetched
                 // via the API so this case must be handled.
-                if let Some(remark) = self.remarks.get(&identity.net_address) {
-                    if identity.on_chain_challenge.matches_remark(&remark) {
+                if let Some(found) = self.remarks.remove(&identity.net_address) {
+                    if identity.on_chain_challenge.matches_remark(&found) {
                         info!(
                             "Valid remark found for {}, submitting valid judgement",
                             identity.net_address.address_str()
@@ -37,12 +39,13 @@ impl Projection for JudgmentGiver {
                         warn!(
                             "Invalid remark challenge for {}, received: {}, expected: {}",
                             identity.net_address.address_str(),
-                            remark.as_str(),
+                            found.remark.as_str(),
                             identity.on_chain_challenge.as_str(),
                         )
                     }
 
-                    // TODO: Notify web session
+                    // Notify websocket session.
+                    self.issue_system_async(JudgementCompleted::from(found));
                 }
 
                 self.pending
@@ -51,13 +54,14 @@ impl Projection for JudgmentGiver {
             EventType::RemarkFound(found) => {
                 if let Some(challenge) = self.pending.get(&found.net_address) {
                     if challenge.matches_remark(&found) {
-                        // TODO: Send judgement to watcher.
                         info!(
                             "Valid remark found for {}, submitting valid judgement",
                             found.net_address.address_str()
                         );
 
                         // TODO: Send judgement to watcher.
+
+                        self.issue_system_async(JudgementCompleted::from(found));
                     } else {
                         warn!(
                             "Invalid remark challenge for {}, received: {}, expected: {}",
@@ -66,8 +70,6 @@ impl Projection for JudgmentGiver {
                             challenge.as_str(),
                         )
                     }
-
-                    // TODO: Notify web session
                 } else {
                     self.remarks.insert(found.net_address.clone(), found);
                 }
