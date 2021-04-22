@@ -27,7 +27,6 @@ pub trait Aggregate {
 
     // TODO: Remove
     #[cfg(test)]
-    fn wipe(&mut self);
     fn state(&self) -> &Self::State;
     async fn apply(&mut self, event: Self::Event) -> std::result::Result<(), Self::Error>;
     async fn handle(
@@ -51,12 +50,6 @@ where
     <A as Snapshot>::State: Send + Sync + TryInto<EventData> + TryFrom<RecordedEvent>,
     <A as Snapshot>::Error: 'static + Send + Sync + Debug,
 {
-    // TODO: Remove
-    #[cfg(test)]
-    pub fn wipe(&mut self) {
-        self.aggregate.wipe()
-    }
-    // TODO: Rename "client" to "store".
     pub async fn new_with_snapshot_service(mut aggregate: A, client: Client) -> Result<Self> {
         let mut snapshot_found = false;
 
@@ -107,10 +100,12 @@ where
             client: client,
         })
     }
+    #[cfg(test)]
     pub fn state(&self) -> &<A as Aggregate>::State {
         <A as Aggregate>::state(&self.aggregate)
     }
     pub async fn apply(&mut self, command: <A as Aggregate>::Command) -> Result<()> {
+        // Generate events which should be applied to the eventstore.
         let events = {
             if let Some(events) = self
                 .aggregate
@@ -166,10 +161,13 @@ where
         // Create a snapshot, if dictated.
         if self.aggregate.qualifies() {
             let state = self.aggregate.snapshot().await;
+
+            // Prepare snapshot.
             let event = state
                 .try_into()
                 .map_err(|_| anyhow!("Failed to convert native snapshot into evenstore event"))?;
 
+            // Send snapshot to the eventstore.
             let _ = self
                 .client
                 .write_events(<A as Snapshot>::Id::default())
@@ -193,7 +191,11 @@ pub trait Snapshot: Sized {
     type State;
     type Error;
 
+    // Tells the repository whether a snapshot of the current state should be
+    // created.
     fn qualifies(&self) -> bool;
+    // Return the snapshot.
     async fn snapshot(&self) -> Self::State;
+    // Restore state based on the snapshot.
     async fn restore(state: Self::State) -> std::result::Result<Self, Self::Error>;
 }

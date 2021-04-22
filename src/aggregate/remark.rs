@@ -26,8 +26,6 @@ impl Aggregate for RemarkWatcher {
     type Error = anyhow::Error;
 
     #[cfg(test)]
-    fn wipe(&mut self) {}
-
     fn state(&self) -> &Self::State {
         unimplemented!()
     }

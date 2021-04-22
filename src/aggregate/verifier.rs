@@ -1,17 +1,12 @@
 use super::{Aggregate, Snapshot};
 use crate::event::{
-    self, DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
+    DisplayNamePersisted, Event, EventType, ExternalMessage, FieldStatusVerified,
     IdentityFullyVerified, IdentityInserted,
 };
 use crate::manager::{
     DisplayName, IdentityField, IdentityManager, IdentityState, NetworkAddress, UpdateChanges,
 };
 use crate::Result;
-use futures::future::BoxFuture;
-use std::cell::Cell;
-use std::convert::{TryFrom, TryInto};
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct VerifierAggregateId;
@@ -64,6 +59,7 @@ impl Default for VerifierAggregate {
 }
 
 impl VerifierAggregate {
+    // TODO: chose better name.
     pub fn set_snapshot_every(self, snapshot_every: usize) -> Self {
         VerifierAggregate {
             snapshot_every: snapshot_every,
@@ -215,10 +211,6 @@ impl Aggregate for VerifierAggregate {
     type Error = anyhow::Error;
 
     #[cfg(test)]
-    fn wipe(&mut self) {
-        self.state = Default::default();
-    }
-
     fn state(&self) -> &Self::State {
         &self.state
     }

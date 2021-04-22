@@ -1,9 +1,8 @@
 use super::{Aggregate, Snapshot};
 use crate::event::{Event, ExternalMessage};
 use crate::Result;
-use futures::future::BoxFuture;
 use std::convert::AsRef;
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Default)]
 pub struct MessageWatcherId;
@@ -47,10 +46,6 @@ impl Aggregate for MessageWatcher {
     type Error = anyhow::Error;
 
     #[cfg(test)]
-    fn wipe(&mut self) {
-        unimplemented!()
-    }
-
     fn state(&self) -> &Self::State {
         &()
     }

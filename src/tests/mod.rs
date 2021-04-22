@@ -31,37 +31,11 @@ fn gen_port() -> usize {
     thread_rng().gen_range(1_024, 65_535)
 }
 
-// Must be called in a tokio v0.2 context.
-struct ApiClient {
-    client: RawClient,
-}
+struct IdentityInjector {}
 
-impl ApiClient {
-    async fn new(rpc_port: usize) -> ApiClient {
-        ApiClient {
-            client: connect::<RawClient>(&format!("ws://127.0.0.1:{}", rpc_port).parse().unwrap())
-                .await
-                .unwrap(),
-        }
-    }
-    fn raw(&self) -> &RawClient {
-        &self.client
-    }
-    async fn get_messages(
-        &self,
-        subscribe: &str,
-        params: Params,
-        notification: &str,
-        unsubscribe: &str,
-    ) -> Vec<Value> {
-        self.client
-            .subscribe(subscribe, params, notification, unsubscribe)
-            .unwrap()
-            .then(|v| async { v.unwrap() })
-            .take_until(tokio_02::time::delay_for(Duration::from_secs(2)))
-            .collect()
-            .await
-    }
+impl IdentityInjector {
+    fn inject_message() {}
+    fn inject_judgement_request() {}
 }
 
 struct InMemBackend {
@@ -111,14 +85,6 @@ impl InMemBackend {
     fn store(&self) -> Client {
         self.store.clone()
     }
-    /*
-    async fn run_session_notifier(&self, pool: ConnectionPool) {
-        let subscription = self.subscription(VerifierAggregateId).await;
-        tokio::spawn(async move {
-            run_session_notifier(pool, subscription).await;
-        });
-    }
-    */
     async fn subscription<Id>(&self, id: Id) -> impl Stream<Item = Event>
     where
         Id: Send + Sync + Eq + AsRef<str> + Default,

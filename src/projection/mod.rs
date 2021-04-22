@@ -51,7 +51,7 @@ where
         let handle = tokio::spawn(async move {
             loop {
                 let mut subscribe =
-                // TODO: Why uUse `default` here?
+                // TODO: Why use `default` here?
                     client.subscribe_to_stream_from(<P as Projection>::Id::default());
 
                 // Don't skip the very first event (event `0`).
