@@ -8,30 +8,31 @@ pub enum ChainName {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChainRemark(String);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct IdentityField {
-    ty: IdentityFieldType,
-    value: IdentityFieldValue,
+    field: IdentityFieldType,
     is_verified: bool,
+    has_failed_attempt: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case", tag="type", content="value")]
 pub enum IdentityFieldType {
-    LegalName,
-    DisplayName,
-    Email,
-    Web,
-    Twitter,
-    Matrix,
-    PGPFingerprint,
-    Image,
-    Additional,
+    LegalName(String),
+    DisplayName(String),
+    Email(String),
+    Web(String),
+    Twitter(String),
+    Matrix(String),
+    PGPFingerprint(()),
+    Image(()),
+    Additional(()),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct IdentityFieldValue(String);
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct JudgementRequest {
+pub struct JudgementState {
     pub chain_address: ChainAddress,
     pub chain_name: ChainName,
     pub fields: Vec<IdentityField>,
@@ -70,5 +71,5 @@ pub enum NotificationType {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum NotificationMessage {
     NoJudgementRequest,
-    FieldVerified(IdentityFieldType, IdentityFieldValue)
+    FieldVerified(IdentityFieldType)
 }
