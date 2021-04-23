@@ -1,16 +1,20 @@
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct ChainAddress(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub enum ChainName {
     Polkadot,
     Kusama,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct ChainRemark(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct IdentityField {
     field: IdentityFieldType,
     is_verified: bool,
@@ -32,6 +36,7 @@ pub enum IdentityFieldType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct JudgementState {
     pub chain_address: ChainAddress,
     pub chain_name: ChainName,
@@ -39,28 +44,39 @@ pub struct JudgementState {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct ExternalMessage {
-    source: ExternalMessageSource,
+    ty: ExternalMessageType,
+    id: u64,
+    origin: ExternalMessageOrigin,
     values: Vec<MessagePart>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ExternalMessageSource {
+#[serde(rename_all="snake_case")]
+pub struct ExternalMessageOrigin(String);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
+pub enum ExternalMessageType {
     Email,
     Twitter,
     Matrix,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct MessagePart(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub struct Notification {
     ty: NotificationType,
     message: NotificationMessage,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub enum NotificationType {
     Success,
     Info,
@@ -69,6 +85,7 @@ pub enum NotificationType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all="snake_case")]
 pub enum NotificationMessage {
     NoJudgementRequest,
     FieldVerified(IdentityFieldType)
