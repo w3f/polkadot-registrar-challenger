@@ -613,8 +613,8 @@ impl OnChainChallenge {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
-    pub fn matches_remark(&self, remark: &RemarkFound) -> bool {
-        self.0.as_str() == remark.as_str()
+    pub fn matches_remark(&self, found: &RemarkFound) -> bool {
+        self.0.as_str() == found.remark.as_str()
     }
 }
 

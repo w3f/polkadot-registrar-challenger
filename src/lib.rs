@@ -10,7 +10,6 @@ extern crate serde;
 extern crate async_trait;
 
 use manager::NetworkAddress;
-
 use std::env;
 use std::fs;
 
@@ -19,6 +18,7 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 mod adapters;
 mod aggregate;
 mod api;
+mod api_v2;
 mod event;
 mod manager;
 mod projection;

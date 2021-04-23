@@ -1,9 +1,9 @@
+use crate::adapters::email::EmailId;
 use crate::manager::{
     DisplayName, FieldAddress, FieldStatus, IdentityField, IdentityState, NetworkAddress,
     OnChainChallenge, ProvidedMessage, UpdateChanges,
 };
 use crate::Result;
-
 use std::convert::TryFrom;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -61,6 +61,7 @@ impl From<EventType> for Event {
     }
 }
 
+// TODO: Move to api module?
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "message")]
 pub enum ErrorMessage {
@@ -127,11 +128,13 @@ impl From<ExternalMessage> for Event {
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum ExternalOrigin {
     #[serde(rename = "email")]
-    Email,
+    Email(EmailId),
+    // Matrix does not have a ID to track. This part is handled by the Matrix
+    // SDK (which syncs a tracking token).
     #[serde(rename = "matrix")]
     Matrix,
     #[serde(rename = "twitter")]
-    Twitter,
+    Twitter(()),
 }
 
 impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
@@ -139,13 +142,14 @@ impl From<(ExternalOrigin, FieldAddress)> for IdentityField {
         let (origin, address) = val;
 
         match origin {
-            ExternalOrigin::Email => IdentityField::Email(address),
+            ExternalOrigin::Email(_) => IdentityField::Email(address),
             ExternalOrigin::Matrix => IdentityField::Matrix(address),
-            ExternalOrigin::Twitter => IdentityField::Twitter(address),
+            ExternalOrigin::Twitter(_) => IdentityField::Twitter(address),
         }
     }
 }
 
+// TODO: Move to API mode?
 #[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct StateWrapper {
     #[serde(flatten)]
@@ -161,10 +165,10 @@ impl StateWrapper {
         }
     }
     // Convenience method which creates a "newly inserted" notification for the user.
-    pub fn newly_inserted_notification(state: IdentityInserted) -> Self {
-        let net_address = state.identity.net_address.clone();
+    pub fn newly_inserted_notification(inserted: IdentityInserted) -> Self {
+        let net_address = inserted.identity.net_address.clone();
         StateWrapper {
-            state: state.identity,
+            state: inserted.identity,
             notifications: vec![UpdateChanges::NewIdentityInserted(net_address).into()],
         }
     }
@@ -258,12 +262,6 @@ impl OnChainRemark {
 pub struct RemarkFound {
     pub net_address: NetworkAddress,
     pub remark: OnChainRemark,
-}
-
-impl RemarkFound {
-    pub fn as_str(&self) -> &str {
-        self.remark.0.as_str()
-    }
 }
 
 impl From<RemarkFound> for Event {

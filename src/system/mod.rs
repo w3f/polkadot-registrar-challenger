@@ -1,12 +1,17 @@
 use crate::adapters::matrix::MatrixClient;
 use crate::adapters::twitter::TwitterBuilder;
 use crate::aggregate::verifier::{VerifierAggregate, VerifierAggregateId, VerifierCommand};
-use crate::aggregate::{MessageWatcher, MessageWatcherCommand, MessageWatcherId};
+use crate::aggregate::{
+    Aggregate, MessageWatcher, MessageWatcherCommand, MessageWatcherId, Repository,
+};
 use crate::api::{ConnectionPool, PublicRpc, PublicRpcApi};
+use crate::api_v2::session::WsAccountStatusSession;
 use crate::event::{Event, EventType, ExternalMessage};
 use crate::projection::{Projector, SessionNotifier};
 use crate::{adapters::email::SmtpImapClientBuilder, manager::IdentityManager};
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
+use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
+use actix_web_actors::ws;
 use async_channel::Receiver;
 use eventstore::Client;
 use futures::join;
@@ -16,69 +21,35 @@ use jsonrpc_ws_server::{RequestContext, Server as WsServer, ServerBuilder};
 use std::sync::Arc;
 use tokio::time::{self, Duration};
 
-// TODO: Maybe rename `client` to `store`?
-pub async fn run_rpc_api_service_blocking(
-    pool: ConnectionPool,
-    rpc_port: usize,
-    client: Client,
-    manager: Arc<parking_lot::RwLock<IdentityManager>>,
-) {
-    // `ConnectionPool` uses `Arc` underneath.
-    let t_pool = pool.clone();
+pub async fn run_rest_api_server_blocking(addr: &str) -> Result<()> {
+    async fn account_status_server_route(
+        req: HttpRequest,
+        stream: web::Payload,
+    ) -> std::result::Result<HttpResponse, ActixError> {
+        ws::start(WsAccountStatusSession::default(), &req, stream)
+    }
 
-    // Start the session notifier. It listens to identity state changes from the
-    // eventstore and sends all updates to the RPC API, in order to inform
-    // users.
-    let t_manager = Arc::clone(&manager);
-    let handle1 = tokio::spawn(async move {
-        let projection = Arc::new(tokio::sync::RwLock::new(SessionNotifier::new(
-            pool, t_manager,
-        )));
-        let projector = Projector::new(projection, client.clone());
-        projector.run_blocking().await;
+    let server = HttpServer::new(move || {
+        App::new().service(web::resource("/api/account_status").to(account_status_server_route))
+    })
+    .bind(addr)?;
+
+    server.run();
+    Ok(())
+}
+
+#[test]
+fn server() {
+    let mut system = actix::System::new("");
+
+    system.block_on(async {
+        run_rest_api_server_blocking("localhost:8080").await;
     });
 
-    // Start the RPC service in its own OS thread, since it requires a tokio
-    // v0.2 runtime.
-    let t_manager = Arc::clone(&manager);
-    std::thread::spawn(move || {
-        let mut rt = tokio_02::runtime::Runtime::new().unwrap();
-        let listen_on = format!("127.0.0.1:{}", rpc_port);
-
-        rt.block_on(async move {
-            let mut io = PubSubHandler::default();
-            io.extend_with(PublicRpcApi::new(t_pool, t_manager).to_delegate());
-
-            // TODO: Might consider setting `max_connections`.
-            let handle = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
-                Arc::new(Session::new(context.sender().clone()))
-            })
-            // TODO: Remove this
-            .start(&listen_on.parse()?)?;
-
-            handle.wait().unwrap();
-            error!("The RPC API server exited unexpectedly");
-
-            Result::Ok(())
-        })
-        .map_err(|err| {
-            error!("Failed to start RPC API server: {:?}", err);
-            err
-        })
-        .unwrap();
-    });
-
-    handle1
-        .await
-        .map_err(|err| {
-            error!("The RPC API session notifier exited unexpectedly");
-            err
-        })
-        .unwrap();
+    system.run();
 }
 
 /*
-#[allow(dead_code)]
 pub async fn run_verifier_subscription(
     client: Client,
 ) -> Result<()> {
@@ -121,11 +92,11 @@ pub async fn run_verifier_subscription(
 
     Ok(())
 }
+*/
 
-#[allow(dead_code)]
-async fn run_matrix_listener(
+pub async fn run_matrix_listener_blocking(
     config: MatrixConfig,
-    store: EventStore<MessageWatcherId>,
+    repo: Repository<MessageWatcher>,
 ) -> Result<()> {
     info!("Configuring Matrix client");
 
@@ -140,13 +111,12 @@ async fn run_matrix_listener(
     info!("Starting Matrix client");
     client.start().await;
 
-    messages_event_loop(store, recv, "email").await
+    messages_event_loop(repo, recv, "email").await
 }
 
-#[allow(dead_code)]
-async fn run_email_listener(
+pub async fn run_email_listener_blocking(
     config: EmailConfig,
-    store: EventStore<MessageWatcherId>,
+    repo: Repository<MessageWatcher>,
 ) -> Result<()> {
     info!("Configuring email client");
 
@@ -162,13 +132,12 @@ async fn run_email_listener(
     info!("Starting email client");
     client.start().await;
 
-    messages_event_loop(store, recv, "email").await
+    messages_event_loop(repo, recv, "email").await
 }
 
-#[allow(dead_code)]
-async fn run_twitter_listener(
+pub async fn run_twitter_listener_blocking(
     config: TwitterConfig,
-    store: EventStore<MessageWatcherId>,
+    repo: Repository<MessageWatcher>,
 ) -> Result<()> {
     info!("Configuring Twitter client");
 
@@ -183,32 +152,24 @@ async fn run_twitter_listener(
     info!("Starting Twitter client");
     client.start().await;
 
-    messages_event_loop(store, recv, "Twitter").await
+    messages_event_loop(repo, recv, "Twitter").await
 }
 
 /// For each message received by an adapter, send a command to the aggregate and
 /// let it handle it. This aggregate does not actually need to maintain a state.
-#[allow(dead_code)]
 async fn messages_event_loop<T>(
-    store: EventStore<MessageWatcherId>,
+    mut repo: Repository<MessageWatcher>,
     recv: Receiver<T>,
     name: &str,
 ) -> Result<()>
 where
     T: Into<ExternalMessage>,
 {
-    let repository = Repository::new(MessageWatcher.into(), store);
-
     info!("Starting event loop for incoming {} messages", name);
     while let Ok(message) = recv.recv().await {
-        let mut root = repository.get(MessageWatcherId).await.unwrap();
-
-        let _ = root
-            .handle(MessageWatcherCommand::AddMessage(message.into()))
-            .await
-            .map_err(|err| error!("Failed to add message to the aggregate: {}", err));
+        repo.apply(MessageWatcherCommand::AddMessage(message.into()))
+            .await?;
     }
 
     Err(anyhow!("The {} client has shut down", name))
 }
-*/

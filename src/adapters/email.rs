@@ -6,13 +6,14 @@ use tokio::time::{self, Duration};
 
 pub struct EmailMessage {
     from: String,
+    id: EmailId,
     message_parts: Vec<String>,
 }
 
 impl From<EmailMessage> for ExternalMessage {
     fn from(val: EmailMessage) -> Self {
         ExternalMessage {
-            origin: ExternalOrigin::Email,
+            origin: ExternalOrigin::Email(val.id),
             field_address: FieldAddress::from(val.from),
             message: ProvidedMessage {
                 parts: val
@@ -25,7 +26,7 @@ impl From<EmailMessage> for ExternalMessage {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, Hash, PartialOrd, Serialize, Deserialize)]
 pub struct EmailId(u64);
 
 impl From<u32> for EmailId {
@@ -197,7 +198,9 @@ impl SmtpImapClient {
         let messages = imap.fetch(query, "(RFC822 UID)")?;
         let mut parsed_messages = vec![];
         for message in &messages {
-            //let email_id = EmailId::from(message.uid.ok_or(anyhow!("unrecognized data"))?);
+            // Track email ID.
+            let email_id = EmailId::from(message.uid.ok_or(anyhow!("unrecognized data"))?);
+
             if let Some(body) = message.body() {
                 let mail = mailparse::parse_mail(body)?;
 
@@ -211,9 +214,10 @@ impl SmtpImapClient {
 
                 debug!("Received message from {}", sender);
 
-                // Prepare message
+                // Prepare parsed message
                 let mut email_message = EmailMessage {
                     from: sender,
+                    id: email_id,
                     message_parts: vec![],
                 };
 

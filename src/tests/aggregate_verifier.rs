@@ -11,6 +11,7 @@ use crate::manager::{
 use std::convert::TryFrom;
 
 #[tokio::test]
+// TODO: Check for single field updates.
 async fn insert_identities() {
     let be = InMemBackend::run().await;
     let store = be.store();
@@ -553,12 +554,12 @@ async fn verify_message_invalid_origin() {
             message: ProvidedMessage::from(expected_message.clone()),
         },
         ExternalMessage {
-            origin: ExternalOrigin::Twitter,
+            origin: ExternalOrigin::Twitter(()),
             field_address: FieldAddress::from("@alice".to_string()),
             message: ProvidedMessage::from(expected_message.clone()),
         },
         ExternalMessage {
-            origin: ExternalOrigin::Twitter,
+            origin: ExternalOrigin::Twitter(()),
             field_address: FieldAddress::from("@alice:matrix.org".to_string()),
             message: ProvidedMessage::from(expected_message),
         },
