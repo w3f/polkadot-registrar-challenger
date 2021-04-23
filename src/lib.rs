@@ -18,6 +18,8 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 //mod api_v2;
 //mod remark_watcher;
 //mod system;
+mod database;
+mod primitives;
 #[cfg(test)]
 mod tests;
 
