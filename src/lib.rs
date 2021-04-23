@@ -9,29 +9,17 @@ extern crate serde;
 #[macro_use]
 extern crate async_trait;
 
-use manager::NetworkAddress;
 use std::env;
 use std::fs;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
-mod adapters;
-mod aggregate;
-mod api;
-mod api_v2;
-mod event;
-mod manager;
-mod projection;
-mod remark_watcher;
-mod system;
+//mod adapters;
+//mod api_v2;
+//mod remark_watcher;
+//mod system;
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("The target address was not found ({}): {:?}", _1, _0)]
-    TargetAddressNotFound(NetworkAddress, String),
-}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
