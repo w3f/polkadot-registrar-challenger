@@ -1,12 +1,17 @@
-use crate::primitives::{IdentityContext, ChainAddress, ChainRemark, ExternalMessage, JudgementState, Timestamp, MessageId};
+use crate::primitives::{
+    ChainAddress, ChainRemark, ExternalMessage, IdentityContext, JudgementState, MessageId,
+    Timestamp,
+};
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
+use futures::StreamExt;
 use mongodb::{options::UpdateOptions, Client, Database as MongoDb};
 use serde::Serialize;
-use futures::StreamExt;
 use std::collections::HashSet;
 
+const IDENTITY_COLLECTION: &'static str = "identities";
 const MESSAGE_COLLECTION: &'static str = "external_messages";
+const REMARK_COLLECTION: &'static str = "on_chain_remark";
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -40,8 +45,58 @@ impl Database {
             last_message_check: Timestamp::now(),
         })
     }
-    pub fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
-        unimplemented!()
+    pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
+        let coll = self.db.collection(MESSAGE_COLLECTION);
+
+        // Check if a request of the same address exists yet (occurs when a
+        // field gets updated during pending judgement process).
+        let doc = coll
+            .find_one(
+                doc! {
+                    "context": request.context.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        // If it does exist, only update specific fields.
+        if let Some(doc) = doc {
+            let mut current: JudgementState = from_document(doc)?;
+
+            // Determine which fields should be updated.
+            let mut to_add = vec![];
+            for new_field in request.fields {
+                // If the current field value is the same as the new one, insert
+                // the current field state back into storage. If the value is
+                // new, insert/update the current field state.
+                if let Some(current_field) = current
+                    .fields
+                    .iter()
+                    .find(|current| current.value == new_field.value)
+                {
+                    to_add.push(current_field.clone());
+                } else {
+                    to_add.push(new_field);
+                }
+            }
+
+            // Set new fields.
+            current.fields = to_add;
+
+            // Update the final value in database.
+            coll.update_one(
+                doc! {
+                    "context": request.context.to_bson()?
+                },
+                current.to_document()?,
+                None,
+            )
+            .await?;
+        } else {
+            coll.insert_one(request.to_document()?, None).await?;
+        }
+
+        Ok(())
     }
     pub async fn add_message(&self, message: ExternalMessage) -> Result<()> {
         let coll = self.db.collection(MESSAGE_COLLECTION);
@@ -63,21 +118,26 @@ impl Database {
         Ok(())
     }
     pub async fn add_chain_remark(&self, remark: ChainRemark) -> Result<()> {
-        unimplemented!()
+        let coll = self.db.collection(REMARK_COLLECTION);
+
+        coll.insert_one(remark.to_document()?, None).await?;
+
+        Ok(())
     }
     pub async fn fetch_messages(&self) -> Result<Vec<ExternalMessage>> {
         let coll = self.db.collection(MESSAGE_COLLECTION);
 
         // Read the latest, unprocessed messages.
-        let mut cursor = coll.find(
-            doc! {
-                "timestamp": {
-                    "$gt": self.last_message_check.to_bson()?,
-                }
-            },
-            None,
-        )
-        .await?;
+        let mut cursor = coll
+            .find(
+                doc! {
+                    "timestamp": {
+                        "$gt": self.last_message_check.to_bson()?,
+                    }
+                },
+                None,
+            )
+            .await?;
 
         // Parse and collect messages.
         let mut messages = vec![];
@@ -90,7 +150,7 @@ impl Database {
     pub async fn verify_message(&self, message: ExternalMessage) -> Result<VerifyOutcome> {
         unimplemented!()
     }
-    pub async fn set_validity() -> Result<()> {
+    pub async fn verify_remark(&self, remark: ChainRemark) -> Result<()> {
         unimplemented!()
     }
     pub async fn fetch_judgement_state(

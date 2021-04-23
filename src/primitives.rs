@@ -20,19 +20,20 @@ pub enum ChainName {
 #[serde(rename_all = "snake_case")]
 pub struct ChainRemark {
     context: IdentityContext,
+    remark: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityField {
-    field: IdentityFieldType,
-    is_verified: bool,
-    has_failed_attempt: bool,
+    pub value: IdentityFieldValue,
+    pub is_verified: bool,
+    pub has_failed_attempt: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
-pub enum IdentityFieldType {
+pub enum IdentityFieldValue {
     LegalName(String),
     DisplayName(String),
     Email(String),
@@ -113,5 +114,5 @@ pub enum NotificationType {
 #[serde(rename_all = "snake_case")]
 pub enum NotificationMessage {
     NoJudgementRequest,
-    FieldVerified(IdentityFieldType),
+    FieldVerified(IdentityFieldValue),
 }
