@@ -1,20 +1,29 @@
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityContext {
+    pub chain_address: ChainAddress,
+    pub chain_name: ChainName,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct ChainAddress(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum ChainName {
     Polkadot,
     Kusama,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
-pub struct ChainRemark(String);
+#[serde(rename_all = "snake_case")]
+pub struct ChainRemark {
+    context: IdentityContext,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub struct IdentityField {
     field: IdentityFieldType,
     is_verified: bool,
@@ -22,7 +31,7 @@ pub struct IdentityField {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case", tag="type", content="value")]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum IdentityFieldType {
     LegalName(String),
     DisplayName(String),
@@ -36,28 +45,25 @@ pub enum IdentityFieldType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub struct JudgementState {
-    pub chain_address: ChainAddress,
-    pub chain_name: ChainName,
+    pub context: IdentityContext,
     pub fields: Vec<IdentityField>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub struct ExternalMessage {
-    ty: ExternalMessageType,
-    id: u64,
-    origin: ExternalMessageOrigin,
+    #[serde(rename = "type")]
+    pub ty: ExternalMessageType,
+    pub id: MessageId,
+    pub timestamp: Timestamp,
+    pub origin: ExternalMessageOrigin,
     values: Vec<MessagePart>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
-pub struct ExternalMessageOrigin(String);
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum ExternalMessageType {
     Email,
     Twitter,
@@ -65,18 +71,37 @@ pub enum ExternalMessageType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
+pub struct MessageId(u64);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub fn now() -> Self {
+        Timestamp(0)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ExternalMessageOrigin(String);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct MessagePart(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub struct Notification {
+    #[serde(rename = "type")]
     ty: NotificationType,
     message: NotificationMessage,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum NotificationType {
     Success,
     Info,
@@ -85,8 +110,8 @@ pub enum NotificationType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all="snake_case")]
+#[serde(rename_all = "snake_case")]
 pub enum NotificationMessage {
     NoJudgementRequest,
-    FieldVerified(IdentityFieldType)
+    FieldVerified(IdentityFieldType),
 }
