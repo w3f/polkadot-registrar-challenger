@@ -1,13 +1,13 @@
 use super::session::{StateNotification, REGISTRAR_IDX};
 use super::JsonResult;
 use crate::event::{
-    ErrorMessage, FieldStatusVerified, IdentityInserted, RemarkFound, StateWrapper,
+    ErrorMessage, FieldStatusVerified, IdentityInserted, JudgementGiven, RemarkFound, StateWrapper,
 };
-use crate::manager::{IdentityManager, IdentityState, NetworkAddress};
+use crate::manager::{IdentityManager, IdentityState, NetworkAddress, OnChainChallenge};
 use crate::Result;
 use actix::prelude::*;
 use actix_broker::BrokerSubscribe;
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Rem};
 
 pub type RecipientAccountState = Recipient<StateNotification>;
 
@@ -17,13 +17,6 @@ pub type RecipientAccountState = Recipient<StateNotification>;
 pub struct RequestAccountState {
     pub recipient: RecipientAccountState,
     pub net_address: NetworkAddress,
-}
-
-#[derive(Debug, Clone, Message)]
-#[rtype(result = "()")]
-// TODO
-struct DeleteAccountState {
-    state: IdentityState,
 }
 
 #[derive(Debug, Clone, Message)]
@@ -39,10 +32,17 @@ pub enum AddIdentityState {
 #[rtype(result = "()")]
 pub struct JudgementCompleted(NetworkAddress);
 
-impl From<RemarkFound> for JudgementCompleted {
-    fn from(val: RemarkFound) -> Self {
+impl From<JudgementGiven> for JudgementCompleted {
+    fn from(val: JudgementGiven) -> Self {
         JudgementCompleted(val.net_address)
     }
+}
+
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "()")]
+pub struct InvalidRemark {
+    pub found: RemarkFound,
+    pub expected: OnChainChallenge,
 }
 
 #[derive(Default)]
@@ -168,6 +168,14 @@ impl Handler<JudgementCompleted> for LookupServer {
     type Result = ();
 
     fn handle(&mut self, msg: JudgementCompleted, _ctx: &mut Self::Context) -> Self::Result {
+        unimplemented!()
+    }
+}
+
+impl Handler<InvalidRemark> for LookupServer {
+    type Result = ();
+
+    fn handle(&mut self, msg: InvalidRemark, _ctx: &mut Self::Context) -> Self::Result {
         unimplemented!()
     }
 }

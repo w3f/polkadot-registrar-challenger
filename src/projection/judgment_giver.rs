@@ -1,5 +1,5 @@
 use super::Projection;
-use crate::api_v2::lookup_server::JudgementCompleted;
+use crate::api_v2::lookup_server::{InvalidRemark, JudgementCompleted};
 use crate::event::{Event, EventType, RemarkFound};
 use crate::manager::{NetworkAddress, OnChainChallenge};
 use actix::prelude::*;
@@ -15,6 +15,7 @@ impl Actor for JudgmentGiver {
     type Context = Context<Self>;
 }
 
+// TODO: This should be an aggregate.
 #[async_trait]
 impl Projection for JudgmentGiver {
     type Id = ();
@@ -27,7 +28,7 @@ impl Projection for JudgmentGiver {
                 // It's very unlikely that the remark is set on-chain before the
                 // identity is verified. However, the challenge can be fetched
                 // via the API so this case must be handled.
-                if let Some(found) = self.remarks.remove(&identity.net_address) {
+                if let Some(found) = self.remarks.get(&identity.net_address) {
                     if identity.on_chain_challenge.matches_remark(&found) {
                         info!(
                             "Valid remark found for {}, submitting valid judgement",
@@ -43,9 +44,6 @@ impl Projection for JudgmentGiver {
                             identity.on_chain_challenge.as_str(),
                         )
                     }
-
-                    // Notify websocket session.
-                    self.issue_system_async(JudgementCompleted::from(found));
                 }
 
                 self.pending
@@ -60,23 +58,32 @@ impl Projection for JudgmentGiver {
                         );
 
                         // TODO: Send judgement to watcher.
-
-                        self.issue_system_async(JudgementCompleted::from(found));
                     } else {
                         warn!(
                             "Invalid remark challenge for {}, received: {}, expected: {}",
                             found.net_address.address_str(),
                             found.remark.as_str(),
                             challenge.as_str(),
-                        )
+                        );
+
+                        // Notify websocket session about invalid remark.
+                        self.issue_system_async(InvalidRemark {
+                            found: found,
+                            expected: challenge.clone(),
+                        });
                     }
                 } else {
                     self.remarks.insert(found.net_address.clone(), found);
                 }
             }
             EventType::JudgementGiven(given) => {
+                // TODO: Do an additional on-chain identity check.
+
                 self.remarks.remove(&given.net_address);
                 self.pending.remove(&given.net_address);
+
+                // Notify websocket session.
+                self.issue_system_async(JudgementCompleted::from(given));
             }
             _ => {}
         }
