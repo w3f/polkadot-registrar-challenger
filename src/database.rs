@@ -1,6 +1,6 @@
 use crate::primitives::{
-    ChainAddress, ChainRemark, ExternalMessage, IdentityContext, JudgementState, MessageId,
-    Timestamp,
+    ChainAddress, ChainRemark, Event, ExternalMessage, IdentityContext, IdentityField,
+    JudgementState, MessageId, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -10,8 +10,7 @@ use serde::Serialize;
 use std::collections::HashSet;
 
 const IDENTITY_COLLECTION: &'static str = "identities";
-const MESSAGE_COLLECTION: &'static str = "external_messages";
-const REMARK_COLLECTION: &'static str = "on_chain_remark";
+const EVENT_COLLECTION: &'static str = "event_log";
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -28,11 +27,6 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
-pub enum VerifyOutcome {
-    FieldOk,
-    FullyVerified,
-}
-
 pub struct Database {
     db: MongoDb,
     last_message_check: Timestamp,
@@ -46,7 +40,7 @@ impl Database {
         })
     }
     pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
-        let coll = self.db.collection(MESSAGE_COLLECTION);
+        let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
         // field gets updated during pending judgement process).
@@ -98,57 +92,53 @@ impl Database {
 
         Ok(())
     }
-    pub async fn add_message(&self, message: ExternalMessage) -> Result<()> {
-        let coll = self.db.collection(MESSAGE_COLLECTION);
+    pub async fn verify_message(&self, message: ExternalMessage) -> Result<()> {
+        let coll = self.db.collection(IDENTITY_COLLECTION);
 
-        coll.update_one(
-            doc! {
-                "type": message.ty.to_bson()?,
-                "id": message.id.to_bson()?,
-            },
-            message.to_document()?,
-            Some({
-                let mut options = UpdateOptions::default();
-                options.upsert = Some(true);
-                options
-            }),
-        )
-        .await?;
-
-        Ok(())
-    }
-    pub async fn add_chain_remark(&self, remark: ChainRemark) -> Result<()> {
-        let coll = self.db.collection(REMARK_COLLECTION);
-
-        coll.insert_one(remark.to_document()?, None).await?;
-
-        Ok(())
-    }
-    pub async fn fetch_messages(&self) -> Result<Vec<ExternalMessage>> {
-        let coll = self.db.collection(MESSAGE_COLLECTION);
-
-        // Read the latest, unprocessed messages.
-        let mut cursor = coll
-            .find(
+        let doc = coll
+            .find_one(
                 doc! {
-                    "timestamp": {
-                        "$gt": self.last_message_check.to_bson()?,
+                    "fields": {
+                        "value": message.ty.to_bson()?,
                     }
                 },
                 None,
             )
             .await?;
 
-        // Parse and collect messages.
-        let mut messages = vec![];
-        while let Some(doc) = cursor.next().await {
-            messages.push(from_document(doc?)?);
+        if let Some(doc) = doc {
+            let mut field_state: IdentityField = from_document(doc)?;
+
+            let event = if message.contains_challenge(&field_state.expected_challenge) {
+                field_state.is_verified = true;
+                NotificationMessage::FieldVerified(field_state.value.clone())
+            } else {
+                field_state.failed_attempts += 1;
+                NotificationMessage::VerificationFailed(field_state.value.clone())
+            };
+
+            // Update field state.
+            coll.update_one(
+                doc! {
+                    "fields": {
+                        "value": message.ty.to_bson()?,
+                    }
+                },
+                field_state.to_document()?,
+                None,
+            )
+            .await?;
+
+            // Add event.
+            let coll = self.db.collection(EVENT_COLLECTION);
+            coll.insert_one(Event::from(event).to_document()?, None)
+                .await?;
+        } else {
+            // TODO: Print sender
+            warn!("Received message from unrecognized sender");
         }
 
-        Ok(messages)
-    }
-    pub async fn verify_message(&self, message: ExternalMessage) -> Result<VerifyOutcome> {
-        unimplemented!()
+        Ok(())
     }
     pub async fn verify_remark(&self, remark: ChainRemark) -> Result<()> {
         unimplemented!()

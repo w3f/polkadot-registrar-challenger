@@ -19,17 +19,23 @@ pub enum ChainName {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ChainRemark {
-    context: IdentityContext,
-    remark: String,
+    pub context: IdentityContext,
+    pub timestamp: Timestamp,
+    pub remark: String,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityField {
     pub value: IdentityFieldValue,
+    pub expected_challenge: ExpectedChallenge,
     pub is_verified: bool,
-    pub has_failed_attempt: bool,
+    pub failed_attempts: usize,
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ExpectedChallenge(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
@@ -63,12 +69,24 @@ pub struct ExternalMessage {
     values: Vec<MessagePart>,
 }
 
+impl ExternalMessage {
+    pub fn contains_challenge(&self, challenge: &ExpectedChallenge) -> bool {
+        for value in &self.values {
+            if value.0.contains(&challenge.0) {
+                return true;
+            }
+        }
+
+        false
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum ExternalMessageType {
-    Email,
-    Twitter,
-    Matrix,
+    Email(String),
+    Twitter(String),
+    Matrix(String),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -112,7 +130,32 @@ pub enum NotificationType {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub struct Event {
+    timestamp: Timestamp,
+    event: NotificationMessage,
+}
+
+impl From<NotificationMessage> for Event {
+    fn from(val: NotificationMessage) -> Self {
+        Event {
+            // TODO:
+            timestamp: Timestamp(0),
+            event: val,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum NotificationMessage {
     NoJudgementRequest,
     FieldVerified(IdentityFieldValue),
+    VerificationFailed(IdentityFieldValue),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityJudged {
+    context: IdentityContext,
+    timestamp: Timestamp,
 }
