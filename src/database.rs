@@ -92,10 +92,11 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_message(&self, message: ExternalMessage) -> Result<()> {
+    pub async fn verify_message(&self, message: ExternalMessage) -> Result<bool> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
+        // TODO: find multiple
         let doc = coll
             .find_one(
                 doc! {
@@ -116,7 +117,7 @@ impl Database {
                 NotificationMessage::FieldVerified(field_state.value.clone())
             } else {
                 field_state.failed_attempts += 1;
-                NotificationMessage::VerificationFailed(field_state.value.clone())
+                NotificationMessage::FieldVerificationFailed(field_state.value.clone())
             };
 
             // Update field state.
@@ -133,17 +134,77 @@ impl Database {
             let coll = self.db.collection(EVENT_COLLECTION);
             coll.insert_one(Event::from(event).to_document()?, None)
                 .await?;
+
+            if field_state.is_verified {
+                return Ok(true);
+            }
         } else {
-            warn!(
+            debug!(
                 "Received message from unrecognized sender: {:?}",
                 message.origin
             );
         }
 
-        Ok(())
+        Ok(false)
     }
-    pub async fn verify_remark(&self, remark: ChainRemark) -> Result<()> {
-        unimplemented!()
+    pub async fn verify_remark(&self, remark: ChainRemark) -> Result<bool> {
+        let coll = self.db.collection(IDENTITY_COLLECTION);
+
+        let doc = coll
+            .find_one(
+                doc! {
+                    "context": remark.context.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        if let Some(doc) = doc {
+            let mut id_state: JudgementState = from_document(doc)?;
+
+            if id_state.expected_remark.matches(&remark) {
+                // Check if each field has already been verified. Technically,
+                // this should never return (the expected on-chain remark is
+                // sent *after* each field has been verified).
+                if !id_state.check_field_verifications() {
+                    return Ok(false);
+                }
+
+                id_state.is_fully_verified = true;
+
+                // Create event statement.
+                let coll = self.db.collection(EVENT_COLLECTION);
+                coll.insert_one(
+                    Event::from(NotificationMessage::RemarkVerified(
+                        id_state.context.clone(),
+                        id_state.expected_remark.clone(),
+                    ))
+                    .to_document()?,
+                    None,
+                )
+                .await?;
+
+                return Ok(true);
+            } else {
+                id_state.failed_remark_attempts += 1;
+
+                debug!("Failed remark verification for {:?}", remark.context);
+
+                // Create event statement.
+                let coll = self.db.collection(EVENT_COLLECTION);
+                coll.insert_one(
+                    Event::from(NotificationMessage::RemarkVerificationFailed(
+                        id_state.context.clone(),
+                        id_state.expected_remark.clone(),
+                    ))
+                    .to_document()?,
+                    None,
+                )
+                .await?;
+            }
+        }
+
+        Ok(false)
     }
     pub async fn fetch_judgement_state(
         &self,

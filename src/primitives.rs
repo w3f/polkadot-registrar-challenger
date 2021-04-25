@@ -55,7 +55,27 @@ pub enum IdentityFieldValue {
 #[serde(rename_all = "snake_case")]
 pub struct JudgementState {
     pub context: IdentityContext,
+    #[serde(skip_serializing)]
+    pub expected_remark: ExpectedRemark,
+    pub is_fully_verified: bool,
+    pub failed_remark_attempts: usize,
     pub fields: Vec<IdentityField>,
+}
+
+impl JudgementState {
+    pub fn check_field_verifications(&self) -> bool {
+        self.fields.iter().all(|field| field.is_verified)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ExpectedRemark(String);
+
+impl ExpectedRemark {
+    pub fn matches(&self, remark: &ChainRemark) -> bool {
+        self.0 == remark.remark
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -142,10 +162,13 @@ impl From<NotificationMessage> for Event {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
+// TODO: Rename
 pub enum NotificationMessage {
     NoJudgementRequest,
     FieldVerified(IdentityFieldValue),
-    VerificationFailed(IdentityFieldValue),
+    FieldVerificationFailed(IdentityFieldValue),
+    RemarkVerified(IdentityContext, ExpectedRemark),
+    RemarkVerificationFailed(IdentityContext, ExpectedRemark),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
