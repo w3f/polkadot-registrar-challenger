@@ -109,6 +109,8 @@ impl Database {
         if let Some(doc) = doc {
             let mut field_state: IdentityField = from_document(doc)?;
 
+            // If the message contains the challenge, set it as valid (or
+            // invalid if otherwise).
             let event = if message.contains_challenge(&field_state.expected_challenge) {
                 field_state.is_verified = true;
                 NotificationMessage::FieldVerified(field_state.value.clone())
@@ -127,13 +129,15 @@ impl Database {
             )
             .await?;
 
-            // Add event.
+            // Create event statement.
             let coll = self.db.collection(EVENT_COLLECTION);
             coll.insert_one(Event::from(event).to_document()?, None)
                 .await?;
         } else {
-            // TODO: Print sender
-            warn!("Received message from unrecognized sender");
+            warn!(
+                "Received message from unrecognized sender: {:?}",
+                message.origin
+            );
         }
 
         Ok(())
