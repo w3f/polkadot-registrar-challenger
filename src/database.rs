@@ -95,17 +95,17 @@ impl Database {
     pub async fn verify_message(&self, message: ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
+        // Fetch the current field state based on the message origin.
         let doc = coll
             .find_one(
                 doc! {
-                    "fields": {
-                        "value": message.ty.to_bson()?,
-                    }
+                    "fields.value": message.origin.to_bson()?,
                 },
                 None,
             )
             .await?;
 
+        // If a field was found, update it.
         if let Some(doc) = doc {
             let mut field_state: IdentityField = from_document(doc)?;
 
@@ -120,9 +120,7 @@ impl Database {
             // Update field state.
             coll.update_one(
                 doc! {
-                    "fields": {
-                        "value": message.ty.to_bson()?,
-                    }
+                    "fields.value": message.origin.to_bson()?,
                 },
                 field_state.to_document()?,
                 None,

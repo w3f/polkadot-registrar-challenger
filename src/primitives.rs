@@ -62,10 +62,9 @@ pub struct JudgementState {
 #[serde(rename_all = "snake_case")]
 pub struct ExternalMessage {
     #[serde(rename = "type")]
-    pub ty: ExternalMessageType,
+    pub origin: ExternalMessageType,
     pub id: MessageId,
     pub timestamp: Timestamp,
-    pub origin: ExternalMessageOrigin,
     values: Vec<MessagePart>,
 }
 
@@ -102,10 +101,6 @@ impl Timestamp {
         Timestamp(0)
     }
 }
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ExternalMessageOrigin(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
