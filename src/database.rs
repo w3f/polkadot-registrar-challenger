@@ -172,7 +172,7 @@ impl Database {
                 return Ok(false);
             }
 
-            if id_state.expected_remark.matches(&remark) {
+            let event = if id_state.expected_remark.matches(&remark) {
                 // Check if each field has already been verified. Technically,
                 // this should never return (the expected on-chain remark is
                 // sent *after* each field has been verified).
@@ -182,36 +182,39 @@ impl Database {
 
                 id_state.is_fully_verified = true;
 
-                // Create event statement.
-                let coll = self.db.collection(EVENT_COLLECTION);
-                coll.insert_one(
-                    Event::from(NotificationMessage::RemarkVerified(
-                        id_state.context.clone(),
-                        id_state.expected_remark.clone(),
-                    ))
-                    .to_document()?,
-                    None,
-                )
-                .await?;
-
-                return Ok(true);
+                Event::from(NotificationMessage::RemarkVerified(
+                    id_state.context.clone(),
+                    id_state.expected_remark.clone(),
+                ))
             } else {
                 id_state.failed_remark_attempts += 1;
 
                 debug!("Failed remark verification for {:?}", remark.context);
 
-                // Create event statement.
-                let coll = self.db.collection(EVENT_COLLECTION);
-                coll.insert_one(
-                    Event::from(NotificationMessage::RemarkVerificationFailed(
-                        id_state.context.clone(),
-                        id_state.expected_remark.clone(),
-                    ))
-                    .to_document()?,
-                    None,
-                )
-                .await?;
+                Event::from(NotificationMessage::RemarkVerificationFailed(
+                    id_state.context.clone(),
+                    id_state.expected_remark.clone(),
+                ))
+            };
+
+            // Update state.
+            coll.update_one(
+                doc! {
+                    "context": remark.context.to_bson()?,
+                },
+                id_state.to_document()?,
+                None,
+            )
+            .await?;
+
+            // Create event statement.
+            let coll = self.db.collection(EVENT_COLLECTION);
+            coll.insert_one(event.to_document()?, None).await?;
+
+            if id_state.is_fully_verified {
+                return Ok(true);
             }
+        } else {
         }
 
         Ok(false)
