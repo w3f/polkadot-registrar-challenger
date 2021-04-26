@@ -126,6 +126,7 @@ impl Database {
             };
 
             // Update field state.
+            // TODO: Only update individual fields.
             coll.update_one(
                 doc! {
                     "fields.value": message.origin.to_bson()?,
@@ -198,6 +199,7 @@ impl Database {
             };
 
             // Update state.
+            // TODO: Only update individual fields.
             coll.update_one(
                 doc! {
                     "context": remark.context.to_bson()?,
