@@ -186,7 +186,7 @@ impl From<NotificationMessage> for Event {
 // TODO: Migrate to enum-structs.
 pub enum NotificationMessage {
     NoJudgementRequest,
-    FieldVerified(IdentityFieldValue),
+    FieldVerified(IdentityContext, IdentityFieldValue),
     FieldVerificationFailed(IdentityFieldValue),
     RemarkVerified(IdentityContext, ExpectedRemark),
     RemarkVerificationFailed(IdentityContext, ExpectedRemark),

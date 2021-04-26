@@ -139,7 +139,10 @@ impl Database {
                 )
                 .await?;
 
-                NotificationMessage::FieldVerified(field_state.value.clone())
+                NotificationMessage::FieldVerified(
+                    id_state.context.clone(),
+                    field_state.value.clone(),
+                )
             } else {
                 // Update field state.
                 coll.update_one(
