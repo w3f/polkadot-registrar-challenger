@@ -107,7 +107,7 @@ impl Database {
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
-            let mut field_state: IdentityField = from_document(doc?)?;
+            let field_state: IdentityField = from_document(doc?)?;
 
             // Ignore if the field has already been verified.
             if field_state.is_verified {
@@ -117,23 +117,40 @@ impl Database {
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
             let event = if message.contains_challenge(&field_state.expected_challenge) {
-                field_state.is_verified = true;
+                // Update field state. Be more specific with the query in order
+                // to verify the correct field (in theory, there could be
+                // multiple pending requests with the same external account
+                // specified).
+                coll.update_one(
+                    doc! {
+                        "fields.value": message.origin.to_bson()?,
+                        "fields.expected_challenge": field_state.expected_challenge.to_bson()?,
+                    },
+                    doc! {
+                        "fields.is_verified": true,
+                    },
+                    None,
+                )
+                .await?;
+
                 NotificationMessage::FieldVerified(field_state.value.clone())
             } else {
-                field_state.failed_attempts += 1;
+                // Update field state.
+                coll.update_one(
+                    doc! {
+                        "fields.value": message.origin.to_bson()?,
+                    },
+                    doc! {
+                        "$inc": {
+                            "fields.failed_attempts": 1
+                        }
+                    },
+                    None,
+                )
+                .await?;
+
                 NotificationMessage::FieldVerificationFailed(field_state.value.clone())
             };
-
-            // Update field state.
-            // TODO: Only update individual fields.
-            coll.update_one(
-                doc! {
-                    "fields.value": message.origin.to_bson()?,
-                },
-                field_state.to_document()?,
-                None,
-            )
-            .await?;
 
             // Create event statement.
             let coll = self.db.collection(EVENT_COLLECTION);
