@@ -107,7 +107,13 @@ impl Database {
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
-            let field_state: IdentityField = from_document(doc?)?;
+            let id_state: JudgementState = from_document(doc?)?;
+            let field_state = id_state
+                .fields
+                .iter()
+                .find(|field| field.value.matches(&message))
+                // Technically, this should never return an error...
+                .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
             // Ignore if the field has already been verified.
             if field_state.is_verified {

@@ -51,6 +51,26 @@ pub enum IdentityFieldValue {
     Additional(()),
 }
 
+impl IdentityFieldValue {
+    pub fn matches(&self, message: &ExternalMessage) -> bool {
+        match self {
+            IdentityFieldValue::Email(n1) => match &message.origin {
+                ExternalMessageType::Email(n2) => n1 == n2,
+                _ => false,
+            },
+            IdentityFieldValue::Twitter(n1) => match &message.origin {
+                ExternalMessageType::Twitter(n2) => n1 == n2,
+                _ => false,
+            },
+            IdentityFieldValue::Matrix(n1) => match &message.origin {
+                ExternalMessageType::Matrix(n2) => n1 == n2,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct JudgementState {
