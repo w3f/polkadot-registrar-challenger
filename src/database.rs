@@ -208,8 +208,25 @@ impl Database {
     }
     pub async fn fetch_judgement_state(
         &self,
-        chain_address: IdentityContext,
-    ) -> Result<JudgementState> {
-        unimplemented!()
+        context: IdentityContext,
+    ) -> Result<Option<JudgementState>> {
+        let coll = self.db.collection(IDENTITY_COLLECTION);
+
+        // Find the context.
+        let doc = coll
+            .find_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        if let Some(doc) = doc {
+            Ok(Some(from_document(doc)?))
+        } else {
+            // Not active request exists.
+            Ok(None)
+        }
     }
 }
