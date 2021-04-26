@@ -163,12 +163,14 @@ impl From<NotificationMessage> for Event {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 // TODO: Rename
+// TODO: Migrate to enum-structs.
 pub enum NotificationMessage {
     NoJudgementRequest,
     FieldVerified(IdentityFieldValue),
     FieldVerificationFailed(IdentityFieldValue),
     RemarkVerified(IdentityContext, ExpectedRemark),
     RemarkVerificationFailed(IdentityContext, ExpectedRemark),
+    JudgementProvided(IdentityContext),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

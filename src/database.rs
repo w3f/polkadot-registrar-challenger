@@ -239,4 +239,15 @@ impl Database {
             Ok(None)
         }
     }
+    pub async fn log_judgement_provided(&self, context: IdentityContext) -> Result<()> {
+        let coll = self.db.collection(EVENT_COLLECTION);
+
+        coll.insert_one(
+            Event::from(NotificationMessage::JudgementProvided(context)).to_document()?,
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
 }
