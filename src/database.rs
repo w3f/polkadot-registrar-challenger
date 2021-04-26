@@ -110,6 +110,11 @@ impl Database {
         if let Some(doc) = doc {
             let mut field_state: IdentityField = from_document(doc)?;
 
+            // Ignore if the field has already been verified.
+            if field_state.is_verified {
+                return Ok(false);
+            }
+
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
             let event = if message.contains_challenge(&field_state.expected_challenge) {
@@ -161,6 +166,11 @@ impl Database {
 
         if let Some(doc) = doc {
             let mut id_state: JudgementState = from_document(doc)?;
+
+            // Ignore if the identity has already been verified.
+            if id_state.is_fully_verified {
+                return Ok(false);
+            }
 
             if id_state.expected_remark.matches(&remark) {
                 // Check if each field has already been verified. Technically,
