@@ -96,9 +96,8 @@ impl Database {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
-        // TODO: find multiple
-        let doc = coll
-            .find_one(
+        let mut cursor = coll
+            .find(
                 doc! {
                     "fields.value": message.origin.to_bson()?,
                 },
@@ -107,8 +106,8 @@ impl Database {
             .await?;
 
         // If a field was found, update it.
-        if let Some(doc) = doc {
-            let mut field_state: IdentityField = from_document(doc)?;
+        while let Some(doc) = cursor.next().await {
+            let mut field_state: IdentityField = from_document(doc?)?;
 
             // Ignore if the field has already been verified.
             if field_state.is_verified {
@@ -144,11 +143,6 @@ impl Database {
             if field_state.is_verified {
                 return Ok(true);
             }
-        } else {
-            debug!(
-                "Received message from unrecognized sender: {:?}",
-                message.origin
-            );
         }
 
         Ok(false)
