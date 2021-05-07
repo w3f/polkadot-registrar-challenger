@@ -1,9 +1,9 @@
 use crate::database::Database;
 use crate::primitives::ExternalMessage;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
-use tokio::time::{interval, Duration};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use actix_broker::{Broker, SystemBroker};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::time::{interval, Duration};
 
 pub struct AdapterListener {
     db: Database,
@@ -48,7 +48,11 @@ impl AdapterListener {
                         }
                     }
                     Err(err) => {
-                        error!("Error fetching messages in {} adapter: {:?}", adapter.name(), err);
+                        error!(
+                            "Error fetching messages in {} adapter: {:?}",
+                            adapter.name(),
+                            err
+                        );
                     }
                 }
             }
