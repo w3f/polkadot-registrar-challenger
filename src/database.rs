@@ -92,7 +92,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_message(&self, message: ExternalMessage) -> Result<bool> {
+    pub async fn verify_message(&self, message: &ExternalMessage) -> Result<bool> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
