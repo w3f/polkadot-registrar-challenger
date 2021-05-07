@@ -1,3 +1,5 @@
+use actix::Message;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
@@ -180,8 +182,9 @@ impl From<NotificationMessage> for Event {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
+#[rtype(result = "()")]
 // TODO: Rename
 // TODO: Migrate to enum-structs.
 pub enum NotificationMessage {

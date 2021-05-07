@@ -6,7 +6,7 @@ pub mod session;
 #[derive(Debug, Clone, Serialize, MessageResponse)]
 #[serde(rename_all = "snake_case", tag = "result_type", content = "message")]
 // TODO: Rename this
-pub enum JsonResult<T, E> {
+pub enum JsonResult<T> {
     Ok(T),
-    Err(E),
+    Err(String),
 }
