@@ -20,14 +20,6 @@ pub enum ChainName {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ChainRemark {
-    pub context: IdentityContext,
-    pub timestamp: Timestamp,
-    pub remark: String,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct IdentityField {
     pub value: IdentityFieldValue,
     pub expected_challenge: ExpectedChallenge,
@@ -77,8 +69,6 @@ impl IdentityFieldValue {
 #[serde(rename_all = "snake_case")]
 pub struct JudgementState {
     pub context: IdentityContext,
-    #[serde(skip_serializing)]
-    pub expected_remark: ExpectedRemark,
     pub is_fully_verified: bool,
     pub failed_remark_attempts: usize,
     pub fields: Vec<IdentityField>,
@@ -87,16 +77,6 @@ pub struct JudgementState {
 impl JudgementState {
     pub fn check_field_verifications(&self) -> bool {
         self.fields.iter().all(|field| field.is_verified)
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ExpectedRemark(String);
-
-impl ExpectedRemark {
-    pub fn matches(&self, remark: &ChainRemark) -> bool {
-        self.0 == remark.remark
     }
 }
 
@@ -191,8 +171,6 @@ pub enum NotificationMessage {
     NoJudgementRequest,
     FieldVerified(IdentityContext, IdentityFieldValue),
     FieldVerificationFailed(IdentityFieldValue),
-    RemarkVerified(IdentityContext, ExpectedRemark),
-    RemarkVerificationFailed(IdentityContext, ExpectedRemark),
     JudgementProvided(IdentityContext),
 }
 

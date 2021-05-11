@@ -1,5 +1,5 @@
 use crate::primitives::{
-    ChainAddress, ChainRemark, Event, ExternalMessage, IdentityContext, IdentityField,
+    ChainAddress, Event, ExternalMessage, IdentityContext, IdentityField,
     JudgementState, MessageId, NotificationMessage, Timestamp,
 };
 use crate::Result;
@@ -169,74 +169,6 @@ impl Database {
             if field_state.is_verified {
                 return Ok(true);
             }
-        }
-
-        Ok(false)
-    }
-    pub async fn verify_remark(&self, remark: ChainRemark) -> Result<bool> {
-        let coll = self.db.collection(IDENTITY_COLLECTION);
-
-        let doc = coll
-            .find_one(
-                doc! {
-                    "context": remark.context.to_bson()?,
-                },
-                None,
-            )
-            .await?;
-
-        if let Some(doc) = doc {
-            let mut id_state: JudgementState = from_document(doc)?;
-
-            // Ignore if the identity has already been verified.
-            if id_state.is_fully_verified {
-                return Ok(false);
-            }
-
-            let event = if id_state.expected_remark.matches(&remark) {
-                // Check if each field has already been verified. Technically,
-                // this should never return (the expected on-chain remark is
-                // sent *after* each field has been verified).
-                if !id_state.check_field_verifications() {
-                    return Ok(false);
-                }
-
-                id_state.is_fully_verified = true;
-
-                Event::from(NotificationMessage::RemarkVerified(
-                    id_state.context.clone(),
-                    id_state.expected_remark.clone(),
-                ))
-            } else {
-                id_state.failed_remark_attempts += 1;
-
-                debug!("Failed remark verification for {:?}", remark.context);
-
-                Event::from(NotificationMessage::RemarkVerificationFailed(
-                    id_state.context.clone(),
-                    id_state.expected_remark.clone(),
-                ))
-            };
-
-            // Update state.
-            // TODO: Only update individual fields.
-            coll.update_one(
-                doc! {
-                    "context": remark.context.to_bson()?,
-                },
-                id_state.to_document()?,
-                None,
-            )
-            .await?;
-
-            // Create event statement.
-            let coll = self.db.collection(EVENT_COLLECTION);
-            coll.insert_one(event.to_document()?, None).await?;
-
-            if id_state.is_fully_verified {
-                return Ok(true);
-            }
-        } else {
         }
 
         Ok(false)
