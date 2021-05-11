@@ -29,8 +29,14 @@ impl<T: Serialize> ToBson for T {
 
 pub enum VerificationOutcome {
     AlreadyVerified,
-    Valid(JudgementState),
-    Invalid(JudgementState),
+    Valid {
+        state: JudgementState,
+        notifications: Vec<NotificationMessage>,
+    },
+    Invalid{
+        state: JudgementState,
+        notifications: Vec<NotificationMessage>,
+    },
     NotFound,
 }
 
@@ -129,7 +135,7 @@ impl Database {
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
-            let event = if message.contains_challenge(&field_state.expected_challenge) {
+            let notification = if message.contains_challenge(&field_state.expected_challenge) {
                 // Update field state. Be more specific with the query in order
                 // to verify the correct field (in theory, there could be
                 // multiple pending requests with the same external account
@@ -170,15 +176,21 @@ impl Database {
 
             // Create event statement.
             let coll = self.db.collection(EVENT_COLLECTION);
-            coll.insert_one(Event::from(event).to_document()?, None)
+            coll.insert_one(Event::from(notification.clone()).to_document()?, None)
                 .await?;
 
             // If it was verified, there no longer is a need to continue
             // verification.
             if field_state.is_verified {
-                return Ok(VerificationOutcome::Valid(id_state.clone()));
+                return Ok(VerificationOutcome::Valid {
+                    state: id_state.clone(),
+                    notifications: vec![notification],
+                });
             } else {
-                return Ok(VerificationOutcome::Invalid(id_state.clone()));
+                return Ok(VerificationOutcome::Invalid {
+                    state: id_state.clone(),
+                    notifications: vec![notification],
+                });
             }
         }
 

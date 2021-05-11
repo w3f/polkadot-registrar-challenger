@@ -67,16 +67,18 @@ impl AdapterListener {
                 VerificationOutcome::AlreadyVerified => {
                     debug!("The account field has already been verified: {:?}", message)
                 }
-                VerificationOutcome::Valid(state) => {
+                VerificationOutcome::Valid {state, notifications } => {
                     info!("Message verification succeeded : {:?}", message);
                     Broker::<SystemBroker>::issue_async(NotifyAccountState {
                         state: state,
+                        notifications: notifications,
                     });
                 }
-                VerificationOutcome::Invalid(state) => {
+                VerificationOutcome::Invalid { state, notifications } => {
                     info!("Message verification failed: {:?}", message);
                     Broker::<SystemBroker>::issue_async(NotifyAccountState {
                         state: state,
+                        notifications: notifications,
                     });
                 }
                 VerificationOutcome::NotFound => {

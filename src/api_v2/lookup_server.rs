@@ -16,6 +16,7 @@ pub struct SubscribeAccountState {
 #[rtype(result = "()")]
 pub struct NotifyAccountState {
     pub state: JudgementState,
+    pub notifications: Vec<NotificationMessage>,
 }
 
 #[derive(Default)]
