@@ -30,7 +30,7 @@ impl Actor for LookupServer {
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // TODO: Use arbiter instead?
-        //self.subscribe_system_async::<AddIdentityState>(ctx);
+        self.subscribe_system_async::<NotifyAccountState>(ctx);
     }
 }
 
