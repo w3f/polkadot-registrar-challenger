@@ -27,6 +27,13 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
+pub enum VerificationOutcome {
+    AlreadyVerified,
+    Valid(JudgementState),
+    Invalid(JudgementState),
+    NotFound,
+}
+
 pub struct Database {
     db: MongoDb,
     last_message_check: Timestamp,
@@ -92,7 +99,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_message(&self, message: &ExternalMessage) -> Result<bool> {
+    pub async fn verify_message(&self, message: &ExternalMessage) -> Result<VerificationOutcome> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -117,7 +124,7 @@ impl Database {
 
             // Ignore if the field has already been verified.
             if field_state.is_verified {
-                return Ok(false);
+                return Ok(VerificationOutcome::AlreadyVerified);
             }
 
             // If the message contains the challenge, set it as valid (or
@@ -166,12 +173,16 @@ impl Database {
             coll.insert_one(Event::from(event).to_document()?, None)
                 .await?;
 
+            // If it was verified, there no longer is a need to continue
+            // verification.
             if field_state.is_verified {
-                return Ok(true);
+                return Ok(VerificationOutcome::Valid(id_state.clone()));
+            } else {
+                return Ok(VerificationOutcome::Invalid(id_state.clone()));
             }
         }
 
-        Ok(false)
+        Ok(VerificationOutcome::NotFound)
     }
     pub async fn fetch_judgement_state(
         &self,

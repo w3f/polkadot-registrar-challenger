@@ -4,7 +4,7 @@ use actix::Message;
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
     pub chain_address: ChainAddress,
-    pub chain_name: ChainName,
+    pub chain: ChainName,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -70,7 +70,6 @@ impl IdentityFieldValue {
 pub struct JudgementState {
     pub context: IdentityContext,
     pub is_fully_verified: bool,
-    pub failed_remark_attempts: usize,
     pub fields: Vec<IdentityField>,
 }
 

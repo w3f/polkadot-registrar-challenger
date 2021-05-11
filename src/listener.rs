@@ -1,6 +1,7 @@
-use crate::database::Database;
+use crate::database::{Database, VerificationOutcome};
 use crate::primitives::ExternalMessage;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
+use crate::api_v2::lookup_server::NotifyAccountState;
 use actix_broker::{Broker, SystemBroker};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::{interval, Duration};
@@ -62,12 +63,25 @@ impl AdapterListener {
         // Listen for received messages from external sources, and verify those.
         while let Some(message) = self.rx.recv().await {
             debug!("Verifying message: {:?}", message);
-            if self.db.verify_message(&message).await? {
-                info!("Message verification succeeded: {:?}", message);
-                Broker::<SystemBroker>::issue_async(());
-            } else {
-                info!("Message verification failed: {:?}", message);
-                Broker::<SystemBroker>::issue_async(());
+            match self.db.verify_message(&message).await? {
+                VerificationOutcome::AlreadyVerified => {
+                    debug!("The account field has already been verified: {:?}", message)
+                }
+                VerificationOutcome::Valid(state) => {
+                    info!("Message verification succeeded : {:?}", message);
+                    Broker::<SystemBroker>::issue_async(NotifyAccountState {
+                        state: state,
+                    });
+                }
+                VerificationOutcome::Invalid(state) => {
+                    info!("Message verification failed: {:?}", message);
+                    Broker::<SystemBroker>::issue_async(NotifyAccountState {
+                        state: state,
+                    });
+                }
+                VerificationOutcome::NotFound => {
+                    debug!("No judgement state could be found based on the external message: {:?}", message);
+                }
             }
         }
 
