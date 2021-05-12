@@ -1,4 +1,4 @@
-use crate::api_v2::lookup_server::NotifyAccountState;
+use crate::{api_v2::lookup_server::NotifyAccountState, primitives::{JudgementState, NotificationMessage}};
 use crate::database::{Database, VerificationOutcome};
 use crate::primitives::ExternalMessage;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
@@ -60,32 +60,44 @@ impl AdapterListener {
         });
     }
     pub async fn start_blocking(&mut self) -> Result<()> {
+        fn notify_session(state: JudgementState, notifications: Vec<NotificationMessage>) {
+                    Broker::<SystemBroker>::issue_async(NotifyAccountState {
+                        state: state,
+                        notifications: notifications,
+                    });
+        }
+
         // Listen for received messages from external sources, and verify those.
         while let Some(message) = self.rx.recv().await {
             debug!("Verifying message: {:?}", message);
+
             match self.db.verify_message(&message).await? {
                 VerificationOutcome::AlreadyVerified => {
                     debug!("The account field has already been verified: {:?}", message)
+                    // Don't inform user.
                 }
                 VerificationOutcome::Valid {
                     state,
                     notifications,
                 } => {
                     info!("Message verification succeeded : {:?}", message);
-                    Broker::<SystemBroker>::issue_async(NotifyAccountState {
-                        state: state,
-                        notifications: notifications,
-                    });
+                    notify_session(state, notifications);
                 }
                 VerificationOutcome::Invalid {
                     state,
                     notifications,
                 } => {
                     info!("Message verification failed: {:?}", message);
-                    Broker::<SystemBroker>::issue_async(NotifyAccountState {
-                        state: state,
-                        notifications: notifications,
-                    });
+                    notify_session(state, notifications);
+                }
+                VerificationOutcome::SecondChallengeExpected {
+                    state,
+                    notifications,
+                } => {
+                    info!("Message verification succeeded: {:?}, second verification expected", message);
+                    notify_session(state, notifications);
+
+                    // TODO: Notify client
                 }
                 VerificationOutcome::NotFound => {
                     debug!(

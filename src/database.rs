@@ -37,6 +37,11 @@ pub enum VerificationOutcome {
         state: JudgementState,
         notifications: Vec<NotificationMessage>,
     },
+    // TODO: Docs clarify
+    SecondChallengeExpected {
+        state: JudgementState,
+        notifications: Vec<NotificationMessage>,
+    },
     NotFound,
 }
 

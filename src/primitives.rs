@@ -23,6 +23,8 @@ pub enum ChainName {
 pub struct IdentityField {
     pub value: IdentityFieldValue,
     pub expected_challenge: ExpectedChallenge,
+    #[serde(skip)]
+    pub second_expected_challenge: Option<SecondExpectedChallenge>,
     pub is_verified: bool,
     pub failed_attempts: usize,
 }
@@ -30,6 +32,10 @@ pub struct IdentityField {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ExpectedChallenge(String);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SecondExpectedChallenge(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
