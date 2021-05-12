@@ -136,6 +136,12 @@ impl Handler<NotifyAccountState> for LookupServer {
     type Result = ();
 
     fn handle(&mut self, msg: NotifyAccountState, ctx: &mut Self::Context) {
-        self.notify_subscribers(msg);
+        match self.notify_subscribers(msg) {
+            Ok(_) => {}
+            Err(err) => error!(
+                "Failed handling account state session notifications: {:?}",
+                err
+            ),
+        }
     }
 }
