@@ -59,7 +59,7 @@ impl AdapterListener {
             }
         });
     }
-    pub async fn start(&mut self) -> Result<()> {
+    pub async fn start_blocking(&mut self) -> Result<()> {
         // Listen for received messages from external sources, and verify those.
         while let Some(message) = self.rx.recv().await {
             debug!("Verifying message: {:?}", message);

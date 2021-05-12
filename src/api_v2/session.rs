@@ -1,9 +1,10 @@
-use super::lookup_server::LookupServer;
+use super::lookup_server::{LookupServer, SubscribeAccountState};
 use super::JsonResult;
 use crate::primitives::IdentityContext;
 use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use actix_web_actors::ws;
+use serde::Serialize;
 use std::collections::HashMap;
 
 // TODO: Set via config.
@@ -28,36 +29,20 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 
         match msg {
             ws::Message::Text(txt) => {
-                let x = LookupServer::from_registry();
-                /*
-                if let Ok(net_address) = serde_json::from_str::<IdentityContext>(txt.as_str()) {
+                if let Ok(context) = serde_json::from_str::<IdentityContext>(txt.as_str()) {
                     // Subscribe the the specified network address.
                     LookupServer::from_registry()
-                        .send(RequestAccountState {
-                            recipient: ctx.address().recipient(),
-                            net_address: net_address,
+                        .send(SubscribeAccountState {
+                            subscriber: ctx.address().recipient(),
+                            id_context: context,
                         })
                         .into_actor(self)
-                        .then(|res, _, ctx| {
-                            // Handle response and notify client about current state of the identity.
-                            if let Ok(state) = res {
-                                if let Ok(txt) = serde_json::to_string(&JsonResult::Ok(
-                                    state
-                                )) {
-                                    ctx.text(txt);
-                                } else {
-                                    error!("Failed to deserialize identity state response on subscription request");
-                                }
-                            }
-
-                            fut::ready(())
-                        })
+                        .then(|_, _, _| fut::ready(()))
                         .wait(ctx);
                 } else {
                     // TODO: Should be `MessageResult`
                     ctx.text("Invalid message type");
                 }
-                */
             }
             ws::Message::Ping(b) => {
                 ctx.pong(&b);
@@ -67,6 +52,17 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                 ctx.stop();
             }
             _ => {}
+        }
+    }
+}
+
+impl<T: Serialize> Handler<JsonResult<T>> for WsAccountStatusSession {
+    type Result = ();
+
+    fn handle(&mut self, msg: JsonResult<T>, ctx: &mut Self::Context) -> Self::Result {
+        match serde_json::to_string(&msg) {
+            Ok(m) => ctx.text(m),
+            Err(err) => error!("Failed to serialize WS session message response: {:?}", err),
         }
     }
 }
