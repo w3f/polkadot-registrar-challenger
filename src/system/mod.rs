@@ -1,9 +1,13 @@
-use crate::Result;
+use crate::api_v2::lookup_server::LookupServer;
 use crate::api_v2::session::WsAccountStatusSession;
+use crate::database::Database;
+use crate::Result;
+use actix::prelude::*;
+use actix::registry::SystemRegistry;
 use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 
-pub async fn run_rest_api_server_blocking(addr: &str) -> Result<()> {
+pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<()> {
     async fn account_status_server_route(
         req: HttpRequest,
         stream: web::Payload,
@@ -11,6 +15,11 @@ pub async fn run_rest_api_server_blocking(addr: &str) -> Result<()> {
         ws::start(WsAccountStatusSession::default(), &req, stream)
     }
 
+    // Add configured actor to the registry.
+    let actor = LookupServer::new(db).start();
+    SystemRegistry::set(actor);
+
+    // Run the WS server.
     let server = HttpServer::new(move || {
         App::new().service(web::resource("/api/account_status").to(account_status_server_route))
     })

@@ -17,10 +17,10 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 //mod adapters;
 mod api_v2;
 //mod remark_watcher;
-//mod system;
 mod database;
 mod listener;
 mod primitives;
+mod system;
 #[cfg(test)]
 mod tests;
 

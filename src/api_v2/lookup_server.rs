@@ -61,6 +61,12 @@ pub struct LookupServer {
 }
 
 impl LookupServer {
+    pub fn new(db: Database) -> Self {
+        LookupServer {
+            db: Some(db),
+            sessions: Default::default(),
+        }
+    }
     fn get_db(&self) -> Result<&Database> {
         self.db.as_ref().ok_or(anyhow!(
             "No database is configured for LookupServer registry service"
