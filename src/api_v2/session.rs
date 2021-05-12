@@ -30,7 +30,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
         match msg {
             ws::Message::Text(txt) => {
                 if let Ok(context) = serde_json::from_str::<IdentityContext>(txt.as_str()) {
-                    // Subscribe the the specified network address.
+                    // Subscribe the the specified identity context.
                     LookupServer::from_registry()
                         .send(SubscribeAccountState {
                             subscriber: ctx.address().recipient(),
@@ -40,8 +40,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
                         .then(|_, _, _| fut::ready(()))
                         .wait(ctx);
                 } else {
-                    // TODO: Should be `MessageResult`
-                    ctx.text("Invalid message type");
+                    // Invalid message type, inform caller.
+                    match serde_json::to_string(&JsonResult::<()>::Err(
+                        "Invalid message type".to_string(),
+                    )) {
+                        Ok(m) => ctx.text(m),
+                        Err(err) => {
+                            error!("Failed to serialize WS session message response: {:?}", err)
+                        }
+                    }
                 }
             }
             ws::Message::Ping(b) => {
