@@ -1,6 +1,6 @@
 use crate::primitives::{
-    ChainAddress, Event, ExternalMessage, IdentityContext, IdentityField,
-    JudgementState, MessageId, NotificationMessage, Timestamp,
+    ChainAddress, Event, ExternalMessage, IdentityContext, IdentityField, JudgementState,
+    MessageId, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -33,7 +33,7 @@ pub enum VerificationOutcome {
         state: JudgementState,
         notifications: Vec<NotificationMessage>,
     },
-    Invalid{
+    Invalid {
         state: JudgementState,
         notifications: Vec<NotificationMessage>,
     },
@@ -42,14 +42,12 @@ pub enum VerificationOutcome {
 
 pub struct Database {
     db: MongoDb,
-    last_message_check: Timestamp,
 }
 
 impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
         Ok(Database {
             db: Client::with_uri_str(uri).await?.database(db),
-            last_message_check: Timestamp::now(),
         })
     }
     pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
@@ -198,7 +196,7 @@ impl Database {
     }
     pub async fn fetch_judgement_state(
         &self,
-        context: IdentityContext,
+        context: &IdentityContext,
     ) -> Result<Option<JudgementState>> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 

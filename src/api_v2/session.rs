@@ -28,6 +28,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 
         match msg {
             ws::Message::Text(txt) => {
+                let x = LookupServer::from_registry();
                 /*
                 if let Ok(net_address) = serde_json::from_str::<IdentityContext>(txt.as_str()) {
                     // Subscribe the the specified network address.

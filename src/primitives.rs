@@ -1,17 +1,17 @@
 use actix::Message;
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
     pub chain_address: ChainAddress,
     pub chain: ChainName,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ChainAddress(String);
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainName {
     Polkadot,
@@ -167,7 +167,6 @@ impl From<NotificationMessage> for Event {
 // TODO: Rename
 // TODO: Migrate to enum-structs.
 pub enum NotificationMessage {
-    NoJudgementRequest,
     FieldVerified(IdentityContext, IdentityFieldValue),
     FieldVerificationFailed(IdentityFieldValue),
     JudgementProvided(IdentityContext),
