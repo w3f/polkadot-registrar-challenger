@@ -4,6 +4,7 @@ use crate::primitives::{IdentityContext, JudgementState, NotificationMessage};
 use crate::Result;
 use actix::prelude::*;
 use actix_broker::BrokerSubscribe;
+use parity_scale_codec::Joiner;
 use std::collections::HashMap;
 
 type Subscriber = Recipient<JsonResult<ResponseAccountState>>;
@@ -49,12 +50,15 @@ impl From<NotifyAccountState> for ResponseAccountState {
     }
 }
 
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
 #[derive(Default)]
 pub struct LookupServer {
     // Database is wrapped in `Option' since implementing `SystemService`
     // requires this type to implement `Default` (which `Database` itself does not).
     db: Option<Database>,
-    sessions: HashMap<IdentityContext, Vec<Subscriber>>,
+    sessions: Arc<RwLock<HashMap<IdentityContext, Vec<Subscriber>>>>,
 }
 
 impl LookupServer {
@@ -64,10 +68,11 @@ impl LookupServer {
         ))
     }
     async fn subscribe_account_state(
-        &mut self,
-        id: IdentityContext,
-        subscriber: Subscriber,
+        &'static mut self,
+        sub_account_state: SubscribeAccountState,
     ) -> Result<()> {
+        let (id, subscriber) = (sub_account_state.id_context, sub_account_state.subscriber);
+
         if let Some(state) = self.get_db()?.fetch_judgement_state(&id).await? {
             if subscriber
                 .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
@@ -76,6 +81,8 @@ impl LookupServer {
                 .is_ok()
             {
                 self.sessions
+                    .write()
+                    .await
                     .entry(id)
                     .and_modify(|subscribers| {
                         subscribers.push(subscriber.clone());
@@ -91,8 +98,8 @@ impl LookupServer {
 
         Ok(())
     }
-    fn notify_subscribers(&mut self, state: NotifyAccountState) -> Result<()> {
-        if let Some(subscribers) = self.sessions.get_mut(&state.state.context) {
+    async fn notify_subscribers(&mut self, state: NotifyAccountState) -> Result<()> {
+        if let Some(subscribers) = self.sessions.write().await.get_mut(&state.state.context) {
             // Move all subscribers into a temporary storage. Subscribers who
             // still have an active session open will be added back later.
             let tmp = std::mem::take(subscribers);
@@ -127,15 +134,50 @@ impl Actor for LookupServer {
 }
 
 impl Handler<SubscribeAccountState> for LookupServer {
-    type Result = ();
+    type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, msg: SubscribeAccountState, _ctx: &mut Self::Context) {}
+    fn handle(&mut self, msg: SubscribeAccountState, ctx: &mut Self::Context) -> Self::Result {
+        let db = self.get_db().unwrap().clone();
+        let sessions = Arc::clone(&self.sessions);
+
+        Box::pin(
+            async move {
+                let (id, subscriber) = (msg.id_context, msg.subscriber);
+
+                if let Some(state) = db.fetch_judgement_state(&id).await.unwrap() {
+                    if subscriber
+                        .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
+                            state,
+                        )))
+                        .is_ok()
+                    {
+                        sessions
+                            .write()
+                            .await
+                            .entry(id)
+                            .and_modify(|subscribers| {
+                                subscribers.push(subscriber.clone());
+                            })
+                            .or_insert(vec![subscriber]);
+                    }
+                } else {
+                    // TODO: Set registrar index via config.
+                    subscriber.do_send(JsonResult::Err(
+                        "There is no judgement request from that account for registrar '0'".to_string(),
+                    ));
+                }
+            }
+            .into_actor(self)
+            .map(|_, _, _| ())
+        )
+    }
 }
 
 impl Handler<NotifyAccountState> for LookupServer {
     type Result = ();
 
     fn handle(&mut self, msg: NotifyAccountState, ctx: &mut Self::Context) {
+        /*
         match self.notify_subscribers(msg) {
             Ok(_) => {}
             Err(err) => error!(
@@ -143,5 +185,6 @@ impl Handler<NotifyAccountState> for LookupServer {
                 err
             ),
         }
+         */
     }
 }

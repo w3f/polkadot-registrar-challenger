@@ -40,6 +40,7 @@ pub enum VerificationOutcome {
     NotFound,
 }
 
+#[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
 }
