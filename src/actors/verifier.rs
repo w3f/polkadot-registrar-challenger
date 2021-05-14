@@ -1,4 +1,5 @@
-use crate::{api_v2::lookup_server::NotifyAccountState, primitives::{JudgementState, NotificationMessage}};
+use crate::actors::api::NotifyAccountState;
+use crate::primitives::{JudgementState, NotificationMessage};
 use crate::database::{Database, VerificationOutcome};
 use crate::primitives::ExternalMessage;
 use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
