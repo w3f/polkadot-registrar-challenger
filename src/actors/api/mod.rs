@@ -1,6 +1,6 @@
-use crate::Result;
+use self::judgement_state::{LookupServer, WsAccountStatusSession};
 use crate::database::Database;
-use self::judgement_state::{WsAccountStatusSession, LookupServer};
+use crate::Result;
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};

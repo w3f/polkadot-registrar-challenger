@@ -2,14 +2,14 @@ use super::JsonResult;
 use crate::database::Database;
 use crate::primitives::{IdentityContext, JudgementState, NotificationMessage};
 use actix::prelude::*;
-use parity_scale_codec::Joiner;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use actix_web_actors::ws;
+use parity_scale_codec::Joiner;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 // TODO: Set via config.
 pub const REGISTRAR_IDX: usize = 0;
@@ -86,7 +86,6 @@ impl Actor for LookupServer {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        // TODO: Use arbiter instead?
         self.subscribe_system_async::<NotifyAccountState>(ctx);
     }
 }

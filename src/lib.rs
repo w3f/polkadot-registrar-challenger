@@ -16,8 +16,6 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 //mod adapters;
 mod actors;
-mod api_v2;
-//mod remark_watcher;
 mod database;
 mod primitives;
 #[cfg(test)]
