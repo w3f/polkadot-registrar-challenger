@@ -42,6 +42,7 @@ pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<()
     Ok(())
 }
 
+/*
 #[test]
 fn server() {
     let mut system = actix::System::new("");
@@ -52,3 +53,4 @@ fn server() {
 
     system.run();
 }
+*/

@@ -300,7 +300,7 @@ mod tests {
                     ),
                     IdentityField::new(IdentityFieldValue::Twitter("@bob".to_string()), false),
                     IdentityField::new(
-                        IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+                        IdentityFieldValue::Matrix("@bob:matrix.org".to_string()),
                         true,
                     ),
                 ],

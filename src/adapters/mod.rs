@@ -113,3 +113,32 @@ impl AdapterListener {
         });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    pub struct MessageInjector {
+        messages: Arc<Mutex<Vec<ExternalMessage>>>,
+    }
+
+    impl MessageInjector {
+        pub async fn send(&self, msg: ExternalMessage) {
+            let mut lock = self.messages.lock().await;
+            (*lock).push(msg);
+        }
+    }
+
+    #[async_trait]
+    impl Adapter for MessageInjector {
+        fn name(&self) -> &'static str {
+            "test_state_injector"
+        }
+        async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+            let mut lock = self.messages.lock().await;
+            Ok(std::mem::take(&mut *lock))
+        }
+    }
+}
