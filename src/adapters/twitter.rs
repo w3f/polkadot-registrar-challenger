@@ -71,7 +71,6 @@ pub struct TwitterBuilder {
     consumer_secret: Option<String>,
     token: Option<String>,
     token_secret: Option<String>,
-    request_interval: Option<u64>,
 }
 
 impl TwitterBuilder {
@@ -81,7 +80,6 @@ impl TwitterBuilder {
             consumer_secret: None,
             token: None,
             token_secret: None,
-            request_interval: None,
         }
     }
     pub fn consumer_key(mut self, key: String) -> Self {
@@ -100,10 +98,6 @@ impl TwitterBuilder {
         self.token_secret = Some(secret);
         self
     }
-    pub fn request_interval(mut self, interval: u64) -> Self {
-        self.request_interval = Some(interval);
-        self
-    }
     pub fn build(self) -> Result<TwitterHandler> {
         Ok(TwitterHandler {
             client: Client::new(),
@@ -118,9 +112,6 @@ impl TwitterBuilder {
                 .token_secret
                 .ok_or(anyhow!("screen name not specified"))?,
             twitter_ids: HashMap::new(),
-            request_interval: self
-                .request_interval
-                .ok_or(anyhow!("request interval not specified"))?,
         })
     }
 }
@@ -162,7 +153,6 @@ pub struct TwitterHandler {
     token: String,
     token_secret: String,
     twitter_ids: HashMap<TwitterId, String>,
-    request_interval: u64,
 }
 
 impl TwitterHandler {

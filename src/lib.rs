@@ -42,7 +42,10 @@ pub struct MatrixConfig {
     pub username: String,
     pub password: String,
     pub db_path: String,
-    pub timeout: u64,
+    // Since the Matrix SDK listens to responses in a stream, this value does
+    // not require special considerations. But it should be often enough, given
+    // that `AdapterListener` fetches the messages from the queue in intervals.
+    pub request_interval: u64,
 }
 
 #[derive(Debug, Deserialize)]

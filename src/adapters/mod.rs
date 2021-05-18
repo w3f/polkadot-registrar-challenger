@@ -12,6 +12,7 @@ pub mod twitter;
 pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> {
     let listener = AdapterListener::new(db).await;
 
+    // Matrix client configuration and execution.
     if config.matrix.enabled {
         let config = config.matrix;
 
@@ -23,7 +24,21 @@ pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> 
         )
         .await?;
 
-        listener.start_message_adapter(matrix_client, config.timeout).await;
+        listener.start_message_adapter(matrix_client, config.request_interval).await;
+    }
+
+    // Twitter client configuration and execution.
+    if config.twitter.enabled {
+        let config = config.twitter;
+
+        let twitter_client = twitter::TwitterBuilder::new()
+            .consumer_key(config.api_key)
+            .consumer_secret(config.api_secret)
+            .token(config.token)
+            .token_secret(config.token_secret)
+            .build()?;
+
+        listener.start_message_adapter(twitter_client, config.request_interval).await;
     }
 
     Ok(())
