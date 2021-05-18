@@ -31,7 +31,6 @@ pub struct SmtpImapClientBuilder {
     inbox: Option<String>,
     user: Option<String>,
     password: Option<String>,
-    request_interval: Option<u64>,
 }
 
 impl SmtpImapClientBuilder {
@@ -42,10 +41,9 @@ impl SmtpImapClientBuilder {
             inbox: None,
             user: None,
             password: None,
-            request_interval: None,
         }
     }
-    pub fn email_server(mut self, server: String) -> Self {
+    pub fn smtp_server(mut self, server: String) -> Self {
         self.server = Some(server);
         self
     }
@@ -65,10 +63,6 @@ impl SmtpImapClientBuilder {
         self.password = Some(password);
         self
     }
-    pub fn request_interval(mut self, interval: u64) -> Self {
-        self.request_interval = Some(interval);
-        self
-    }
     pub fn build(self) -> Result<SmtpImapClient> {
         Ok(SmtpImapClient {
             smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
@@ -80,9 +74,6 @@ impl SmtpImapClientBuilder {
             password: self
                 .password
                 .ok_or(anyhow!("password server not specified"))?,
-            request_interval: self
-                .request_interval
-                .ok_or(anyhow!("request interval not specified"))?,
         })
     }
 }
@@ -94,7 +85,6 @@ pub struct SmtpImapClient {
     inbox: String,
     user: String,
     password: String,
-    request_interval: u64,
 }
 
 impl SmtpImapClient {

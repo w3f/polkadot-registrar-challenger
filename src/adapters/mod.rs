@@ -1,9 +1,9 @@
-use crate::{Result, AccountsConfig};
-use crate::database::Database;
 use crate::actors::Verifier;
+use crate::database::Database;
 use crate::primitives::ExternalMessage;
-use tokio::time::{interval, Duration};
+use crate::{AccountsConfig, Result};
 use actix::prelude::*;
+use tokio::time::{interval, Duration};
 
 pub mod email;
 pub mod matrix;
@@ -24,7 +24,9 @@ pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> 
         )
         .await?;
 
-        listener.start_message_adapter(matrix_client, config.request_interval).await;
+        listener
+            .start_message_adapter(matrix_client, config.request_interval)
+            .await;
     }
 
     // Twitter client configuration and execution.
@@ -38,7 +40,26 @@ pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> 
             .token_secret(config.token_secret)
             .build()?;
 
-        listener.start_message_adapter(twitter_client, config.request_interval).await;
+        listener
+            .start_message_adapter(twitter_client, config.request_interval)
+            .await;
+    }
+
+    // Email client configuration and execution.
+    if config.email.enabled {
+        let config = config.email;
+
+        let email_client = email::SmtpImapClientBuilder::new()
+            .smtp_server(config.smtp_server)
+            .imap_server(config.imap_server)
+            .email_inbox(config.inbox)
+            .email_user(config.user)
+            .email_password(config.password)
+            .build()?;
+
+        listener
+            .start_message_adapter(email_client, config.request_interval)
+            .await;
     }
 
     Ok(())

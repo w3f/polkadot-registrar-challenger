@@ -13,9 +13,7 @@ pub struct Verifier {
 
 impl Verifier {
     pub fn new(db: Database) -> Self {
-        Verifier {
-            db: db,
-        }
+        Verifier { db: db }
     }
 }
 
