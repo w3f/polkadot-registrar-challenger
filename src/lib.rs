@@ -14,13 +14,10 @@ use std::fs;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
-//mod adapters;
-mod api_v2;
-//mod remark_watcher;
+mod adapters;
+mod actors;
 mod database;
-mod listener;
 mod primitives;
-mod system;
 #[cfg(test)]
 mod tests;
 

@@ -1,11 +1,24 @@
-use crate::api_v2::lookup_server::LookupServer;
-use crate::api_v2::session::WsAccountStatusSession;
+use self::judgement_state::{LookupServer, WsAccountStatusSession};
 use crate::database::Database;
 use crate::Result;
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
+
+mod judgement_state;
+
+// Reexport
+pub use self::judgement_state::NotifyAccountState;
+
+#[derive(Debug, Clone, Serialize, Message)]
+#[serde(rename_all = "snake_case", tag = "result_type", content = "message")]
+#[rtype(result = "()")]
+// TODO: Rename this
+pub enum JsonResult<T> {
+    Ok(T),
+    Err(String),
+}
 
 pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<()> {
     async fn account_status_server_route(

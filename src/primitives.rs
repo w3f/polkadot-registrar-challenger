@@ -85,10 +85,10 @@ impl JudgementState {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[serde(rename_all = "snake_case")]
+#[rtype(result = "()")]
 pub struct ExternalMessage {
-    #[serde(rename = "type")]
     pub origin: ExternalMessageType,
     pub id: MessageId,
     pub timestamp: Timestamp,
