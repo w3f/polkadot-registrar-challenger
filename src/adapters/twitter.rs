@@ -1,5 +1,5 @@
 use crate::actors::verifier::Adapter;
-use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
+use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
 use crate::Result;
 use hmac::{Hmac, Mac, NewMac};
 use rand::{thread_rng, Rng};
@@ -12,9 +12,6 @@ use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{cmp::Ordering, hash::Hash};
-use tokio::time::{self, Duration};
-
-const REQ_MESSAGE_TIMEOUT: u64 = 180;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedMessageContext {
