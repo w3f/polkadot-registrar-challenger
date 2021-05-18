@@ -1,36 +1,17 @@
 use crate::Result;
+use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, Timestamp, MessagePart};
+use crate::actors::verifier::Adapter;
 
-pub struct EmailMessage {
-    from: String,
-    id: EmailId,
-    message_parts: Vec<String>,
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, Hash, PartialOrd, Serialize, Deserialize)]
-pub struct EmailId(u64);
-
-impl From<u32> for EmailId {
-    fn from(val: u32) -> Self {
-        EmailId(val as u64)
-    }
-}
-
-impl From<u64> for EmailId {
-    fn from(val: u64) -> Self {
-        EmailId(val)
-    }
-}
-
-trait ConvertEmailInto<T> {
+trait ExtractSender<T> {
     type Error;
 
-    fn convert_into(self) -> std::result::Result<T, Self::Error>;
+    fn extract_sender(self) -> std::result::Result<T, Self::Error>;
 }
 
-impl ConvertEmailInto<String> for String {
+impl ExtractSender<String> for String {
     type Error = anyhow::Error;
 
-    fn convert_into(self) -> Result<String> {
+    fn extract_sender(self) -> Result<String> {
         if self.contains("<") {
             let parts = self.split("<");
             if let Some(email) = parts.into_iter().nth(1) {
@@ -116,8 +97,17 @@ pub struct SmtpImapClient {
     request_interval: u64,
 }
 
+impl Adapter for SmtpImapClient {
+    fn name(&self) -> &'static str {
+        "email"
+    }
+    fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+        self.request_messages()
+    }
+}
+
 impl SmtpImapClient {
-    fn request_messages(&self) -> Result<Vec<EmailMessage>> {
+    fn request_messages(&self) -> Result<Vec<ExternalMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
@@ -150,9 +140,6 @@ impl SmtpImapClient {
         let messages = imap.fetch(query, "(RFC822 UID)")?;
         let mut parsed_messages = vec![];
         for message in &messages {
-            // Track email ID.
-            let email_id = EmailId::from(message.uid.ok_or(anyhow!("unrecognized data"))?);
-
             if let Some(body) = message.body() {
                 let mail = mailparse::parse_mail(body)?;
 
@@ -162,29 +149,30 @@ impl SmtpImapClient {
                     .find(|header| header.get_key_ref() == "From")
                     .ok_or(anyhow!("unrecognized data"))?
                     .get_value()
-                    .convert_into()?;
+                    .extract_sender()?;
 
                 debug!("Received message from {}", sender);
 
                 // Prepare parsed message
-                let mut email_message = EmailMessage {
-                    from: sender,
-                    id: email_id,
-                    message_parts: vec![],
+                let mut email_message = ExternalMessage {
+                    origin: ExternalMessageType::Email(sender),
+                    id: MessageId::from(message.uid.ok_or(anyhow!("missing UID for email message"))?),
+                    timestamp: Timestamp::now(),
+                    values: vec![],
                 };
 
+                // Add body content.
                 if let Ok(body) = mail.get_body() {
-                    email_message.message_parts.push(body);
+                    email_message.values.push(MessagePart::from(body));
                 } else {
                     warn!("No body found in message from");
                 }
 
                 // An email message can contain multiple "subparts". Add each of
-                // those into the prepared message. The `VerifierAggregate` will
-                // check each of those parts.
+                // those into the prepared message.
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        email_message.message_parts.push(body);
+                        email_message.values.push(MessagePart::from(body));
                     } else {
                         debug!("No body found in subpart message");
                     }
@@ -192,7 +180,7 @@ impl SmtpImapClient {
 
                 parsed_messages.push(email_message);
             } else {
-                warn!("No body");
+                warn!("No body found for message");
             }
         }
 

@@ -1,3 +1,3 @@
 mod api;
 mod email_notifier;
-mod verifier;
+pub mod verifier;

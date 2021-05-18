@@ -92,7 +92,7 @@ pub struct ExternalMessage {
     pub origin: ExternalMessageType,
     pub id: MessageId,
     pub timestamp: Timestamp,
-    values: Vec<MessagePart>,
+    pub values: Vec<MessagePart>,
 }
 
 impl ExternalMessage {
@@ -119,6 +119,18 @@ pub enum ExternalMessageType {
 #[serde(rename_all = "snake_case")]
 pub struct MessageId(u64);
 
+impl From<u64> for MessageId {
+    fn from(val: u64) -> Self {
+            MessageId(val)
+    }
+}
+
+impl From<u32> for MessageId {
+    fn from(val: u32) -> Self {
+        MessageId::from(val as u64)
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Timestamp(u64);
@@ -132,6 +144,12 @@ impl Timestamp {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct MessagePart(String);
+
+impl From<String> for MessagePart {
+    fn from(val: String) -> Self {
+        MessagePart(val)
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
