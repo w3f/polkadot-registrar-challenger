@@ -14,8 +14,8 @@ use std::fs;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
-mod adapters;
 mod actors;
+mod adapters;
 mod database;
 mod primitives;
 #[cfg(test)]
