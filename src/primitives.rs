@@ -29,13 +29,46 @@ pub struct IdentityField {
     pub failed_attempts: usize,
 }
 
+impl IdentityField {
+    pub fn new(val: IdentityFieldValue, second_challenge: bool) -> Self {
+        IdentityField {
+            value: val,
+            expected_challenge: ExpectedChallenge::random(),
+            second_expected_challenge: {
+                if second_challenge {
+                    Some(SecondExpectedChallenge::random())
+                } else {
+                    None
+                }
+            },
+            is_verified: false,
+            failed_attempts: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ExpectedChallenge(String);
 
+impl ExpectedChallenge {
+    pub fn random() -> Self {
+        use rand::{thread_rng, Rng};
+
+        let random: [u8; 16] = thread_rng().gen();
+        ExpectedChallenge(hex::encode(random))
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SecondExpectedChallenge(String);
+
+impl SecondExpectedChallenge {
+    pub fn random() -> Self {
+        SecondExpectedChallenge(ExpectedChallenge::random().0)
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
@@ -194,6 +227,8 @@ pub enum NotificationMessage {
     FieldVerified(IdentityContext, IdentityFieldValue),
     FieldVerificationFailed(IdentityFieldValue),
     JudgementProvided(IdentityContext),
+    // TODO: Make use of this
+    NotSupported(IdentityFieldValue),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -201,4 +236,93 @@ pub enum NotificationMessage {
 pub struct IdentityJudged {
     context: IdentityContext,
     timestamp: Timestamp,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl IdentityContext {
+        fn alice() -> Self {
+            IdentityContext {
+                chain_address: ChainAddress(
+                    "1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP".to_string(),
+                ),
+                chain: ChainName::Polkadot,
+            }
+        }
+        fn bob() -> Self {
+            IdentityContext {
+                chain_address: ChainAddress(
+                    "1b3NhsSEqWSQwS6nPGKgCrSjv9Kp13CnhraLV5Coyd8ooXB".to_string(),
+                ),
+                chain: ChainName::Polkadot,
+            }
+        }
+        fn eve() -> Self {
+            IdentityContext {
+                chain_address: ChainAddress(
+                    "1cNyFSmLW4ofr7xh38za6JxLFxcu548LPcfc1E6L9r57SE3".to_string(),
+                ),
+                chain: ChainName::Polkadot,
+            }
+        }
+    }
+
+    impl JudgementState {
+        fn alice() -> Self {
+            JudgementState {
+                context: IdentityContext::alice(),
+                is_fully_verified: false,
+                fields: vec![
+                    IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string()), false),
+                    IdentityField::new(
+                        IdentityFieldValue::Email("alice@email.com".to_string()),
+                        true,
+                    ),
+                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string()), false),
+                    IdentityField::new(
+                        IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+                        true,
+                    ),
+                ],
+            }
+        }
+        fn bob() -> Self {
+            JudgementState {
+                context: IdentityContext::bob(),
+                is_fully_verified: false,
+                fields: vec![
+                    IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string()), false),
+                    IdentityField::new(
+                        IdentityFieldValue::Email("bob@email.com".to_string()),
+                        true,
+                    ),
+                    IdentityField::new(IdentityFieldValue::Twitter("@bob".to_string()), false),
+                    IdentityField::new(
+                        IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+                        true,
+                    ),
+                ],
+            }
+        }
+        fn eve() -> Self {
+            JudgementState {
+                context: IdentityContext::eve(),
+                is_fully_verified: false,
+                fields: vec![
+                    IdentityField::new(IdentityFieldValue::DisplayName("Eve".to_string()), false),
+                    IdentityField::new(
+                        IdentityFieldValue::Email("eve@email.com".to_string()),
+                        true,
+                    ),
+                    IdentityField::new(IdentityFieldValue::Twitter("@eve".to_string()), false),
+                    IdentityField::new(
+                        IdentityFieldValue::Matrix("@eve:matrix.org".to_string()),
+                        true,
+                    ),
+                ],
+            }
+        }
+    }
 }

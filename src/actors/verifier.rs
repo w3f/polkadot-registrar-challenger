@@ -46,8 +46,8 @@ impl Handler<ExternalMessage> for Verifier {
 
                 match outcome {
                     VerificationOutcome::AlreadyVerified => {
-                        debug!("The account field has already been verified: {:?}", msg)
                         // Ignore.
+                        debug!("The account field has already been verified: {:?}", msg)
                     }
                     VerificationOutcome::Valid {
                         state,
