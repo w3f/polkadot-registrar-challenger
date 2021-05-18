@@ -2,18 +2,10 @@ use crate::actors::api::NotifyAccountState;
 use crate::database::{Database, VerificationOutcome};
 use crate::primitives::ExternalMessage;
 use crate::primitives::{JudgementState, NotificationMessage};
-use crate::{EmailConfig, MatrixConfig, Result, TwitterConfig};
+use crate::Result;
 use actix::prelude::*;
 use actix_broker::{Broker, SystemBroker};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::{interval, Duration};
-
-pub struct AdapterListener {
-    db: Database,
-    tx: UnboundedSender<ExternalMessage>,
-    rx: UnboundedReceiver<ExternalMessage>,
-    verifier: Addr<Verifier>,
-}
 
 pub trait Adapter {
     fn name(&self) -> &'static str;
@@ -47,7 +39,7 @@ impl Handler<ExternalMessage> for Verifier {
                     Ok(outcome) => outcome,
                     Err(err) => {
                         error!("Failed to verify message: {:?}", err);
-                        return ()
+                        return ();
                     }
                 };
 
@@ -95,14 +87,13 @@ impl Handler<ExternalMessage> for Verifier {
     }
 }
 
+pub struct AdapterListener {
+    verifier: Addr<Verifier>,
+}
+
 impl AdapterListener {
     pub async fn new(db: Database) -> Self {
-        let (tx, mut rx) = unbounded_channel();
-
         AdapterListener {
-            db: db.clone(),
-            tx: tx,
-            rx: rx,
             verifier: Verifier { db: db }.start(),
         }
     }
@@ -112,7 +103,7 @@ impl AdapterListener {
     {
         let mut interval = interval(Duration::from_secs(timeout));
 
-        let tx = self.tx.clone();
+        let verifier = self.verifier.clone();
         tokio::spawn(async move {
             loop {
                 // Timeout (skipped the first time);
@@ -123,8 +114,7 @@ impl AdapterListener {
                     Ok(messages) => {
                         for message in messages {
                             debug!("Received message: {:?}", message);
-                            // TODO: Is unwrapping fine here?
-                            tx.send(message).unwrap();
+                            verifier.do_send(message);
                         }
                     }
                     Err(err) => {
