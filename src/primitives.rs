@@ -121,7 +121,7 @@ pub struct MessageId(u64);
 
 impl From<u64> for MessageId {
     fn from(val: u64) -> Self {
-            MessageId(val)
+        MessageId(val)
     }
 }
 

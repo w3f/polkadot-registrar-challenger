@@ -7,9 +7,10 @@ use actix::prelude::*;
 use actix_broker::{Broker, SystemBroker};
 use tokio::time::{interval, Duration};
 
+#[async_trait]
 pub trait Adapter {
     fn name(&self) -> &'static str;
-    fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>>;
+    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>>;
 }
 
 struct Verifier {
@@ -110,7 +111,7 @@ impl AdapterListener {
                 interval.tick().await;
 
                 // Fetch message and send it to the listener, if any.
-                match adapter.fetch_messages() {
+                match adapter.fetch_messages().await {
                     Ok(messages) => {
                         for message in messages {
                             debug!("Received message: {:?}", message);

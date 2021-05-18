@@ -1,10 +1,13 @@
+use crate::actors::verifier::Adapter;
+use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
 use crate::Result;
+use hmac::{Hmac, Mac, NewMac};
 use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
-
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sha1::Sha1;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -125,9 +128,6 @@ impl TwitterBuilder {
     }
 }
 
-use hmac::{Hmac, Mac, NewMac};
-use sha1::Sha1;
-
 enum HttpMethod {
     POST,
     GET,
@@ -169,7 +169,7 @@ pub struct TwitterHandler {
 }
 
 impl TwitterHandler {
-    async fn handle_incoming_messages(&mut self) -> Result<Vec<TwitterMessage>> {
+    async fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         debug!("Requesting Twitter messages");
         // Request message on parse those into a simpler type.
         let messages = self
@@ -210,17 +210,20 @@ impl TwitterHandler {
         let parsed_messages = messages
             .into_iter()
             .map(|context| {
-                Ok(TwitterMessage {
-                    // This should never return an error.
-                    sender: self
-                        .twitter_ids
-                        .get(&context.sender)
-                        .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
-                        .clone(),
-                    message: context.message,
+                let sender = self
+                    .twitter_ids
+                    .get(&context.sender)
+                    .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
+                    .clone();
+
+                Ok(ExternalMessage {
+                    origin: ExternalMessageType::Twitter(sender),
+                    id: context.id.into(),
+                    timestamp: Timestamp::now(),
+                    values: vec![context.message.into()],
                 })
             })
-            .collect::<Result<Vec<TwitterMessage>>>()?;
+            .collect::<Result<Vec<ExternalMessage>>>()?;
 
         Ok(parsed_messages)
     }
@@ -452,5 +455,15 @@ impl ApiMessageRequest {
         }
 
         Ok(messages)
+    }
+}
+
+#[async_trait]
+impl Adapter for TwitterHandler {
+    fn name(&self) -> &'static str {
+        "Twitter"
+    }
+    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+        self.request_messages().await
     }
 }

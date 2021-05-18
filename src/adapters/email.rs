@@ -1,6 +1,6 @@
-use crate::Result;
-use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, Timestamp, MessagePart};
 use crate::actors::verifier::Adapter;
+use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
+use crate::Result;
 
 trait ExtractSender<T> {
     type Error;
@@ -97,15 +97,6 @@ pub struct SmtpImapClient {
     request_interval: u64,
 }
 
-impl Adapter for SmtpImapClient {
-    fn name(&self) -> &'static str {
-        "email"
-    }
-    fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
-        self.request_messages()
-    }
-}
-
 impl SmtpImapClient {
     fn request_messages(&self) -> Result<Vec<ExternalMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
@@ -156,14 +147,17 @@ impl SmtpImapClient {
                 // Prepare parsed message
                 let mut email_message = ExternalMessage {
                     origin: ExternalMessageType::Email(sender),
-                    id: MessageId::from(message.uid.ok_or(anyhow!("missing UID for email message"))?),
+                    id: message
+                        .uid
+                        .ok_or(anyhow!("missing UID for email message"))?
+                        .into(),
                     timestamp: Timestamp::now(),
                     values: vec![],
                 };
 
                 // Add body content.
                 if let Ok(body) = mail.get_body() {
-                    email_message.values.push(MessagePart::from(body));
+                    email_message.values.push(body.into());
                 } else {
                     warn!("No body found in message from");
                 }
@@ -172,7 +166,7 @@ impl SmtpImapClient {
                 // those into the prepared message.
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        email_message.values.push(MessagePart::from(body));
+                        email_message.values.push(body.into());
                     } else {
                         debug!("No body found in subpart message");
                     }
@@ -185,5 +179,15 @@ impl SmtpImapClient {
         }
 
         Ok(parsed_messages)
+    }
+}
+
+#[async_trait]
+impl Adapter for SmtpImapClient {
+    fn name(&self) -> &'static str {
+        "email"
+    }
+    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+        self.request_messages()
     }
 }
