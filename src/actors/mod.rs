@@ -1,3 +1,5 @@
 mod api;
 mod email_notifier;
-pub mod verifier;
+mod verifier;
+
+pub use verifier::Verifier;

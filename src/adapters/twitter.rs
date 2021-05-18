@@ -1,4 +1,4 @@
-use crate::actors::verifier::Adapter;
+use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
 use crate::Result;
 use hmac::{Hmac, Mac, NewMac};

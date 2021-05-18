@@ -1,4 +1,4 @@
-use crate::actors::verifier::Adapter;
+use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
 use crate::Result;
 use matrix_sdk::events::room::member::MemberEventContent;
@@ -25,6 +25,7 @@ pub struct MatrixClient {
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
+// TODO: Change workflow to chain methods.
 impl MatrixClient {
     pub async fn new(
         homeserver: &str,

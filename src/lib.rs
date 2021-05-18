@@ -28,6 +28,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
+// TODO: Rename to "Adapter"?
 pub struct AccountsConfig {
     matrix: MatrixConfig,
     twitter: TwitterConfig,
@@ -41,6 +42,7 @@ pub struct MatrixConfig {
     pub username: String,
     pub password: String,
     pub db_path: String,
+    pub timeout: u64,
 }
 
 #[derive(Debug, Deserialize)]
