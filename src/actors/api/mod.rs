@@ -21,20 +21,13 @@ pub enum JsonResult<T> {
 }
 
 pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<()> {
-    async fn account_status_server_route(
-        req: HttpRequest,
-        stream: web::Payload,
-    ) -> std::result::Result<HttpResponse, ActixError> {
-        ws::start(WsAccountStatusSession::default(), &req, stream)
-    }
-
     // Add configured actor to the registry.
     let actor = LookupServer::new(db).start();
     SystemRegistry::set(actor);
 
     // Run the WS server.
     let server = HttpServer::new(move || {
-        App::new().service(web::resource("/api/account_status").to(account_status_server_route))
+        App::new().service(web::resource("/account_status").to(account_status_server_route))
     })
     .bind(addr)?;
 
@@ -42,15 +35,26 @@ pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<()
     Ok(())
 }
 
-/*
-#[test]
-fn server() {
-    let mut system = actix::System::new("");
-
-    system.block_on(async {
-        run_rest_api_server_blocking("localhost:8080").await;
-    });
-
-    system.run();
+async fn account_status_server_route(
+    req: HttpRequest,
+    stream: web::Payload,
+) -> std::result::Result<HttpResponse, ActixError> {
+    ws::start(WsAccountStatusSession::default(), &req, stream)
 }
-*/
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use actix_http::Request;
+    use actix_web::dev::{Service, ServiceResponse};
+
+    #[cfg(test)]
+    async fn setup_app(
+    ) -> impl Service<Request = Request, Response = ServiceResponse, Error = ActixError> {
+        actix_web::test::init_service(
+            // TODO: Find a way to unify this with the `App` creation above.
+            App::new().service(web::resource("/account_status").to(account_status_server_route)),
+        )
+        .await
+    }
+}

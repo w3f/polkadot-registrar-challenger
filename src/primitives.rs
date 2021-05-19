@@ -243,7 +243,7 @@ mod tests {
     use super::*;
 
     impl IdentityContext {
-        fn alice() -> Self {
+        pub fn alice() -> Self {
             IdentityContext {
                 chain_address: ChainAddress(
                     "1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP".to_string(),
@@ -251,7 +251,7 @@ mod tests {
                 chain: ChainName::Polkadot,
             }
         }
-        fn bob() -> Self {
+        pub fn bob() -> Self {
             IdentityContext {
                 chain_address: ChainAddress(
                     "1b3NhsSEqWSQwS6nPGKgCrSjv9Kp13CnhraLV5Coyd8ooXB".to_string(),
@@ -259,7 +259,7 @@ mod tests {
                 chain: ChainName::Polkadot,
             }
         }
-        fn eve() -> Self {
+        pub fn eve() -> Self {
             IdentityContext {
                 chain_address: ChainAddress(
                     "1cNyFSmLW4ofr7xh38za6JxLFxcu548LPcfc1E6L9r57SE3".to_string(),
@@ -270,7 +270,7 @@ mod tests {
     }
 
     impl JudgementState {
-        fn alice() -> Self {
+        pub fn alice() -> Self {
             JudgementState {
                 context: IdentityContext::alice(),
                 is_fully_verified: false,
@@ -288,7 +288,7 @@ mod tests {
                 ],
             }
         }
-        fn bob() -> Self {
+        pub fn bob() -> Self {
             JudgementState {
                 context: IdentityContext::bob(),
                 is_fully_verified: false,
@@ -306,7 +306,7 @@ mod tests {
                 ],
             }
         }
-        fn eve() -> Self {
+        pub fn eve() -> Self {
             JudgementState {
                 context: IdentityContext::eve(),
                 is_fully_verified: false,

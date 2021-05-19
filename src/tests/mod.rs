@@ -1,7 +1,7 @@
-use crate::database::Database;
-use crate::adapters::AdapterListener;
-use crate::adapters::tests::MessageInjector;
 use crate::actors::api::run_rest_api_server_blocking;
+use crate::adapters::tests::MessageInjector;
+use crate::adapters::AdapterListener;
+use crate::database::Database;
 
 mod api_judgement_state;
 
@@ -22,7 +22,9 @@ async fn new_env() -> (Database, MessageInjector) {
 
     // Configure API
     let port = thread_rng().gen_range(1025, 65_535);
-    run_rest_api_server_blocking(&format!("localhost:{}", port), db.clone()).await.unwrap();
+    run_rest_api_server_blocking(&format!("localhost:{}", port), db.clone())
+        .await
+        .unwrap();
 
     // Setup message verifier and injector.
     let injector = MessageInjector::new();
