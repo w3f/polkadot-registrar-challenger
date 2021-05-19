@@ -1,4 +1,4 @@
-mod api;
+pub mod api;
 mod email_notifier;
 mod verifier;
 

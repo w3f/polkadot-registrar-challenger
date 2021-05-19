@@ -120,6 +120,7 @@ pub mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
+    #[derive(Clone)]
     pub struct MessageInjector {
         messages: Arc<Mutex<Vec<ExternalMessage>>>,
     }
