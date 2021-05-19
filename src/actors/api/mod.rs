@@ -45,14 +45,20 @@ async fn account_status_server_route(
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::database::Database;
     use actix_http::Request;
     use actix_web::dev::{Service, ServiceResponse};
 
     #[cfg(test)]
-    async fn setup_app(
+    // TODO: Unify this with the `run_rest_api_server_blocking` function above.
+    pub async fn run_test_server(
+        db: Database,
     ) -> impl Service<Request = Request, Response = ServiceResponse, Error = ActixError> {
+        // Add configured actor to the registry.
+        let actor = LookupServer::new(db).start();
+        SystemRegistry::set(actor);
+
         actix_web::test::init_service(
-            // TODO: Find a way to unify this with the `App` creation above.
             App::new().service(web::resource("/account_status").to(account_status_server_route)),
         )
         .await
