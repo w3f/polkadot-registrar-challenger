@@ -2,17 +2,11 @@ use crate::actors::api::tests::run_test_server;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
-use actix_http::Request;
-use actix_web::dev::{Service, ServiceResponse};
-use actix_web::Error as ActixError;
+use actix_web::test::TestServer;
 
 mod api_judgement_state;
 
-async fn new_env() -> (
-    Database,
-    impl Service<Request = Request, Response = ServiceResponse, Error = ActixError>,
-    MessageInjector,
-) {
+async fn new_env() -> (Database, TestServer, MessageInjector) {
     use rand::{thread_rng, Rng};
 
     // Setup MongoDb database.
