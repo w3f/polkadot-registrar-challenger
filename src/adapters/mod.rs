@@ -115,7 +115,7 @@ impl AdapterListener {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -125,6 +125,11 @@ mod tests {
     }
 
     impl MessageInjector {
+        pub fn new() -> Self {
+            MessageInjector {
+                messages: Arc::new(Mutex::new(vec![])),
+            }
+        }
         pub async fn send(&self, msg: ExternalMessage) {
             let mut lock = self.messages.lock().await;
             (*lock).push(msg);
