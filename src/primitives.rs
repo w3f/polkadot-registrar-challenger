@@ -241,6 +241,8 @@ pub struct IdentityJudged {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use actix_web_actors::ws::Message;
+    use serde::Serialize;
 
     impl IdentityContext {
         pub fn alice() -> Self {

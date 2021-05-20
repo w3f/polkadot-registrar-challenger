@@ -181,8 +181,8 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
         };
 
         match msg {
-            ws::Message::Text(txt) => {
-                if let Ok(context) = serde_json::from_str::<IdentityContext>(txt.as_str()) {
+            ws::Message::Text(msg) => {
+                if let Ok(context) = serde_json::from_slice::<IdentityContext>(msg.as_bytes()) {
                     // Subscribe the the specified identity context.
                     LookupServer::from_registry()
                         .send(SubscribeAccountState {

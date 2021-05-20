@@ -27,7 +27,7 @@ pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<()
 
     // Run the WS server.
     let server = HttpServer::new(move || {
-        App::new().service(web::resource("/account_status").to(account_status_server_route))
+        App::new().service(web::resource("/api/account_status").to(account_status_server_route))
     })
     .bind(addr)?;
 
@@ -46,7 +46,7 @@ async fn account_status_server_route(
 pub mod tests {
     use super::*;
     use crate::database::Database;
-    use actix_web::test::{start, TestServer};
+    use actix_test::{start, TestServer};
 
     #[cfg(test)]
     // TODO: Unify this with the `run_rest_api_server_blocking` function above.
@@ -56,7 +56,7 @@ pub mod tests {
         SystemRegistry::set(actor);
 
         start(move || {
-            App::new().service(web::resource("/account_status").to(account_status_server_route))
+            App::new().service(web::resource("/api/account_status").to(account_status_server_route))
         })
     }
 }

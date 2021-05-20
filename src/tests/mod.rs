@@ -2,21 +2,30 @@ use crate::actors::api::tests::run_test_server;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
-use actix_web::test::TestServer;
+use actix_test::{start, TestServer};
+use actix_web_actors::ws::Message;
+use serde::Serialize;
 
 mod api_judgement_state;
+
+trait ToWsMessage {
+    fn to_ws(&self) -> Message;
+}
+
+impl<T: Serialize> ToWsMessage for T {
+    fn to_ws(&self) -> Message {
+        Message::Text(serde_json::to_string(&self).unwrap().into())
+    }
+}
 
 async fn new_env() -> (Database, TestServer, MessageInjector) {
     use rand::{thread_rng, Rng};
 
     // Setup MongoDb database.
-    let random: [u8; 32] = thread_rng().gen();
+    let random: u32 = thread_rng().gen_range(u32::MIN, u32::MAX);
     let db = Database::new(
         "mongodb://localhost:27017/",
-        &format!(
-            "registrar_test_{}",
-            String::from_utf8(random.to_vec()).unwrap()
-        ),
+        &format!("registrar_test_{}", random),
     )
     .await
     .unwrap();

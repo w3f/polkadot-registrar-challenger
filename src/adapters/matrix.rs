@@ -55,10 +55,11 @@ impl MatrixClient {
         })
     }
     pub async fn start(&self) {
-        self.client.add_event_emitter(Box::new(self.clone())).await;
+        //self.client.add_event_emitter(Box::new(self.clone())).await;
     }
 }
 
+/*
 #[async_trait]
 impl EventEmitter for MatrixClient {
     async fn on_stripped_state_member(
@@ -126,6 +127,7 @@ impl EventEmitter for MatrixClient {
         }
     }
 }
+*/
 
 #[async_trait]
 impl Adapter for MatrixClient {
