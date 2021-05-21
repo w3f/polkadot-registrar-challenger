@@ -26,7 +26,7 @@ pub struct IdentityField {
     #[serde(skip)]
     pub second_expected_challenge: Option<SecondExpectedChallenge>,
     pub is_verified: bool,
-    pub failed_attempts: usize,
+    pub failed_attempts: isize,
 }
 
 impl IdentityField {

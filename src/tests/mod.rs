@@ -2,7 +2,7 @@ use crate::actors::api::tests::run_test_server;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
-use actix_test::{start, TestServer};
+use actix_test::TestServer;
 use actix_web_actors::ws::Message;
 use serde::Serialize;
 
