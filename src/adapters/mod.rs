@@ -1,6 +1,6 @@
-use crate::actors::Verifier;
 use crate::database::Database;
 use crate::primitives::ExternalMessage;
+use crate::verifier::Verifier;
 use crate::{AccountsConfig, Result};
 use actix::prelude::*;
 use tokio::time::{interval, Duration};
@@ -72,13 +72,13 @@ pub trait Adapter {
 }
 
 pub struct AdapterListener {
-    verifier: Addr<Verifier>,
+    verifier: Verifier,
 }
 
 impl AdapterListener {
     pub async fn new(db: Database) -> Self {
         AdapterListener {
-            verifier: Verifier::new(db).start(),
+            verifier: Verifier::new(db),
         }
     }
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
@@ -98,7 +98,7 @@ impl AdapterListener {
                     Ok(messages) => {
                         for message in messages {
                             debug!("Received message: {:?}", message);
-                            verifier.do_send(message);
+                            verifier.verify(message);
                         }
                     }
                     Err(err) => {

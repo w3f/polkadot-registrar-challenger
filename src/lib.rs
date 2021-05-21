@@ -20,6 +20,7 @@ mod database;
 mod primitives;
 #[cfg(test)]
 mod tests;
+mod verifier;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
