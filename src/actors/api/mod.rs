@@ -51,11 +51,11 @@ pub mod tests {
     #[cfg(test)]
     // TODO: Unify this with the `run_rest_api_server_blocking` function above.
     pub async fn run_test_server(db: Database) -> TestServer {
-        // Add configured actor to the registry.
-        let actor = LookupServer::new(db).start();
-        SystemRegistry::set(actor);
-
         start(move || {
+            // Add configured actor to the registry.
+            let actor = LookupServer::new(db.clone()).start();
+            SystemRegistry::set(actor);
+
             App::new().service(web::resource("/api/account_status").to(account_status_server_route))
         })
     }
