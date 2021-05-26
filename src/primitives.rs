@@ -58,6 +58,10 @@ impl ExpectedChallenge {
         let random: [u8; 16] = thread_rng().gen();
         ExpectedChallenge(hex::encode(random))
     }
+    #[cfg(test)]
+    pub fn into_message_parts(&self) -> Vec<MessagePart> {
+        vec![self.0.clone().into()]
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -115,6 +119,10 @@ pub struct JudgementState {
 impl JudgementState {
     pub fn check_field_verifications(&self) -> bool {
         self.fields.iter().all(|field| field.is_verified)
+    }
+    #[cfg(test)]
+    pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
+        self.fields.iter().find(|field| &field.value == ty).unwrap()
     }
 }
 
