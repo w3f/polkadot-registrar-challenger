@@ -326,5 +326,10 @@ mod tests {
                 ],
             }
         }
+        pub fn blank_second_challenge(&mut self) {
+            self.fields.iter_mut().for_each(|field| {
+                field.second_expected_challenge = None;
+            })
+        }
     }
 }

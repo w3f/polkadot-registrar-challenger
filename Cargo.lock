@@ -3513,6 +3513,7 @@ version = "0.1.2"
 dependencies = [
  "actix",
  "actix-broker",
+ "actix-http",
  "actix-test",
  "actix-web",
  "actix-web-actors",

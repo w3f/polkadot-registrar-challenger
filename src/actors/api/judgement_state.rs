@@ -21,7 +21,7 @@ pub struct SubscribeAccountState {
     pub id_context: IdentityContext,
 }
 
-#[derive(Clone, Debug, Message, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[rtype(result = "()")]
 pub struct NotifyAccountState {
     pub state: JudgementState,
@@ -30,7 +30,7 @@ pub struct NotifyAccountState {
 
 // Identical to `NotifyAccountState`, but gets sent from the server to the
 // session for type-safety purposes.
-#[derive(Clone, Debug, Message, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[rtype(result = "()")]
 pub struct ResponseAccountState {
     pub state: JudgementState,
@@ -38,7 +38,7 @@ pub struct ResponseAccountState {
 }
 
 impl ResponseAccountState {
-    fn with_no_notifications(state: JudgementState) -> Self {
+    pub fn with_no_notifications(state: JudgementState) -> Self {
         ResponseAccountState {
             state: state,
             notifications: vec![],

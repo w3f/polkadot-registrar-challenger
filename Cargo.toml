@@ -52,3 +52,6 @@ url = "2.1.1"
 rand = "0.7.3"
 hex = "0.4.2"
 strsim = "0.10.0"
+
+[dev-dependencies]
+actix-http = "3.0.0-beta.6"

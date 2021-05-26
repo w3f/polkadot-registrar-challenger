@@ -9,9 +9,9 @@ use actix_web_actors::ws;
 mod judgement_state;
 
 // Reexport
-pub use self::judgement_state::NotifyAccountState;
+pub use self::judgement_state::{NotifyAccountState, ResponseAccountState};
 
-#[derive(Debug, Clone, Serialize, Message)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[serde(rename_all = "snake_case", tag = "result_type", content = "message")]
 #[rtype(result = "()")]
 // TODO: Rename this

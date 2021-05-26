@@ -1,14 +1,17 @@
 use crate::actors::api::tests::run_test_server;
+use crate::actors::api::JsonResult;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
+use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
 use futures::FutureExt;
 use rand::{thread_rng, Rng};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
-use tokio::time::{sleep, Duration};
 use std::future::Future;
+use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;
 
@@ -19,6 +22,15 @@ trait ToWsMessage {
 impl<T: Serialize> ToWsMessage for T {
     fn to_ws(&self) -> Message {
         Message::Text(serde_json::to_string(&self).unwrap().into())
+    }
+}
+
+impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonResult<T> {
+    fn from(val: Option<Result<Frame, ProtocolError>>) -> Self {
+        match val.unwrap().unwrap() {
+            Frame::Text(t) => serde_json::from_slice::<JsonResult<T>>(&t).unwrap(),
+            _ => panic!(),
+        }
     }
 }
 
