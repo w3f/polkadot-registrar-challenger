@@ -17,6 +17,7 @@ impl Verifier {
         Verifier { db: db }
     }
     pub async fn verify(&self, msg: ExternalMessage) -> Result<()> {
+        /// Notifies the websocket session(s) about the state changes.
         fn notify_session(state: JudgementState, notifications: Vec<NotificationMessage>) {
             Broker::<SystemBroker>::issue_async(NotifyAccountState {
                 state: state,

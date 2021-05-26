@@ -91,6 +91,14 @@ impl Database {
                 }
             }
 
+            // Check verification status.
+            current.is_fully_verified = if !to_add.is_empty() {
+                // (Re-)set validity if new fields are available.
+                false
+            } else {
+                current.is_fully_verified
+            };
+
             // Set new fields.
             current.fields = to_add;
 
@@ -99,7 +107,12 @@ impl Database {
                 doc! {
                     "context": request.context.to_bson()?
                 },
-                current.to_document()?,
+                doc! {
+                    "$set": {
+                        "is_fully_verified": current.is_fully_verified.to_bson()?,
+                        "fields": current.fields.to_bson()?
+                    }
+                },
                 None,
             )
             .await?;
