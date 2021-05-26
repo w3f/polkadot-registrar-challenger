@@ -174,7 +174,7 @@ impl From<u32> for MessageId {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Timestamp(u64);
+pub struct Timestamp(i64);
 
 impl Timestamp {
     pub fn now() -> Self {

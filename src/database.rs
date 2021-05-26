@@ -27,6 +27,7 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
+#[derive(Debug)]
 pub enum VerificationOutcome {
     AlreadyVerified,
     Valid {
@@ -152,6 +153,7 @@ impl Database {
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
+            let mut is_verified = false;
             let notification = if message.contains_challenge(&field_state.expected_challenge) {
                 // Update field state. Be more specific with the query in order
                 // to verify the correct field (in theory, there could be
@@ -163,11 +165,15 @@ impl Database {
                         "fields.expected_challenge": field_state.expected_challenge.to_bson()?,
                     },
                     doc! {
-                        "fields.is_verified": true,
+                        "$set": {
+                            "fields.$.is_verified": true.to_bson()?,
+                        }
                     },
                     None,
                 )
                 .await?;
+
+                is_verified = true;
 
                 NotificationMessage::FieldVerified(
                     id_state.context.clone(),
@@ -181,7 +187,7 @@ impl Database {
                     },
                     doc! {
                         "$inc": {
-                            "fields.failed_attempts": 1
+                            "fields.$.failed_attempts": 1isize.to_bson()?,
                         }
                     },
                     None,
@@ -198,7 +204,7 @@ impl Database {
 
             // If it was verified, there no longer is a need to continue
             // verification.
-            if field_state.is_verified {
+            if is_verified {
                 return Ok(VerificationOutcome::Valid {
                     state: id_state.clone(),
                     notifications: vec![notification],

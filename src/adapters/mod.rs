@@ -98,7 +98,10 @@ impl AdapterListener {
                     Ok(messages) => {
                         for message in messages {
                             debug!("Received message: {:?}", message);
-                            verifier.verify(message);
+                            let _ = verifier
+                                .verify(message)
+                                .await
+                                .map_err(|err| error!("Error when verifying message: {:?}", err));
                         }
                     }
                     Err(err) => {

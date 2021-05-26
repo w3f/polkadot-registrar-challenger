@@ -117,6 +117,7 @@ async fn verify_invalid_message_bad_challenge() {
         .await;
 
     wait().await;
+    // TODO: This is wrong:
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -157,4 +158,43 @@ async fn verify_invalid_message_bad_origin() {
 
     wait().await;
     assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
+async fn verify_valid_message() {
+    let (db, mut api, injector) = new_env().await;
+
+    // Insert judgement request.
+    let mut alice = JudgementState::alice();
+    let bob = JudgementState::alice();
+    db.add_judgement_request(alice.clone()).await.unwrap();
+    db.add_judgement_request(bob.clone()).await.unwrap();
+
+    // Subscribe to endpoint.
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+
+    // Check status.
+    alice.blank_second_challenge();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Send invalid message (bad origin).
+    injector
+        .send(ExternalMessage {
+            origin: ExternalMessageType::Email("alice@email.com".to_string()),
+            id: MessageId::from(0u32),
+            timestamp: Timestamp::now(),
+            values: alice
+                .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+                .expected_challenge
+                .into_message_parts(),
+        })
+        .await;
+
+    wait().await;
+    assert!(stream.next().now_or_never().is_some());
 }
