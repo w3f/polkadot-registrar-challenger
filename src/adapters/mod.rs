@@ -13,9 +13,8 @@ pub mod twitter;
 pub async fn start_adapters(
     config: AccountsConfig,
     db: Database,
-    server: Addr<LookupServer>,
 ) -> Result<()> {
-    let listener = AdapterListener::new(db, server).await;
+    let listener = AdapterListener::new(db).await;
 
     // Matrix client configuration and execution.
     if config.matrix.enabled {
@@ -77,13 +76,13 @@ pub trait Adapter {
 }
 
 pub struct AdapterListener {
-    verifier: Verifier,
+    db: Database,
 }
 
 impl AdapterListener {
-    pub async fn new(db: Database, server: Addr<LookupServer>) -> Self {
+    pub async fn new(db: Database) -> Self {
         AdapterListener {
-            verifier: Verifier::new(db, server),
+            db: db,
         }
     }
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
@@ -92,7 +91,7 @@ impl AdapterListener {
     {
         let mut interval = interval(Duration::from_secs(timeout));
 
-        let verifier = self.verifier.clone();
+        let db = self.db.clone();
         tokio::spawn(async move {
             loop {
                 // Timeout (skipped the first time);
@@ -103,8 +102,7 @@ impl AdapterListener {
                     Ok(messages) => {
                         for message in messages {
                             debug!("Received message: {:?}", message);
-                            let _ = verifier
-                                .verify(message)
+                            let _ = db.process_message(&message)
                                 .await
                                 .map_err(|err| error!("Error when verifying message: {:?}", err));
                         }

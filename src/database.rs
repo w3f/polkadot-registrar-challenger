@@ -125,7 +125,19 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_message(&self, message: &ExternalMessage) -> Result<VerificationOutcome> {
+    pub async fn process_message(&self, message: &ExternalMessage) -> Result<()> {
+        let events = self.verify_message(message).await?;
+
+        // Create event statement.
+        let coll = self.db.collection(EVENT_COLLECTION);
+        for event in events {
+            coll.insert_one(Event::from(event).to_document()?, None)
+                .await?;
+        }
+
+        Ok(())
+    }
+    async fn verify_message(&self, message: &ExternalMessage) -> Result<Vec<NotificationMessage>> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -137,6 +149,8 @@ impl Database {
                 None,
             )
             .await?;
+
+        let mut events = vec![];
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
@@ -150,7 +164,7 @@ impl Database {
 
             // Ignore if the field has already been verified.
             if field_state.is_verified {
-                return Ok(VerificationOutcome::AlreadyVerified);
+                continue;
             }
 
             // If the message contains the challenge, set it as valid (or
@@ -176,10 +190,12 @@ impl Database {
 
                 field_state.is_verified = true;
 
-                NotificationMessage::FieldVerified(
-                    id_state.context.clone(),
-                    field_state.value.clone(),
-                )
+                events.push(
+                    NotificationMessage::FieldVerified(
+                        id_state.context.clone(),
+                        field_state.value.clone(),
+                    )
+                );
             } else {
                 // Update field state.
                 coll.update_one(
@@ -195,35 +211,18 @@ impl Database {
                 )
                 .await?;
 
-                NotificationMessage::FieldVerificationFailed(
-                    id_state.context.clone(),
-                    field_state.value.clone(),
-                )
+                events.push(
+                    NotificationMessage::FieldVerificationFailed(
+                        id_state.context.clone(),
+                        field_state.value.clone(),
+                    )
+                );
             };
-
-            // Create event statement.
-            let coll = self.db.collection(EVENT_COLLECTION);
-            coll.insert_one(Event::from(notification.clone()).to_document()?, None)
-                .await?;
-
-            // If it was verified, there no longer is a need to continue
-            // verification.
-            if field_state.is_verified {
-                return Ok(VerificationOutcome::Valid {
-                    state: id_state.clone(),
-                    notifications: vec![notification],
-                });
-            } else {
-                return Ok(VerificationOutcome::Invalid {
-                    state: id_state.clone(),
-                    notifications: vec![notification],
-                });
-            }
         }
 
-        Ok(VerificationOutcome::NotFound)
+        Ok(events)
     }
-    pub async fn fetch_events(&self) -> Result<Vec<NotificationMessage>> {
+    pub async fn fetch_events(&mut self) -> Result<Vec<NotificationMessage>> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let mut cursor = coll
@@ -241,6 +240,8 @@ impl Database {
         while let Some(doc) = cursor.next().await {
             events.push(from_document(doc?)?);
         }
+
+        self.timestamp = Timestamp::now();
 
         Ok(events)
     }
