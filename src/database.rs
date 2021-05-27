@@ -231,7 +231,7 @@ impl Database {
         let mut cursor = coll
             .find(
                 doc! {
-                    "timestamp": {
+                    "id": {
                         "$gt": self.event_counter.to_bson()?,
                     }
                 },

@@ -29,6 +29,9 @@ impl SessionNotifier {
             loop {
                 interval.tick().await;
 
+                // Fetch events based on intervals until ["Change
+                // Stream"](https://docs.mongodb.com/manual/changeStreams/) are
+                // implemented in the Rust MongoDb driver.
                 match db.fetch_events().await {
                     Ok(events) => {
                         let mut cache: HashMap<IdentityContext, JudgementState> = HashMap::new();
