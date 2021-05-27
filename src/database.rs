@@ -138,10 +138,10 @@ impl Database {
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
-            let id_state: JudgementState = from_document(doc?)?;
-            let field_state = id_state
+            let mut id_state: JudgementState = from_document(doc?)?;
+            let mut field_state = id_state
                 .fields
-                .iter()
+                .iter_mut()
                 .find(|field| field.value.matches(&message))
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
@@ -153,7 +153,6 @@ impl Database {
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
-            let mut is_verified = false;
             let notification = if message.contains_challenge(&field_state.expected_challenge) {
                 // Update field state. Be more specific with the query in order
                 // to verify the correct field (in theory, there could be
@@ -173,7 +172,7 @@ impl Database {
                 )
                 .await?;
 
-                is_verified = true;
+                field_state.is_verified = true;
 
                 NotificationMessage::FieldVerified(
                     id_state.context.clone(),
@@ -194,7 +193,10 @@ impl Database {
                 )
                 .await?;
 
-                NotificationMessage::FieldVerificationFailed(field_state.value.clone())
+                NotificationMessage::FieldVerificationFailed(
+                    id_state.context.clone(),
+                    field_state.value.clone(),
+                )
             };
 
             // Create event statement.
@@ -204,7 +206,7 @@ impl Database {
 
             // If it was verified, there no longer is a need to continue
             // verification.
-            if is_verified {
+            if field_state.is_verified {
                 return Ok(VerificationOutcome::Valid {
                     state: id_state.clone(),
                     notifications: vec![notification],

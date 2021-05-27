@@ -124,6 +124,13 @@ impl JudgementState {
     pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
         self.fields.iter().find(|field| &field.value == ty).unwrap()
     }
+    #[cfg(test)]
+    pub fn get_field_mut<'a>(&'a mut self, ty: &IdentityFieldValue) -> &'a mut IdentityField {
+        self.fields
+            .iter_mut()
+            .find(|field| &field.value == ty)
+            .unwrap()
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
@@ -233,7 +240,7 @@ impl From<NotificationMessage> for Event {
 // TODO: Migrate to enum-structs.
 pub enum NotificationMessage {
     FieldVerified(IdentityContext, IdentityFieldValue),
-    FieldVerificationFailed(IdentityFieldValue),
+    FieldVerificationFailed(IdentityContext, IdentityFieldValue),
     JudgementProvided(IdentityContext),
     // TODO: Make use of this
     NotSupported(IdentityFieldValue),

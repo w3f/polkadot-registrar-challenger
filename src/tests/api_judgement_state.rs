@@ -1,7 +1,10 @@
 use super::*;
 use crate::actors::api::{JsonResult, NotifyAccountState, ResponseAccountState};
 use crate::database::Database;
-use crate::primitives::{ExpectedChallenge, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue, JudgementState, MessageId, MessagePart, NotificationMessage, Timestamp};
+use crate::primitives::{
+    ExpectedChallenge, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
+    JudgementState, MessageId, MessagePart, NotificationMessage, Timestamp,
+};
 use actix_http::ws::Frame;
 use futures::{FutureExt, SinkExt, StreamExt};
 
@@ -115,12 +118,13 @@ async fn verify_invalid_message_bad_challenge() {
         })
         .await;
 
-    // The expected (error) message.
+    // The expected message (field verification failed).
     let expected = ResponseAccountState {
         state: alice.clone(),
-        notifications: vec![
-            NotificationMessage::FieldVerificationFailed(IdentityFieldValue::Email("alice@email.com".to_string()))
-        ],
+        notifications: vec![NotificationMessage::FieldVerificationFailed(
+            alice.context.clone(),
+            IdentityFieldValue::Email("alice@email.com".to_string()),
+        )],
     };
 
     // Check response
@@ -193,7 +197,7 @@ async fn verify_valid_message() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
     );
 
-    // Send invalid message (bad origin).
+    // Send valid message.
     injector
         .send(ExternalMessage {
             origin: ExternalMessageType::Email("alice@email.com".to_string()),
@@ -206,6 +210,20 @@ async fn verify_valid_message() {
         })
         .await;
 
-    wait().await;
-    assert!(stream.next().now_or_never().is_some());
+    // Email of Alice is now verified
+    alice
+        .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
+        .is_verified = true;
+
+    // The expected message (field verified successfully).
+    let expected = ResponseAccountState {
+        state: alice.clone(),
+        notifications: vec![NotificationMessage::FieldVerified(
+            alice.context.clone(),
+            IdentityFieldValue::Email("alice@email.com".to_string()),
+        )],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
 }
