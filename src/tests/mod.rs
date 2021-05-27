@@ -3,6 +3,7 @@ use crate::actors::api::JsonResult;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
+use crate::verifier::SessionNotifier;
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
@@ -53,8 +54,9 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
 
     // Setup message verifier and injector.
     let injector = MessageInjector::new();
-    let listener = AdapterListener::new(db.clone(), actor).await;
+    let listener = AdapterListener::new(db.clone()).await;
     listener.start_message_adapter(injector.clone(), 1).await;
+    let _ = SessionNotifier::new(db.clone(), actor).start().await;
 
     (db, server, injector)
 }

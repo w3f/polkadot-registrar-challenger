@@ -50,6 +50,8 @@ pub enum VerificationOutcome {
 pub struct Database {
     db: MongoDb,
     timestamp: Timestamp,
+    // TODO: This should be tracked in storage.
+    event_counter: i64,
 }
 
 impl Database {
@@ -57,6 +59,7 @@ impl Database {
         Ok(Database {
             db: Client::with_uri_str(uri).await?.database(db),
             timestamp: Timestamp::now(),
+            event_counter: Timestamp::now().raw(),
         })
     }
     pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
@@ -125,13 +128,17 @@ impl Database {
 
         Ok(())
     }
-    pub async fn process_message(&self, message: &ExternalMessage) -> Result<()> {
+    fn gen_id(&mut self) -> i64 {
+        self.event_counter += 1;
+        self.event_counter
+    }
+    pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
         let events = self.verify_message(message).await?;
 
         // Create event statement.
         let coll = self.db.collection(EVENT_COLLECTION);
         for event in events {
-            coll.insert_one(Event::from(event).to_document()?, None)
+            coll.insert_one(Event::new(event, self.gen_id()).to_document()?, None)
                 .await?;
         }
 
@@ -146,7 +153,7 @@ impl Database {
                 doc! {
                     "fields.value": message.origin.to_bson()?,
                 },
-                None,
+                None
             )
             .await?;
 
@@ -190,12 +197,10 @@ impl Database {
 
                 field_state.is_verified = true;
 
-                events.push(
-                    NotificationMessage::FieldVerified(
-                        id_state.context.clone(),
-                        field_state.value.clone(),
-                    )
-                );
+                events.push(NotificationMessage::FieldVerified(
+                    id_state.context.clone(),
+                    field_state.value.clone(),
+                ));
             } else {
                 // Update field state.
                 coll.update_one(
@@ -211,12 +216,10 @@ impl Database {
                 )
                 .await?;
 
-                events.push(
-                    NotificationMessage::FieldVerificationFailed(
-                        id_state.context.clone(),
-                        field_state.value.clone(),
-                    )
-                );
+                events.push(NotificationMessage::FieldVerificationFailed(
+                    id_state.context.clone(),
+                    field_state.value.clone(),
+                ));
             };
         }
 
@@ -229,7 +232,7 @@ impl Database {
             .find(
                 doc! {
                     "timestamp": {
-                        "$gt": self.timestamp.to_bson()?,
+                        "$gt": self.event_counter.to_bson()?,
                     }
                 },
                 None,
@@ -238,7 +241,11 @@ impl Database {
 
         let mut events = vec![];
         while let Some(doc) = cursor.next().await {
-            events.push(from_document(doc?)?);
+            let event = from_document::<Event>(doc?)?;
+
+            // Track latest Id.
+            self.event_counter = self.event_counter.max(event.id);
+            events.push(event.event);
         }
 
         self.timestamp = Timestamp::now();
@@ -268,11 +275,11 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn log_judgement_provided(&self, context: IdentityContext) -> Result<()> {
+    pub async fn log_judgement_provided(&mut self, context: IdentityContext) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         coll.insert_one(
-            Event::from(NotificationMessage::JudgementProvided(context)).to_document()?,
+            Event::new(NotificationMessage::JudgementProvided(context), self.gen_id()).to_document()?,
             None,
         )
         .await?;

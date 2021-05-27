@@ -181,11 +181,23 @@ impl From<u32> for MessageId {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+// Uses signed integer to make it MongoDb (driver) friendly.
 pub struct Timestamp(i64);
 
 impl Timestamp {
     pub fn now() -> Self {
-        Timestamp(0)
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let start = SystemTime::now();
+        let time = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to calculate UNIX time")
+            .as_secs();
+
+        Timestamp(time as i64)
+    }
+    pub fn raw(&self) -> i64 {
+        self.0
     }
 }
 
@@ -219,16 +231,17 @@ pub enum NotificationType {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Event {
-    timestamp: Timestamp,
-    event: NotificationMessage,
+    pub timestamp: Timestamp,
+    pub id: i64,
+    pub event: NotificationMessage,
 }
 
-impl From<NotificationMessage> for Event {
-    fn from(val: NotificationMessage) -> Self {
+impl Event {
+    pub fn new(event: NotificationMessage, id: i64) -> Self {
         Event {
-            // TODO:
-            timestamp: Timestamp(0),
-            event: val,
+            timestamp: Timestamp::now(),
+            id: id,
+            event: event,
         }
     }
 }
@@ -243,7 +256,20 @@ pub enum NotificationMessage {
     FieldVerificationFailed(IdentityContext, IdentityFieldValue),
     JudgementProvided(IdentityContext),
     // TODO: Make use of this
-    NotSupported(IdentityFieldValue),
+    NotSupported(IdentityContext, IdentityFieldValue),
+}
+
+impl NotificationMessage {
+    pub fn context(&self) -> &IdentityContext {
+        use NotificationMessage::*;
+
+        match self {
+            FieldVerified(ctx, _) => ctx,
+            FieldVerificationFailed(ctx, _) => ctx,
+            JudgementProvided(ctx) => ctx,
+            NotSupported(ctx, _) => ctx,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]

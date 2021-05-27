@@ -1,7 +1,6 @@
 use crate::actors::api::LookupServer;
 use crate::database::Database;
 use crate::primitives::ExternalMessage;
-use crate::verifier::Verifier;
 use crate::{AccountsConfig, Result};
 use actix::prelude::*;
 use tokio::time::{interval, Duration};
@@ -10,10 +9,7 @@ pub mod email;
 pub mod matrix;
 pub mod twitter;
 
-pub async fn start_adapters(
-    config: AccountsConfig,
-    db: Database,
-) -> Result<()> {
+pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> {
     let listener = AdapterListener::new(db).await;
 
     // Matrix client configuration and execution.
@@ -81,9 +77,7 @@ pub struct AdapterListener {
 
 impl AdapterListener {
     pub async fn new(db: Database) -> Self {
-        AdapterListener {
-            db: db,
-        }
+        AdapterListener { db: db }
     }
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
     where
@@ -91,7 +85,7 @@ impl AdapterListener {
     {
         let mut interval = interval(Duration::from_secs(timeout));
 
-        let db = self.db.clone();
+        let mut db = self.db.clone();
         tokio::spawn(async move {
             loop {
                 // Timeout (skipped the first time);
@@ -102,7 +96,8 @@ impl AdapterListener {
                     Ok(messages) => {
                         for message in messages {
                             debug!("Received message: {:?}", message);
-                            let _ = db.process_message(&message)
+                            let _ = db
+                                .process_message(&message)
                                 .await
                                 .map_err(|err| error!("Error when verifying message: {:?}", err));
                         }

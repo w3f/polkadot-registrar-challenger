@@ -129,6 +129,8 @@ async fn verify_invalid_message_bad_challenge() {
         .await;
 
     // The expected message (field verification failed).
+    alice.get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string())).failed_attempts = 1;
+
     let expected = ResponseAccountState {
         state: alice.clone(),
         notifications: vec![NotificationMessage::FieldVerificationFailed(
