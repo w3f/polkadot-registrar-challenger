@@ -49,12 +49,12 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
     .unwrap();
 
     // Setup API
-    let api = run_test_server(db.clone()).await;
+    let (server, actor) = run_test_server(db.clone()).await;
 
     // Setup message verifier and injector.
     let injector = MessageInjector::new();
-    let listener = AdapterListener::new(db.clone()).await;
+    let listener = AdapterListener::new(db.clone(), actor).await;
     listener.start_message_adapter(injector.clone(), 1).await;
 
-    (db, api, injector)
+    (db, server, injector)
 }

@@ -1,3 +1,4 @@
+use crate::actors::api::LookupServer;
 use crate::database::Database;
 use crate::primitives::ExternalMessage;
 use crate::verifier::Verifier;
@@ -9,8 +10,12 @@ pub mod email;
 pub mod matrix;
 pub mod twitter;
 
-pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> {
-    let listener = AdapterListener::new(db).await;
+pub async fn start_adapters(
+    config: AccountsConfig,
+    db: Database,
+    server: Addr<LookupServer>,
+) -> Result<()> {
+    let listener = AdapterListener::new(db, server).await;
 
     // Matrix client configuration and execution.
     if config.matrix.enabled {
@@ -76,9 +81,9 @@ pub struct AdapterListener {
 }
 
 impl AdapterListener {
-    pub async fn new(db: Database) -> Self {
+    pub async fn new(db: Database, server: Addr<LookupServer>) -> Self {
         AdapterListener {
-            verifier: Verifier::new(db),
+            verifier: Verifier::new(db, server),
         }
     }
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
