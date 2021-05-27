@@ -1,10 +1,7 @@
 use super::*;
 use crate::actors::api::{JsonResult, NotifyAccountState, ResponseAccountState};
 use crate::database::Database;
-use crate::primitives::{
-    ExpectedChallenge, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
-    JudgementState, MessageId, MessagePart, Timestamp,
-};
+use crate::primitives::{ExpectedChallenge, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue, JudgementState, MessageId, MessagePart, NotificationMessage, Timestamp};
 use actix_http::ws::Frame;
 use futures::{FutureExt, SinkExt, StreamExt};
 
@@ -42,6 +39,7 @@ async fn current_judgement_state_multiple_inserts() {
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
+    // Check current state.
     alice.blank_second_challenge();
     assert_eq!(
         resp,
@@ -65,6 +63,7 @@ async fn current_judgement_state_multiple_identities() {
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
+    // Check current state.
     alice.blank_second_challenge();
     assert_eq!(
         resp,
@@ -99,11 +98,11 @@ async fn verify_invalid_message_bad_challenge() {
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
-    // Check status.
+    // Check current state.
     alice.blank_second_challenge();
     assert_eq!(
         resp,
-        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
     );
 
     // Send invalid message (bad challenge).
@@ -116,8 +115,19 @@ async fn verify_invalid_message_bad_challenge() {
         })
         .await;
 
+    // The expected (error) message.
+    let expected = ResponseAccountState {
+        state: alice.clone(),
+        notifications: vec![
+            NotificationMessage::FieldVerificationFailed(IdentityFieldValue::Email("alice@email.com".to_string()))
+        ],
+    };
+
+    // Check response
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+
     wait().await;
-    // TODO: This is wrong:
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -136,7 +146,7 @@ async fn verify_invalid_message_bad_origin() {
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
-    // Check status.
+    // Check current state.
     alice.blank_second_challenge();
     assert_eq!(
         resp,
@@ -156,6 +166,7 @@ async fn verify_invalid_message_bad_origin() {
         })
         .await;
 
+    // No response is sent.
     wait().await;
     assert!(stream.next().now_or_never().is_none());
 }
@@ -175,7 +186,7 @@ async fn verify_valid_message() {
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
-    // Check status.
+    // Check current state.
     alice.blank_second_challenge();
     assert_eq!(
         resp,
