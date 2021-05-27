@@ -49,7 +49,6 @@ pub enum VerificationOutcome {
 #[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
-    timestamp: Timestamp,
     // TODO: This should be tracked in storage.
     event_counter: i64,
 }
@@ -58,7 +57,6 @@ impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
         Ok(Database {
             db: Client::with_uri_str(uri).await?.database(db),
-            timestamp: Timestamp::now(),
             event_counter: Timestamp::now().raw(),
         })
     }
@@ -247,8 +245,6 @@ impl Database {
             self.event_counter = self.event_counter.max(event.id);
             events.push(event.event);
         }
-
-        self.timestamp = Timestamp::now();
 
         Ok(events)
     }
