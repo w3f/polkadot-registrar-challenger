@@ -49,12 +49,14 @@ pub enum VerificationOutcome {
 #[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
+    timestamp: Timestamp,
 }
 
 impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
         Ok(Database {
             db: Client::with_uri_str(uri).await?.database(db),
+            timestamp: Timestamp::now(),
         })
     }
     pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
@@ -220,6 +222,27 @@ impl Database {
         }
 
         Ok(VerificationOutcome::NotFound)
+    }
+    pub async fn fetch_events(&self) -> Result<Vec<NotificationMessage>> {
+        let coll = self.db.collection(EVENT_COLLECTION);
+
+        let mut cursor = coll
+            .find(
+                doc! {
+                    "timestamp": {
+                        "$gt": self.timestamp.to_bson()?,
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        let mut events = vec![];
+        while let Some(doc) = cursor.next().await {
+            events.push(from_document(doc?)?);
+        }
+
+        Ok(events)
     }
     pub async fn fetch_judgement_state(
         &self,
