@@ -27,6 +27,7 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
+#[derive(Debug)]
 pub enum VerificationOutcome {
     AlreadyVerified,
     Valid {
@@ -91,6 +92,14 @@ impl Database {
                 }
             }
 
+            // Check verification status.
+            current.is_fully_verified = if !to_add.is_empty() {
+                // (Re-)set validity if new fields are available.
+                false
+            } else {
+                current.is_fully_verified
+            };
+
             // Set new fields.
             current.fields = to_add;
 
@@ -99,7 +108,12 @@ impl Database {
                 doc! {
                     "context": request.context.to_bson()?
                 },
-                current.to_document()?,
+                doc! {
+                    "$set": {
+                        "is_fully_verified": current.is_fully_verified.to_bson()?,
+                        "fields": current.fields.to_bson()?
+                    }
+                },
                 None,
             )
             .await?;
@@ -124,10 +138,10 @@ impl Database {
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
-            let id_state: JudgementState = from_document(doc?)?;
-            let field_state = id_state
+            let mut id_state: JudgementState = from_document(doc?)?;
+            let mut field_state = id_state
                 .fields
-                .iter()
+                .iter_mut()
                 .find(|field| field.value.matches(&message))
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
@@ -150,11 +164,15 @@ impl Database {
                         "fields.expected_challenge": field_state.expected_challenge.to_bson()?,
                     },
                     doc! {
-                        "fields.is_verified": true,
+                        "$set": {
+                            "fields.$.is_verified": true.to_bson()?,
+                        }
                     },
                     None,
                 )
                 .await?;
+
+                field_state.is_verified = true;
 
                 NotificationMessage::FieldVerified(
                     id_state.context.clone(),
@@ -168,14 +186,17 @@ impl Database {
                     },
                     doc! {
                         "$inc": {
-                            "fields.failed_attempts": 1
+                            "fields.$.failed_attempts": 1isize.to_bson()?,
                         }
                     },
                     None,
                 )
                 .await?;
 
-                NotificationMessage::FieldVerificationFailed(field_state.value.clone())
+                NotificationMessage::FieldVerificationFailed(
+                    id_state.context.clone(),
+                    field_state.value.clone(),
+                )
             };
 
             // Create event statement.
