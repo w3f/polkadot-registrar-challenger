@@ -237,27 +237,28 @@ async fn verify_valid_message() {
     // Send valid message.
     injector
         .send(ExternalMessage {
-            origin: ExternalMessageType::Email("alice@email.com".to_string()),
+            origin: ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
             values: alice
-                .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+                .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
                 .expected_challenge
                 .into_message_parts(),
         })
         .await;
 
-    // Email of Alice is now verified
+    // Matrix account of Alice is now verified
     alice
-        .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
-        .is_verified = true;
+        .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+        .expected_challenge
+        .set_verified();
 
     // The expected message (field verified successfully).
     let expected = ResponseAccountState {
         state: alice.clone(),
         notifications: vec![NotificationMessage::FieldVerified(
             alice.context.clone(),
-            IdentityFieldValue::Email("alice@email.com".to_string()),
+            IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
         )],
     };
 

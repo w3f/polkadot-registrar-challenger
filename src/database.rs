@@ -167,78 +167,78 @@ impl Database {
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
-            // Ignore if the field has already been verified.
-            if field_state.is_verified {
-                continue;
-            }
-
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
-            let notification = if message.contains_challenge(&field_state.expected_challenge) {
-                // Update field state. Be more specific with the query in order
-                // to verify the correct field (in theory, there could be
-                // multiple pending requests with the same external account
-                // specified).
-                coll.update_one(
-                    doc! {
-                        "fields.value": message.origin.to_bson()?,
-                        "fields.expected_challenge": field_state.expected_challenge.to_bson()?,
-                    },
-                    doc! {
-                        "$set": {
-                            "fields.$.is_verified": true.to_bson()?,
-                        }
-                    },
-                    None,
-                )
-                .await?;
-
-                events.push(NotificationMessage::FieldVerified(
-                    id_state.context.clone(),
-                    field_state.value.clone(),
-                ));
-
-                std::mem::drop(field_state);
-
-                // Check if all fields have been verified.
-                if id_state.fields.iter().all(|field| field.is_verified) {
+            if !field_state.expected_challenge.is_verified {
+                if field_state.expected_challenge.verify_message(&message) {
+                    // Update field state. Be more specific with the query in order
+                    // to verify the correct field (in theory, there could be
+                    // multiple pending requests with the same external account
+                    // specified).
                     coll.update_one(
                         doc! {
-                            "context": id_state.context.to_bson()?,
+                            "fields.value": message.origin.to_bson()?,
+                            "fields.expected_challenge.value": field_state.expected_challenge.value.to_bson()?,
                         },
                         doc! {
                             "$set": {
-                                "is_fully_verified": true.to_bson()?
+                                "fields.$.expected_challenge.is_verified": true.to_bson()?,
                             }
                         },
                         None,
                     )
                     .await?;
 
-                    events.push(NotificationMessage::IdentityFullyVerified(
+                    events.push(NotificationMessage::FieldVerified(
                         id_state.context.clone(),
+                        field_state.value.clone(),
+                    ));
+                } else {
+                    // Update field state.
+                    coll.update_one(
+                        doc! {
+                            "fields.value": message.origin.to_bson()?,
+                        },
+                        doc! {
+                            "$inc": {
+                                "fields.$.failed_attempts": 1isize.to_bson()?,
+                            }
+                        },
+                        None,
+                    )
+                    .await?;
+
+                    events.push(NotificationMessage::FieldVerificationFailed(
+                        id_state.context.clone(),
+                        field_state.value.clone(),
                     ));
                 }
+            } else if let Some(challenge) = &field_state.second_expected_challenge {
             } else {
-                // Update field state.
+                continue;
+            }
+
+            // Check if all fields have been verified.
+            std::mem::drop(field_state);
+
+            if id_state.is_fully_verified() {
                 coll.update_one(
                     doc! {
-                        "fields.value": message.origin.to_bson()?,
+                        "context": id_state.context.to_bson()?,
                     },
                     doc! {
-                        "$inc": {
-                            "fields.$.failed_attempts": 1isize.to_bson()?,
+                        "$set": {
+                            "is_fully_verified": true.to_bson()?
                         }
                     },
                     None,
                 )
                 .await?;
 
-                events.push(NotificationMessage::FieldVerificationFailed(
+                events.push(NotificationMessage::IdentityFullyVerified(
                     id_state.context.clone(),
-                    field_state.value.clone(),
                 ));
-            };
+            }
         }
 
         Ok(events)
