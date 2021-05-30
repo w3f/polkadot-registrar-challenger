@@ -3,7 +3,7 @@ use crate::actors::api::JsonResult;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
-use crate::verifier::SessionNotifier;
+use crate::notifier::SessionNotifier;
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
