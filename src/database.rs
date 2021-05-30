@@ -151,7 +151,7 @@ impl Database {
                 doc! {
                     "fields.value": message.origin.to_bson()?,
                 },
-                None
+                None,
             )
             .await?;
 
@@ -193,12 +193,32 @@ impl Database {
                 )
                 .await?;
 
-                field_state.is_verified = true;
-
                 events.push(NotificationMessage::FieldVerified(
                     id_state.context.clone(),
                     field_state.value.clone(),
                 ));
+
+                std::mem::drop(field_state);
+
+                // Check if all fields have been verified.
+                if id_state.fields.iter().all(|field| field.is_verified) {
+                    coll.update_one(
+                        doc! {
+                            "context": id_state.context.to_bson()?,
+                        },
+                        doc! {
+                            "$set": {
+                                "is_fully_verified": true.to_bson()?
+                            }
+                        },
+                        None,
+                    )
+                    .await?;
+
+                    events.push(NotificationMessage::IdentityFullyVerified(
+                        id_state.context.clone(),
+                    ));
+                }
             } else {
                 // Update field state.
                 coll.update_one(
@@ -275,7 +295,11 @@ impl Database {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         coll.insert_one(
-            Event::new(NotificationMessage::JudgementProvided(context), self.gen_id()).to_document()?,
+            Event::new(
+                NotificationMessage::JudgementProvided(context),
+                self.gen_id(),
+            )
+            .to_document()?,
             None,
         )
         .await?;

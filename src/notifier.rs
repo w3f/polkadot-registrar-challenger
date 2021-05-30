@@ -57,6 +57,7 @@ impl SessionNotifier {
                                 }
                             };
 
+                            // TODO: Pass multiple events of the same identity as one.
                             server.do_send(NotifyAccountState {
                                 state: state,
                                 notifications: vec![event],

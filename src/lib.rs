@@ -17,10 +17,10 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 mod actors;
 mod adapters;
 mod database;
+mod notifier;
 mod primitives;
 #[cfg(test)]
 mod tests;
-mod notifier;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
