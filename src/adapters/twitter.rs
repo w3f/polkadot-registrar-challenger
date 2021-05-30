@@ -1,20 +1,17 @@
-use crate::event::{ExternalMessage, ExternalOrigin};
-use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
+use crate::adapters::Adapter;
+use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
 use crate::Result;
-use async_channel::{Receiver, Sender};
+use hmac::{Hmac, Mac, NewMac};
 use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
-
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sha1::Sha1;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{cmp::Ordering, hash::Hash};
-use tokio::time::{self, Duration};
-
-const REQ_MESSAGE_TIMEOUT: u64 = 180;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedMessageContext {
@@ -26,18 +23,6 @@ pub struct ReceivedMessageContext {
 pub struct TwitterMessage {
     sender: String,
     message: String,
-}
-
-impl From<TwitterMessage> for ExternalMessage {
-    fn from(val: TwitterMessage) -> Self {
-        ExternalMessage {
-            origin: ExternalOrigin::Twitter(()),
-            field_address: FieldAddress::from(val.sender),
-            message: ProvidedMessage {
-                parts: vec![ProvidedMessagePart::from(val.message)],
-            },
-        }
-    }
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -86,7 +71,6 @@ pub struct TwitterBuilder {
     consumer_secret: Option<String>,
     token: Option<String>,
     token_secret: Option<String>,
-    request_interval: Option<u64>,
 }
 
 impl TwitterBuilder {
@@ -96,7 +80,6 @@ impl TwitterBuilder {
             consumer_secret: None,
             token: None,
             token_secret: None,
-            request_interval: None,
         }
     }
     pub fn consumer_key(mut self, key: String) -> Self {
@@ -115,39 +98,23 @@ impl TwitterBuilder {
         self.token_secret = Some(secret);
         self
     }
-    pub fn request_interval(mut self, interval: u64) -> Self {
-        self.request_interval = Some(interval);
-        self
-    }
-    pub fn build(self) -> Result<(TwitterHandler, Receiver<TwitterMessage>)> {
-        let (tx, recv) = async_channel::unbounded();
-
-        Ok((
-            TwitterHandler {
-                client: Client::new(),
-                consumer_key: self
-                    .consumer_key
-                    .ok_or(anyhow!("consumer key name not specified"))?,
-                consumer_secret: self
-                    .consumer_secret
-                    .ok_or(anyhow!("consumer secret name not specified"))?,
-                token: self.token.ok_or(anyhow!("screen name not specified"))?,
-                token_secret: self
-                    .token_secret
-                    .ok_or(anyhow!("screen name not specified"))?,
-                twitter_ids: HashMap::new(),
-                request_interval: self
-                    .request_interval
-                    .ok_or(anyhow!("request interval not specified"))?,
-                sender: tx,
-            },
-            recv,
-        ))
+    pub fn build(self) -> Result<TwitterHandler> {
+        Ok(TwitterHandler {
+            client: Client::new(),
+            consumer_key: self
+                .consumer_key
+                .ok_or(anyhow!("consumer key name not specified"))?,
+            consumer_secret: self
+                .consumer_secret
+                .ok_or(anyhow!("consumer secret name not specified"))?,
+            token: self.token.ok_or(anyhow!("screen name not specified"))?,
+            token_secret: self
+                .token_secret
+                .ok_or(anyhow!("screen name not specified"))?,
+            twitter_ids: HashMap::new(),
+        })
     }
 }
-
-use hmac::{Hmac, Mac, NewMac};
-use sha1::Sha1;
 
 enum HttpMethod {
     POST,
@@ -186,34 +153,10 @@ pub struct TwitterHandler {
     token: String,
     token_secret: String,
     twitter_ids: HashMap<TwitterId, String>,
-    request_interval: u64,
-    sender: Sender<TwitterMessage>,
 }
 
 impl TwitterHandler {
-    pub async fn start(&mut self) {
-        loop {
-            match self.handle_incoming_messages().await {
-                Ok(messages) => {
-                    for message in messages {
-                        // Send the message to `crate::system`, where the
-                        // message will be processed by an aggregate and sent to
-                        // the event store.
-                        let _ = self.sender.send(message).await.map_err(|err| {
-                            error!(
-                                "Failed to send message from Twitter adapter to system: {:?}",
-                                err
-                            );
-                        });
-                    }
-                }
-                Err(err) => error!("{:?}", err),
-            }
-
-            time::sleep(Duration::from_secs(self.request_interval)).await;
-        }
-    }
-    async fn handle_incoming_messages(&mut self) -> Result<Vec<TwitterMessage>> {
+    async fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         debug!("Requesting Twitter messages");
         // Request message on parse those into a simpler type.
         let messages = self
@@ -254,17 +197,20 @@ impl TwitterHandler {
         let parsed_messages = messages
             .into_iter()
             .map(|context| {
-                Ok(TwitterMessage {
-                    // This should never return an error.
-                    sender: self
-                        .twitter_ids
-                        .get(&context.sender)
-                        .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
-                        .clone(),
-                    message: context.message,
+                let sender = self
+                    .twitter_ids
+                    .get(&context.sender)
+                    .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
+                    .clone();
+
+                Ok(ExternalMessage {
+                    origin: ExternalMessageType::Twitter(sender),
+                    id: context.id.into(),
+                    timestamp: Timestamp::now(),
+                    values: vec![context.message.into()],
                 })
             })
-            .collect::<Result<Vec<TwitterMessage>>>()?;
+            .collect::<Result<Vec<ExternalMessage>>>()?;
 
         Ok(parsed_messages)
     }
@@ -496,5 +442,15 @@ impl ApiMessageRequest {
         }
 
         Ok(messages)
+    }
+}
+
+#[async_trait]
+impl Adapter for TwitterHandler {
+    fn name(&self) -> &'static str {
+        "Twitter"
+    }
+    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+        self.request_messages().await
     }
 }

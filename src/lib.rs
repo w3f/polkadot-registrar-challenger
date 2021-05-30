@@ -9,29 +9,18 @@ extern crate serde;
 #[macro_use]
 extern crate async_trait;
 
-use manager::NetworkAddress;
 use std::env;
 use std::fs;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
+mod actors;
 mod adapters;
-mod aggregate;
-mod api;
-mod api_v2;
-mod event;
-mod manager;
-mod projection;
-mod remark_watcher;
-mod system;
+mod database;
+mod notifier;
+mod primitives;
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("The target address was not found ({}): {:?}", _1, _0)]
-    TargetAddressNotFound(NetworkAddress, String),
-}
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -40,6 +29,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
+// TODO: Rename to "Adapter"?
 pub struct AccountsConfig {
     matrix: MatrixConfig,
     twitter: TwitterConfig,
@@ -53,6 +43,10 @@ pub struct MatrixConfig {
     pub username: String,
     pub password: String,
     pub db_path: String,
+    // Since the Matrix SDK listens to responses in a stream, this value does
+    // not require special considerations. But it should be often enough, given
+    // that `AdapterListener` fetches the messages from the queue in intervals.
+    pub request_interval: u64,
 }
 
 #[derive(Debug, Deserialize)]

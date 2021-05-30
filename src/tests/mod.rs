@@ -1,114 +1,62 @@
-use crate::event::Event;
-use crate::{
-    aggregate::{
-        verifier::{VerifierAggregateId, VerifierAggregateSnapshotsId, VerifierCommand},
-        Repository,
-    },
-    event::{ExternalMessage, ExternalOrigin},
-    manager::{ChallengeStatus, ExpectedMessage, IdentityFieldType, IdentityState, Validity},
-};
-use crate::{api::ConnectionPool, manager::IdentityManager};
-use eventstore::Client;
-use futures::{future::Join, FutureExt, Stream, StreamExt};
-use hmac::digest::generic_array::typenum::Exp;
-use jsonrpc_client_transports::transports::ws::connect;
-use jsonrpc_client_transports::RawClient;
-use jsonrpc_core::{Params, Value};
-use jsonrpc_ws_server::Server as WsServer;
-use lock_api::RwLock;
+use crate::actors::api::tests::run_test_server;
+use crate::actors::api::JsonResult;
+use crate::adapters::tests::MessageInjector;
+use crate::adapters::AdapterListener;
+use crate::database::Database;
+use crate::notifier::SessionNotifier;
+use actix_http::ws::{Frame, ProtocolError};
+use actix_test::TestServer;
+use actix_web_actors::ws::Message;
+use futures::FutureExt;
 use rand::{thread_rng, Rng};
-use std::convert::TryFrom;
-use std::fs::canonicalize;
-use std::process::Stdio;
-use std::sync::Arc;
-use tokio::process::{Child, Command};
-use tokio::task::JoinHandle;
-use tokio::time::{self, Duration};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use std::future::Future;
+use tokio::time::{sleep, Duration};
 
-mod aggregate_verifier;
+mod api_judgement_state;
 
-fn gen_port() -> usize {
-    thread_rng().gen_range(1_024, 65_535)
+trait ToWsMessage {
+    fn to_ws(&self) -> Message;
 }
 
-struct IdentityInjector {}
-
-impl IdentityInjector {
-    fn inject_message() {}
-    fn inject_judgement_request() {}
+impl<T: Serialize> ToWsMessage for T {
+    fn to_ws(&self) -> Message {
+        Message::Text(serde_json::to_string(&self).unwrap().into())
+    }
 }
 
-struct InMemBackend {
-    store: Client,
-    port: usize,
-    _handle: Child,
-}
-
-impl InMemBackend {
-    async fn run() -> Self {
-        // Configure and spawn the event store in a background process.
-        let port: usize = gen_port();
-        let handle = Command::new(canonicalize("/usr/bin/eventstored").unwrap())
-            .arg("--mem-db")
-            .arg("--disable-admin-ui")
-            .arg("--insecure")
-            .arg("--http-port")
-            .arg(port.to_string())
-            .arg("--int-tcp-port")
-            .arg((port + 1).to_string())
-            .arg("--ext-tcp-port")
-            .arg((port + 2).to_string())
-            .kill_on_drop(true)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .stdin(Stdio::null())
-            .spawn()
-            .unwrap();
-
-        tokio::time::sleep(Duration::from_secs(2)).await;
-
-        // Build store.
-        let store = Client::create(
-            format!("esdb://localhost:{}?tls=false", port)
-                .parse()
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-        InMemBackend {
-            store: store,
-            port: port,
-            _handle: handle,
+impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonResult<T> {
+    fn from(val: Option<Result<Frame, ProtocolError>>) -> Self {
+        match val.unwrap().unwrap() {
+            Frame::Text(t) => serde_json::from_slice::<JsonResult<T>>(&t).unwrap(),
+            _ => panic!(),
         }
     }
-    fn store(&self) -> Client {
-        self.store.clone()
-    }
-    async fn subscription<Id>(&self, id: Id) -> impl Stream<Item = Event>
-    where
-        Id: Send + Sync + Eq + AsRef<str> + Default,
-    {
-        self.store
-            .subscribe_to_stream_from(Id::default())
-            .execute_event_appeared_only()
-            .await
-            .unwrap()
-            .then(|resolved| async {
-                match resolved.unwrap().event {
-                    Some(recorded) => Event::try_from(recorded).unwrap(),
-                    _ => panic!(),
-                }
-            })
-    }
-    async fn get_events<Id>(&self, id: Id) -> Vec<Event>
-    where
-        Id: Send + Sync + Eq + AsRef<str> + Default,
-    {
-        self.subscription(id)
-            .await
-            .take_until(time::sleep(Duration::from_secs(2)))
-            .collect()
-            .await
-    }
+}
+
+async fn wait() {
+    sleep(Duration::from_secs(1)).await;
+}
+
+async fn new_env() -> (Database, TestServer, MessageInjector) {
+    // Setup MongoDb database.
+    let random: u32 = thread_rng().gen_range(u32::MIN, u32::MAX);
+    let db = Database::new(
+        "mongodb://localhost:27017/",
+        &format!("registrar_test_{}", random),
+    )
+    .await
+    .unwrap();
+
+    // Setup API
+    let (server, actor) = run_test_server(db.clone()).await;
+
+    // Setup message verifier and injector.
+    let injector = MessageInjector::new();
+    let listener = AdapterListener::new(db.clone()).await;
+    listener.start_message_adapter(injector.clone(), 1).await;
+    let _ = SessionNotifier::new(db.clone(), actor).start().await;
+
+    (db, server, injector)
 }

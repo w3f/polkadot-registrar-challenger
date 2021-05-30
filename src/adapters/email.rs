@@ -1,56 +1,17 @@
-use crate::event::{ExternalMessage, ExternalOrigin};
-use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
+use crate::adapters::Adapter;
+use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
 use crate::Result;
-use async_channel::{Receiver, Sender};
-use tokio::time::{self, Duration};
 
-pub struct EmailMessage {
-    from: String,
-    id: EmailId,
-    message_parts: Vec<String>,
-}
-
-impl From<EmailMessage> for ExternalMessage {
-    fn from(val: EmailMessage) -> Self {
-        ExternalMessage {
-            origin: ExternalOrigin::Email(val.id),
-            field_address: FieldAddress::from(val.from),
-            message: ProvidedMessage {
-                parts: val
-                    .message_parts
-                    .into_iter()
-                    .map(|string| ProvidedMessagePart::from(string))
-                    .collect(),
-            },
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, Hash, PartialOrd, Serialize, Deserialize)]
-pub struct EmailId(u64);
-
-impl From<u32> for EmailId {
-    fn from(val: u32) -> Self {
-        EmailId(val as u64)
-    }
-}
-
-impl From<u64> for EmailId {
-    fn from(val: u64) -> Self {
-        EmailId(val)
-    }
-}
-
-trait ConvertEmailInto<T> {
+trait ExtractSender<T> {
     type Error;
 
-    fn convert_into(self) -> std::result::Result<T, Self::Error>;
+    fn extract_sender(self) -> std::result::Result<T, Self::Error>;
 }
 
-impl ConvertEmailInto<String> for String {
+impl ExtractSender<String> for String {
     type Error = anyhow::Error;
 
-    fn convert_into(self) -> Result<String> {
+    fn extract_sender(self) -> Result<String> {
         if self.contains("<") {
             let parts = self.split("<");
             if let Some(email) = parts.into_iter().nth(1) {
@@ -70,7 +31,6 @@ pub struct SmtpImapClientBuilder {
     inbox: Option<String>,
     user: Option<String>,
     password: Option<String>,
-    request_interval: Option<u64>,
 }
 
 impl SmtpImapClientBuilder {
@@ -81,10 +41,9 @@ impl SmtpImapClientBuilder {
             inbox: None,
             user: None,
             password: None,
-            request_interval: None,
         }
     }
-    pub fn email_server(mut self, server: String) -> Self {
+    pub fn smtp_server(mut self, server: String) -> Self {
         self.server = Some(server);
         self
     }
@@ -104,31 +63,18 @@ impl SmtpImapClientBuilder {
         self.password = Some(password);
         self
     }
-    pub fn request_interval(mut self, interval: u64) -> Self {
-        self.request_interval = Some(interval);
-        self
-    }
-    pub fn build(self) -> Result<(SmtpImapClient, Receiver<EmailMessage>)> {
-        let (rx, recv) = async_channel::unbounded();
-
-        Ok((
-            SmtpImapClient {
-                smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
-                imap_server: self
-                    .imap_server
-                    .ok_or(anyhow!("IMAP server not specified"))?,
-                inbox: self.inbox.ok_or(anyhow!("inbox server not specified"))?,
-                user: self.user.ok_or(anyhow!("user server not specified"))?,
-                password: self
-                    .password
-                    .ok_or(anyhow!("password server not specified"))?,
-                request_interval: self
-                    .request_interval
-                    .ok_or(anyhow!("request interval not specified"))?,
-                sender: rx,
-            },
-            recv,
-        ))
+    pub fn build(self) -> Result<SmtpImapClient> {
+        Ok(SmtpImapClient {
+            smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
+            imap_server: self
+                .imap_server
+                .ok_or(anyhow!("IMAP server not specified"))?,
+            inbox: self.inbox.ok_or(anyhow!("inbox server not specified"))?,
+            user: self.user.ok_or(anyhow!("user server not specified"))?,
+            password: self
+                .password
+                .ok_or(anyhow!("password server not specified"))?,
+        })
     }
 }
 
@@ -139,33 +85,10 @@ pub struct SmtpImapClient {
     inbox: String,
     user: String,
     password: String,
-    request_interval: u64,
-    sender: Sender<EmailMessage>,
 }
 
 impl SmtpImapClient {
-    pub async fn start(&self) {
-        loop {
-            match self.request_messages() {
-                Ok(messages) => {
-                    for message in messages {
-                        // Send the message to `crate::system`, where the message will
-                        // be processed by an aggregate and sent to the event store.
-                        let _ = self.sender.send(message).await.map_err(|err| {
-                            error!(
-                                "Failed to send message from Email adapter to system: {:?}",
-                                err
-                            );
-                        });
-                    }
-                }
-                Err(err) => error!("{:?}", err),
-            }
-
-            time::sleep(Duration::from_secs(self.request_interval)).await;
-        }
-    }
-    fn request_messages(&self) -> Result<Vec<EmailMessage>> {
+    fn request_messages(&self) -> Result<Vec<ExternalMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
@@ -198,9 +121,6 @@ impl SmtpImapClient {
         let messages = imap.fetch(query, "(RFC822 UID)")?;
         let mut parsed_messages = vec![];
         for message in &messages {
-            // Track email ID.
-            let email_id = EmailId::from(message.uid.ok_or(anyhow!("unrecognized data"))?);
-
             if let Some(body) = message.body() {
                 let mail = mailparse::parse_mail(body)?;
 
@@ -210,29 +130,33 @@ impl SmtpImapClient {
                     .find(|header| header.get_key_ref() == "From")
                     .ok_or(anyhow!("unrecognized data"))?
                     .get_value()
-                    .convert_into()?;
+                    .extract_sender()?;
 
                 debug!("Received message from {}", sender);
 
                 // Prepare parsed message
-                let mut email_message = EmailMessage {
-                    from: sender,
-                    id: email_id,
-                    message_parts: vec![],
+                let mut email_message = ExternalMessage {
+                    origin: ExternalMessageType::Email(sender),
+                    id: message
+                        .uid
+                        .ok_or(anyhow!("missing UID for email message"))?
+                        .into(),
+                    timestamp: Timestamp::now(),
+                    values: vec![],
                 };
 
+                // Add body content.
                 if let Ok(body) = mail.get_body() {
-                    email_message.message_parts.push(body);
+                    email_message.values.push(body.into());
                 } else {
                     warn!("No body found in message from");
                 }
 
                 // An email message can contain multiple "subparts". Add each of
-                // those into the prepared message. The `VerifierAggregate` will
-                // check each of those parts.
+                // those into the prepared message.
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        email_message.message_parts.push(body);
+                        email_message.values.push(body.into());
                     } else {
                         debug!("No body found in subpart message");
                     }
@@ -240,10 +164,20 @@ impl SmtpImapClient {
 
                 parsed_messages.push(email_message);
             } else {
-                warn!("No body");
+                warn!("No body found for message");
             }
         }
 
         Ok(parsed_messages)
+    }
+}
+
+#[async_trait]
+impl Adapter for SmtpImapClient {
+    fn name(&self) -> &'static str {
+        "email"
+    }
+    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+        self.request_messages()
     }
 }

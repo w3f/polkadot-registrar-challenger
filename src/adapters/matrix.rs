@@ -1,13 +1,12 @@
-use crate::event::{ExternalMessage, ExternalOrigin};
-use crate::manager::{FieldAddress, ProvidedMessage, ProvidedMessagePart};
+use crate::adapters::Adapter;
+use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
 use crate::Result;
-use async_channel::{Receiver, Sender};
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
 use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
-
 use matrix_sdk::{Client, ClientConfig, EventEmitter, RoomState, SyncSettings};
-
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
 use url::Url;
 
@@ -20,31 +19,20 @@ pub struct MatrixMessage {
     message: String,
 }
 
-impl From<MatrixMessage> for ExternalMessage {
-    fn from(val: MatrixMessage) -> Self {
-        ExternalMessage {
-            origin: ExternalOrigin::Matrix,
-            field_address: FieldAddress::from(val.from),
-            message: ProvidedMessage {
-                parts: vec![ProvidedMessagePart::from(val.message)],
-            },
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct MatrixClient {
     client: Client, // `Client` from matrix_sdk
-    sender: Sender<MatrixMessage>,
+    messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
+// TODO: Change workflow to chain methods.
 impl MatrixClient {
     pub async fn new(
         homeserver: &str,
         username: &str,
         password: &str,
         db_path: &str,
-    ) -> Result<(MatrixClient, Receiver<MatrixMessage>)> {
+    ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
         let client_config = ClientConfig::new().store_path(db_path);
@@ -61,21 +49,17 @@ impl MatrixClient {
         info!("Syncing Matrix client");
         client.sync(SyncSettings::default()).await;
 
-        let (tx, recv) = async_channel::unbounded();
-
-        Ok((
-            MatrixClient {
-                client: client,
-                sender: tx,
-            },
-            recv,
-        ))
+        Ok(MatrixClient {
+            client: client,
+            messages: Arc::new(Mutex::new(vec![])),
+        })
     }
     pub async fn start(&self) {
-        self.client.add_event_emitter(Box::new(self.clone())).await;
+        //self.client.add_event_emitter(Box::new(self.clone())).await;
     }
 }
 
+/*
 #[async_trait]
 impl EventEmitter for MatrixClient {
     async fn on_stripped_state_member(
@@ -97,13 +81,14 @@ impl EventEmitter for MatrixClient {
                 );
 
                 time::sleep(Duration::from_secs(delay)).await;
-                delay *= 2;
-                rejoin_attempts += 1;
 
                 if rejoin_attempts == REJOIN_MAX_ATTEMPTS {
                     error!("Can't join room {} ({:?})", room.room_id(), err);
                     return;
                 }
+
+                delay *= 2;
+                rejoin_attempts += 1;
             }
 
             debug!("Joined room {}", room.room_id());
@@ -115,34 +100,43 @@ impl EventEmitter for MatrixClient {
         event: &SyncMessageEvent<MessageEventContent>,
     ) {
         if let RoomState::Joined(_) = room {
-            match event.content {
-                MessageEventContent::Text(ref content) => {
+            match &event.content {
+                MessageEventContent::Text(content) => {
                     debug!(
                         "Received message \"{}\" from {}",
                         content.body, event.sender
                     );
 
-                    // Send the message to `crate::system`, where the message
-                    // will be processed by an aggregate and sent to the event
-                    // store.
-                    let _ = self
-                        .sender
-                        .send(MatrixMessage {
-                            from: event.sender.to_string(),
-                            message: content.body.clone(),
-                        })
-                        .await
-                        .map_err(|err| {
-                            error!(
-                                "Failed to send message from Matrix adapter to system: {:?}",
-                                err
-                            )
-                        });
+                    // Add external message to inner field. That field is then
+                    // fetched by the `Adapter` implementation.
+                    let mut lock = self.messages.lock().await;
+                    (*lock).push(ExternalMessage {
+                        origin: ExternalMessageType::Matrix(event.sender.to_string()),
+                        // A message UID is not relevant regarding a live
+                        // message listener. The Matrix SDK handles
+                        // synchronization.
+                        id: 0u32.into(),
+                        timestamp: Timestamp::now(),
+                        values: vec![content.body.to_string().into()],
+                    });
                 }
                 _ => {
                     trace!("Received unacceptable message type from {}", event.sender);
                 }
             }
         }
+    }
+}
+*/
+
+#[async_trait]
+impl Adapter for MatrixClient {
+    fn name(&self) -> &'static str {
+        "Matrix"
+    }
+    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+        let mut lock = self.messages.lock().await;
+        // Return messages and wipe inner field.
+        Ok(std::mem::take(&mut *lock))
     }
 }
