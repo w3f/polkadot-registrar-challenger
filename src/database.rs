@@ -120,6 +120,7 @@ impl Database {
                 None,
             )
             .await?;
+            // TODO: Check modified count.
         } else {
             coll.insert_one(request.to_document()?, None).await?;
         }

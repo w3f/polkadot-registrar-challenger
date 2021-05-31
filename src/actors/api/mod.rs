@@ -23,6 +23,7 @@ pub enum JsonResult<T> {
 pub async fn run_rest_api_server_blocking(addr: &str, db: Database) -> Result<Addr<LookupServer>> {
     // Add configured actor to the registry.
     let actor = LookupServer::new(db).start();
+    SystemRegistry::set(actor.clone());
 
     // Run the WS server.
     let server = HttpServer::new(move || {
