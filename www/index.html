@@ -3,7 +3,6 @@
 <style>
     .container {
         margin: 1em;
-        background-color: red;
     }
 </style>
 
@@ -34,46 +33,63 @@
     -->
     <div class="container">
         <h1 class="text-center">Registrar #0</h1>
-        <p class="text-center">Identity registrar service for Polkadot and Kusama, provided by Web3 Foundation</p>
-    </div>
-    <div class="container">
-        <ul class="nav nav-pills justify-content-center">
-            <li class="nav-item">
-                <a class="nav-link" href="#">Request Judgement</a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="#">Check Display Name</a>
-            </li>
-        </ul>
+        <p class="text-center">Identity registrar service for Polkadot and Kusama.<br>Provided by the Web3 Foundation.
+        </p>
     </div>
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-7 table-responsive">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th scope="col">#</th>
-                            <th scope="col">Type</th>
-                            <th scope="col">Challenge</th>
-                            <th scope="col">From</th>
-                            <th scope="col">To</th>
-                            <th scope="col">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <th scope="row">1</th>
-                            <td>Mark</td>
-                            <td>Otto</td>
-                            <td>@mdo</td>
-                            <td>@mdo</td>
-                            <td>unverified</td>
-                        </tr>
-                    </tbody>
-                </table>
+            <div class="col-7">
+                <div class="input-group">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                        aria-expanded="false">Polkadot</button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#">Polkadot</a></li>
+                        <li><a class="dropdown-item" href="#">Kusama</a></li>
+                    </ul>
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                        aria-expanded="false">Request Judgement</button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#">Request Judgement</a></li>
+                        <li><a class="dropdown-item" href="#">Check Username</a></li>
+                    </ul>
+                    <input type="text" class="form-control" aria-label="Text input with dropdown button"
+                        placeholder="Account address...">
+                    <button class="col-1 btn btn-primary" type="button" id="button-addon2">Go!</button>
+                    <button class="col-1 btn btn-primary" type="button">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span class="visually-hidden">Loading...</span>
+                    </button>
+                </div>
             </div>
         </div>
-    </div>
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-7 table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th scope="col">#</th>
+                                <th scope="col">Type</th>
+                                <th scope="col">Challenge</th>
+                                <th scope="col">From</th>
+                                <th scope="col">To</th>
+                                <th scope="col">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <th scope="row">2</th>
+                                <td>Mark</td>
+                                <td>Otto</td>
+                                <td>@mdo</td>
+                                <td>@mdo</td>
+                                <td>unverified</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
 </body>
 
