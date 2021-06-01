@@ -1,0 +1,9 @@
+{
+  "name": "w3f-registrar-frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "bootstrap": "^5.0.1"
+  }
+}
