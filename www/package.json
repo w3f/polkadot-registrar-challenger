@@ -5,5 +5,11 @@
   "license": "MIT",
   "dependencies": {
     "bootstrap": "^5.0.1"
+  },
+  "scripts": {
+    "compile:sass": "node-sass scss/custom.scss custom.css"
+  },
+  "devDependencies": {
+    "node-sass": "^6.0.0"
   }
 }
