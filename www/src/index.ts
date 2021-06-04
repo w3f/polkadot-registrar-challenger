@@ -1,4 +1,6 @@
 class ActionListerner {
+    btn_execute_action: HTMLButtonElement;
+
     constructor() {
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
@@ -18,15 +20,33 @@ class ActionListerner {
                     .innerText = (e.target as HTMLAnchorElement).innerText;
             });
 
+        // Register the action button.
+        this.btn_execute_action =
+            document
+                .getElementById("execute-action")! as HTMLButtonElement;
+
         // Handler for executing action and communicating with the backend API.
-        document
-            .getElementById("execute-action")!
+        this.btn_execute_action
             .addEventListener("click", (_: Event) => this.executeAction());
     }
     executeAction() {
+        this.btn_execute_action.disabled = true;
+
+        this.btn_execute_action
+            .innerHTML = `
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span class="visually-hidden"></span>
+            `;
+
         const network = document.getElementById("specify-network")!;
         const action = document.getElementById("specify-action")!;
 
+        const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+
+        socket.addEventListener("open", (_: Event) => {
+            this.btn_execute_action
+                .innerHTML = "Done!";
+        });
     }
 }
 
