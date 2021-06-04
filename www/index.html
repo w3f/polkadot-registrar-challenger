@@ -13,7 +13,6 @@
 
     <!-- Bootstrap CSS -->
     <link href="dist/custom.css" rel="stylesheet">
-
     <title>W3F Registrar</title>
 </head>
 
@@ -39,20 +38,20 @@
         <div class="row justify-content-center">
             <div class="col-7">
                 <div class="input-group">
-                    <button id="specify-network" class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
-                        aria-expanded="false">Polkadot</button>
-                    <ul class="dropdown-menu">
+                    <button id="specify-network" class="col-2 btn btn-secondary dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" aria-expanded="false">Polkadot</button>
+                    <ul id="network-options" class="dropdown-menu">
                         <li><a class="dropdown-item" href="#">Polkadot</a></li>
                         <li><a class="dropdown-item" href="#">Kusama</a></li>
                     </ul>
-                    <button id="specify-action" class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
-                        aria-expanded="false">Request Judgement</button>
-                    <ul class="dropdown-menu">
+                    <button id="specify-action" class="col-4 btn btn-outline-secondary dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" aria-expanded="false">Request Judgement</button>
+                    <ul id="action-options" class="dropdown-menu">
                         <li><a class="dropdown-item" href="#">Request Judgement</a></li>
                         <li><a class="dropdown-item" href="#">Check Username</a></li>
                     </ul>
-                    <input id="specify-address" type="text" class="form-control" aria-label="Text input with dropdown button"
-                        placeholder="Account address...">
+                    <input id="specify-address" type="text" class="form-control"
+                        aria-label="Text input with dropdown button" placeholder="Account address...">
                     <button id="execute-action" class="col-1 btn btn-primary" type="button">Go!</button>
                     <button class="col-1 btn btn-primary" type="button">
                         <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -90,6 +89,6 @@
             </div>
         </div>
 
+    <script src="dist/index.js"></script>
 </body>
-
 </html>
