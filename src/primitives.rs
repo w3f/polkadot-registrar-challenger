@@ -121,6 +121,7 @@ impl IdentityFieldValue {
 pub struct JudgementState {
     pub context: IdentityContext,
     pub is_fully_verified: bool,
+    pub completion_timestamp: Option<Timestamp>,
     pub fields: Vec<IdentityField>,
 }
 

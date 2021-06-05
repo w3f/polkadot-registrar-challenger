@@ -30,19 +30,25 @@ mod primitives;
 mod tests;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type", content = "config")]
-pub enum Config {
-    AdapterListener(AdapterConfig),
-    SessionNotifier(NotifierConfig),
+pub struct Config {
+    pub log_level: LevelFilter,
+    pub instance: InstanceType,
 }
 
-impl Config {
-    fn log_level(&self) -> LevelFilter {
-        match self {
-            Config::AdapterListener(config) => config.log_level,
-            Config::SessionNotifier(config) => config.log_level,
-        }
-    }
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "config")]
+pub enum InstanceType {
+    AdapterListener(AdapterConfig),
+    SessionNotifier(NotifierConfig),
+    SingleInstance(SingleInstanceConfig),
+    RandomGenerator(SingleInstanceConfig),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SingleInstanceConfig {
+    pub adapter: AdapterConfig,
+    pub notifier: NotifierConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,7 +63,6 @@ pub struct DatabaseConfig {
 pub struct NotifierConfig {
     pub db: DatabaseConfig,
     pub api_address: String,
-    pub log_level: LevelFilter,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,7 +70,6 @@ pub struct NotifierConfig {
 pub struct AdapterConfig {
     pub accounts: AccountsConfig,
     pub db: DatabaseConfig,
-    pub log_level: LevelFilter,
 }
 
 #[derive(Debug, Deserialize)]
@@ -143,9 +147,9 @@ pub fn init_env() -> Result<Config> {
         println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
         env_logger::init();
     } else {
-        println!("Setting log level to '{}' from config.", config.log_level());
+        println!("Setting log level to '{}' from config.", config.log_level);
         env_logger::builder()
-            .filter_module("registrar", config.log_level())
+            .filter_module("registrar", config.log_level)
             .init();
     }
 
@@ -153,3 +157,5 @@ pub fn init_env() -> Result<Config> {
 
     Ok(config)
 }
+
+pub fn random_generator() {}

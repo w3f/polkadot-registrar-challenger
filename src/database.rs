@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 const IDENTITY_COLLECTION: &'static str = "identities";
 const EVENT_COLLECTION: &'static str = "event_log";
+const PRUNE_OFFSET: i64 = 1_800;
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -144,6 +145,7 @@ impl Database {
         Ok(())
     }
     async fn verify_message(&self, message: &ExternalMessage) -> Result<Vec<NotificationMessage>> {
+        // TODO: Specify type on `collection`.
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -219,9 +221,9 @@ impl Database {
                 continue;
             }
 
-            // Check if all fields have been verified.
             std::mem::drop(field_state);
 
+            // Check if all fields have been verified.
             if id_state.is_fully_verified() {
                 coll.update_one(
                     doc! {
@@ -301,6 +303,22 @@ impl Database {
                 self.gen_id(),
             )
             .to_document()?,
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
+    pub async fn prune_completed(&self, offset: i64) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        coll.delete_many(
+            doc! {
+                "is_fully_verified": true.to_bson()?,
+                "completion_timestamp": {
+                    "$lt": Timestamp::now().raw() - offset,
+                }
+            },
             None,
         )
         .await?;
