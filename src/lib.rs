@@ -15,6 +15,11 @@ use std::fs;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
+// Re-exports
+pub use actors::api::run_rest_api_server_blocking;
+pub use database::Database;
+pub use notifier::SessionNotifier;
+
 mod actors;
 mod adapters;
 mod database;
@@ -24,10 +29,19 @@ mod primitives;
 mod tests;
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+#[serde(rename_all = "snake_case", tag = "type", content = "config")]
 pub enum Config {
-    Adapter(AdapterConfig),
-    Notifier(NotifierConfig),
+    AdapterListener(AdapterConfig),
+    SessionNotifier(NotifierConfig),
+}
+
+impl Config {
+    fn log_level(&self) -> LevelFilter {
+        match self {
+            Config::AdapterListener(config) => config.log_level,
+            Config::SessionNotifier(config) => config.log_level,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +55,8 @@ pub struct DatabaseConfig {
 #[serde(rename_all = "snake_case")]
 pub struct NotifierConfig {
     pub db: DatabaseConfig,
+    pub api_address: String,
+    pub log_level: LevelFilter,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,7 +134,7 @@ fn open_config() -> Result<Config> {
     Ok(config)
 }
 
-pub fn init_env(level: LevelFilter) -> Result<Config> {
+pub fn init_env() -> Result<Config> {
     let config = open_config()?;
 
     // Env variables for log level overwrites config.
@@ -126,9 +142,9 @@ pub fn init_env(level: LevelFilter) -> Result<Config> {
         println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
         env_logger::init();
     } else {
-        println!("Setting log level to '{}' from config.", level);
+        println!("Setting log level to '{}' from config.", config.log_level());
         env_logger::builder()
-            .filter_module("registrar", level)
+            .filter_module("registrar", config.log_level())
             .init();
     }
 

@@ -21,54 +21,52 @@ impl SessionNotifier {
             server: server,
         }
     }
-    pub async fn start(self) {
+    pub async fn run_blocking(mut self) {
         let mut interval = interval(Duration::from_secs(1));
 
-        let (mut db, server) = (self.db, self.server);
-        tokio::spawn(async move {
-            loop {
-                interval.tick().await;
+        loop {
+            interval.tick().await;
 
-                // Fetch events based on intervals until ["Change
-                // Stream"](https://docs.mongodb.com/manual/changeStreams/) are
-                // implemented in the Rust MongoDb driver.
-                match db.fetch_events().await {
-                    Ok(events) => {
-                        let mut cache: HashMap<IdentityContext, JudgementState> = HashMap::new();
+            // Fetch events based on intervals until ["Change
+            // Stream"](https://docs.mongodb.com/manual/changeStreams/) are
+            // implemented in the Rust MongoDb driver.
+            match self.db.fetch_events().await {
+                Ok(events) => {
+                    let mut cache: HashMap<IdentityContext, JudgementState> = HashMap::new();
 
-                        for event in events {
-                            let state = match cache.get(event.context()) {
-                                Some(state) => state.clone(),
-                                None => {
-                                    let state = db
-                                        .fetch_judgement_state(event.context())
-                                        .await
-                                        // TODO: Handle unwrap
-                                        .unwrap()
-                                        .ok_or(anyhow!(
-                                            "No identity state found for context: {:?}",
-                                            event.context()
-                                        ))
-                                        .unwrap();
+                    for event in events {
+                        let state = match cache.get(event.context()) {
+                            Some(state) => state.clone(),
+                            None => {
+                                let state = self
+                                    .db
+                                    .fetch_judgement_state(event.context())
+                                    .await
+                                    // TODO: Handle unwrap
+                                    .unwrap()
+                                    .ok_or(anyhow!(
+                                        "No identity state found for context: {:?}",
+                                        event.context()
+                                    ))
+                                    .unwrap();
 
-                                    cache.insert(event.context().clone(), state.clone());
+                                cache.insert(event.context().clone(), state.clone());
 
-                                    state
-                                }
-                            };
+                                state
+                            }
+                        };
 
-                            // TODO: Pass multiple events of the same identity as one.
-                            server.do_send(NotifyAccountState {
-                                state: state,
-                                notifications: vec![event],
-                            });
-                        }
-                    }
-                    Err(err) => {
-                        error!("Error fetching events from database: {:?}", err);
+                        // TODO: Pass multiple events of the same identity as one.
+                        self.server.do_send(NotifyAccountState {
+                            state: state,
+                            notifications: vec![event],
+                        });
                     }
                 }
+                Err(err) => {
+                    error!("Error fetching events from database: {:?}", err);
+                }
             }
-        });
+        }
     }
 }
