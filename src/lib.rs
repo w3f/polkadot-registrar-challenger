@@ -9,6 +9,7 @@ extern crate serde;
 #[macro_use]
 extern crate async_trait;
 
+use log::LevelFilter;
 use std::env;
 use std::fs;
 
@@ -23,12 +24,35 @@ mod primitives;
 mod tests;
 
 #[derive(Debug, Deserialize)]
-pub struct Config {
-    pub accounts: AccountsConfig,
-    pub log_level: log::LevelFilter,
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+pub enum Config {
+    Adapter(AdapterConfig),
+    Notifier(NotifierConfig),
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct DatabaseConfig {
+    pub uri: String,
+    pub db_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct NotifierConfig {
+    pub db: DatabaseConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AdapterConfig {
+    pub accounts: AccountsConfig,
+    pub db: DatabaseConfig,
+    pub log_level: LevelFilter,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 // TODO: Rename to "Adapter"?
 pub struct AccountsConfig {
     matrix: MatrixConfig,
@@ -37,6 +61,7 @@ pub struct AccountsConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct MatrixConfig {
     pub enabled: bool,
     pub homeserver: String,
@@ -50,6 +75,7 @@ pub struct MatrixConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct TwitterConfig {
     pub enabled: bool,
     pub api_key: String,
@@ -60,6 +86,7 @@ pub struct TwitterConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub struct EmailConfig {
     pub enabled: bool,
     pub smtp_server: String,
@@ -91,7 +118,7 @@ fn open_config() -> Result<Config> {
     Ok(config)
 }
 
-pub fn init_env() -> Result<Config> {
+pub fn init_env(level: LevelFilter) -> Result<Config> {
     let config = open_config()?;
 
     // Env variables for log level overwrites config.
@@ -99,9 +126,9 @@ pub fn init_env() -> Result<Config> {
         println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
         env_logger::init();
     } else {
-        println!("Setting log level to '{}' from config.", config.log_level);
+        println!("Setting log level to '{}' from config.", level);
         env_logger::builder()
-            .filter_module("registrar", config.log_level)
+            .filter_module("registrar", level)
             .init();
     }
 
