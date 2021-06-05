@@ -1,0 +1,15 @@
+{
+  "name": "w3f-registrar-frontend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "bootstrap": "^5.0.1"
+  },
+  "scripts": {
+    "build": "tsc && node-sass src/ -o dist/"
+  },
+  "devDependencies": {
+    "node-sass": "^6.0.0"
+  }
+}

@@ -3,3 +3,4 @@ config*
 !config.sample.json
 !helmfile.d/config
 scripts/load-env.sh
+node_modules
