@@ -9,7 +9,7 @@ pub mod email;
 pub mod matrix;
 pub mod twitter;
 
-pub async fn start_adapters(config: AccountsConfig, db: Database) -> Result<()> {
+pub async fn run_adapters_blocking(config: AccountsConfig, db: Database) -> Result<()> {
     let listener = AdapterListener::new(db).await;
 
     // Matrix client configuration and execution.

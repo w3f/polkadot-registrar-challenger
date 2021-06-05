@@ -17,6 +17,7 @@ pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 // Re-exports
 pub use actors::api::run_rest_api_server_blocking;
+pub use adapters::run_adapters_blocking;
 pub use database::Database;
 pub use notifier::SessionNotifier;
 
