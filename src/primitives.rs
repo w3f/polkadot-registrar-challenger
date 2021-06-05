@@ -323,6 +323,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::alice(),
                 is_fully_verified: false,
+                completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string()), false),
                     IdentityField::new(
@@ -341,6 +342,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::bob(),
                 is_fully_verified: false,
+                completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string()), false),
                     IdentityField::new(
@@ -359,6 +361,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::eve(),
                 is_fully_verified: false,
+                completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Eve".to_string()), false),
                     IdentityField::new(

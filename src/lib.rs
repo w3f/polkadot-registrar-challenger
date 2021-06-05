@@ -9,10 +9,10 @@ extern crate serde;
 #[macro_use]
 extern crate async_trait;
 
+use futures::{select, FutureExt};
 use log::LevelFilter;
 use std::env;
 use std::fs;
-use futures::{select, FutureExt};
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
@@ -33,6 +33,7 @@ mod tests;
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub log_level: LevelFilter,
+    pub db: DatabaseConfig,
     pub instance: InstanceType,
 }
 
@@ -51,7 +52,7 @@ pub struct SingleInstanceConfig {
     pub notifier: NotifierConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct DatabaseConfig {
     pub uri: String,
@@ -61,7 +62,6 @@ pub struct DatabaseConfig {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct NotifierConfig {
-    pub db: DatabaseConfig,
     pub api_address: String,
 }
 
@@ -69,7 +69,6 @@ pub struct NotifierConfig {
 #[serde(rename_all = "snake_case")]
 pub struct AdapterConfig {
     pub accounts: AccountsConfig,
-    pub db: DatabaseConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,32 +157,39 @@ pub fn init_env() -> Result<Config> {
     Ok(config)
 }
 
+async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
+    let db = Database::new(&db_config.uri, &db_config.db_name).await?;
+    run_adapters_blocking(config.accounts, db).await
+}
+
+async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {
+    let db = Database::new(&db_config.uri, &db_config.db_name).await?;
+    let server = run_rest_api_server_blocking(&config.api_address, db.clone()).await?;
+    Ok(SessionNotifier::new(db, server).run_blocking().await)
+}
+
 pub async fn run() -> Result<()> {
-    async fn config_adapter_listener(config: AdapterConfig) -> Result<()> {
-        let db = Database::new(&config.db.uri, &config.db.db_name).await?;
-        run_adapters_blocking(config.accounts, db).await
-    }
+    let root = init_env()?;
+    let (db_config, instance) = (root.db, root.instance);
 
-    async fn config_session_notifier(config: NotifierConfig) -> Result<()> {
-        let db = Database::new(&config.db.uri, &config.db.db_name).await?;
-        let server = run_rest_api_server_blocking(&config.api_address, db.clone()).await?;
-        Ok(SessionNotifier::new(db, server).run_blocking().await)
-    }
-
-    let config = init_env()?;
-
-    match config.instance {
+    match instance {
         InstanceType::AdapterListener(config) => {
-            config_adapter_listener(config).await?;
+            config_adapter_listener(db_config, config).await?;
         }
         InstanceType::SessionNotifier(config) => {
-            config_session_notifier(config).await?;
+            config_session_notifier(db_config, config).await?;
         }
         InstanceType::SingleInstance(config) => {
             let (adapter, notifier) = (config.adapter, config.notifier);
 
-            let a = tokio::spawn(async move { config_adapter_listener(adapter).await });
-            let b = tokio::spawn(async move { config_session_notifier(notifier).await });
+            let t1_db_config = db_config.clone();
+            let t2_db_config = db_config.clone();
+
+            // Starts threads
+            let a =
+                tokio::spawn(async move { config_adapter_listener(t1_db_config, adapter).await });
+            let b =
+                tokio::spawn(async move { config_session_notifier(t2_db_config, notifier).await });
 
             // If one thread exits, exit the full application.
             select! {
@@ -191,6 +197,35 @@ pub async fn run() -> Result<()> {
                 res = b.fuse() => res??,
             }
         }
+    }
+
+    Ok(())
+}
+
+#[actix::test]
+async fn random_generator() -> Result<()> {
+    let root = init_env()?;
+    let (db_config, instance) = (root.db, root.instance);
+
+    match instance {
+        InstanceType::SingleInstance(config) => {
+            let (adapter, notifier) = (config.adapter, config.notifier);
+
+            let t1_db_config = db_config.clone();
+            let t2_db_config = db_config.clone();
+
+            let a =
+                tokio::spawn(async move { config_adapter_listener(t1_db_config, adapter).await });
+            let b =
+                tokio::spawn(async move { config_session_notifier(t2_db_config, notifier).await });
+
+            // If one thread exits, exit the full application.
+            select! {
+                res = a.fuse() => res??,
+                res = b.fuse() => res??,
+            }
+        }
+        _ => panic!("wrong instance type in config"),
     }
 
     Ok(())
