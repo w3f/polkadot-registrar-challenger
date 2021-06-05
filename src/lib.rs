@@ -41,7 +41,6 @@ pub enum InstanceType {
     AdapterListener(AdapterConfig),
     SessionNotifier(NotifierConfig),
     SingleInstance(SingleInstanceConfig),
-    RandomGenerator(SingleInstanceConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,5 +156,3 @@ pub fn init_env() -> Result<Config> {
 
     Ok(config)
 }
-
-pub fn random_generator() {}

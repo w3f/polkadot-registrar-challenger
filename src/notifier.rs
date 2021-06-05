@@ -8,6 +8,7 @@ use actix_broker::{Broker, SystemBroker};
 use std::collections::HashMap;
 use tokio::time::{interval, Duration};
 
+// TODO: Should be a single function.
 #[derive(Clone)]
 pub struct SessionNotifier {
     db: Database,
