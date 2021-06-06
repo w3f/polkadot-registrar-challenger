@@ -213,7 +213,7 @@ mod local_tests {
     use tokio::time::{sleep, Duration};
 
     #[actix::test]
-    async fn random_generator() {
+    async fn random_event_generator() {
         async fn generate_events(db_config: DatabaseConfig) {
             let mut db = Database::new(&db_config.uri, &db_config.db_name)
                 .await
@@ -260,29 +260,24 @@ mod local_tests {
             }
         }
 
-        let root = init_env().unwrap();
-        let (db_config, instance) = (root.db, root.instance);
+        let database = DatabaseConfig {
+            uri: "mongodb://localhost:27017/".to_string(),
+            db_name: "random_event_generator".to_string(),
+        };
 
-        match instance {
-            InstanceType::SingleInstance(config) => {
-                let notifier = config.notifier;
+        let notifier = NotifierConfig {
+            api_address: "localhost:8888".to_string(),
+        };
 
-                let t1_db_config = db_config.clone();
-                let t2_db_config = db_config.clone();
+        let t_db = database.clone();
 
-                let a =
-                    tokio::spawn(
-                        async move { config_session_notifier(t1_db_config, notifier).await },
-                    );
-                let b = tokio::spawn(async move { generate_events(t2_db_config).await });
+        let a = tokio::spawn(async move { config_session_notifier(database, notifier).await });
+        let b = tokio::spawn(async move { generate_events(t_db).await });
 
-                // If one thread exits, exit the full application.
-                select! {
-                    res = a.fuse() => res.unwrap().unwrap(),
-                    res = b.fuse() => res.unwrap(),
-                }
-            }
-            _ => panic!("wrong instance type in config"),
+        // If one thread exits, exit the full application.
+        select! {
+            res = a.fuse() => res.unwrap().unwrap(),
+            res = b.fuse() => res.unwrap(),
         }
     }
 }
