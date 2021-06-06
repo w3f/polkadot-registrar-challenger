@@ -86,7 +86,7 @@ impl AdapterListener {
         let mut interval = interval(Duration::from_secs(timeout));
 
         let mut db = self.db.clone();
-        tokio::spawn(async move {
+        actix::spawn(async move {
             loop {
                 // Timeout (skipped the first time);
                 interval.tick().await;

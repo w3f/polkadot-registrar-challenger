@@ -1,8 +1,6 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate thiserror;
-#[macro_use]
 extern crate anyhow;
 #[macro_use]
 extern crate serde;
@@ -186,15 +184,31 @@ pub async fn run() -> Result<()> {
             let t2_db_config = db_config.clone();
 
             // Starts threads
-            let a =
-                tokio::spawn(async move { config_adapter_listener(t1_db_config, adapter).await });
-            let b =
-                tokio::spawn(async move { config_session_notifier(t2_db_config, notifier).await });
+            let a = actix::spawn(async move {
+                config_adapter_listener(t1_db_config, adapter)
+                    .await
+                    .map(|_| ())
+                    .or_else::<(), _>(|err| {
+                        error!("{:?}", err);
+                        Ok(())
+                    })
+                    .unwrap()
+            });
+            let b = actix::spawn(async move {
+                config_session_notifier(t2_db_config, notifier)
+                    .await
+                    .map(|_| ())
+                    .or_else::<(), _>(|err| {
+                        error!("{:?}", err);
+                        Ok(())
+                    })
+                    .unwrap()
+            });
 
             // If one thread exits, exit the full application.
             select! {
-                res = a.fuse() => res??,
-                res = b.fuse() => res??,
+                res = a.fuse() => res?,
+                res = b.fuse() => res?,
             }
         }
     }
@@ -203,7 +217,7 @@ pub async fn run() -> Result<()> {
 }
 
 #[cfg(test)]
-mod local_tests {
+mod live_tests {
     use super::*;
     use crate::primitives::{
         ExpectedChallenge, ExternalMessage, ExternalMessageType, JudgementState, MessageId,
@@ -213,6 +227,7 @@ mod local_tests {
     use tokio::time::{sleep, Duration};
 
     #[actix::test]
+    #[ignore]
     async fn random_event_generator() {
         async fn generate_events(db_config: DatabaseConfig) {
             let mut db = Database::new(&db_config.uri, &db_config.db_name)
@@ -271,12 +286,13 @@ mod local_tests {
 
         let t_db = database.clone();
 
-        let a = tokio::spawn(async move { config_session_notifier(database, notifier).await });
-        let b = tokio::spawn(async move { generate_events(t_db).await });
+        let a =
+            actix::spawn(async move { config_session_notifier(database, notifier).await.unwrap() });
+        let b = actix::spawn(async move { generate_events(t_db).await });
 
         // If one thread exits, exit the full application.
         select! {
-            res = a.fuse() => res.unwrap().unwrap(),
+            res = a.fuse() => res.unwrap(),
             res = b.fuse() => res.unwrap(),
         }
     }

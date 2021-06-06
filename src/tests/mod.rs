@@ -58,7 +58,7 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
     listener.start_message_adapter(injector.clone(), 1).await;
 
     let t_db = db.clone();
-    tokio::spawn(async move {
+    actix::spawn(async move {
         SessionNotifier::new(t_db, actor).run_blocking().await;
     });
 
