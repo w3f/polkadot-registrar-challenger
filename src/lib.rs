@@ -163,7 +163,10 @@ async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfi
 async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
     let server = run_rest_api_server_blocking(&config.api_address, db.clone()).await?;
-    Ok(SessionNotifier::new(db, server).run_blocking().await)
+
+    actix::spawn(async move { SessionNotifier::new(db, server).run_blocking().await });
+
+    Ok(())
 }
 
 pub async fn run() -> Result<()> {
@@ -194,6 +197,7 @@ pub async fn run() -> Result<()> {
                     })
                     .unwrap()
             });
+            // TOOD: No need to run in thread. See blow in test function.
             let b = actix::spawn(async move {
                 config_session_notifier(t2_db_config, notifier)
                     .await
@@ -228,6 +232,7 @@ mod live_tests {
 
     #[actix::test]
     #[ignore]
+    // TODO: Implement custom Ctrl+C shutdown logic: https://stackoverflow.com/questions/54569843/shutting-down-actix-with-more-than-one-system-running
     async fn random_event_generator() {
         async fn generate_events(db_config: DatabaseConfig) {
             let mut db = Database::new(&db_config.uri, &db_config.db_name)
@@ -286,14 +291,9 @@ mod live_tests {
 
         let t_db = database.clone();
 
-        let a =
-            actix::spawn(async move { config_session_notifier(database, notifier).await.unwrap() });
-        let b = actix::spawn(async move { generate_events(t_db).await });
-
-        // If one thread exits, exit the full application.
-        select! {
-            res = a.fuse() => res.unwrap(),
-            res = b.fuse() => res.unwrap(),
-        }
+        config_session_notifier(database, notifier).await.unwrap();
+        actix::spawn(async move { generate_events(t_db).await })
+            .await
+            .unwrap();
     }
 }
