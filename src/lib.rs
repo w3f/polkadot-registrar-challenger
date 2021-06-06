@@ -202,31 +202,87 @@ pub async fn run() -> Result<()> {
     Ok(())
 }
 
-#[actix::test]
-async fn random_generator() -> Result<()> {
-    let root = init_env()?;
-    let (db_config, instance) = (root.db, root.instance);
+#[cfg(test)]
+mod local_tests {
+    use super::*;
+    use crate::primitives::{
+        ExpectedChallenge, ExternalMessage, ExternalMessageType, JudgementState, MessageId,
+        Timestamp,
+    };
+    use rand::{thread_rng, Rng};
+    use tokio::time::{sleep, Duration};
 
-    match instance {
-        InstanceType::SingleInstance(config) => {
-            let (adapter, notifier) = (config.adapter, config.notifier);
+    #[actix::test]
+    async fn random_generator() {
+        async fn generate_events(db_config: DatabaseConfig) {
+            let mut db = Database::new(&db_config.uri, &db_config.db_name)
+                .await
+                .unwrap();
 
-            let t1_db_config = db_config.clone();
-            let t2_db_config = db_config.clone();
+            let alice = JudgementState::alice();
+            let bob = JudgementState::bob();
 
-            let a =
-                tokio::spawn(async move { config_adapter_listener(t1_db_config, adapter).await });
-            let b =
-                tokio::spawn(async move { config_session_notifier(t2_db_config, notifier).await });
+            loop {
+                db.add_judgement_request(alice.clone()).await.unwrap();
+                db.add_judgement_request(bob.clone()).await.unwrap();
 
-            // If one thread exits, exit the full application.
-            select! {
-                res = a.fuse() => res??,
-                res = b.fuse() => res??,
+                let rand = thread_rng().gen_range(0, 2);
+                let origin = match rand {
+                    0 => ExternalMessageType::Email("alice@email.com".to_string()),
+                    1 => ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+                    2 => ExternalMessageType::Twitter("@alice".to_string()),
+                    _ => panic!(),
+                };
+
+                let msg = ExternalMessage {
+                    origin: origin.clone(),
+                    id: MessageId::from(0u32),
+                    timestamp: Timestamp::now(),
+                    values: {
+                        let rand = thread_rng().gen_range(0, 1);
+                        match rand {
+                            0 => ExpectedChallenge::random().into_message_parts(),
+                            1 => alice
+                                .get_field(&origin.into())
+                                .expected_challenge
+                                .into_message_parts(),
+                            _ => panic!(),
+                        }
+                    },
+                };
+
+                db.process_message(&msg).await.unwrap();
+
+                let rand = thread_rng().gen_range(3, 5);
+                sleep(Duration::from_secs(rand)).await;
+                db.prune_completed(0).await.unwrap();
+                sleep(Duration::from_secs(rand)).await;
             }
         }
-        _ => panic!("wrong instance type in config"),
-    }
 
-    Ok(())
+        let root = init_env().unwrap();
+        let (db_config, instance) = (root.db, root.instance);
+
+        match instance {
+            InstanceType::SingleInstance(config) => {
+                let notifier = config.notifier;
+
+                let t1_db_config = db_config.clone();
+                let t2_db_config = db_config.clone();
+
+                let a =
+                    tokio::spawn(
+                        async move { config_session_notifier(t1_db_config, notifier).await },
+                    );
+                let b = tokio::spawn(async move { generate_events(t2_db_config).await });
+
+                // If one thread exits, exit the full application.
+                select! {
+                    res = a.fuse() => res.unwrap().unwrap(),
+                    res = b.fuse() => res.unwrap(),
+                }
+            }
+            _ => panic!("wrong instance type in config"),
+        }
+    }
 }

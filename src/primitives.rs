@@ -382,4 +382,14 @@ mod tests {
             })
         }
     }
+
+    impl From<ExternalMessageType> for IdentityFieldValue {
+        fn from(val: ExternalMessageType) -> Self {
+            match val {
+                ExternalMessageType::Email(n) => IdentityFieldValue::Email(n),
+                ExternalMessageType::Twitter(n) => IdentityFieldValue::Twitter(n),
+                ExternalMessageType::Matrix(n) => IdentityFieldValue::Matrix(n),
+            }
+        }
+    }
 }
