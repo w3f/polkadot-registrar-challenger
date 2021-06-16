@@ -223,6 +223,7 @@ mod live_tests {
     #[actix::test]
     #[ignore]
     // TODO: Implement custom Ctrl+C shutdown logic: https://stackoverflow.com/questions/54569843/shutting-down-actix-with-more-than-one-system-running
+    // Client message: `{"chain":"polkadot","address":"1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP"}`
     async fn random_event_generator() {
         async fn generate_events(db_config: DatabaseConfig) {
             let mut db = Database::new(&db_config.uri, &db_config.db_name)
