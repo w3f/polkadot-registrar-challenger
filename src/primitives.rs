@@ -3,7 +3,7 @@ use actix::Message;
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
-    pub chain_address: ChainAddress,
+    pub address: ChainAddress,
     pub chain: ChainName,
 }
 
@@ -294,7 +294,7 @@ mod tests {
     impl IdentityContext {
         pub fn alice() -> Self {
             IdentityContext {
-                chain_address: ChainAddress(
+                address: ChainAddress(
                     "1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP".to_string(),
                 ),
                 chain: ChainName::Polkadot,
@@ -302,7 +302,7 @@ mod tests {
         }
         pub fn bob() -> Self {
             IdentityContext {
-                chain_address: ChainAddress(
+                address: ChainAddress(
                     "1b3NhsSEqWSQwS6nPGKgCrSjv9Kp13CnhraLV5Coyd8ooXB".to_string(),
                 ),
                 chain: ChainName::Polkadot,
@@ -310,7 +310,7 @@ mod tests {
         }
         pub fn eve() -> Self {
             IdentityContext {
-                chain_address: ChainAddress(
+                address: ChainAddress(
                     "1cNyFSmLW4ofr7xh38za6JxLFxcu548LPcfc1E6L9r57SE3".to_string(),
                 ),
                 chain: ChainName::Polkadot,

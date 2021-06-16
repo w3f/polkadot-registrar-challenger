@@ -1,7 +1,7 @@
 use crate::actors::api::LookupServer;
 use crate::database::Database;
 use crate::primitives::ExternalMessage;
-use crate::{AccountsConfig, Result};
+use crate::{AdapterConfig, Result};
 use actix::prelude::*;
 use tokio::time::{interval, Duration};
 
@@ -9,7 +9,7 @@ pub mod email;
 pub mod matrix;
 pub mod twitter;
 
-pub async fn run_adapters_blocking(config: AccountsConfig, db: Database) -> Result<()> {
+pub async fn run_adapters_blocking(config: AdapterConfig, db: Database) -> Result<()> {
     let listener = AdapterListener::new(db).await;
 
     // Matrix client configuration and execution.
@@ -24,9 +24,7 @@ pub async fn run_adapters_blocking(config: AccountsConfig, db: Database) -> Resu
         )
         .await?;
 
-        listener
-            .start_message_adapter(matrix_client, config.request_interval)
-            .await;
+        listener.start_message_adapter(matrix_client, 1).await;
     }
 
     // Twitter client configuration and execution.

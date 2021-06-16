@@ -15,7 +15,7 @@ use std::fs;
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 // Re-exports
-pub use actors::api::run_rest_api_server_blocking;
+pub use actors::api::run_rest_api_server;
 pub use adapters::run_adapters_blocking;
 pub use database::Database;
 pub use notifier::SessionNotifier;
@@ -65,14 +65,8 @@ pub struct NotifierConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct AdapterConfig {
-    pub accounts: AccountsConfig,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
 // TODO: Rename to "Adapter"?
-pub struct AccountsConfig {
+pub struct AdapterConfig {
     matrix: MatrixConfig,
     twitter: TwitterConfig,
     email: EmailConfig,
@@ -86,10 +80,6 @@ pub struct MatrixConfig {
     pub username: String,
     pub password: String,
     pub db_path: String,
-    // Since the Matrix SDK listens to responses in a stream, this value does
-    // not require special considerations. But it should be often enough, given
-    // that `AdapterListener` fetches the messages from the queue in intervals.
-    pub request_interval: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,14 +147,14 @@ pub fn init_env() -> Result<Config> {
 
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
-    run_adapters_blocking(config.accounts, db).await
+    run_adapters_blocking(config, db).await
 }
 
 async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
-    let server = run_rest_api_server_blocking(&config.api_address, db.clone()).await?;
+    let lookup = run_rest_api_server(&config.api_address, db.clone()).await?;
 
-    actix::spawn(async move { SessionNotifier::new(db, server).run_blocking().await });
+    actix::spawn(async move { SessionNotifier::new(db, lookup).run_blocking().await });
 
     Ok(())
 }
@@ -282,7 +272,10 @@ mod live_tests {
 
         let database = DatabaseConfig {
             uri: "mongodb://localhost:27017/".to_string(),
-            db_name: "random_event_generator".to_string(),
+            db_name: format!(
+                "random_event_generator_{}",
+                thread_rng().gen_range(u32::MIN, u32::MAX)
+            ),
         };
 
         let notifier = NotifierConfig {
