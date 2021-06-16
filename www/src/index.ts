@@ -41,7 +41,7 @@ class ActionListerner {
         const network = document.getElementById("specify-network")!;
         const action = document.getElementById("specify-action")!;
 
-        const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+        const socket = new WebSocket('ws://161.35.213.120/api/account_status');
 
         socket.addEventListener("open", (_: Event) => {
             this.btn_execute_action
