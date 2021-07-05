@@ -124,7 +124,7 @@ async fn verify_invalid_message_bad_challenge() {
             origin: ExternalMessageType::Email("alice@email.com".to_string()),
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
-            values: ExpectedMessage::random().into_message_parts(),
+            values: ExpectedMessage::random().to_message_parts(),
         })
         .await;
 
@@ -190,7 +190,7 @@ async fn verify_invalid_message_bad_origin() {
             values: alice
                 .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
                 .expected_challenge
-                .into_message_parts(),
+                .to_message_parts(),
         })
         .await;
 
@@ -243,7 +243,7 @@ async fn verify_valid_message() {
             values: alice
                 .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
                 .expected_challenge
-                .into_message_parts(),
+                .to_message_parts(),
         })
         .await;
 

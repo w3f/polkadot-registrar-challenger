@@ -30,6 +30,17 @@ impl IdentityField {
     pub fn value(&self) -> &IdentityFieldValue {
         &self.value
     }
+    #[cfg(test)]
+    pub fn challenge_mut(&mut self) -> &mut ChallengeType {
+        &mut self.challenge
+    }
+    #[cfg(test)]
+    pub fn expected_message(&self) -> &ExpectedMessage {
+        match &self.challenge {
+            ChallengeType::ExpectedMessage { message, second } => message,
+            _ => panic!(),
+        }
+    }
 }
 
 impl IdentityField {
@@ -133,7 +144,7 @@ impl ExpectedMessage {
         self.is_verified = true;
     }
     #[cfg(test)]
-    pub fn into_message_parts(&self) -> Vec<MessagePart> {
+    pub fn to_message_parts(&self) -> Vec<MessagePart> {
         vec![self.value.clone().into()]
     }
 }
@@ -376,16 +387,10 @@ mod tests {
                 is_fully_verified: false,
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string()), false),
-                    IdentityField::new(
-                        IdentityFieldValue::Email("alice@email.com".to_string()),
-                        true,
-                    ),
-                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string()), false),
-                    IdentityField::new(
-                        IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
-                        true,
-                    ),
+                    IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
+                    IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
+                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string())),
+                    IdentityField::new(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
                 ],
             }
         }
@@ -395,16 +400,10 @@ mod tests {
                 is_fully_verified: false,
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string()), false),
-                    IdentityField::new(
-                        IdentityFieldValue::Email("bob@email.com".to_string()),
-                        true,
-                    ),
-                    IdentityField::new(IdentityFieldValue::Twitter("@bob".to_string()), false),
-                    IdentityField::new(
-                        IdentityFieldValue::Matrix("@bob:matrix.org".to_string()),
-                        true,
-                    ),
+                    IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string())),
+                    IdentityField::new(IdentityFieldValue::Email("bob@email.com".to_string())),
+                    IdentityField::new(IdentityFieldValue::Twitter("@bob".to_string())),
+                    IdentityField::new(IdentityFieldValue::Matrix("@bob:matrix.org".to_string())),
                 ],
             }
         }
@@ -414,23 +413,23 @@ mod tests {
                 is_fully_verified: false,
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new(IdentityFieldValue::DisplayName("Eve".to_string()), false),
-                    IdentityField::new(
-                        IdentityFieldValue::Email("eve@email.com".to_string()),
-                        true,
-                    ),
-                    IdentityField::new(IdentityFieldValue::Twitter("@eve".to_string()), false),
-                    IdentityField::new(
-                        IdentityFieldValue::Matrix("@eve:matrix.org".to_string()),
-                        true,
-                    ),
+                    IdentityField::new(IdentityFieldValue::DisplayName("Eve".to_string())),
+                    IdentityField::new(IdentityFieldValue::Email("eve@email.com".to_string())),
+                    IdentityField::new(IdentityFieldValue::Twitter("@eve".to_string())),
+                    IdentityField::new(IdentityFieldValue::Matrix("@eve:matrix.org".to_string())),
                 ],
             }
         }
         pub fn blank_second_challenge(&mut self) {
-            self.fields.iter_mut().for_each(|field| {
-                field.second_expected_challenge = None;
-            })
+            self.fields
+                .iter_mut()
+                .for_each(|field| match field.challenge_mut() {
+                    ChallengeType::ExpectedMessage {
+                        message,
+                        ref mut second,
+                    } => *second = None,
+                    _ => {}
+                })
         }
     }
 

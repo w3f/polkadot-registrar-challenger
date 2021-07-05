@@ -251,11 +251,11 @@ mod live_tests {
                     values: {
                         let rand = thread_rng().gen_range(0, 1);
                         match rand {
-                            0 => ExpectedMessage::random().into_message_parts(),
+                            0 => ExpectedMessage::random().to_message_parts(),
                             1 => alice
                                 .get_field(&origin.into())
-                                .expected_challenge
-                                .into_message_parts(),
+                                .expected_message()
+                                .to_message_parts(),
                             _ => panic!(),
                         }
                     },
