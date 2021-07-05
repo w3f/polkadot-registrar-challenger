@@ -21,21 +21,26 @@ pub enum ChainName {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityField {
-    pub value: IdentityFieldValue,
-    pub expected_challenge: ExpectedChallenge,
-    #[serde(skip)]
-    pub second_expected_challenge: Option<ExpectedChallenge>,
-    pub failed_attempts: isize,
+    value: IdentityFieldValue,
+    challenge: ChallengeType,
+    failed_attempts: isize,
 }
 
+impl IdentityField {
+    pub fn value(&self) -> &IdentityFieldValue {
+        &self.value
+    }
+}
+
+/*
 impl IdentityField {
     pub fn new(val: IdentityFieldValue, second_challenge: bool) -> Self {
         IdentityField {
             value: val,
-            expected_challenge: ExpectedChallenge::random(),
+            challenge: ExpectedMessage::random(),
             second_expected_challenge: {
                 if second_challenge {
-                    Some(ExpectedChallenge::random())
+                    Some(ExpectedMessage::random())
                 } else {
                     None
                 }
@@ -44,20 +49,49 @@ impl IdentityField {
         }
     }
 }
+*/
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    rename_all = "snake_case",
+    tag = "challenge_type",
+    content = "challenge"
+)]
+pub enum ChallengeType {
+    ExpectedMessage {
+        message: ExpectedMessage,
+        #[serde(skip)]
+        second: Option<ExpectedMessage>,
+    },
+}
+
+impl ChallengeType {
+    pub fn is_verified(&self) -> bool {
+        match self {
+            ChallengeType::ExpectedMessage { message, second } => {
+                if let Some(second) = second {
+                    message.is_verified && second.is_verified
+                } else {
+                    message.is_verified
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ExpectedChallenge {
+pub struct ExpectedMessage {
     pub value: String,
     pub is_verified: bool,
 }
 
-impl ExpectedChallenge {
+impl ExpectedMessage {
     pub fn random() -> Self {
         use rand::{thread_rng, Rng};
 
         let random: [u8; 16] = thread_rng().gen();
-        ExpectedChallenge {
+        ExpectedMessage {
             value: hex::encode(random),
             is_verified: false,
         }
@@ -127,14 +161,9 @@ pub struct JudgementState {
 
 impl JudgementState {
     pub fn is_fully_verified(&self) -> bool {
-        self.fields.iter().all(|field| {
-            field.expected_challenge.is_verified && {
-                match field.second_expected_challenge {
-                    Some(ref challenge) => challenge.is_verified,
-                    None => true,
-                }
-            }
-        })
+        self.fields
+            .iter()
+            .all(|field| field.challenge.is_verified())
     }
     #[cfg(test)]
     pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {

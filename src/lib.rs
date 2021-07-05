@@ -214,8 +214,7 @@ pub async fn run() -> Result<()> {
 mod live_tests {
     use super::*;
     use crate::primitives::{
-        ExpectedChallenge, ExternalMessage, ExternalMessageType, JudgementState, MessageId,
-        Timestamp,
+        ExpectedMessage, ExternalMessage, ExternalMessageType, JudgementState, MessageId, Timestamp,
     };
     use rand::{thread_rng, Rng};
     use tokio::time::{sleep, Duration};
@@ -252,7 +251,7 @@ mod live_tests {
                     values: {
                         let rand = thread_rng().gen_range(0, 1);
                         match rand {
-                            0 => ExpectedChallenge::random().into_message_parts(),
+                            0 => ExpectedMessage::random().into_message_parts(),
                             1 => alice
                                 .get_field(&origin.into())
                                 .expected_challenge

@@ -2,7 +2,7 @@ use super::*;
 use crate::actors::api::{JsonResult, NotifyAccountState, ResponseAccountState};
 use crate::database::Database;
 use crate::primitives::{
-    ExpectedChallenge, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
     JudgementState, MessageId, MessagePart, NotificationMessage, Timestamp,
 };
 use actix_http::ws::Frame;
@@ -124,7 +124,7 @@ async fn verify_invalid_message_bad_challenge() {
             origin: ExternalMessageType::Email("alice@email.com".to_string()),
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
-            values: ExpectedChallenge::random().into_message_parts(),
+            values: ExpectedMessage::random().into_message_parts(),
         })
         .await;
 

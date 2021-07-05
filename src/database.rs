@@ -88,7 +88,7 @@ impl Database {
                 if let Some(current_field) = current
                     .fields
                     .iter()
-                    .find(|current| current.value == new_field.value)
+                    .find(|current| current.value() == new_field.value())
                 {
                     to_add.push(current_field.clone());
                 } else {
@@ -166,12 +166,13 @@ impl Database {
             let mut field_state = id_state
                 .fields
                 .iter_mut()
-                .find(|field| field.value.matches(&message))
+                .find(|field| field.value().matches(&message))
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
+            /*
             if !field_state.expected_challenge.is_verified {
                 if field_state.expected_challenge.verify_message(&message) {
                     // Update field state. Be more specific with the query in order
@@ -216,10 +217,11 @@ impl Database {
                         field_state.value.clone(),
                     ));
                 }
-            } else if let Some(challenge) = &field_state.second_expected_challenge {
+            } else if let Some(challenge) = &field_state.second {
             } else {
                 continue;
             }
+            */
 
             std::mem::drop(field_state);
 
