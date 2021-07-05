@@ -38,15 +38,24 @@ class ActionListerner {
                 <span class="visually-hidden"></span>
             `;
 
-        const network = document.getElementById("specify-network")!;
-        const action = document.getElementById("specify-action")!;
+        const action = document.getElementById("specify-action")!.innerHTML;
+        const address = (document.getElementById("specify-address")! as HTMLInputElement).value;
+        const network = document.getElementById("specify-network")!.innerHTML.toLowerCase();
 
-        const socket = new WebSocket('ws://161.35.213.120/api/account_status');
+        if (action == "Request Judgement") {
+            const socket = new WebSocket('ws://161.35.213.120/api/account_status');
 
-        socket.addEventListener("open", (_: Event) => {
-            this.btn_execute_action
-                .innerHTML = "Done!";
-        });
+            socket.addEventListener("open", (_: Event) => {
+                socket.send(JSON.stringify({ address: address, chain: network }));
+
+                this.btn_execute_action
+                    .innerHTML = "Done!";
+            });
+
+            socket.addEventListener("message", (event: Event) => {
+                console.log((event as MessageEvent).data);
+            });
+        }
     }
 }
 
