@@ -31,6 +31,9 @@ impl IdentityField {
     pub fn value(&self) -> &IdentityFieldValue {
         &self.value
     }
+    pub fn challenge(&self) -> &ChallengeType {
+        &self.challenge
+    }
     // TODO: Move to tests module.
     #[cfg(test)]
     pub fn challenge_mut(&mut self) -> &mut ChallengeType {
@@ -39,7 +42,7 @@ impl IdentityField {
     #[cfg(test)]
     pub fn expected_message(&self) -> &ExpectedMessage {
         match &self.challenge {
-            ChallengeType::ExpectedMessage { message, second } => message,
+            ChallengeType::ExpectedMessage { expected, second } => expected,
             _ => panic!(),
         }
     }
@@ -47,9 +50,9 @@ impl IdentityField {
     pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
         match &mut self.challenge {
             ChallengeType::ExpectedMessage {
-                ref mut message,
+                ref mut expected,
                 second,
-            } => message,
+            } => expected,
             _ => panic!(),
         }
     }
@@ -72,15 +75,15 @@ impl IdentityField {
                 Additional(_) => ChallengeType::Unsupported,
                 DisplayName(_) => ChallengeType::BackgroundCheck { passed: false },
                 Email(_) => ChallengeType::ExpectedMessage {
-                    message: ExpectedMessage::random(),
+                    expected: ExpectedMessage::random(),
                     second: Some(ExpectedMessage::random()),
                 },
                 Twitter(_) => ChallengeType::ExpectedMessage {
-                    message: ExpectedMessage::random(),
+                    expected: ExpectedMessage::random(),
                     second: None,
                 },
                 Matrix(_) => ChallengeType::ExpectedMessage {
-                    message: ExpectedMessage::random(),
+                    expected: ExpectedMessage::random(),
                     second: None,
                 },
             }
@@ -95,14 +98,10 @@ impl IdentityField {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(
-    rename_all = "snake_case",
-    tag = "challenge_type",
-    content = "challenge"
-)]
+#[serde(rename_all = "snake_case", tag = "challenge_type", content = "content")]
 pub enum ChallengeType {
     ExpectedMessage {
-        message: ExpectedMessage,
+        expected: ExpectedMessage,
         #[serde(skip)]
         second: Option<ExpectedMessage>,
     },
@@ -115,11 +114,11 @@ pub enum ChallengeType {
 impl ChallengeType {
     pub fn is_verified(&self) -> bool {
         match self {
-            ChallengeType::ExpectedMessage { message, second } => {
+            ChallengeType::ExpectedMessage { expected, second } => {
                 if let Some(second) = second {
-                    message.is_verified && second.is_verified
+                    expected.is_verified && second.is_verified
                 } else {
-                    message.is_verified
+                    expected.is_verified
                 }
             }
             ChallengeType::BackgroundCheck { passed } => *passed,
@@ -145,10 +144,9 @@ impl ExpectedMessage {
             is_verified: false,
         }
     }
-    pub fn verify_message(&mut self, message: &ExternalMessage) -> bool {
+    pub fn verify_message_dry(&self, message: &ExternalMessage) -> bool {
         for value in &message.values {
             if value.0.contains(&self.value) {
-                self.is_verified = true;
                 return true;
             }
         }
@@ -441,7 +439,7 @@ mod tests {
                 .iter_mut()
                 .for_each(|field| match field.challenge_mut() {
                     ChallengeType::ExpectedMessage {
-                        message,
+                        expected,
                         ref mut second,
                     } => *second = None,
                     _ => {}

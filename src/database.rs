@@ -1,6 +1,6 @@
 use crate::primitives::{
-    ChainAddress, Event, ExternalMessage, IdentityContext, IdentityField, JudgementState,
-    MessageId, NotificationMessage, Timestamp,
+    ChainAddress, ChallengeType, Event, ExternalMessage, IdentityContext, IdentityField,
+    JudgementState, MessageId, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -172,56 +172,67 @@ impl Database {
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
-            /*
-            if !field_state.expected_challenge.is_verified {
-                if field_state.expected_challenge.verify_message(&message) {
-                    // Update field state. Be more specific with the query in order
-                    // to verify the correct field (in theory, there could be
-                    // multiple pending requests with the same external account
-                    // specified).
-                    coll.update_one(
-                        doc! {
-                            "fields.value": message.origin.to_bson()?,
-                            "fields.expected_challenge.value": field_state.expected_challenge.value.to_bson()?,
-                        },
-                        doc! {
-                            "$set": {
-                                "fields.$.expected_challenge.is_verified": true.to_bson()?,
-                            }
-                        },
-                        None,
-                    )
-                    .await?;
+            let challenge = field_state.challenge();
+            if !challenge.is_verified() {
+                match challenge {
+                    ChallengeType::ExpectedMessage { expected, second } => {
+                        if !expected.is_verified {
+                            if expected.verify_message_dry(&message) {
+                                // Update field state. Be more specific with the query in order
+                                // to verify the correct field (in theory, there could be
+                                // multiple pending requests with the same external account
+                                // specified).
+                                coll.update_one(
+                                    doc! {
+                                        "fields.value": message.origin.to_bson()?,
+                                        "fields.challenge.content.expected.value": expected.value.to_bson()?,
+                                    },
+                                    doc! {
+                                        "$set": {
+                                            "fields.$.challenge.content.expected.is_verified": true.to_bson()?,
+                                        }
+                                    },
+                                    None,
+                                )
+                                .await?;
 
-                    events.push(NotificationMessage::FieldVerified(
-                        id_state.context.clone(),
-                        field_state.value.clone(),
-                    ));
-                } else {
-                    // Update field state.
-                    coll.update_one(
-                        doc! {
-                            "fields.value": message.origin.to_bson()?,
-                        },
-                        doc! {
-                            "$inc": {
-                                "fields.$.failed_attempts": 1isize.to_bson()?,
-                            }
-                        },
-                        None,
-                    )
-                    .await?;
+                                events.push(NotificationMessage::FieldVerified(
+                                    id_state.context.clone(),
+                                    field_state.value().clone(),
+                                ));
+                            } else {
+                                // Update field state.
+                                coll.update_one(
+                                    doc! {
+                                        "fields.value": message.origin.to_bson()?,
+                                    },
+                                    doc! {
+                                        "$inc": {
+                                            "fields.$.failed_attempts": 1isize.to_bson()?,
+                                        }
+                                    },
+                                    None,
+                                )
+                                .await?;
 
-                    events.push(NotificationMessage::FieldVerificationFailed(
-                        id_state.context.clone(),
-                        field_state.value.clone(),
-                    ));
+                                events.push(NotificationMessage::FieldVerificationFailed(
+                                    id_state.context.clone(),
+                                    field_state.value().clone(),
+                                ));
+                            }
+                        } else if let Some(second) = second {
+                            if second.is_verified {}
+                        }
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Invalid challenge type when verifying message. This is a bug"
+                        ))
+                    }
                 }
-            } else if let Some(challenge) = &field_state.second {
             } else {
                 continue;
             }
-            */
 
             std::mem::drop(field_state);
 
