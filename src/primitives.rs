@@ -32,24 +32,40 @@ impl IdentityField {
     }
 }
 
-/*
 impl IdentityField {
-    pub fn new(val: IdentityFieldValue, second_challenge: bool) -> Self {
+    pub fn new(val: IdentityFieldValue) -> Self {
+        use IdentityFieldValue::*;
+
+        let challenge = {
+            match val {
+                LegalName(_) => ChallengeType::Unsupported,
+                Web(_) => ChallengeType::Unsupported,
+                PGPFingerprint(_) => ChallengeType::Unsupported,
+                Image(_) => ChallengeType::Unsupported,
+                Additional(_) => ChallengeType::Unsupported,
+                DisplayName(_) => ChallengeType::BackgroundCheck { passed: false },
+                Email(_) => ChallengeType::ExpectedMessage {
+                    message: ExpectedMessage::random(),
+                    second: Some(ExpectedMessage::random()),
+                },
+                Twitter(_) => ChallengeType::ExpectedMessage {
+                    message: ExpectedMessage::random(),
+                    second: None,
+                },
+                Matrix(_) => ChallengeType::ExpectedMessage {
+                    message: ExpectedMessage::random(),
+                    second: None,
+                },
+            }
+        };
+
         IdentityField {
             value: val,
-            challenge: ExpectedMessage::random(),
-            second_expected_challenge: {
-                if second_challenge {
-                    Some(ExpectedMessage::random())
-                } else {
-                    None
-                }
-            },
+            challenge: challenge,
             failed_attempts: 0,
         }
     }
 }
-*/
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -63,6 +79,10 @@ pub enum ChallengeType {
         #[serde(skip)]
         second: Option<ExpectedMessage>,
     },
+    BackgroundCheck {
+        passed: bool,
+    },
+    Unsupported,
 }
 
 impl ChallengeType {
@@ -75,6 +95,8 @@ impl ChallengeType {
                     message.is_verified
                 }
             }
+            ChallengeType::BackgroundCheck { passed } => *passed,
+            ChallengeType::Unsupported => false,
         }
     }
 }
