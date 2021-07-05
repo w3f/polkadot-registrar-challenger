@@ -23,6 +23,7 @@ pub enum ChainName {
 pub struct IdentityField {
     value: IdentityFieldValue,
     challenge: ChallengeType,
+    // TODO: Change this to usize.
     failed_attempts: isize,
 }
 
@@ -30,6 +31,7 @@ impl IdentityField {
     pub fn value(&self) -> &IdentityFieldValue {
         &self.value
     }
+    // TODO: Move to tests module.
     #[cfg(test)]
     pub fn challenge_mut(&mut self) -> &mut ChallengeType {
         &mut self.challenge
@@ -40,6 +42,20 @@ impl IdentityField {
             ChallengeType::ExpectedMessage { message, second } => message,
             _ => panic!(),
         }
+    }
+    #[cfg(test)]
+    pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
+        match &mut self.challenge {
+            ChallengeType::ExpectedMessage {
+                ref mut message,
+                second,
+            } => message,
+            _ => panic!(),
+        }
+    }
+    #[cfg(test)]
+    pub fn failed_attempts_mut(&mut self) -> &mut isize {
+        &mut self.failed_attempts
     }
 }
 

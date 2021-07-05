@@ -129,9 +129,9 @@ async fn verify_invalid_message_bad_challenge() {
         .await;
 
     // The expected message (field verification failed).
-    alice
+    *alice
         .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
-        .failed_attempts = 1;
+        .failed_attempts_mut() = 1;
 
     let expected = ResponseAccountState {
         state: alice.clone(),
@@ -189,7 +189,7 @@ async fn verify_invalid_message_bad_origin() {
             timestamp: Timestamp::now(),
             values: alice
                 .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
-                .expected_challenge
+                .expected_message()
                 .to_message_parts(),
         })
         .await;
@@ -242,7 +242,7 @@ async fn verify_valid_message() {
             timestamp: Timestamp::now(),
             values: alice
                 .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
-                .expected_challenge
+                .expected_message()
                 .to_message_parts(),
         })
         .await;
@@ -250,7 +250,7 @@ async fn verify_valid_message() {
     // Matrix account of Alice is now verified
     alice
         .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
-        .expected_challenge
+        .expected_message_mut()
         .set_verified();
 
     // The expected message (field verified successfully).
