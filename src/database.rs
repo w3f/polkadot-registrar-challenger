@@ -28,25 +28,6 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
-#[derive(Debug)]
-pub enum VerificationOutcome {
-    AlreadyVerified,
-    Valid {
-        state: JudgementState,
-        notifications: Vec<NotificationMessage>,
-    },
-    Invalid {
-        state: JudgementState,
-        notifications: Vec<NotificationMessage>,
-    },
-    // TODO: Docs clarify
-    SecondChallengeExpected {
-        state: JudgementState,
-        notifications: Vec<NotificationMessage>,
-    },
-    NotFound,
-}
-
 #[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
@@ -163,7 +144,7 @@ impl Database {
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
             let mut id_state: JudgementState = from_document(doc?)?;
-            let mut field_state = id_state
+            let field_state = id_state
                 .fields
                 .iter_mut()
                 .find(|field| field.value().matches(&message))

@@ -1,5 +1,5 @@
 use crate::actors::api::{LookupServer, NotifyAccountState};
-use crate::database::{Database, VerificationOutcome};
+use crate::database::Database;
 use crate::primitives::{ExternalMessage, IdentityContext};
 use crate::primitives::{JudgementState, NotificationMessage};
 use crate::Result;
