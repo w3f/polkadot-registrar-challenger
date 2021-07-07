@@ -281,7 +281,7 @@ mod live_tests {
 
                 let rand = thread_rng().gen_range(3, 5);
                 sleep(Duration::from_secs(rand)).await;
-                db.prune_completed(0).await.unwrap();
+                db.prune_timeout().await.unwrap();
                 sleep(Duration::from_secs(rand)).await;
             }
         }

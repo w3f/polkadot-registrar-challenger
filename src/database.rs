@@ -372,6 +372,22 @@ impl Database {
         Ok(())
     }
     #[cfg(test)]
+    pub async fn prune_timeout(&self) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        coll.delete_many(
+            doc! {
+                "completion_timestamp": {
+                    "$lt": Timestamp::now().raw() - 60,
+                }
+            },
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
+    #[cfg(test)]
     pub async fn set_display_name_valid(&self, name: &str) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
