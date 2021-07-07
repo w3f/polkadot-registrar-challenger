@@ -203,6 +203,7 @@ impl IdentityFieldValue {
 pub struct JudgementState {
     pub context: IdentityContext,
     pub is_fully_verified: bool,
+    pub inserted_timestamp: Timestamp,
     pub completion_timestamp: Option<Timestamp>,
     pub fields: Vec<IdentityField>,
 }
@@ -400,6 +401,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::alice(),
                 is_fully_verified: false,
+                inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
@@ -413,6 +415,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::alice(),
                 is_fully_verified: false,
+                inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
@@ -428,6 +431,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::bob(),
                 is_fully_verified: false,
+                inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string())),
@@ -441,6 +445,7 @@ mod tests {
             JudgementState {
                 context: IdentityContext::eve(),
                 is_fully_verified: false,
+                inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Eve".to_string())),

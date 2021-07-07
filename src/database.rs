@@ -377,7 +377,7 @@ impl Database {
 
         coll.delete_many(
             doc! {
-                "completion_timestamp": {
+                "inserted_timestamp": {
                     "$lt": Timestamp::now().raw() - 60,
                 }
             },
