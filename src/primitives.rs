@@ -34,11 +34,10 @@ impl IdentityField {
     pub fn challenge(&self) -> &ChallengeType {
         &self.challenge
     }
-    // TODO: Move to tests module.
-    #[cfg(test)]
     pub fn challenge_mut(&mut self) -> &mut ChallengeType {
         &mut self.challenge
     }
+    // TODO: Move to tests module.
     #[cfg(test)]
     pub fn expected_message(&self) -> &ExpectedMessage {
         match &self.challenge {
@@ -144,9 +143,10 @@ impl ExpectedMessage {
             is_verified: false,
         }
     }
-    pub fn verify_message_dry(&self, message: &ExternalMessage) -> bool {
+    pub fn verify_message(&mut self, message: &ExternalMessage) -> bool {
         for value in &message.values {
             if value.0.contains(&self.value) {
+                self.is_verified = true;
                 return true;
             }
         }

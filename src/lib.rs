@@ -243,7 +243,7 @@ mod live_tests {
                 let rand = thread_rng().gen_range(0, 3);
                 match rand {
                     0 => db.set_display_name_valid("Alice").await.unwrap(),
-                    _ => {},
+                    _ => {}
                 }
 
                 let rand = thread_rng().gen_range(0, 3);

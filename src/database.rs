@@ -144,7 +144,7 @@ impl Database {
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
             let mut id_state: JudgementState = from_document(doc?)?;
-            let field_state = id_state
+            let mut field_state = id_state
                 .fields
                 .iter_mut()
                 .find(|field| field.value().matches(&message))
@@ -153,13 +153,16 @@ impl Database {
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
-            let challenge = field_state.challenge();
+            let mut challenge = field_state.challenge_mut();
             if !challenge.is_verified() {
                 match challenge {
-                    ChallengeType::ExpectedMessage { expected, second } => {
+                    ChallengeType::ExpectedMessage {
+                        ref mut expected,
+                        second,
+                    } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
-                            if expected.verify_message_dry(&message) {
+                            if expected.verify_message(&message) {
                                 // Update field state. Be more specific with the query in order
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
@@ -252,7 +255,6 @@ impl Database {
                                 }
                                 */
                             } else {
-
                             }
                         }
                     }
