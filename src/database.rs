@@ -206,6 +206,7 @@ impl Database {
                         // If the first expected challenge has been verified, verify the second challenge, assuming it exists.
                         else if let Some(second) = second {
                             if !second.is_verified {
+                                /*
                                 if second.verify_message_dry(&message) {
                                     // Update field state. Be more specific with the query in order
                                     // to verify the correct field (in theory, there could be
@@ -249,6 +250,7 @@ impl Database {
                                         field_state.value().clone(),
                                     ));
                                 }
+                                */
                             } else {
 
                             }

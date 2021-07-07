@@ -113,26 +113,36 @@ class ActionListerner {
             `;
 
             table += '<tbody>';
+            let counter = 1;
             for (let field of parsed.message.state.fields) {
                 if (field.challenge.challenge_type == "expected_message") {
+                    let validity;
+                    if (field.challenge.content.expected.is_verified) {
+                        validity = '<span class="badge bg-success">verified</span>';
+                    } else {
+                        validity = '<span class="badge bg-warning text-dark">unverified</span>';
+                    }
+
                     table += `
                         <tr>
-                            <th scope="row">2</th>
-                            <td>${field.value.type}</td>
+                            <th scope="row">${counter}</th>
+                            <td>${capitalizeFirstLetter(field.value.type)}</td>
                             <td>${field.challenge.content.expected.value}</td>
                             <td>${field.value.value}</td>
                             <td>temp</td>
-                            <td>${field.challenge.content.expected.is_verified}</td>
+                            <td>${validity}</td>
                         </tr>
                     `;
+
+                    counter += 1;
                 } else if (field.challenge.challenge_type == "background_check" && field.value.type == "display_name") {
                     let elem = this.display_name_validity;
 
                     if (field.challenge.content.passed) {
-                        elem.innerHTML = "VALID";
+                        elem.innerHTML = '<span class="badge bg-success">valid</span>';
                         elem.classList.add("text-success");
                     } else {
-                        elem.innerHTML = "INVALID";
+                        elem.innerHTML = '<span class="badge bg-danger">invalid</span>';
                         elem.classList.add("text-danger");
                     }
 
@@ -161,6 +171,9 @@ class ActionListerner {
     }
 }
 
+function capitalizeFirstLetter(word: string) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
 
 function display_notification(notifications: Notification[]) {
 
