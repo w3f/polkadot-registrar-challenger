@@ -276,7 +276,8 @@ impl Database {
                     },
                     doc! {
                         "$set": {
-                            "is_fully_verified": true.to_bson()?
+                            "is_fully_verified": true.to_bson()?,
+                            "completion_timestamp": Timestamp::now().to_bson()?,
                         }
                     },
                     None,
