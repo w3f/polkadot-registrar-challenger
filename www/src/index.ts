@@ -1,3 +1,5 @@
+import { AccountStatus, Notification } from "./json";
+
 class ActionListerner {
     btn_execute_action: HTMLButtonElement;
 
@@ -53,10 +55,65 @@ class ActionListerner {
             });
 
             socket.addEventListener("message", (event: Event) => {
-                console.log((event as MessageEvent).data);
+                let msg = (event as MessageEvent);
+                console.log(msg.data);
+                parse_account_status(msg);
             });
         }
     }
+}
+
+function parse_account_status(msg: MessageEvent) {
+    let table = "";
+
+    const parsed: AccountStatus = JSON.parse(msg.data);
+    if (parsed.result_type == "ok") {
+        // TODO: Check if 'fields` is empty.
+
+        table + `
+            <thead>
+                <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Challenge</th>
+                    <th scope="col">From</th>
+                    <th scope="col">To</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+        `;
+
+        table = '<tbody>';
+        for (let field of parsed.message.state.fields) {
+            if (field.challenge.challenge_type == "expected_message") {
+                table + `
+                    <tr>
+                        <th scope="row">2</th>
+                        <td>${field.value.type}</td>
+                        <td>${field.challenge.content.expected.value}</td>
+                        <td>${field.value.value}</td>
+                        <td>temp</td>
+                        <td>${field.challenge.content.expected.is_verified}</td>
+                    </tr>
+                `;
+
+            } else if (field.challenge.challenge_type == "background_check") {
+
+            }
+        }
+        table = '</tbody>';
+
+
+        document.getElementById("verification-overview")!.innerHTML = table;
+    } else if (parsed.result_type == "err") {
+
+    } else {
+        // Print unexpected error...
+    }
+}
+
+function display_notification(notifications: Notification[]) {
+
 }
 
 new ActionListerner();

@@ -11,6 +11,7 @@ mod judgement_state;
 // Reexport
 pub use self::judgement_state::{LookupServer, NotifyAccountState, ResponseAccountState};
 
+// TODO: Unify all "*_type" values as just "type". See JSON output.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[serde(rename_all = "snake_case", tag = "result_type", content = "message")]
 #[rtype(result = "()")]
