@@ -262,8 +262,6 @@ impl Database {
                         ))
                     }
                 }
-            } else {
-                continue;
             }
 
             std::mem::drop(field_state);

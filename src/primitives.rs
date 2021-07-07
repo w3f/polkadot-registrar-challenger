@@ -178,6 +178,7 @@ pub enum IdentityFieldValue {
 }
 
 impl IdentityFieldValue {
+    // TODO: Rename
     pub fn matches(&self, message: &ExternalMessage) -> bool {
         match self {
             IdentityFieldValue::Email(n1) => match &message.origin {
