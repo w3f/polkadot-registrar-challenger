@@ -7,7 +7,7 @@
     "bootstrap": "^5.0.1"
   },
   "scripts": {
-    "build": "tsc && node-sass src/ -o dist/"
+    "build": "tsc && node-sass src/ -o dist/ && browserify dist/index.js -o dist/bundle.js"
   },
   "devDependencies": {
     "node-sass": "^6.0.0"
