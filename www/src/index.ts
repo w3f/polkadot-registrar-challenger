@@ -170,8 +170,12 @@ class ActionListerner {
             this.verification_overview.innerHTML = table;
             this.div_verification_overview.classList.remove("invisible");
 
-            this.unsupported_overview.innerHTML = unsupported;
-            this.div_unsupported_overview.classList.remove("invisible");
+            if (unsupported.length != 0) {
+                this.unsupported_overview.innerHTML = unsupported;
+                this.div_unsupported_overview.classList.remove("invisible");
+            } else {
+                this.div_unsupported_overview.classList.add("invisible");
+            }
 
             this.btn_execute_action
                 .innerHTML = `

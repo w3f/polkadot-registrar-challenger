@@ -233,15 +233,14 @@ mod live_tests {
                 .await
                 .unwrap();
 
-            let mut alice = JudgementState::alice();
             let bob = JudgementState::bob();
 
             loop {
                 let rand = thread_rng().gen_range(0, 3);
-                match rand {
-                    0 => alice = JudgementState::alice_unsupported(),
-                    _ => {}
-                }
+                let alice = match rand {
+                    0 => JudgementState::alice_unsupported(),
+                    _ => JudgementState::alice(),
+                };
 
                 db.add_judgement_request(alice.clone()).await.unwrap();
                 db.add_judgement_request(bob.clone()).await.unwrap();
@@ -281,7 +280,7 @@ mod live_tests {
 
                 let rand = thread_rng().gen_range(3, 5);
                 sleep(Duration::from_secs(rand)).await;
-                db.prune_timeout().await.unwrap();
+                db.prune_completed(0).await.unwrap();
                 sleep(Duration::from_secs(rand)).await;
             }
         }
