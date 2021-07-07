@@ -404,10 +404,10 @@ mod tests {
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
-                    IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
-                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string())),
-                    IdentityField::new(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::DisplayName("Alice".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Email("alice@email.com".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Twitter("@alice".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
                 ],
             }
         }
@@ -418,12 +418,12 @@ mod tests {
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
-                    IdentityField::new(IdentityFieldValue::Web("alice.com".to_string())),
-                    IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
-                    IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
-                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string())),
-                    IdentityField::new(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Web("alice.com".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::DisplayName("Alice".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Email("alice@email.com".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Twitter("@alice".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
                 ],
             }
         }
@@ -474,6 +474,49 @@ mod tests {
                 ExternalMessageType::Email(n) => IdentityFieldValue::Email(n),
                 ExternalMessageType::Twitter(n) => IdentityFieldValue::Twitter(n),
                 ExternalMessageType::Matrix(n) => IdentityFieldValue::Matrix(n),
+            }
+        }
+    }
+
+    impl IdentityField {
+        pub fn new_fixed_challenge(val: IdentityFieldValue) -> Self {
+            use IdentityFieldValue::*;
+
+            let challenge = {
+                match val {
+                    LegalName(_) => ChallengeType::Unsupported,
+                    Web(_) => ChallengeType::Unsupported,
+                    PGPFingerprint(_) => ChallengeType::Unsupported,
+                    Image(_) => ChallengeType::Unsupported,
+                    Additional(_) => ChallengeType::Unsupported,
+                    DisplayName(_) => ChallengeType::BackgroundCheck { passed: false },
+                    Email(_) => ChallengeType::ExpectedMessage {
+                        expected: ExpectedMessage::from_challenge("e8f7ae7024752e761bb64dbeafa09026"),
+                        second: Some(ExpectedMessage::random()),
+                    },
+                    Twitter(_) => ChallengeType::ExpectedMessage {
+                        expected: ExpectedMessage::from_challenge("0a5f85f20a6c63fcfa9d15aaaef3f45e"),
+                        second: None,
+                    },
+                    Matrix(_) => ChallengeType::ExpectedMessage {
+                        expected: ExpectedMessage::from_challenge("c6d286488bb7d5a02912f19b461110df"),
+                        second: None,
+                    },
+                }
+            };
+
+            IdentityField {
+                value: val,
+                challenge: challenge,
+                failed_attempts: 0,
+            }
+        }
+    }
+    impl ExpectedMessage {
+        pub fn from_challenge(ch: &str) -> Self {
+            ExpectedMessage {
+                value: ch.to_string(),
+                is_verified: false,
             }
         }
     }
