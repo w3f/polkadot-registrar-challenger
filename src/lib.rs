@@ -224,6 +224,10 @@ mod live_tests {
     // TODO: Implement custom Ctrl+C shutdown logic: https://stackoverflow.com/questions/54569843/shutting-down-actix-with-more-than-one-system-running
     // Client message: `{"chain":"polkadot","address":"1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP"}`
     async fn random_event_generator() {
+        env_logger::builder()
+            .filter_level(LevelFilter::Debug)
+            .init();
+
         async fn generate_events(db_config: DatabaseConfig) {
             let mut db = Database::new(&db_config.uri, &db_config.db_name)
                 .await
@@ -236,7 +240,7 @@ mod live_tests {
                 db.add_judgement_request(alice.clone()).await.unwrap();
                 db.add_judgement_request(bob.clone()).await.unwrap();
 
-                let rand = thread_rng().gen_range(0, 2);
+                let rand = thread_rng().gen_range(0, 3);
                 let origin = match rand {
                     0 => ExternalMessageType::Email("alice@email.com".to_string()),
                     1 => ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
@@ -249,7 +253,7 @@ mod live_tests {
                     id: MessageId::from(0u32),
                     timestamp: Timestamp::now(),
                     values: {
-                        let rand = thread_rng().gen_range(0, 1);
+                        let rand = thread_rng().gen_range(0, 2);
                         match rand {
                             0 => ExpectedMessage::random().to_message_parts(),
                             1 => alice

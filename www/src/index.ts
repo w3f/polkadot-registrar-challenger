@@ -110,9 +110,9 @@ class ActionListerner {
                         <th scope="col">Status</th>
                     </tr>
                 </thead>
+                <tbody>
             `;
 
-            table += '<tbody>';
             let counter = 1;
             for (let field of parsed.message.state.fields) {
                 if (field.challenge.challenge_type == "expected_message") {
@@ -152,6 +152,7 @@ class ActionListerner {
                     // TODO
                 }
             }
+
             table += '</tbody>';
 
             this.verification_overview.innerHTML = table;
