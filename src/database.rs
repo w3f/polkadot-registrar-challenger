@@ -370,4 +370,24 @@ impl Database {
 
         Ok(())
     }
+    #[cfg(test)]
+    pub async fn set_display_name_valid(&self, name: &str) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        coll.update_one(
+            doc! {
+                "fields.value.type": "display_name",
+                "fields.value.value": name.to_bson()?,
+            },
+            doc! {
+                "$set": {
+                    "fields.$.challenge.content.passed": true.to_bson()?,
+                }
+            },
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
 }

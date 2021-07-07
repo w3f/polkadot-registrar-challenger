@@ -240,6 +240,12 @@ mod live_tests {
                 db.add_judgement_request(alice.clone()).await.unwrap();
                 db.add_judgement_request(bob.clone()).await.unwrap();
 
+                let rand = thread_rng().gen_range(0, 5);
+                match rand {
+                    0 => db.set_display_name_valid("alice").await.unwrap(),
+                    _ => {},
+                }
+
                 let rand = thread_rng().gen_range(0, 3);
                 let origin = match rand {
                     0 => ExternalMessageType::Email("alice@email.com".to_string()),
