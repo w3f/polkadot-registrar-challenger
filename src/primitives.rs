@@ -409,6 +409,21 @@ mod tests {
                 ],
             }
         }
+        pub fn alice_unsupported() -> Self {
+            JudgementState {
+                context: IdentityContext::alice(),
+                is_fully_verified: false,
+                completion_timestamp: None,
+                fields: vec![
+                    IdentityField::new(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
+                    IdentityField::new(IdentityFieldValue::Web("alice.com".to_string())),
+                    IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
+                    IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
+                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string())),
+                    IdentityField::new(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
+                ],
+            }
+        }
         pub fn bob() -> Self {
             JudgementState {
                 context: IdentityContext::bob(),

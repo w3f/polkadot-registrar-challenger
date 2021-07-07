@@ -75,13 +75,22 @@
                     <p>The service expects a message <strong>From</strong> the specified account in the on-chain
                         identity sent <strong>To</strong> the corresponding W3F account containing the
                         <strong>Challenge</strong>. <em>Do note</em> that each account type has its own, individual
-                        challenge.</p>
+                        challenge.
+                    </p>
                     <table id="verification-overview" , class="table table-striped"></table>
                 </div>
             </div>
-            <div class="invisible row justify-content-center">
+            <div id="div-unsupported-overview" class="invisible row justify-content-center">
                 <div class="col-10 table-responsive">
-                    <h2>Unsupported entries</h2>
+                    <h2>Unsupported entries ⚠️</h2>
+                    <ul id="unsupported-overview">
+                    </ul>
+                    <p>The identity on-chain info contains fields that are not supported by the W3F registrar service in
+                        an automated manner. If you really want to have those fields included, please contact the
+                        appropriate authorities as described in the <em>"Need help?"</em> section below. Please prepare the
+                        appropriate information so the manual verification can be completed as quickly as possible. For
+                        example, if you want to add a web address, please make sure that the website somehow references
+                        your Kusama/Polkadot address.</p>
                     <table id="unsupported-overview" , class="table table-striped"></table>
                 </div>
             </div>

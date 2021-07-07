@@ -11,6 +11,9 @@ class ActionListerner {
     div_verification_overview: HTMLElement;
     verification_overview: HTMLElement;
 
+    div_unsupported_overview: HTMLElement;
+    unsupported_overview: HTMLElement;
+
     constructor() {
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
@@ -59,6 +62,14 @@ class ActionListerner {
             document
                 .getElementById("verification-overview")!;
 
+        this.div_unsupported_overview =
+            document
+                .getElementById("div-unsupported-overview")!;
+
+        this.unsupported_overview =
+            document
+                .getElementById("unsupported-overview")!;
+
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => this.executeAction());
@@ -94,6 +105,7 @@ class ActionListerner {
     }
     parseAccountStatus(msg: MessageEvent) {
         let table = "";
+        let unsupported = "";
 
         const parsed: AccountStatus = JSON.parse(msg.data);
         if (parsed.result_type == "ok") {
@@ -149,7 +161,7 @@ class ActionListerner {
                     this.display_name_value.innerHTML = field.value.value;
                     this.div_display_name_overview.classList.remove("invisible");
                 } else if (field.challenge.challenge_type == "unsupported") {
-                    // TODO
+                    unsupported += `<li>${capitalizeFirstLetter(field.value.type)} ("${field.value.value}")</li>`;
                 }
             }
 
@@ -157,6 +169,9 @@ class ActionListerner {
 
             this.verification_overview.innerHTML = table;
             this.div_verification_overview.classList.remove("invisible");
+
+            this.unsupported_overview.innerHTML = unsupported;
+            this.div_unsupported_overview.classList.remove("invisible");
 
             this.btn_execute_action
                 .innerHTML = `

@@ -233,10 +233,16 @@ mod live_tests {
                 .await
                 .unwrap();
 
-            let alice = JudgementState::alice();
+            let mut alice = JudgementState::alice();
             let bob = JudgementState::bob();
 
             loop {
+                let rand = thread_rng().gen_range(0, 3);
+                match rand {
+                    0 => alice = JudgementState::alice_unsupported(),
+                    _ => {}
+                }
+
                 db.add_judgement_request(alice.clone()).await.unwrap();
                 db.add_judgement_request(bob.clone()).await.unwrap();
 
