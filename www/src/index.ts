@@ -77,7 +77,18 @@ class ActionListerner {
 
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
-            .addEventListener("click", (_: Event) => this.executeAction());
+            .addEventListener("click", (_: Event) => {
+                window.location.href = "?address=" +
+                    (document.getElementById("specify-address")! as HTMLInputElement).value
+                    ;
+            });
+
+        let params = new URLSearchParams(window.location.search);
+        let address = params.get("address");
+        if (address != null) {
+            (document.getElementById("specify-address")! as HTMLInputElement).value = address;
+            this.executeAction();
+        }
     }
     executeAction() {
         this.btn_execute_action.disabled = true;
