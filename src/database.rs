@@ -167,6 +167,7 @@ impl Database {
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
                                 // specified).
+                                // TODO: Filter by context?
                                 coll.update_one(
                                     doc! {
                                         "fields.value": message.origin.to_bson()?,
@@ -187,6 +188,7 @@ impl Database {
                                 ));
                             } else {
                                 // Update field state.
+                                // TODO: Filter by context?
                                 coll.update_one(
                                     doc! {
                                         "fields.value": message.origin.to_bson()?,

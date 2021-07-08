@@ -3,6 +3,7 @@ import { AccountStatus, Notification } from "./json";
 class ActionListerner {
     btn_execute_action: HTMLButtonElement;
     div_live_updates_info: HTMLElement;
+    div_fully_verified_info: HTMLElement;
 
     div_display_name_overview: HTMLElement;
     display_name_value: HTMLElement;
@@ -15,28 +16,14 @@ class ActionListerner {
     unsupported_overview: HTMLElement;
 
     constructor() {
-        // Handler for choosing network, e.g. "Kusama" or "Polkadot".
-        document
-            .getElementById("network-options")!
-            .addEventListener("click", (e: Event) => {
-                document
-                    .getElementById("specify-network")!
-                    .innerText = (e.target as HTMLAnchorElement).innerText;
-            });
-
-        // Handler for choosing action, e.g. "Request Judgement".
-        document
-            .getElementById("action-options")!
-            .addEventListener("click", (e: Event) => {
-                document
-                    .getElementById("specify-action")!
-                    .innerText = (e.target as HTMLAnchorElement).innerText;
-            });
-
         // Register relevant elements.
         this.div_live_updates_info =
             document
                 .getElementById("div-live-updates-info")! as HTMLButtonElement;
+
+        this.div_fully_verified_info =
+            document
+                .getElementById("div-fully-verified-info")! as HTMLButtonElement;
 
         this.btn_execute_action =
             document
@@ -70,6 +57,24 @@ class ActionListerner {
             document
                 .getElementById("unsupported-overview")!;
 
+        // Handler for choosing network, e.g. "Kusama" or "Polkadot".
+        document
+            .getElementById("network-options")!
+            .addEventListener("click", (e: Event) => {
+                document
+                    .getElementById("specify-network")!
+                    .innerText = (e.target as HTMLAnchorElement).innerText;
+            });
+
+        // Handler for choosing action, e.g. "Request Judgement".
+        document
+            .getElementById("action-options")!
+            .addEventListener("click", (e: Event) => {
+                document
+                    .getElementById("specify-action")!
+                    .innerText = (e.target as HTMLAnchorElement).innerText;
+            });
+
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => this.executeAction());
@@ -77,15 +82,15 @@ class ActionListerner {
     executeAction() {
         this.btn_execute_action.disabled = true;
 
+        const action = document.getElementById("specify-action")!.innerHTML;
+        const address = (document.getElementById("specify-address")! as HTMLInputElement).value;
+        const network = document.getElementById("specify-network")!.innerHTML.toLowerCase();
+
         this.btn_execute_action
             .innerHTML = `
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                 <span class="visually-hidden"></span>
             `;
-
-        const action = document.getElementById("specify-action")!.innerHTML;
-        const address = (document.getElementById("specify-address")! as HTMLInputElement).value;
-        const network = document.getElementById("specify-network")!.innerHTML.toLowerCase();
 
         if (action == "Request Judgement") {
             const socket = new WebSocket('ws://161.35.213.120/api/account_status');
@@ -98,7 +103,7 @@ class ActionListerner {
 
             socket.addEventListener("message", (event: Event) => {
                 let msg = (event as MessageEvent);
-                console.log(msg.data);
+                // console.log(msg.data);
                 this.parseAccountStatus(msg);
             });
         }
@@ -177,6 +182,18 @@ class ActionListerner {
                 this.div_unsupported_overview.classList.add("invisible");
             }
 
+            if (parsed.message.state.is_fully_verified) {
+                this.div_fully_verified_info.innerHTML = `
+                    <div class="row justify-content-center">
+                        <div class="col-10 table-responsive bg-success">
+                            <h2 class="text-center text-white">Identity fully verified! ✔</h2>
+                        </div>
+                    </div>
+                `;
+            } else {
+                this.div_fully_verified_info.innerHTML = '';
+            }
+
             this.btn_execute_action
                 .innerHTML = `
                     <div class="spinner-grow spinner-grow-sm" role="status">
@@ -192,7 +209,7 @@ class ActionListerner {
 }
 
 function capitalizeFirstLetter(word: string) {
-  return word.charAt(0).toUpperCase() + word.slice(1);
+    return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 function display_notification(notifications: Notification[]) {

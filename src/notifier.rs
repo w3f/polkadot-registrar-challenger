@@ -29,7 +29,7 @@ impl SessionNotifier {
             interval.tick().await;
 
             // Fetch events based on intervals until ["Change
-            // Stream"](https://docs.mongodb.com/manual/changeStreams/) are
+            // Streams"](https://docs.mongodb.com/manual/changeStreams/) are
             // implemented in the Rust MongoDb driver.
             match self.db.fetch_events().await {
                 Ok(events) => {
