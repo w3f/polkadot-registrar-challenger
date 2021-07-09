@@ -146,7 +146,11 @@ class ActionListerner {
                 if (field.challenge.challenge_type == "expected_message") {
                     let validity;
                     if (field.challenge.content.expected.is_verified) {
-                        validity = '<span class="badge bg-success">verified</span>';
+                        if (field.challenge.content.second && !field.challenge.content.second!.is_verified) {
+                            validity = '<span class="badge bg-info">verified (1/2)</span>';
+                        } else {
+                            validity = '<span class="badge bg-success">verified</span>';
+                        }
                     } else {
                         validity = '<span class="badge bg-warning text-dark">unverified</span>';
                     }

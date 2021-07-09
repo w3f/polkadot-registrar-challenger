@@ -37,8 +37,9 @@ export interface Challenge {
 }
 
 export interface Content {
-    passed: boolean;
+    passed?: boolean;
     expected: Expected;
+    second?: Expected;
 }
 
 export interface Expected {
