@@ -370,10 +370,10 @@ impl Database {
 
         Ok(())
     }
-    pub async fn prune_completed(&self, offset: i64) -> Result<()> {
+    pub async fn prune_completed(&self, offset: i64) -> Result<usize> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.delete_many(
+        let res = coll.delete_many(
             doc! {
                 "is_fully_verified": true.to_bson()?,
                 "completion_timestamp": {
@@ -384,7 +384,7 @@ impl Database {
         )
         .await?;
 
-        Ok(())
+        Ok(res.deleted_count as usize)
     }
     #[cfg(test)]
     pub async fn set_display_name_valid(&self, name: &str) -> Result<()> {

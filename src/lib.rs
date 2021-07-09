@@ -273,18 +273,18 @@ mod live_tests {
                         match rand {
                             0 => ExpectedMessage::random().to_message_parts(),
                             1 => {
-                                let mut field = alice.get_field_mut(&origin.into());
+                                let field = alice.get_field_mut(&origin.into());
                                 let expected = field.expected_message();
                                 let second = field.expected_second();
 
                                 // If the first challenge has been verified, verify the
                                 // second challenge if it exists.
                                 if expected.is_verified && second.is_some() {
-                                    let mut second = field.expected_second_mut().as_mut().unwrap();
+                                    let second = field.expected_second_mut().as_mut().unwrap();
                                     second.set_verified();
                                     second.to_message_parts()
                                 } else {
-                                    let mut expected = field.expected_message_mut();
+                                    let expected = field.expected_message_mut();
                                     expected.set_verified();
                                     expected.to_message_parts()
                                 }
@@ -299,7 +299,11 @@ mod live_tests {
                 // Timeout
                 let rand = thread_rng().gen_range(3, 5);
                 sleep(Duration::from_secs(rand)).await;
-                db.prune_completed(0).await.unwrap();
+
+                // Prune fully verified identities. Reset state if identity was deleted.
+                if db.prune_completed(0).await.unwrap() > 0 {
+                    alice = JudgementState::alice();
+                }
             }
         }
 
