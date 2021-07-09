@@ -47,6 +47,16 @@ impl IdentityField {
     }
     // TODO: Move to tests module.
     #[cfg(test)]
+    pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
+        match &mut self.challenge {
+            ChallengeType::ExpectedMessage {
+                ref mut expected,
+                second,
+            } => expected,
+            _ => panic!(),
+        }
+    }
+    #[cfg(test)]
     pub fn expected_second(&self) -> &Option<ExpectedMessage> {
         match &self.challenge {
             ChallengeType::ExpectedMessage { expected, second } => second,
@@ -54,12 +64,12 @@ impl IdentityField {
         }
     }
     #[cfg(test)]
-    pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
+    pub fn expected_second_mut(&mut self) -> &mut Option<ExpectedMessage> {
         match &mut self.challenge {
             ChallengeType::ExpectedMessage {
-                ref mut expected,
-                second,
-            } => expected,
+                expected,
+                ref mut second,
+            } => second,
             _ => panic!(),
         }
     }
@@ -501,6 +511,9 @@ mod tests {
             }
         }
         pub fn alice_add_unsupported(&mut self) {
+            // Prevent duplicates.
+            self.remove_unsupported();
+
             self.fields.append(&mut vec![
                 IdentityField::new(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
                 IdentityField::new(IdentityFieldValue::Web("alice.com".to_string())),

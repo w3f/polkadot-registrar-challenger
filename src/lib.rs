@@ -273,18 +273,20 @@ mod live_tests {
                         match rand {
                             0 => ExpectedMessage::random().to_message_parts(),
                             1 => {
-                                let field = alice.get_field(&origin.into());
+                                let mut field = alice.get_field_mut(&origin.into());
+                                let expected = field.expected_message();
+                                let second = field.expected_second();
 
                                 // If the first challenge has been verified, verify the
                                 // second challenge if it exists.
-                                if field.expected_message().is_verified {
-                                    if let Some(second) = field.expected_second() {
-                                        second.to_message_parts()
-                                    } else {
-                                        field.expected_message().to_message_parts()
-                                    }
+                                if expected.is_verified && second.is_some() {
+                                    let mut second = field.expected_second_mut().as_mut().unwrap();
+                                    second.set_verified();
+                                    second.to_message_parts()
                                 } else {
-                                    field.expected_message().to_message_parts()
+                                    let mut expected = field.expected_message_mut();
+                                    expected.set_verified();
+                                    expected.to_message_parts()
                                 }
                             }
                             _ => panic!(),
