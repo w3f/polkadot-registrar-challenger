@@ -197,6 +197,7 @@ impl IdentityFieldValue {
     }
 }
 
+// TODO: Should those fields be public?
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct JudgementStateBlanked {
@@ -412,6 +413,7 @@ pub enum NotificationMessage {
     FieldVerificationFailed(IdentityContext, IdentityFieldValue),
     SecondFieldVerified(IdentityContext, IdentityFieldValue),
     SecondFieldVerificationFailed(IdentityContext, IdentityFieldValue),
+    AwaitingSecondChallenge(IdentityContext, IdentityFieldValue),
     IdentityFullyVerified(IdentityContext),
     JudgementProvided(IdentityContext),
     // TODO: Make use of this
@@ -427,6 +429,7 @@ impl NotificationMessage {
             FieldVerificationFailed(ctx, _) => ctx,
             SecondFieldVerified(ctx, _) => ctx,
             SecondFieldVerificationFailed(ctx, _) => ctx,
+            AwaitingSecondChallenge(ctx, _) => ctx,
             IdentityFullyVerified(ctx) => ctx,
             JudgementProvided(ctx) => ctx,
             NotSupported(ctx, _) => ctx,

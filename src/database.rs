@@ -153,6 +153,10 @@ impl Database {
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
+
+            let context = id_state.context.clone();
+            let field_value = field_state.value().clone();
+
             let mut challenge = field_state.challenge_mut();
             if !challenge.is_verified() {
                 match challenge {
@@ -183,9 +187,17 @@ impl Database {
                                 .await?;
 
                                 events.push(NotificationMessage::FieldVerified(
-                                    id_state.context.clone(),
-                                    field_state.value().clone(),
+                                    context.clone(),
+                                    field_value.clone(),
                                 ));
+
+                                // TODO: Document
+                                if second.is_some() {
+                                    events.push(NotificationMessage::AwaitingSecondChallenge(
+                                        context,
+                                        field_value,
+                                    ));
+                                }
                             } else {
                                 // Update field state.
                                 // TODO: Filter by context?
@@ -203,8 +215,8 @@ impl Database {
                                 .await?;
 
                                 events.push(NotificationMessage::FieldVerificationFailed(
-                                    id_state.context.clone(),
-                                    field_state.value().clone(),
+                                    context,
+                                    field_value,
                                 ));
                             }
                         }
@@ -232,8 +244,8 @@ impl Database {
                                     .await?;
 
                                     events.push(NotificationMessage::SecondFieldVerified(
-                                        id_state.context.clone(),
-                                        field_state.value().clone(),
+                                        context,
+                                        field_value,
                                     ));
                                 } else {
                                     // Update field state.
@@ -252,8 +264,8 @@ impl Database {
                                     .await?;
 
                                     events.push(NotificationMessage::SecondFieldVerificationFailed(
-                                        id_state.context.clone(),
-                                        field_state.value().clone(),
+                                        context,
+                                        field_value,
                                     ));
                                 }
                             }
