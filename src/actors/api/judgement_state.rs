@@ -1,6 +1,6 @@
 use super::JsonResult;
 use crate::database::Database;
-use crate::primitives::{IdentityContext, JudgementState, NotificationMessage};
+use crate::primitives::{IdentityContext, JudgementStateBlanked, NotificationMessage};
 use actix::prelude::*;
 use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
 use actix_web_actors::ws;
@@ -24,7 +24,7 @@ pub struct SubscribeAccountState {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[rtype(result = "()")]
 pub struct NotifyAccountState {
-    pub state: JudgementState,
+    pub state: JudgementStateBlanked,
     pub notifications: Vec<NotificationMessage>,
 }
 
@@ -33,12 +33,12 @@ pub struct NotifyAccountState {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[rtype(result = "()")]
 pub struct ResponseAccountState {
-    pub state: JudgementState,
+    pub state: JudgementStateBlanked,
     pub notifications: Vec<NotificationMessage>,
 }
 
 impl ResponseAccountState {
-    pub fn with_no_notifications(state: JudgementState) -> Self {
+    pub fn with_no_notifications(state: JudgementStateBlanked) -> Self {
         ResponseAccountState {
             state: state,
             notifications: vec![],
@@ -102,7 +102,7 @@ impl Handler<SubscribeAccountState> for LookupServer {
                 if let Some(state) = db.fetch_judgement_state(&id).await.unwrap() {
                     if subscriber
                         .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
-                            state,
+                            state.into(),
                         )))
                         .is_ok()
                     {
