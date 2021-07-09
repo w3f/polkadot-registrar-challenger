@@ -1,11 +1,9 @@
 use super::*;
-use crate::actors::api::{JsonResult, NotifyAccountState, ResponseAccountState};
-use crate::database::Database;
+use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::primitives::{
     ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
-    JudgementState, MessageId, MessagePart, NotificationMessage, Timestamp,
+    JudgementState, MessageId, NotificationMessage, Timestamp,
 };
-use actix_http::ws::Frame;
 use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
@@ -13,7 +11,7 @@ async fn current_judgement_state_single_identity() {
     let (db, mut api, _) = new_env().await;
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
+    let alice = JudgementState::alice();
     db.add_judgement_request(alice.clone()).await.unwrap();
 
     // Subscribe to endpoint.
@@ -37,7 +35,7 @@ async fn current_judgement_state_multiple_inserts() {
     let (db, mut api, _) = new_env().await;
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
+    let alice = JudgementState::alice();
     // Multiple inserts of the same request. Must not cause bad behavior.
     db.add_judgement_request(alice.clone()).await.unwrap();
     db.add_judgement_request(alice.clone()).await.unwrap();
@@ -63,8 +61,8 @@ async fn current_judgement_state_multiple_identities() {
     let (db, mut api, _) = new_env().await;
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
-    let mut bob = JudgementState::bob();
+    let alice = JudgementState::alice();
+    let bob = JudgementState::bob();
     db.add_judgement_request(alice.clone()).await.unwrap();
     db.add_judgement_request(bob.clone()).await.unwrap();
 
@@ -98,7 +96,7 @@ async fn verify_invalid_message_bad_challenge() {
 
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
-    let mut bob = JudgementState::bob();
+    let bob = JudgementState::bob();
     db.add_judgement_request(alice.clone()).await.unwrap();
     db.add_judgement_request(bob.clone()).await.unwrap();
 
@@ -158,8 +156,8 @@ async fn verify_invalid_message_bad_origin() {
     let (db, mut api, injector) = new_env().await;
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
-    let mut bob = JudgementState::bob();
+    let alice = JudgementState::alice();
+    let bob = JudgementState::bob();
     db.add_judgement_request(alice.clone()).await.unwrap();
     db.add_judgement_request(bob.clone()).await.unwrap();
 
@@ -210,7 +208,7 @@ async fn verify_valid_message() {
 
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
-    let mut bob = JudgementState::bob();
+    let bob = JudgementState::bob();
     db.add_judgement_request(alice.clone()).await.unwrap();
     db.add_judgement_request(bob.clone()).await.unwrap();
 
