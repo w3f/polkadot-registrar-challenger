@@ -114,7 +114,7 @@ class ActionListerner {
 
             socket.addEventListener("message", (event: Event) => {
                 let msg = (event as MessageEvent);
-                // console.log(msg.data);
+                console.log(msg.data);
                 this.parseAccountStatus(msg);
             });
         }
@@ -196,7 +196,7 @@ class ActionListerner {
             if (parsed.message.state.is_fully_verified) {
                 this.div_fully_verified_info.innerHTML = `
                     <div class="row justify-content-center">
-                        <div class="col-10 table-responsive bg-success">
+                        <div class="col-10 table-responsive bg-success p-2">
                             <h2 class="text-center text-white">Identity fully verified! ✔</h2>
                         </div>
                     </div>
@@ -220,7 +220,8 @@ class ActionListerner {
 }
 
 function capitalizeFirstLetter(word: string) {
-    return word.charAt(0).toUpperCase() + word.slice(1);
+    return (word.charAt(0).toUpperCase() + word.slice(1))
+        .replace("_", " ");
 }
 
 function display_notification(notifications: Notification[]) {
