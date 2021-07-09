@@ -1,6 +1,6 @@
 use crate::actors::api::LookupServer;
 use crate::database::Database;
-use crate::primitives::ExternalMessage;
+use crate::primitives::{ExternalMessage, IdentityFieldValue, NotificationMessage};
 use crate::{AdapterConfig, Result};
 use actix::prelude::*;
 use tokio::time::{interval, Duration};
@@ -67,6 +67,7 @@ pub async fn run_adapters_blocking(config: AdapterConfig, db: Database) -> Resul
 pub trait Adapter {
     fn name(&self) -> &'static str;
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>>;
+    async fn send_message(&mut self, to: &str) -> Result<()>;
 }
 
 pub struct AdapterListener {
@@ -100,6 +101,37 @@ impl AdapterListener {
                                 .map_err(|err| error!("Error when verifying message: {:?}", err));
                         }
                     }
+                    Err(err) => {
+                        error!(
+                            "Error fetching messages in {} adapter: {:?}",
+                            adapter.name(),
+                            err
+                        );
+                    }
+                }
+
+                // Check if a second challenge must be sent to the user directly.
+                match db.fetch_events().await {
+                    Ok(events) => {
+                        for event in &events {
+                            match event {
+                                NotificationMessage::AwaitingSecondChallenge(_, field_value) => {
+                                    match field_value {
+                                        IdentityFieldValue::Email(to) => {
+                                            if adapter.name() == "email" {
+                                                // TODO: Handle unwrap.
+                                                debug!("Sending second challenge to {}", to);
+                                                adapter.send_message(to.as_str()).await.unwrap();
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    // TODO: Unify error handling.
                     Err(err) => {
                         error!(
                             "Error fetching messages in {} adapter: {:?}",
@@ -144,6 +176,9 @@ pub mod tests {
         async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
             let mut lock = self.messages.lock().await;
             Ok(std::mem::take(&mut *lock))
+        }
+        async fn send_message(&mut self, to: &str) -> Result<()> {
+            unimplemented!()
         }
     }
 }

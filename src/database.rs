@@ -263,10 +263,12 @@ impl Database {
                                     )
                                     .await?;
 
-                                    events.push(NotificationMessage::SecondFieldVerificationFailed(
-                                        context,
-                                        field_value,
-                                    ));
+                                    events.push(
+                                        NotificationMessage::SecondFieldVerificationFailed(
+                                            context,
+                                            field_value,
+                                        ),
+                                    );
                                 }
                             }
                         }

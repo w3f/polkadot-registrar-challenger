@@ -453,4 +453,7 @@ impl Adapter for TwitterHandler {
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         self.request_messages().await
     }
+    async fn send_message(&mut self, to: &str) -> Result<()> {
+        unimplemented!()
+    }
 }

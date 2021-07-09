@@ -40,7 +40,7 @@ pub struct ResponseAccountState {
 impl ResponseAccountState {
     pub fn with_no_notifications<T>(state: T) -> Self
     where
-        T: Into<JudgementStateBlanked>
+        T: Into<JudgementStateBlanked>,
     {
         ResponseAccountState {
             state: state.into(),

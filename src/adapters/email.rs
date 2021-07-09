@@ -180,4 +180,7 @@ impl Adapter for SmtpImapClient {
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         self.request_messages()
     }
+    async fn send_message(&mut self, to: &str) -> Result<()> {
+        unimplemented!()
+    }
 }
