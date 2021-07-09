@@ -22,7 +22,6 @@ async fn current_judgement_state_single_identity() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
-    alice.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
@@ -49,7 +48,6 @@ async fn current_judgement_state_multiple_inserts() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
-    alice.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
@@ -76,7 +74,6 @@ async fn current_judgement_state_multiple_identities() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
-    alice.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
@@ -85,7 +82,6 @@ async fn current_judgement_state_multiple_identities() {
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
-    bob.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob))
@@ -112,7 +108,6 @@ async fn verify_invalid_message_bad_challenge() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
-    alice.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -134,7 +129,7 @@ async fn verify_invalid_message_bad_challenge() {
         .failed_attempts_mut() = 1;
 
     let expected = ResponseAccountState {
-        state: alice.clone(),
+        state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerificationFailed(
             alice.context.clone(),
             IdentityFieldValue::Email("alice@email.com".to_string()),
@@ -148,7 +143,6 @@ async fn verify_invalid_message_bad_challenge() {
     // Other judgement states must be unaffected.
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
-    bob.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -175,7 +169,6 @@ async fn verify_invalid_message_bad_origin() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
-    alice.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -201,7 +194,6 @@ async fn verify_invalid_message_bad_origin() {
     // Other judgement states must be unaffected.
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
-    bob.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -228,7 +220,6 @@ async fn verify_valid_message() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
-    alice.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -255,7 +246,7 @@ async fn verify_valid_message() {
 
     // The expected message (field verified successfully).
     let expected = ResponseAccountState {
-        state: alice.clone(),
+        state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerified(
             alice.context.clone(),
             IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
@@ -269,7 +260,6 @@ async fn verify_valid_message() {
     // Other judgement states must be unaffected.
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
-    bob.blank_second_challenge();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))

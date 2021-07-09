@@ -232,8 +232,8 @@ pub enum ChallengeTypeBlanked {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ExpectedMessageBlanked {
-    #[serde(skip)]
-    pub value: String,
+    // IMPORTANT: This value is blanked.
+    // pub value: String,
     pub is_verified: bool,
 }
 
@@ -255,7 +255,6 @@ impl From<JudgementState> for JudgementStateBlanked {
                                 ChallengeTypeBlanked::ExpectedMessage {
                                     expected: expected,
                                     second: second.map(|s| ExpectedMessageBlanked {
-                                        value: s.value,
                                         is_verified: s.is_verified,
                                     }),
                                 }

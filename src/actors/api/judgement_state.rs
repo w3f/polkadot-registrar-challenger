@@ -38,9 +38,12 @@ pub struct ResponseAccountState {
 }
 
 impl ResponseAccountState {
-    pub fn with_no_notifications(state: JudgementStateBlanked) -> Self {
+    pub fn with_no_notifications<T>(state: T) -> Self
+    where
+        T: Into<JudgementStateBlanked>
+    {
         ResponseAccountState {
-            state: state,
+            state: state.into(),
             notifications: vec![],
         }
     }
@@ -102,7 +105,7 @@ impl Handler<SubscribeAccountState> for LookupServer {
                 if let Some(state) = db.fetch_judgement_state(&id).await.unwrap() {
                     if subscriber
                         .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
-                            state.into(),
+                            state,
                         )))
                         .is_ok()
                     {
