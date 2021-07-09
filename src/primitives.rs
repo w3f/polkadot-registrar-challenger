@@ -411,6 +411,8 @@ impl Event {
 pub enum NotificationMessage {
     FieldVerified(IdentityContext, IdentityFieldValue),
     FieldVerificationFailed(IdentityContext, IdentityFieldValue),
+    SecondFieldVerified(IdentityContext, IdentityFieldValue),
+    SecondFieldVerificationFailed(IdentityContext, IdentityFieldValue),
     IdentityFullyVerified(IdentityContext),
     JudgementProvided(IdentityContext),
     // TODO: Make use of this
@@ -424,6 +426,8 @@ impl NotificationMessage {
         match self {
             FieldVerified(ctx, _) => ctx,
             FieldVerificationFailed(ctx, _) => ctx,
+            SecondFieldVerified(ctx, _) => ctx,
+            SecondFieldVerificationFailed(ctx, _) => ctx,
             IdentityFullyVerified(ctx) => ctx,
             JudgementProvided(ctx) => ctx,
             NotSupported(ctx, _) => ctx,

@@ -211,32 +211,33 @@ impl Database {
                         // If the first expected challenge has been verified, verify the second challenge, assuming it exists.
                         else if let Some(second) = second {
                             if !second.is_verified {
-                                /*
-                                if second.verify_message_dry(&message) {
+                                if second.verify_message(&message) {
                                     // Update field state. Be more specific with the query in order
                                     // to verify the correct field (in theory, there could be
                                     // multiple pending requests with the same external account
                                     // specified).
+                                    // TODO: Filter by context?
                                     coll.update_one(
                                         doc! {
                                             "fields.value": message.origin.to_bson()?,
-                                            "fields.challenge.content.expected.value": second.value.to_bson()?,
+                                            "fields.challenge.content.second.value": second.value.to_bson()?,
                                         },
                                         doc! {
                                             "$set": {
-                                                "fields.$.challenge.content.expected.is_verified": true.to_bson()?,
+                                                "fields.$.challenge.content.second.is_verified": true.to_bson()?,
                                             }
                                         },
                                         None,
                                     )
                                     .await?;
 
-                                    events.push(NotificationMessage::FieldVerified(
+                                    events.push(NotificationMessage::SecondFieldVerified(
                                         id_state.context.clone(),
                                         field_state.value().clone(),
                                     ));
                                 } else {
                                     // Update field state.
+                                    // TODO: Filter by context?
                                     coll.update_one(
                                         doc! {
                                             "fields.value": message.origin.to_bson()?,
@@ -250,13 +251,11 @@ impl Database {
                                     )
                                     .await?;
 
-                                    events.push(NotificationMessage::FieldVerificationFailed(
+                                    events.push(NotificationMessage::SecondFieldVerificationFailed(
                                         id_state.context.clone(),
                                         field_state.value().clone(),
                                     ));
                                 }
-                                */
-                            } else {
                             }
                         }
                     }
