@@ -111,6 +111,8 @@ impl AdapterListener {
                 }
 
                 // Check if a second challenge must be sent to the user directly.
+                // TODO: One might consider putting this logic into a separate task
+                // with a lower event loop timeout.
                 match db.fetch_events().await {
                     Ok(events) => {
                         for event in &events {

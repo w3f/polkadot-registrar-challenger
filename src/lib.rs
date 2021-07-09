@@ -233,24 +233,28 @@ mod live_tests {
                 .await
                 .unwrap();
 
+            let mut alice = JudgementState::alice();
             let bob = JudgementState::bob();
 
             loop {
+                // Random: Add/remove unsupported entries.
                 let rand = thread_rng().gen_range(0, 3);
-                let alice = match rand {
-                    0 => JudgementState::alice_unsupported(),
-                    _ => JudgementState::alice(),
+                match rand {
+                    0 => alice.alice_add_unsupported(),
+                    _ => alice.remove_unsupported(),
                 };
 
                 db.add_judgement_request(alice.clone()).await.unwrap();
                 db.add_judgement_request(bob.clone()).await.unwrap();
 
+                // Random: Verify display name.
                 let rand = thread_rng().gen_range(0, 3);
                 match rand {
                     0 => db.set_display_name_valid("Alice").await.unwrap(),
                     _ => {}
                 }
 
+                // Random: Chose field to verify.
                 let rand = thread_rng().gen_range(0, 3);
                 let origin = match rand {
                     0 => ExternalMessageType::Email("alice@email.com".to_string()),
@@ -259,6 +263,7 @@ mod live_tests {
                     _ => panic!(),
                 };
 
+                // Random: Verify valid/invalid message.
                 let msg = ExternalMessage {
                     origin: origin.clone(),
                     id: MessageId::from(0u32),
@@ -267,10 +272,21 @@ mod live_tests {
                         let rand = thread_rng().gen_range(0, 2);
                         match rand {
                             0 => ExpectedMessage::random().to_message_parts(),
-                            1 => alice
-                                .get_field(&origin.into())
-                                .expected_message()
-                                .to_message_parts(),
+                            1 => {
+                                let field = alice.get_field(&origin.into());
+
+                                // If the first challenge has been verified, verify the
+                                // second challenge if it exists.
+                                if field.expected_message().is_verified {
+                                    if let Some(second) = field.expected_second() {
+                                        second.to_message_parts()
+                                    } else {
+                                        field.expected_message().to_message_parts()
+                                    }
+                                } else {
+                                    field.expected_message().to_message_parts()
+                                }
+                            }
                             _ => panic!(),
                         }
                     },
@@ -278,10 +294,10 @@ mod live_tests {
 
                 db.process_message(&msg).await.unwrap();
 
+                // Timeout
                 let rand = thread_rng().gen_range(3, 5);
                 sleep(Duration::from_secs(rand)).await;
                 db.prune_completed(0).await.unwrap();
-                sleep(Duration::from_secs(rand)).await;
             }
         }
 
