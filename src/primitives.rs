@@ -101,7 +101,6 @@ impl IdentityField {
 pub enum ChallengeType {
     ExpectedMessage {
         expected: ExpectedMessage,
-        #[serde(skip)]
         second: Option<ExpectedMessage>,
     },
     BackgroundCheck {
@@ -194,6 +193,82 @@ impl IdentityFieldValue {
                 _ => false,
             },
             _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct JudgementStateBlanked {
+    pub context: IdentityContext,
+    pub is_fully_verified: bool,
+    pub inserted_timestamp: Timestamp,
+    pub completion_timestamp: Option<Timestamp>,
+    pub fields: Vec<IdentityFieldBlanked>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityFieldBlanked {
+    value: IdentityFieldValue,
+    challenge: ChallengeTypeBlanked,
+    // TODO: Change this to usize.
+    failed_attempts: isize,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "challenge_type", content = "content")]
+pub enum ChallengeTypeBlanked {
+    ExpectedMessage {
+        expected: ExpectedMessage,
+        second: Option<ExpectedMessageBlanked>,
+    },
+    BackgroundCheck {
+        passed: bool,
+    },
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ExpectedMessageBlanked {
+    #[serde(skip)]
+    pub value: String,
+    pub is_verified: bool,
+}
+
+impl From<JudgementState> for JudgementStateBlanked {
+    fn from(s: JudgementState) -> Self {
+        JudgementStateBlanked {
+            context: s.context,
+            is_fully_verified: s.is_fully_verified,
+            inserted_timestamp: s.inserted_timestamp,
+            completion_timestamp: s.completion_timestamp,
+            fields: s
+                .fields
+                .into_iter()
+                .map(|f| IdentityFieldBlanked {
+                    value: f.value,
+                    challenge: {
+                        match f.challenge {
+                            ChallengeType::ExpectedMessage { expected, second } => {
+                                ChallengeTypeBlanked::ExpectedMessage {
+                                    expected: expected,
+                                    second: second.map(|s| ExpectedMessageBlanked {
+                                        value: s.value,
+                                        is_verified: s.is_verified,
+                                    }),
+                                }
+                            }
+                            ChallengeType::BackgroundCheck { passed } => {
+                                ChallengeTypeBlanked::BackgroundCheck { passed: passed }
+                            }
+                            ChallengeType::Unsupported => ChallengeTypeBlanked::Unsupported,
+                        }
+                    },
+                    failed_attempts: f.failed_attempts,
+                })
+                .collect(),
         }
     }
 }
@@ -404,10 +479,18 @@ mod tests {
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::DisplayName("Alice".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Email("alice@email.com".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Twitter("@alice".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::DisplayName(
+                        "Alice".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Email(
+                        "alice@email.com".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Twitter(
+                        "@alice".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Matrix(
+                        "@alice:matrix.org".to_string(),
+                    )),
                 ],
             }
         }
@@ -418,12 +501,24 @@ mod tests {
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 fields: vec![
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Web("alice.com".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::DisplayName("Alice".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Email("alice@email.com".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Twitter("@alice".to_string())),
-                    IdentityField::new_fixed_challenge(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::LegalName(
+                        "Alice Cooper".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Web(
+                        "alice.com".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::DisplayName(
+                        "Alice".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Email(
+                        "alice@email.com".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Twitter(
+                        "@alice".to_string(),
+                    )),
+                    IdentityField::new_fixed_challenge(IdentityFieldValue::Matrix(
+                        "@alice:matrix.org".to_string(),
+                    )),
                 ],
             }
         }
@@ -491,15 +586,21 @@ mod tests {
                     Additional(_) => ChallengeType::Unsupported,
                     DisplayName(_) => ChallengeType::BackgroundCheck { passed: false },
                     Email(_) => ChallengeType::ExpectedMessage {
-                        expected: ExpectedMessage::from_challenge("e8f7ae7024752e761bb64dbeafa09026"),
+                        expected: ExpectedMessage::from_challenge(
+                            "e8f7ae7024752e761bb64dbeafa09026",
+                        ),
                         second: Some(ExpectedMessage::random()),
                     },
                     Twitter(_) => ChallengeType::ExpectedMessage {
-                        expected: ExpectedMessage::from_challenge("0a5f85f20a6c63fcfa9d15aaaef3f45e"),
+                        expected: ExpectedMessage::from_challenge(
+                            "0a5f85f20a6c63fcfa9d15aaaef3f45e",
+                        ),
                         second: None,
                     },
                     Matrix(_) => ChallengeType::ExpectedMessage {
-                        expected: ExpectedMessage::from_challenge("c6d286488bb7d5a02912f19b461110df"),
+                        expected: ExpectedMessage::from_challenge(
+                            "c6d286488bb7d5a02912f19b461110df",
+                        ),
                         second: None,
                     },
                 }
