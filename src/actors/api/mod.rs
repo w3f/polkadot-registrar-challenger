@@ -5,7 +5,7 @@ use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
-use second_challenge::SecondChallengeVerifier;
+use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
 
 mod judgement_state;
 mod second_challenge;
@@ -32,7 +32,9 @@ pub async fn run_rest_api_server(addr: &str, db: Database) -> Result<Addr<Lookup
 
     // Run the WS server.
     let server = HttpServer::new(move || {
-        App::new().service(web::resource("/api/account_status").to(account_status_server_route))
+        App::new()
+            .service(web::resource("/api/account_status").to(account_status_server_route))
+            .service(web::resource("/api/verify_second_challenge").to(verify_second_challenge))
     })
     .bind(addr)?;
 
@@ -65,7 +67,9 @@ pub mod tests {
             SystemRegistry::set(t_actor.clone());
             SystemRegistry::set(verifier.clone());
 
-            App::new().service(web::resource("/api/account_status").to(account_status_server_route))
+            App::new()
+                .service(web::resource("/api/account_status").to(account_status_server_route))
+                .service(web::resource("/api/verify_second_challenge").to(verify_second_challenge))
         });
 
         (server, actor)

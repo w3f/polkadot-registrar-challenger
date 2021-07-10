@@ -55,8 +55,7 @@ pub struct VerifyChallenge {
     pub challenge: String,
 }
 
-#[post("/api/verify_second_challenge")]
-async fn verify_second_challenge(req: web::Json<VerifyChallenge>) -> HttpResponse {
+pub async fn verify_second_challenge(req: web::Json<VerifyChallenge>) -> HttpResponse {
     HttpResponse::Ok().json(
         SecondChallengeVerifier::from_registry()
             .send(req.into_inner())
