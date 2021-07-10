@@ -140,7 +140,10 @@ impl AdapterListener {
                                                     .await
                                                     .unwrap();
 
-                                                adapter.send_message(to.as_str(), challenge.into()).await.unwrap();
+                                                adapter
+                                                    .send_message(to.as_str(), challenge.into())
+                                                    .await
+                                                    .unwrap();
                                             }
                                         }
                                         _ => {}

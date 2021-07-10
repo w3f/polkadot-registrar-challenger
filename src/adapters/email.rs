@@ -1,6 +1,12 @@
 use crate::adapters::Adapter;
-use crate::primitives::{ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
+use crate::primitives::{
+    ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp,
+};
 use crate::Result;
+use lettre::smtp::authentication::Credentials;
+use lettre::smtp::SmtpClient;
+use lettre::Transport;
+use lettre_email::EmailBuilder;
 
 trait ExtractSender<T> {
     type Error;
@@ -170,6 +176,27 @@ impl SmtpImapClient {
 
         Ok(parsed_messages)
     }
+    async fn send_message(&self, to: &str, message: &str) -> Result<()> {
+        // SMTP transport
+        let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
+            .credentials(Credentials::new(
+                self.user.to_string(),
+                self.password.to_string(),
+            ))
+            .transport();
+
+        let email = EmailBuilder::new()
+            // Addresses can be specified by the tuple (email, alias)
+            .to(to)
+            .from(self.user.as_str())
+            .subject("W3F Registrar Verification Service")
+            .text(format!("Insert the following challenge into the web interface: {:?}", message))
+            .build()?;
+
+        let _ = smtp.send(email.into())?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -183,6 +210,6 @@ impl Adapter for SmtpImapClient {
         self.request_messages()
     }
     async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
-        unimplemented!()
+        Self::send_message(&self, to, content.value.as_str()).await
     }
 }
