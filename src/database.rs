@@ -255,12 +255,16 @@ impl Database {
 
         Ok(events)
     }
-    pub async fn verify_second_challenge(&mut self, request: VerifyChallenge) -> Result<bool> {
+    pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
         let mut events = vec![];
 
+        // Trim received challenge, just in case.
+        request.challenge = request.challenge.trim().to_string();
+
+        // Query database.
         let mut try_state = coll
             .find_one(
                 doc! {
