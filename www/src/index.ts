@@ -166,7 +166,7 @@ class ActionListerner {
                             validity = '<span class="badge bg-success">verified</span>';
 
                             if (field.value.type == "email") {
-                                //this.div_email_second_challenge.classList.add("invisible");
+                                this.div_email_second_challenge.classList.add("invisible");
                             }
                         }
                     } else {
