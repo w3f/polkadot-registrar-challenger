@@ -1,6 +1,8 @@
 use crate::actors::api::LookupServer;
 use crate::database::Database;
-use crate::primitives::{ExternalMessage, IdentityFieldValue, NotificationMessage};
+use crate::primitives::{
+    ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage,
+};
 use crate::{AdapterConfig, Result};
 use actix::prelude::*;
 use tokio::time::{interval, Duration};
@@ -65,9 +67,18 @@ pub async fn run_adapters_blocking(config: AdapterConfig, db: Database) -> Resul
 
 #[async_trait]
 pub trait Adapter {
+    type MessageType;
+
     fn name(&self) -> &'static str;
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>>;
-    async fn send_message(&mut self, to: &str) -> Result<()>;
+    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()>;
+}
+
+// Filler for adapters that do not send messages.
+impl From<ExpectedMessage> for () {
+    fn from(_: ExpectedMessage) -> Self {
+        ()
+    }
 }
 
 pub struct AdapterListener {
@@ -81,6 +92,7 @@ impl AdapterListener {
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
     where
         T: 'static + Adapter + Send,
+        <T as Adapter>::MessageType: From<ExpectedMessage>,
     {
         let mut interval = interval(Duration::from_secs(timeout));
 
@@ -123,7 +135,12 @@ impl AdapterListener {
                                             if adapter.name() == "email" {
                                                 // TODO: Handle unwrap.
                                                 debug!("Sending second challenge to {}", to);
-                                                adapter.send_message(to.as_str()).await.unwrap();
+                                                let challenge = db
+                                                    .fetch_second_challenge(field_value)
+                                                    .await
+                                                    .unwrap();
+
+                                                adapter.send_message(to.as_str(), challenge.into()).await.unwrap();
                                             }
                                         }
                                         _ => {}
@@ -172,6 +189,8 @@ pub mod tests {
 
     #[async_trait]
     impl Adapter for MessageInjector {
+        type MessageType = ();
+
         fn name(&self) -> &'static str {
             "test_state_injector"
         }
@@ -179,7 +198,7 @@ pub mod tests {
             let mut lock = self.messages.lock().await;
             Ok(std::mem::take(&mut *lock))
         }
-        async fn send_message(&mut self, to: &str) -> Result<()> {
+        async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
             unimplemented!()
         }
     }

@@ -1,7 +1,7 @@
 use crate::actors::api::VerifyChallenge;
 use crate::primitives::{
-    ChainAddress, ChallengeType, Event, ExternalMessage, IdentityContext, IdentityField,
-    JudgementState, MessageId, NotificationMessage, Timestamp,
+    ChainAddress, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
+    IdentityField, IdentityFieldValue, JudgementState, MessageId, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -349,6 +349,45 @@ impl Database {
         }
 
         Ok(verified)
+    }
+    pub async fn fetch_second_challenge(
+        &self,
+        field: &IdentityFieldValue,
+    ) -> Result<ExpectedMessage> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Query database.
+        let mut try_state = coll
+            .find_one(
+                doc! {
+                    "fields.value": field.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        if let Some(state) = try_state {
+            // Optimize this. Should be handled by the query itself.
+            let field_state = state
+                .fields
+                .iter()
+                .find(|f| f.value() == field)
+                // Technically, this should never return an error...
+                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+
+            match field_state.challenge() {
+                ChallengeType::ExpectedMessage { expected, second } => {
+                    if let Some(second) = second {
+                        Ok(second.clone())
+                    } else {
+                        Err(anyhow!("No second challenge found for {:?}", field))
+                    }
+                }
+                _ => Err(anyhow!("No second challenge found for {:?}", field)),
+            }
+        } else {
+            Err(anyhow!("No entry found for {:?}", field))
+        }
     }
     pub async fn fetch_events(&mut self) -> Result<Vec<NotificationMessage>> {
         let coll = self.db.collection(EVENT_COLLECTION);

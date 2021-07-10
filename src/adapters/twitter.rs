@@ -447,13 +447,15 @@ impl ApiMessageRequest {
 
 #[async_trait]
 impl Adapter for TwitterHandler {
+    type MessageType = ();
+
     fn name(&self) -> &'static str {
         "Twitter"
     }
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         self.request_messages().await
     }
-    async fn send_message(&mut self, to: &str) -> Result<()> {
+    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
         unimplemented!()
     }
 }

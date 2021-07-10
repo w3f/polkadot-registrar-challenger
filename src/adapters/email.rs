@@ -1,5 +1,5 @@
 use crate::adapters::Adapter;
-use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
+use crate::primitives::{ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
 use crate::Result;
 
 trait ExtractSender<T> {
@@ -174,13 +174,15 @@ impl SmtpImapClient {
 
 #[async_trait]
 impl Adapter for SmtpImapClient {
+    type MessageType = ExpectedMessage;
+
     fn name(&self) -> &'static str {
         "email"
     }
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         self.request_messages()
     }
-    async fn send_message(&mut self, to: &str) -> Result<()> {
+    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
         unimplemented!()
     }
 }

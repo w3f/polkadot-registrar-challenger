@@ -131,6 +131,8 @@ impl EventEmitter for MatrixClient {
 
 #[async_trait]
 impl Adapter for MatrixClient {
+    type MessageType = ();
+
     fn name(&self) -> &'static str {
         "Matrix"
     }
@@ -139,7 +141,7 @@ impl Adapter for MatrixClient {
         // Return messages and wipe inner field.
         Ok(std::mem::take(&mut *lock))
     }
-    async fn send_message(&mut self, to: &str) -> Result<()> {
+    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
         unimplemented!()
     }
 }
