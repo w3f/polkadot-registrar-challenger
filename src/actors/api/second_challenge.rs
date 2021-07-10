@@ -31,17 +31,25 @@ impl Actor for SecondChallengeVerifier {
 }
 
 impl Handler<VerifyChallenge> for SecondChallengeVerifier {
-    type Result = ResponseActFuture<Self, bool>;
+    type Result = ResponseActFuture<Self, JsonResult<bool>>;
 
     fn handle(&mut self, msg: VerifyChallenge, ctx: &mut Self::Context) -> Self::Result {
-        let mut db = self.get_db().unwrap().clone();
+        let db = self.get_db().unwrap().clone();
 
-        Box::pin(async move { db.verify_second_challenge(msg).await.unwrap() }.into_actor(self))
+        Box::pin(
+            async move {
+                db.verify_second_challenge(msg)
+                    .await
+                    .map(|b| JsonResult::Ok(b))
+                    .unwrap()
+            }
+            .into_actor(self),
+        )
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
-#[rtype(result = "bool")]
+#[rtype(result = "JsonResult<bool>")]
 pub struct VerifyChallenge {
     pub entry: IdentityFieldValue,
     pub challenge: String,
@@ -49,5 +57,10 @@ pub struct VerifyChallenge {
 
 #[post("/api/verify_second_challenge")]
 async fn verify_second_challenge(req: web::Json<VerifyChallenge>) -> HttpResponse {
-    unimplemented!()
+    HttpResponse::Ok().json(
+        SecondChallengeVerifier::from_registry()
+            .send(req.into_inner())
+            .await
+            .unwrap(),
+    )
 }

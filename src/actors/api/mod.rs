@@ -5,6 +5,7 @@ use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
+use second_challenge::SecondChallengeVerifier;
 
 mod judgement_state;
 mod second_challenge;
@@ -25,8 +26,9 @@ pub enum JsonResult<T> {
 
 pub async fn run_rest_api_server(addr: &str, db: Database) -> Result<Addr<LookupServer>> {
     // Add configured actor to the registry.
-    let actor = LookupServer::new(db).start();
+    let actor = LookupServer::new(db.clone()).start();
     SystemRegistry::set(actor.clone());
+    SystemRegistry::set(SecondChallengeVerifier::new(db).start());
 
     // Run the WS server.
     let server = HttpServer::new(move || {
@@ -55,11 +57,13 @@ pub mod tests {
     // TODO: Unify this with the `run_rest_api_server_blocking` function above.
     pub async fn run_test_server(db: Database) -> (TestServer, Addr<LookupServer>) {
         let actor = LookupServer::new(db.clone()).start();
+        let verifier = SecondChallengeVerifier::new(db.clone()).start();
 
         let t_actor = actor.clone();
         let server = start(move || {
             // Add configured actor to the registry.
             SystemRegistry::set(t_actor.clone());
+            SystemRegistry::set(verifier.clone());
 
             App::new().service(web::resource("/api/account_status").to(account_status_server_route))
         });
