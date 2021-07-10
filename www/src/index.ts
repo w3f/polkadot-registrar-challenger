@@ -12,6 +12,9 @@ class ActionListerner {
     div_verification_overview: HTMLElement;
     verification_overview: HTMLElement;
 
+    div_email_second_challenge: HTMLElement;
+    email_second_challenge: HTMLElement;
+
     div_unsupported_overview: HTMLElement;
     unsupported_overview: HTMLElement;
 
@@ -44,6 +47,14 @@ class ActionListerner {
         this.div_verification_overview =
             document
                 .getElementById("div-verification-overview")!;
+
+        this.div_email_second_challenge =
+            document
+                .getElementById("div-email-second-challenge")!;
+
+        this.email_second_challenge =
+            document
+                .getElementById("email-second-challenge")!;
 
         this.verification_overview =
             document
@@ -148,8 +159,15 @@ class ActionListerner {
                     if (field.challenge.content.expected.is_verified) {
                         if (field.challenge.content.second && !field.challenge.content.second!.is_verified) {
                             validity = '<span class="badge bg-info">verified (1/2)</span>';
+
+                            this.email_second_challenge.innerHTML = `${field.value.value}`;
+                            this.div_email_second_challenge.classList.remove("invisible");
                         } else {
                             validity = '<span class="badge bg-success">verified</span>';
+
+                            if (field.value.type == "email") {
+                                //this.div_email_second_challenge.classList.add("invisible");
+                            }
                         }
                     } else {
                         validity = '<span class="badge bg-warning text-dark">unverified</span>';
