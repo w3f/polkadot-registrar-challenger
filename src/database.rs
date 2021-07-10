@@ -1,3 +1,4 @@
+use crate::actors::api::VerifyChallenge;
 use crate::primitives::{
     ChainAddress, ChallengeType, Event, ExternalMessage, IdentityContext, IdentityField,
     JudgementState, MessageId, NotificationMessage, Timestamp,
@@ -113,6 +114,7 @@ impl Database {
         self.event_counter += 1;
         self.event_counter
     }
+    // TODO: Merge with 'verify_message'?
     pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
         let events = self.verify_message(message).await?;
 
@@ -194,7 +196,7 @@ impl Database {
                                 // TODO: Document
                                 if second.is_some() {
                                     events.push(NotificationMessage::AwaitingSecondChallenge(
-                                        context,
+                                        context.clone(),
                                         field_value,
                                     ));
                                 }
@@ -215,61 +217,9 @@ impl Database {
                                 .await?;
 
                                 events.push(NotificationMessage::FieldVerificationFailed(
-                                    context,
+                                    context.clone(),
                                     field_value,
                                 ));
-                            }
-                        }
-                        // If the first expected challenge has been verified, verify the second challenge, assuming it exists.
-                        else if let Some(second) = second {
-                            if !second.is_verified {
-                                if second.verify_message(&message) {
-                                    // Update field state. Be more specific with the query in order
-                                    // to verify the correct field (in theory, there could be
-                                    // multiple pending requests with the same external account
-                                    // specified).
-                                    // TODO: Filter by context?
-                                    coll.update_one(
-                                        doc! {
-                                            "fields.value": message.origin.to_bson()?,
-                                            "fields.challenge.content.second.value": second.value.to_bson()?,
-                                        },
-                                        doc! {
-                                            "$set": {
-                                                "fields.$.challenge.content.second.is_verified": true.to_bson()?,
-                                            }
-                                        },
-                                        None,
-                                    )
-                                    .await?;
-
-                                    events.push(NotificationMessage::SecondFieldVerified(
-                                        context,
-                                        field_value,
-                                    ));
-                                } else {
-                                    // Update field state.
-                                    // TODO: Filter by context?
-                                    coll.update_one(
-                                        doc! {
-                                            "fields.value": message.origin.to_bson()?,
-                                        },
-                                        doc! {
-                                            "$inc": {
-                                                "fields.$.failed_attempts": 1isize.to_bson()?,
-                                            }
-                                        },
-                                        None,
-                                    )
-                                    .await?;
-
-                                    events.push(
-                                        NotificationMessage::SecondFieldVerificationFailed(
-                                            context,
-                                            field_value,
-                                        ),
-                                    );
-                                }
                             }
                         }
                     }
@@ -299,13 +249,102 @@ impl Database {
                 )
                 .await?;
 
-                events.push(NotificationMessage::IdentityFullyVerified(
-                    id_state.context.clone(),
-                ));
+                events.push(NotificationMessage::IdentityFullyVerified(context.clone()));
             }
         }
 
         Ok(events)
+    }
+    pub async fn verify_second_challenge(&mut self, request: VerifyChallenge) -> Result<bool> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        let mut verified = false;
+        let mut events = vec![];
+
+        let mut try_state = coll
+            .find_one(
+                doc! {
+                    "fields.value": request.entry.to_bson()?,
+                    "fields.challenge.content.second.value": request.challenge.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        if let Some(mut state) = try_state {
+            let mut field_state = state
+                .fields
+                .iter_mut()
+                .find(|field| field.value() == &request.entry)
+                // Technically, this should never return an error...
+                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+
+            let context = state.context.clone();
+            let field_value = field_state.value().clone();
+
+            match field_state.challenge_mut() {
+                ChallengeType::ExpectedMessage { expected, second } => {
+                    let second = second.as_mut().unwrap();
+                    if request.challenge.contains(&second.value) {
+                        second.set_verified();
+                        verified = true;
+
+                        // TODO: Filter by context?
+                        coll.update_one(
+                            doc! {
+                                "fields.value": request.entry.to_bson()?,
+                                "fields.challenge.content.second.value": request.challenge.to_bson()?,
+                            },
+                            doc! {
+                                "$set": {
+                                    "fields.$.challenge.content.second.is_verified": true.to_bson()?,
+                                }
+                            },
+                            None,
+                        )
+                        .await?;
+
+                        events.push(NotificationMessage::SecondFieldVerified(
+                            context.clone(),
+                            field_value.clone(),
+                        ));
+                    } else {
+                        events.push(NotificationMessage::SecondFieldVerificationFailed(
+                            context.clone(),
+                            field_value.clone(),
+                        ));
+                    }
+                }
+                _ => {
+                    // TODO: Should panic
+                    return Err(anyhow!(
+                        "Invalid challenge type when verifying message. This is a bug"
+                    ));
+                }
+            }
+
+            // TODO: Move this into its own function.
+            // Check if all fields have been verified.
+            if state.is_fully_verified() {
+                coll.update_one(
+                    doc! {
+                        "context": state.context.to_bson()?,
+                    },
+                    doc! {
+                        "$set": {
+                            "is_fully_verified": true.to_bson()?,
+                            "completion_timestamp": Timestamp::now().to_bson()?,
+                        }
+                    },
+                    None,
+                )
+                .await?;
+
+                events.push(NotificationMessage::IdentityFullyVerified(context.clone()));
+            }
+        }
+
+        Ok(verified)
     }
     pub async fn fetch_events(&mut self) -> Result<Vec<NotificationMessage>> {
         let coll = self.db.collection(EVENT_COLLECTION);
@@ -373,16 +412,17 @@ impl Database {
     pub async fn prune_completed(&self, offset: i64) -> Result<usize> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        let res = coll.delete_many(
-            doc! {
-                "is_fully_verified": true.to_bson()?,
-                "completion_timestamp": {
-                    "$lt": Timestamp::now().raw() - offset,
-                }
-            },
-            None,
-        )
-        .await?;
+        let res = coll
+            .delete_many(
+                doc! {
+                    "is_fully_verified": true.to_bson()?,
+                    "completion_timestamp": {
+                        "$lt": Timestamp::now().raw() - offset,
+                    }
+                },
+                None,
+            )
+            .await?;
 
         Ok(res.deleted_count as usize)
     }

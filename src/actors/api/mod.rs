@@ -7,9 +7,11 @@ use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpSe
 use actix_web_actors::ws;
 
 mod judgement_state;
+mod second_challenge;
 
 // Reexport
 pub use self::judgement_state::{LookupServer, NotifyAccountState, ResponseAccountState};
+pub use self::second_challenge::VerifyChallenge;
 
 // TODO: Unify all "*_type" values as just "type". See JSON output.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]

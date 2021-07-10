@@ -6,6 +6,8 @@ extern crate anyhow;
 extern crate serde;
 #[macro_use]
 extern crate async_trait;
+#[macro_use]
+extern crate actix_web;
 
 use futures::{select, FutureExt};
 use log::LevelFilter;
