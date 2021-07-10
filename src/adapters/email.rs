@@ -190,7 +190,10 @@ impl SmtpImapClient {
             .to(to)
             .from(self.user.as_str())
             .subject("W3F Registrar Verification Service")
-            .text(format!("Insert the following challenge into the web interface: {:?}", message))
+            .text(format!(
+                "Insert the following challenge into the web interface: {:?}",
+                message
+            ))
             .build()?;
 
         let _ = smtp.send(email.into())?;

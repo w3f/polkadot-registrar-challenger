@@ -4,7 +4,9 @@ use crate::Result;
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
 use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
-use matrix_sdk::{Client, ClientConfig, EventEmitter, RoomState, SyncSettings};
+use matrix_sdk::room::Room;
+use matrix_sdk::{Client, ClientConfig, EventHandler, SyncSettings};
+use ruma::events::room::message::MessageType;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
@@ -59,16 +61,15 @@ impl MatrixClient {
     }
 }
 
-/*
 #[async_trait]
-impl EventEmitter for MatrixClient {
+impl EventHandler for MatrixClient {
     async fn on_stripped_state_member(
         &self,
-        room: RoomState,
+        room: Room,
         _: &StrippedStateEvent<MemberEventContent>,
         _: Option<MemberEventContent>,
     ) {
-        if let RoomState::Invited(room) = room {
+        if let Room::Invited(room) = room {
             let mut delay = REJOIN_DELAY;
             let mut rejoin_attempts = 0;
 
@@ -94,14 +95,10 @@ impl EventEmitter for MatrixClient {
             debug!("Joined room {}", room.room_id());
         }
     }
-    async fn on_room_message(
-        &self,
-        room: RoomState,
-        event: &SyncMessageEvent<MessageEventContent>,
-    ) {
-        if let RoomState::Joined(_) = room {
-            match &event.content {
-                MessageEventContent::Text(content) => {
+    async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
+        if let Room::Joined(_) = room {
+            match &event.content.msgtype {
+                MessageType::Text(content) => {
                     debug!(
                         "Received message \"{}\" from {}",
                         content.body, event.sender
@@ -121,13 +118,12 @@ impl EventEmitter for MatrixClient {
                     });
                 }
                 _ => {
-                    trace!("Received unacceptable message type from {}", event.sender);
+                    debug!("Received unacceptable message type from {}", event.sender);
                 }
             }
         }
     }
 }
-*/
 
 #[async_trait]
 impl Adapter for MatrixClient {
