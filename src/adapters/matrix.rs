@@ -124,8 +124,8 @@ impl EventHandler for Listener {
             match &event.content.msgtype {
                 MessageType::Text(content) => {
                     debug!(
-                        "Received message \"{}\" from {}",
-                        content.body, event.sender
+                        "Received message from {}",
+                        event.sender
                     );
 
                     // Add external message to inner field. That field is then
