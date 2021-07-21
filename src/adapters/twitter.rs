@@ -1,5 +1,5 @@
 use crate::adapters::Adapter;
-use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
+use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, Timestamp};
 use crate::Result;
 use hmac::{Hmac, Mac, NewMac};
 use rand::{thread_rng, Rng};
@@ -8,7 +8,7 @@ use reqwest::{Client, Request};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sha1::Sha1;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{cmp::Ordering, hash::Hash};
@@ -17,11 +17,6 @@ use std::{cmp::Ordering, hash::Hash};
 pub struct ReceivedMessageContext {
     sender: TwitterId,
     id: u64,
-    message: String,
-}
-
-pub struct TwitterMessage {
-    sender: String,
     message: String,
 }
 
@@ -112,23 +107,8 @@ impl TwitterBuilder {
                 .token_secret
                 .ok_or(anyhow!("token secret not specified"))?,
             twitter_ids: HashMap::new(),
+            cache: HashSet::new(),
         })
-    }
-}
-
-enum HttpMethod {
-    POST,
-    GET,
-}
-
-impl HttpMethod {
-    fn as_str(&self) -> &'static str {
-        use HttpMethod::*;
-
-        match self {
-            POST => "POST",
-            GET => "GET",
-        }
     }
 }
 
@@ -146,6 +126,7 @@ fn gen_timestamp() -> u64 {
 }
 
 #[derive(Clone)]
+// TODO: Rename
 pub struct TwitterHandler {
     client: Client,
     consumer_key: String,
@@ -153,6 +134,8 @@ pub struct TwitterHandler {
     token: String,
     token_secret: String,
     twitter_ids: HashMap<TwitterId, String>,
+    // Keep track of messages.
+    cache: HashSet<MessageId>,
 }
 
 impl TwitterHandler {
@@ -194,23 +177,27 @@ impl TwitterHandler {
         self.twitter_ids.extend(lookup_results);
 
         // Parse al messages into `TwitterMessage`.
-        let parsed_messages = messages
-            .into_iter()
-            .map(|context| {
-                let sender = self
-                    .twitter_ids
-                    .get(&context.sender)
-                    .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
-                    .clone();
+        let mut parsed_messages = vec![];
+        for context in messages {
+            let sender = self
+                .twitter_ids
+                .get(&context.sender)
+                .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
+                .clone();
 
-                Ok(ExternalMessage {
+            // Skip message if it was already processed.
+            let id = context.id.into();
+            if !self.cache.contains(&id) {
+                self.cache.insert(id);
+
+                parsed_messages.push(ExternalMessage {
                     origin: ExternalMessageType::Twitter(sender),
-                    id: context.id.into(),
+                    id: id,
                     timestamp: Timestamp::now(),
                     values: vec![context.message.into()],
-                })
-            })
-            .collect::<Result<Vec<ExternalMessage>>>()?;
+                });
+            }
+        }
 
         Ok(parsed_messages)
     }
@@ -218,7 +205,6 @@ impl TwitterHandler {
     /// https://developer.twitter.com/en/docs/authentication/oauth-1-0a/creating-a-signature
     fn authenticate_request(
         &self,
-        method: &HttpMethod,
         url: &str,
         request: &mut Request,
         params: Option<&[(&str, &str)]>,
@@ -253,7 +239,7 @@ impl TwitterHandler {
         // Remove the trailing `&`.
         params.pop();
 
-        let base = format!("{}&{}&{}", method.as_str(), encode(url), encode(&params));
+        let base = format!("GET&{}&{}", encode(url), encode(&params));
 
         // Sign the base string.
         let sign_key = format!(
@@ -309,24 +295,7 @@ impl TwitterHandler {
         }
 
         let mut request = self.client.get(&full_url).build()?;
-        self.authenticate_request(&HttpMethod::GET, url, &mut request, params)?;
-        let resp = self.client.execute(request).await?;
-        let txt = resp.text().await?;
-
-        serde_json::from_str::<T>(&txt).map_err(|err| err.into())
-    }
-    async fn post_request<T: DeserializeOwned, B: Serialize>(
-        &self,
-        url: &str,
-        body: B,
-    ) -> Result<T> {
-        let mut request = self
-            .client
-            .post(url)
-            .body(serde_json::to_string(&body)?)
-            .build()?;
-
-        self.authenticate_request(&HttpMethod::POST, url, &mut request, None)?;
+        self.authenticate_request(url, &mut request, params)?;
         let resp = self.client.execute(request).await?;
         let txt = resp.text().await?;
 
@@ -455,7 +424,7 @@ impl Adapter for TwitterHandler {
     async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         self.request_messages().await
     }
-    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
+    async fn send_message(&mut self, _to: &str, _content: Self::MessageType) -> Result<()> {
         unimplemented!()
     }
 }

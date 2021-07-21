@@ -55,6 +55,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         info!("Starting email adapter...");
         let config = config.email;
 
+        // TODO: Rename struct
         let email_client = email::SmtpImapClientBuilder::new()
             .smtp_server(config.smtp_server)
             .imap_server(config.imap_server)
