@@ -1,0 +1,28 @@
+log_level: debug
+db:
+  uri: mongodb://localhost:27017/
+  db_name: registrar_db
+instance:
+  type: adapter_listener
+  config:
+    matrix:
+      enabled: false
+      homeserver: homeserver
+      username: username
+      password: password
+      db_path: db_path
+    twitter:
+      enabled: false
+      api_key: key
+      api_secret: secret
+      token: token
+      token_secret: secret
+      request_interval: 300
+    email:
+      enabled: false
+      smtp_server: server
+      imap_server: server
+      inbox: inbox
+      user: user
+      password: password
+      request_interval: 5

@@ -11,7 +11,7 @@ pub mod email;
 pub mod matrix;
 pub mod twitter;
 
-pub async fn run_adapters_blocking(config: AdapterConfig, db: Database) -> Result<()> {
+pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     let listener = AdapterListener::new(db).await;
 
     // Matrix client configuration and execution.

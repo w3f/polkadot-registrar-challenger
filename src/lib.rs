@@ -9,16 +9,18 @@ extern crate async_trait;
 #[macro_use]
 extern crate actix_web;
 
+use actix::clock::sleep;
 use futures::{select, FutureExt};
 use log::LevelFilter;
 use std::env;
 use std::fs;
+use std::time::Duration;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 // Re-exports
 pub use actors::api::run_rest_api_server;
-pub use adapters::run_adapters_blocking;
+pub use adapters::run_adapters;
 pub use database::Database;
 pub use notifier::SessionNotifier;
 
@@ -67,7 +69,7 @@ pub struct NotifierConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-// TODO: Rename to "Adapter"?
+// TODO: Wrap in `Option`
 pub struct AdapterConfig {
     matrix: MatrixConfig,
     twitter: TwitterConfig,
@@ -149,7 +151,7 @@ pub fn init_env() -> Result<Config> {
 
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
-    run_adapters_blocking(config, db).await
+    run_adapters(config, db).await
 }
 
 async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {
@@ -173,43 +175,19 @@ pub async fn run() -> Result<()> {
             config_session_notifier(db_config, config).await?;
         }
         InstanceType::SingleInstance(config) => {
-            let (adapter, notifier) = (config.adapter, config.notifier);
+            let (adapter_config, notifier_config) = (config.adapter, config.notifier);
 
             let t1_db_config = db_config.clone();
-            let t2_db_config = db_config.clone();
+            let t2_db_config = db_config;
 
-            // Starts threads
-            let a = actix::spawn(async move {
-                config_adapter_listener(t1_db_config, adapter)
-                    .await
-                    .map(|_| ())
-                    .or_else::<(), _>(|err| {
-                        error!("{:?}", err);
-                        Ok(())
-                    })
-                    .unwrap()
-            });
-            // TOOD: No need to run in thread. See blow in test function.
-            let b = actix::spawn(async move {
-                config_session_notifier(t2_db_config, notifier)
-                    .await
-                    .map(|_| ())
-                    .or_else::<(), _>(|err| {
-                        error!("{:?}", err);
-                        Ok(())
-                    })
-                    .unwrap()
-            });
-
-            // If one thread exits, exit the full application.
-            select! {
-                res = a.fuse() => res?,
-                res = b.fuse() => res?,
-            }
+            config_adapter_listener(t1_db_config, adapter_config).await?;
+            config_session_notifier(t2_db_config, notifier_config).await?;
         }
     }
 
-    Ok(())
+    loop {
+        sleep(Duration::from_secs(u64::MAX)).await;
+    }
 }
 
 #[cfg(test)]
