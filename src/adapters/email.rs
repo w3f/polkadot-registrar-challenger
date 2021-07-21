@@ -1,5 +1,9 @@
+use std::collections::HashSet;
+
 use crate::adapters::Adapter;
-use crate::primitives::{ExpectedMessage, ExternalMessage, ExternalMessageType, Timestamp};
+use crate::primitives::{
+    ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, Timestamp,
+};
 use crate::Result;
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
@@ -78,6 +82,7 @@ impl SmtpImapClientBuilder {
             password: self
                 .password
                 .ok_or(anyhow!("password server not specified"))?,
+            cache: HashSet::new(),
         })
     }
 }
@@ -89,10 +94,12 @@ pub struct SmtpImapClient {
     inbox: String,
     user: String,
     password: String,
+    // Keep track of messages.
+    cache: HashSet<MessageId>,
 }
 
 impl SmtpImapClient {
-    fn request_messages(&self) -> Result<Vec<ExternalMessage>> {
+    fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
@@ -138,8 +145,18 @@ impl SmtpImapClient {
 
                 debug!("Received message from {}", sender);
 
+                let id = message
+                    .uid
+                    .ok_or(anyhow!("missing UID for email message"))?
+                    .into();
+
+                // Skip message if it was already processed.
+                if self.cache.contains(&id) {
+                    continue;
+                }
+
                 // Prepare parsed message
-                let mut email_message = ExternalMessage {
+                let mut parsed_message = ExternalMessage {
                     origin: ExternalMessageType::Email(sender),
                     id: message
                         .uid
@@ -151,7 +168,7 @@ impl SmtpImapClient {
 
                 // Add body content.
                 if let Ok(body) = mail.get_body() {
-                    email_message.values.push(body.into());
+                    parsed_message.values.push(body.into());
                 } else {
                     warn!("No body found in message from");
                 }
@@ -160,13 +177,16 @@ impl SmtpImapClient {
                 // those into the prepared message.
                 for subpart in mail.subparts {
                     if let Ok(body) = subpart.get_body() {
-                        email_message.values.push(body.into());
+                        parsed_message.values.push(body.into());
                     } else {
                         debug!("No body found in subpart message");
                     }
                 }
 
-                parsed_messages.push(email_message);
+                debug!("Received new message: {:?}", parsed_message);
+
+                self.cache.insert(parsed_message.id);
+                parsed_messages.push(parsed_message);
             } else {
                 warn!("No body found for message");
             }
