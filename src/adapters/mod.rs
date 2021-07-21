@@ -119,7 +119,7 @@ impl AdapterListener {
                 match adapter.fetch_messages().await {
                     Ok(messages) => {
                         for message in messages {
-                            debug!("Received message: {:?}", message);
+                            debug!("Processing message from: {:?}", message.origin);
                             let _ = db
                                 .process_message(&message)
                                 .await

@@ -114,7 +114,7 @@ impl SmtpImapClient {
         //
         // Gmail has a custom search syntax and does not support the IMAP
         // standardized queries.
-        let recent_seq = imap.search("X-GM-RAW \"newer_than:2d\"")?;
+        let recent_seq = imap.search("X-GM-RAW \"newer_than:1d\"")?;
 
         if recent_seq.is_empty() {
             return Ok(vec![]);
@@ -143,8 +143,6 @@ impl SmtpImapClient {
                     .get_value()
                     .extract_sender()?;
 
-                debug!("Received message from {}", sender);
-
                 let id = message
                     .uid
                     .ok_or(anyhow!("missing UID for email message"))?
@@ -154,6 +152,8 @@ impl SmtpImapClient {
                 if self.cache.contains(&id) {
                     continue;
                 }
+
+                debug!("Received message from {}", sender);
 
                 // Prepare parsed message
                 let mut parsed_message = ExternalMessage {
@@ -170,7 +170,7 @@ impl SmtpImapClient {
                 if let Ok(body) = mail.get_body() {
                     parsed_message.values.push(body.into());
                 } else {
-                    warn!("No body found in message from");
+                    warn!("No body found in message");
                 }
 
                 // An email message can contain multiple "subparts". Add each of
@@ -182,8 +182,6 @@ impl SmtpImapClient {
                         debug!("No body found in subpart message");
                     }
                 }
-
-                debug!("Received new message: {:?}", parsed_message);
 
                 self.cache.insert(parsed_message.id);
                 parsed_messages.push(parsed_message);

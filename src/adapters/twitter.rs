@@ -142,13 +142,16 @@ impl TwitterHandler {
     async fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         debug!("Requesting Twitter messages");
         // Request message on parse those into a simpler type.
-        let messages = self
+        let mut messages = self
             .get_request::<ApiMessageRequest>(
                 "https://api.twitter.com/1.1/direct_messages/events/list.json",
                 None,
             )
             .await?
             .parse()?;
+
+        // Skip message if it was already processed.
+        messages.retain(|context| !self.cache.contains(&context.id.into()));
 
         if messages.is_empty() {
             return Ok(vec![]);
@@ -185,18 +188,15 @@ impl TwitterHandler {
                 .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
                 .clone();
 
-            // Skip message if it was already processed.
             let id = context.id.into();
-            if !self.cache.contains(&id) {
-                self.cache.insert(id);
+            self.cache.insert(id);
 
-                parsed_messages.push(ExternalMessage {
-                    origin: ExternalMessageType::Twitter(sender),
-                    id: id,
-                    timestamp: Timestamp::now(),
-                    values: vec![context.message.into()],
-                });
-            }
+            parsed_messages.push(ExternalMessage {
+                origin: ExternalMessageType::Twitter(sender),
+                id: id,
+                timestamp: Timestamp::now(),
+                values: vec![context.message.into()],
+            });
         }
 
         Ok(parsed_messages)
