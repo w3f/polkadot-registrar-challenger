@@ -111,10 +111,10 @@ pub struct EmailConfig {
 
 fn open_config() -> Result<Config> {
     // Open config file.
-    let content = fs::read_to_string("config.json")
-        .or_else(|_| fs::read_to_string("/etc/registrar/config.json"))
+    let content = fs::read_to_string("config.yaml")
+        .or_else(|_| fs::read_to_string("/etc/registrar/config.yaml"))
         .map_err(|_| {
-            eprintln!("Failed to open config at 'config.json' or '/etc/registrar/config.json'.");
+            eprintln!("Failed to open config at 'config.yaml' or '/etc/registrar/config.yaml'.");
             std::process::exit(1);
         })
         .unwrap();
@@ -140,7 +140,7 @@ pub fn init_env() -> Result<Config> {
     } else {
         println!("Setting log level to '{}' from config.", config.log_level);
         env_logger::builder()
-            .filter_module("registrar", config.log_level)
+            .filter_module("system", config.log_level)
             .init();
     }
 
@@ -169,12 +169,15 @@ pub async fn run() -> Result<()> {
 
     match instance {
         InstanceType::AdapterListener(config) => {
+            info!("Starting adapter listener instance");
             config_adapter_listener(db_config, config).await?;
         }
         InstanceType::SessionNotifier(config) => {
+            info!("Starting session notifier instance");
             config_session_notifier(db_config, config).await?;
         }
         InstanceType::SingleInstance(config) => {
+            info!("Starting adapter listener and session notifier instances");
             let (adapter_config, notifier_config) = (config.adapter, config.notifier);
 
             let t1_db_config = db_config.clone();
@@ -184,6 +187,8 @@ pub async fn run() -> Result<()> {
             config_session_notifier(t2_db_config, notifier_config).await?;
         }
     }
+
+    info!("Setup completed");
 
     loop {
         sleep(Duration::from_secs(u64::MAX)).await;

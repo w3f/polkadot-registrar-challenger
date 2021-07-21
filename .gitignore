@@ -1,7 +1,6 @@
 /target
 /www/dist
-config/*
-!config/sample*
+config*
 !helmfile.d/config
 scripts/load-env.sh
 node_modules

@@ -1,10 +1,8 @@
-use crate::actors::api::LookupServer;
 use crate::database::Database;
 use crate::primitives::{
     ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage,
 };
 use crate::{AdapterConfig, Result};
-use actix::prelude::*;
 use tokio::time::{interval, Duration};
 
 pub mod email;
@@ -13,9 +11,12 @@ pub mod twitter;
 
 pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     let listener = AdapterListener::new(db).await;
+    // Convenience flat for logging
+    let mut started = false;
 
     // Matrix client configuration and execution.
     if config.matrix.enabled {
+        info!("Starting Matrix adapter...");
         let config = config.matrix;
 
         let matrix_client = matrix::MatrixClient::new(
@@ -27,10 +28,12 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         .await?;
 
         listener.start_message_adapter(matrix_client, 1).await;
+        started = true;
     }
 
     // Twitter client configuration and execution.
     if config.twitter.enabled {
+        info!("Starting Twitter adapter...");
         let config = config.twitter;
 
         let twitter_client = twitter::TwitterBuilder::new()
@@ -43,10 +46,13 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         listener
             .start_message_adapter(twitter_client, config.request_interval)
             .await;
+
+        started = true;
     }
 
     // Email client configuration and execution.
     if config.email.enabled {
+        info!("Starting email adapter...");
         let config = config.email;
 
         let email_client = email::SmtpImapClientBuilder::new()
@@ -60,6 +66,12 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         listener
             .start_message_adapter(email_client, config.request_interval)
             .await;
+
+        started = true;
+    }
+
+    if !started {
+        warn!("No adapters are enabled");
     }
 
     Ok(())

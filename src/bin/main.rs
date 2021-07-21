@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate log;
 
-use libregistrar::{run, Result};
+use system::{run, Result};
 
 #[actix::main]
 async fn main() -> Result<()> {
