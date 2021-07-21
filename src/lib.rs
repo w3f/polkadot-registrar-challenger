@@ -158,6 +158,7 @@ async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConf
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
     let lookup = run_rest_api_server(&config.api_address, db.clone()).await?;
 
+    // TODO: Should be executed in `run_rest_api_server`
     actix::spawn(async move { SessionNotifier::new(db, lookup).run_blocking().await });
 
     Ok(())

@@ -58,13 +58,13 @@
         </div>
         <div class="container">
             <div id="div-live-updates-info" class="invisible row justify-content-center">
-                <div class="col-10 table-responsive">
+                <div class="col-10">
                     <p class="text-center"><em>Displaying live updates...</em></p>
                 </div>
             </div>
             <div id="div-fully-verified-info" class="p-2"></div>
             <div id="div-display-name-overview" class="invisible row justify-content-center">
-                <div class="col-10 table-responsive">
+                <div class="col-10">
                     <h2>Display name check</h2>
                     <p>The display name <strong id="display-name-value"></strong> is <span
                             id="display-name-validity"></span></p>
@@ -82,7 +82,7 @@
                 </div>
             </div>
             <div id="div-email-second-challenge" class="invisible row justify-content-center p-2">
-                <div class="col-10 table-responsive">
+                <div class="col-10">
                     <h2>⚠️️ Additional Challenge</h2>
                     <p>An message containing an additional challenge was sent to <strong
                             id="email-second-challenge"></strong>. Please insert that challenge in the following field:
@@ -90,12 +90,13 @@
                     <div class="input-group">
                         <input id="specify-second-challenge" type="text" class="form-control"
                             aria-label="Second challenge verification" placeholder="Challenge...">
-                        <button id="execute-second-challenge" class="col-1 btn btn-primary" type="button">Verify</button>
+                        <button id="execute-second-challenge" class="col-1 btn btn-primary"
+                            type="button">Verify</button>
                     </div>
                 </div>
             </div>
             <div id="div-unsupported-overview" class="invisible row justify-content-center p-2">
-                <div class="col-10 table-responsive">
+                <div class="col-10">
                     <h2>🚨 Unsupported entries</h2>
                     <ul id="unsupported-overview">
                     </ul>
@@ -110,8 +111,32 @@
                 </div>
             </div>
         </div>
-
-        <script src="dist/bundle.js"></script>
+    </div>
+    <div class="fixed-bottom bg-primary text-white">
+        <div class="container">
+            <div class="row justify-content-center p-2">
+                <div class="col-10">
+                    <h2>Need help?</h2>
+                    <p>Please provide your Kusama/Polkadot address upfront and describe your issue when contacting us.
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>Guide</strong>: <a class="text-white"
+                                href="https://wiki.polkadot.network/docs/learn-registrar">wiki.polkadot.network</a>
+                        </li>
+                        <li>
+                            <strong>Email Support</strong>: <a class="text-white"
+                                href="mailto:support@polkadot.network">support@polkadot.network</a>
+                        </li>
+                        <li>
+                            <strong>Matrix (<hem>fastest</em>)</strong>: ...
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="dist/bundle.js"></script>
 </body>
 
 </html>
