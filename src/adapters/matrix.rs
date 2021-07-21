@@ -1,5 +1,5 @@
 use crate::adapters::Adapter;
-use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp};
+use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
 use crate::Result;
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
@@ -15,15 +15,9 @@ use url::Url;
 const REJOIN_DELAY: u64 = 3;
 const REJOIN_MAX_ATTEMPTS: usize = 5;
 
-// TODO: This type should be unified with other adapters.
-pub struct MatrixMessage {
-    from: String,
-    message: String,
-}
-
 #[derive(Clone)]
 pub struct MatrixClient {
-    client: Client, // `Client` from matrix_sdk
+    client: Client,
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
@@ -48,21 +42,51 @@ impl MatrixClient {
             .await?;
 
         // Sync up, avoid responding to old messages.
-        info!("Syncing Matrix client");
-        client.sync(SyncSettings::default()).await;
+        let messages = Arc::new(Mutex::new(vec![]));
+        client.sync_once(SyncSettings::default()).await?;
+
+        // Add event handler
+        client
+            .set_event_handler(Box::new(Listener::new(
+                client.clone(),
+                Arc::clone(&messages),
+            )))
+            .await;
+
+        // Start backend syncing service
+        let settings = SyncSettings::default().token(
+            client
+                .sync_token()
+                .await
+                .ok_or(anyhow!("Failed to acquire sync token"))?,
+        );
+
+        client.sync(settings).await;
 
         Ok(MatrixClient {
             client: client,
-            messages: Arc::new(Mutex::new(vec![])),
+            messages: messages,
         })
     }
-    pub async fn start(&self) {
-        //self.client.add_event_emitter(Box::new(self.clone())).await;
+}
+
+struct Listener {
+    client: Client,
+    // TODO: Rename?
+    messages: Arc<Mutex<Vec<ExternalMessage>>>,
+}
+
+impl Listener {
+    pub fn new(client: Client, messages: Arc<Mutex<Vec<ExternalMessage>>>) -> Self {
+        Self {
+            client: client,
+            messages: messages,
+        }
     }
 }
 
 #[async_trait]
-impl EventHandler for MatrixClient {
+impl EventHandler for Listener {
     async fn on_stripped_state_member(
         &self,
         room: Room,
@@ -137,7 +161,7 @@ impl Adapter for MatrixClient {
         // Return messages and wipe inner field.
         Ok(std::mem::take(&mut *lock))
     }
-    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
+    async fn send_message(&mut self, _to: &str, _content: Self::MessageType) -> Result<()> {
         unimplemented!()
     }
 }

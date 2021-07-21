@@ -1,7 +1,5 @@
 use crate::adapters::Adapter;
-use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, MessagePart, Timestamp,
-};
+use crate::primitives::{ExpectedMessage, ExternalMessage, ExternalMessageType, Timestamp};
 use crate::Result;
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;

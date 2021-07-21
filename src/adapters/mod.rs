@@ -213,7 +213,7 @@ pub mod tests {
             let mut lock = self.messages.lock().await;
             Ok(std::mem::take(&mut *lock))
         }
-        async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
+        async fn send_message(&mut self, _to: &str, _content: Self::MessageType) -> Result<()> {
             unimplemented!()
         }
     }
