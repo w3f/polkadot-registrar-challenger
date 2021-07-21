@@ -151,7 +151,7 @@ impl TwitterHandler {
             .parse()?;
 
         // Skip message if it was already processed.
-        messages.retain(|context| !self.cache.contains(&context.id.into()));
+        messages.retain(|message| !self.cache.contains(&message.id.into()));
 
         if messages.is_empty() {
             return Ok(vec![]);
@@ -163,11 +163,11 @@ impl TwitterHandler {
         #[rustfmt::skip]
         let mut to_lookup: Vec<&TwitterId> = messages
             .iter()
-            .filter(|context| {
+            .filter(|message| {
                 // Only lookup Ids that aren't cached.
-                !self.twitter_ids.contains_key(&context.sender)
+                !self.twitter_ids.contains_key(&message.sender)
             })
-            .map(|context| &context.sender)
+            .map(|message| &message.sender)
             .collect();
 
         // Remove duplicates.
@@ -175,27 +175,27 @@ impl TwitterHandler {
         to_lookup.dedup();
 
         // Lookup Twitter Ids and insert those into the cache.
-        debug!("Looking up TwitterIds");
+        debug!("Looking up Twitter Ids");
         let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
         self.twitter_ids.extend(lookup_results);
 
         // Parse al messages into `TwitterMessage`.
         let mut parsed_messages = vec![];
-        for context in messages {
+        for message in messages {
             let sender = self
                 .twitter_ids
-                .get(&context.sender)
+                .get(&message.sender)
                 .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
                 .clone();
 
-            let id = context.id.into();
+            let id = message.id.into();
             self.cache.insert(id);
 
             parsed_messages.push(ExternalMessage {
                 origin: ExternalMessageType::Twitter(sender),
                 id: id,
                 timestamp: Timestamp::now(),
-                values: vec![context.message.into()],
+                values: vec![message.message.into()],
             });
         }
 
