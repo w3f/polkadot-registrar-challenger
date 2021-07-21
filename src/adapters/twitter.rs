@@ -107,10 +107,10 @@ impl TwitterBuilder {
             consumer_secret: self
                 .consumer_secret
                 .ok_or(anyhow!("consumer secret name not specified"))?,
-            token: self.token.ok_or(anyhow!("screen name not specified"))?,
+            token: self.token.ok_or(anyhow!("token not specified"))?,
             token_secret: self
                 .token_secret
-                .ok_or(anyhow!("screen name not specified"))?,
+                .ok_or(anyhow!("token secret not specified"))?,
             twitter_ids: HashMap::new(),
         })
     }
