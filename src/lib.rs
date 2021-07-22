@@ -23,7 +23,6 @@ pub use notifier::SessionNotifier;
 
 mod actors;
 mod adapters;
-mod connector;
 mod database;
 mod notifier;
 mod primitives;

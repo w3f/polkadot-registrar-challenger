@@ -166,6 +166,7 @@ impl Handler<ClientCommand> for Connector {
 
     fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) {
         let mut address = None;
+
         match msg {
             ClientCommand::ProvideJudgement(id) => {
                 self.sink.write(Message::Text(
@@ -211,7 +212,7 @@ impl Actor for Connector {
 impl Connector {
     fn heartbeat(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(5, 0), |act, ctx| {
-            //act.0.write(Message::Ping(b""));
+            act.sink.write(Message::Ping(String::from("").into()));
             act.heartbeat(ctx);
 
             // TODO: Check timeouts
