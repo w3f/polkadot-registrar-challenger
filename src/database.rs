@@ -31,7 +31,7 @@ impl<T: Serialize> ToBson for T {
 pub struct Database {
     db: MongoDb,
     // TODO: This should be tracked in storage.
-    event_counter: i64,
+    event_counter: u64,
 }
 
 impl Database {
@@ -108,7 +108,7 @@ impl Database {
 
         Ok(())
     }
-    fn gen_id(&mut self) -> i64 {
+    fn gen_id(&mut self) -> u64 {
         self.event_counter += 1;
         self.event_counter
     }
@@ -456,7 +456,26 @@ impl Database {
 
         Ok(())
     }
-    pub async fn prune_completed(&self, offset: i64) -> Result<usize> {
+    pub async fn fetch_completed(&self) -> Result<Vec<JudgementState>> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        let mut cursor = coll
+            .find(
+                doc! {
+                    "is_fully_verified": true.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        let mut completed = vec![];
+        while let Some(state) = cursor.next().await {
+            completed.push(state?);
+        }
+
+        Ok(completed)
+    }
+    pub async fn prune_completed(&self, offset: u64) -> Result<usize> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         let res = coll

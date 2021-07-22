@@ -41,7 +41,7 @@ impl IdentityField {
     #[cfg(test)]
     pub fn expected_message(&self) -> &ExpectedMessage {
         match &self.challenge {
-            ChallengeType::ExpectedMessage { expected, _second } => expected,
+            ChallengeType::ExpectedMessage { expected, second: _ } => expected,
             _ => panic!(),
         }
     }
@@ -355,8 +355,7 @@ impl From<u32> for MessageId {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-// Uses signed integer to make it MongoDb (driver) friendly.
-pub struct Timestamp(i64);
+pub struct Timestamp(u64);
 
 impl Timestamp {
     pub fn now() -> Self {
@@ -368,9 +367,9 @@ impl Timestamp {
             .expect("Failed to calculate UNIX time")
             .as_secs();
 
-        Timestamp(time as i64)
+        Timestamp(time)
     }
-    pub fn raw(&self) -> i64 {
+    pub fn raw(&self) -> u64 {
         self.0
     }
 }
@@ -406,12 +405,12 @@ pub enum NotificationType {
 #[serde(rename_all = "snake_case")]
 pub struct Event {
     pub timestamp: Timestamp,
-    pub id: i64,
+    pub id: u64,
     pub event: NotificationMessage,
 }
 
 impl Event {
-    pub fn new(event: NotificationMessage, id: i64) -> Self {
+    pub fn new(event: NotificationMessage, id: u64) -> Self {
         Event {
             timestamp: Timestamp::now(),
             id: id,

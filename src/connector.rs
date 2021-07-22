@@ -1,5 +1,6 @@
-use crate::Result;
+use crate::primitives::{IdentityContext, Timestamp};
 use crate::Database;
+use crate::Result;
 use actix::io::SinkWrite;
 use actix::io::WriteHandler;
 use actix::*;
@@ -10,22 +11,39 @@ use awc::{
     BoxedSocket, Client,
 };
 use futures::stream::{SplitSink, StreamExt};
-use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::sleep;
+use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
+use tokio::time::sleep;
+use std::collections::HashMap;
+
+type Cache = Arc<RwLock<HashMap<IdentityContext, Timestamp>>>;
 
 async fn run_connector(db: Database, url: String) -> Result<()> {
     let cache = Default::default();
     let mut connector = init_connector(&db, url.as_str(), Arc::clone(&cache)).await?;
 
     actix::spawn(async move {
-        async fn local(connector: &mut Addr<Connector>, db: &Database, url: &str, cache: Arc<RwLock<HashMap<(), ()>>>) -> Result<()> {
+        async fn local(connector: &mut Addr<Connector>, db: &Database, url: &str, cache: Cache) -> Result<()> {
             // If connection dropped, try to reconnect
             if !connector.connected() {
                 warn!("Connection to Watcher dropped, trying to reconnect...");
-                *connector = init_connector(db, url, cache).await?
+                *connector = init_connector(db, url, Arc::clone(&cache)).await?
+            }
+
+            let mut completed = db.fetch_completed().await?;
+            {
+                let lock = cache.read().await;
+                completed.retain(|state| {
+                    if let Some(timestamp) = lock.get(&state.context) {
+                        if Timestamp::now().raw() - timestamp.raw() < 10 {
+                            return false
+                        }
+                    }
+
+                    true
+                });
             }
 
             Ok(())
@@ -35,19 +53,18 @@ async fn run_connector(db: Database, url: String) -> Result<()> {
             match local(&mut connector, &db, url.as_str(), Arc::clone(&cache)).await {
                 Ok(_) => {
                     sleep(Duration::from_secs(1)).await;
-                },
+                }
                 Err(err) => {
                     error!("Connector error: {:?}", err);
                     sleep(Duration::from_secs(10)).await;
                 }
-            }
-        }
+            } }
     });
 
     Ok(())
 }
 
-async fn init_connector(db: &Database, endpoint: &str, cache: Arc<RwLock<HashMap<(), ()>>>) -> Result<Addr<Connector>> {
+async fn init_connector(db: &Database, endpoint: &str, cache: Cache) -> Result<Addr<Connector>> {
     let (_, framed) = Client::new().ws(endpoint).connect().await.map_err(|err| {
         anyhow!(
             "failed to initiate client connector to {}: {:?}",
@@ -72,7 +89,21 @@ async fn init_connector(db: &Database, endpoint: &str, cache: Arc<RwLock<HashMap
 struct Connector {
     db: Database,
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
-    cache: Arc<RwLock<HashMap<(), ()>>>,
+    cache: Cache,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+enum ClientCommand {
+    ProvideJudgement,
+}
+
+impl Handler<ClientCommand> for Connector {
+    type Result = ();
+
+    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
+        //self.sink.write(Message::Text(msg.0));
+    }
 }
 
 impl Actor for Connector {
