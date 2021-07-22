@@ -1,4 +1,6 @@
-use crate::primitives::{ChainAddress, IdentityContext, IdentityFieldValue, Timestamp, ChainName, JudgementState};
+use crate::primitives::{
+    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState, Timestamp,
+};
 use crate::Database;
 use crate::Result;
 use actix::io::SinkWrite;
@@ -216,7 +218,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             EventType::Ack => {
                 // TODO: Check the "result"
                 let data: AckResponse = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received acknowledgement from Watcher");
+                debug!("Received acknowledgement from Watcher: {:?}", data);
 
                 let db = self.db.clone();
                 let cache = Arc::clone(&self.cache);
@@ -231,26 +233,35 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     );
                 }
             }
+            EventType::Error => {
+                error!("Received error from Watcher: {:?}", parsed.data);
+            }
             EventType::NewJudgementRequest => {
                 let data: JudgementRequest = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received acknowledgement from Watcher");
+                debug!("Received new judgement request from Watcher: {:?}", data);
 
                 let db = self.db.clone();
                 ctx.spawn(
                     async move {
-                        let chain = if data.address.as_str().starts_with("1") {
-                            ChainName::Polkadot
-                        } else {
-                            ChainName::Kusama
-                        };
+                        process_request(&db, data.address, data.accounts)
+                            .await
+                            .unwrap();
+                    }
+                    .into_actor(self),
+                );
+            }
+            EventType::PendingJudgementsResponse => {
+                let requests: Vec<JudgementRequest> = serde_json::from_value(parsed.data).unwrap();
+                debug!("Received pending judgments from Watcher: {:?}", requests);
 
-                        let id = IdentityContext {
-                            address: data.address,
-                            chain: chain,
-                        };
-
-                        let state = JudgementState::new(id, data.accounts.into_iter().map(|a| a.into()).collect());
-                        db.add_judgement_request(state).await.unwrap();
+                let db = self.db.clone();
+                ctx.spawn(
+                    async move {
+                        for data in requests {
+                            process_request(&db, data.address, data.accounts)
+                                .await
+                                .unwrap();
+                        }
                     }
                     .into_actor(self),
                 );
@@ -269,6 +280,29 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         error!("Watcher disconnected");
         ctx.stop()
     }
+}
+
+async fn process_request(
+    db: &Database,
+    address: ChainAddress,
+    accounts: HashMap<AccountType, String>,
+) -> Result<()> {
+    let chain = if address.as_str().starts_with("1") {
+        ChainName::Polkadot
+    } else {
+        ChainName::Kusama
+    };
+
+    let id = IdentityContext {
+        address: address,
+        chain: chain,
+    };
+
+    let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
+
+    db.add_judgement_request(state).await?;
+
+    Ok(())
 }
 
 impl WriteHandler<WsProtocolError> for Connector {}
