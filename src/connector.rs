@@ -53,6 +53,10 @@ async fn run_connector(db: Database, url: String) -> Result<()> {
                 });
             }
 
+            for state in completed {
+                connector.do_send(ClientCommand::ProvideJudgement(state.context));
+            }
+
             Ok(())
         }
 
@@ -160,20 +164,34 @@ enum ClientCommand {
 impl Handler<ClientCommand> for Connector {
     type Result = ();
 
-    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
+    fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) {
+        let mut address = None;
         match msg {
             ClientCommand::ProvideJudgement(id) => {
                 self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
                         data: JudgementResponse {
-                            address: id.address,
+                            address: id.address.clone(),
                             judgement: Judgement::Reasonable,
                         },
                     })
                     .unwrap(),
                 ));
+
+                address = Some(id.address);
             }
+        }
+
+        if let Some(address) = address {
+            let cache = Arc::clone(&self.cache);
+            ctx.spawn(
+                async move {
+                    let mut lock = cache.write().await;
+                    lock.insert(address, Timestamp::now());
+                }
+                .into_actor(self),
+            );
         }
     }
 }
@@ -225,8 +243,8 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                 if let Some(address) = data.address {
                     ctx.spawn(
                         async move {
-                            let mut lock = cache.write().await;
                             db.remove_judgement_request(&address).await.unwrap();
+                            let mut lock = cache.write().await;
                             lock.remove(&address);
                         }
                         .into_actor(self),
