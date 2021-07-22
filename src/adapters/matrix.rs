@@ -123,10 +123,7 @@ impl EventHandler for Listener {
         if let Room::Joined(_) = room {
             match &event.content.msgtype {
                 MessageType::Text(content) => {
-                    debug!(
-                        "Received message from {}",
-                        event.sender
-                    );
+                    debug!("Received message from {}", event.sender);
 
                     // Add external message to inner field. That field is then
                     // fetched by the `Adapter` implementation.

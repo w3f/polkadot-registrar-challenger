@@ -58,6 +58,7 @@ pub mod tests {
     #[cfg(test)]
     // TODO: Unify this with the `run_rest_api_server_blocking` function above.
     pub async fn run_test_server(db: Database) -> (TestServer, Addr<LookupServer>) {
+        // TODO: Use Actor::create?
         let actor = LookupServer::new(db.clone()).start();
         let verifier = SecondChallengeVerifier::new(db.clone()).start();
 

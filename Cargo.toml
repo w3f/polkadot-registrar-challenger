@@ -32,8 +32,10 @@ async-trait = "0.1.40"
 actix = { version = "0.11.1", features = ["macros"]}
 actix-web = "4.0.0-beta.6"
 actix-broker = "0.4.0"
+actix-codec = "0.3.0"
 actix-web-actors = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.6" } 
 actix-test = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.6" } 
+awc = "2.0.3"
 thiserror = "1.0.23"
 anyhow = "1.0.38"
 serde = "1.0.116"
