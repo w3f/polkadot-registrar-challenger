@@ -1,5 +1,5 @@
 use crate::primitives::{
-    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState, Timestamp,
+    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState 
 };
 use crate::Database;
 use crate::Result;
@@ -14,10 +14,8 @@ use awc::{
 };
 use futures::stream::{SplitSink, StreamExt};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 pub async fn run_connector(url: String, db: Database) -> Result<()> {
