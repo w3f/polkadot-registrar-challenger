@@ -441,13 +441,14 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn fetch_completed(&self) -> Result<Vec<JudgementState>> {
+    pub async fn fetch_completed_not_submitted(&self) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut cursor = coll
             .find(
                 doc! {
-                    "is_fully_verified": true.to_bson()?,
+                    "is_fully_verified": true,
+                    "judgement_submitted": false,
                 },
                 None,
             )
@@ -460,7 +461,7 @@ impl Database {
 
         Ok(completed)
     }
-    pub async fn mark_judged(&self, context: &IdentityContext) -> Result<()> {
+    pub async fn set_submitted(&self, context: &IdentityContext) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         coll.update_one(

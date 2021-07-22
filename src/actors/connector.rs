@@ -43,7 +43,7 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
             }
 
             // Provide judgments.
-            let completed = db.fetch_completed().await?;
+            let completed = db.fetch_completed_not_submitted().await?;
             for state in completed {
                 connector.do_send(ClientCommand::ProvideJudgement(state.context));
             }
@@ -106,13 +106,12 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
                     // TODO: Check the "result"
                     if let Some(address) = data.address {
                         let context = create_context(address);
-                        db.mark_judged(&context).await?;
+                        db.set_submitted(&context).await?;
                     }
                 }
                 QueueMessage::NewJudgementRequest(data) => {
                     process_request(&db, data.address, data.accounts)
-                        .await
-                        .unwrap();
+                        .await?
                 }
                 QueueMessage::PendingJudgementsRequests(data) => {
                     for d in data {
