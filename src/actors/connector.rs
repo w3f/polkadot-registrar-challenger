@@ -16,14 +16,18 @@ use futures::stream::{SplitSink, StreamExt};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 type Cache = Arc<RwLock<HashMap<ChainAddress, Timestamp>>>;
 
 pub async fn run_connector(url: String, db: Database) -> Result<()> {
+    // Init process queue.
+    let (tx, recv) = unbounded_channel();
+
     let cache = Default::default();
-    let mut connector = init_connector(&db, url.as_str(), Arc::clone(&cache)).await?;
+    let mut connector = init_connector(url.as_str(), tx.clone()).await?;
 
     actix::spawn(async move {
         async fn local(
@@ -31,11 +35,12 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
             db: &Database,
             url: &str,
             cache: Cache,
+            tx: UnboundedSender<QueueMessage>,
         ) -> Result<()> {
             // If connection dropped, try to reconnect
             if !connector.connected() {
                 warn!("Connection to Watcher dropped, trying to reconnect...");
-                *connector = init_connector(db, url, Arc::clone(&cache)).await?
+                *connector = init_connector(url, tx).await?
             }
 
             let mut completed = db.fetch_completed().await?;
@@ -60,7 +65,15 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
         }
 
         loop {
-            match local(&mut connector, &db, url.as_str(), Arc::clone(&cache)).await {
+            match local(
+                &mut connector,
+                &db,
+                url.as_str(),
+                Arc::clone(&cache),
+                tx.clone(),
+            )
+            .await
+            {
                 Ok(_) => {}
                 Err(err) => {
                     error!("Connector error: {:?}", err);
@@ -74,7 +87,44 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
     Ok(())
 }
 
-async fn init_connector(db: &Database, endpoint: &str, cache: Cache) -> Result<Addr<Connector>> {
+async fn run_queue_processor(mut recv: UnboundedReceiver<QueueMessage>) {
+    actix::spawn(async move {
+        while let Some(message) = recv.recv().await {
+            match message {
+                QueueMessage::Ack(data) => {
+                    /*
+                    // TODO: Check the "result"
+                    let id = create_context(address.clone());
+                    db.mark_judged(&id).await.unwrap();
+                    let mut lock = cache.write().await;
+                    lock.remove(&address);
+                     */
+                }
+                QueueMessage::NewJudgementRequest(data) => {
+                    /*
+                       process_request(&db, data.address, data.accounts)
+                           .await
+                           .unwrap();
+                    */
+                }
+                QueueMessage::PendingJudgementsRequests(data) => {
+                    /*
+                       for data in requests {
+                           process_request(&db, data.address, data.accounts)
+                               .await
+                               .unwrap();
+                       }
+                    */
+                }
+            }
+        }
+    });
+}
+
+async fn init_connector(
+    endpoint: &str,
+    queue: UnboundedSender<QueueMessage>,
+) -> Result<Addr<Connector>> {
     let (_, framed) = Client::new().ws(endpoint).connect().await.map_err(|err| {
         anyhow!(
             "failed to initiate client connector to {}: {:?}",
@@ -87,9 +137,8 @@ async fn init_connector(db: &Database, endpoint: &str, cache: Cache) -> Result<A
     let actor = Connector::create(|ctx| {
         Connector::add_stream(stream, ctx);
         Connector {
-            db: db.clone(),
             sink: SinkWrite::new(sink, ctx),
-            cache: cache,
+            queue: queue,
         }
     });
 
@@ -148,10 +197,16 @@ pub(crate) struct JudgementRequest {
     pub accounts: HashMap<AccountType, String>,
 }
 
+#[derive(Debug, Clone)]
+enum QueueMessage {
+    Ack(AckResponse),
+    NewJudgementRequest(JudgementRequest),
+    PendingJudgementsRequests(Vec<JudgementRequest>),
+}
+
 struct Connector {
-    db: Database,
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
-    cache: Cache,
+    queue: UnboundedSender<QueueMessage>,
 }
 
 #[derive(Message)]
@@ -182,15 +237,6 @@ impl Handler<ClientCommand> for Connector {
                 address = id.address;
             }
         }
-
-        let cache = Arc::clone(&self.cache);
-        ctx.spawn(
-            async move {
-                let mut lock = cache.write().await;
-                lock.insert(address, Timestamp::now());
-            }
-            .into_actor(self),
-        );
     }
 }
 
@@ -232,23 +278,10 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
         match parsed.event {
             EventType::Ack => {
-                // TODO: Check the "result"
                 let data: AckResponse = serde_json::from_value(parsed.data).unwrap();
                 debug!("Received acknowledgement from Watcher: {:?}", data);
 
-                let db = self.db.clone();
-                let cache = Arc::clone(&self.cache);
-                if let Some(address) = data.address {
-                    ctx.spawn(
-                        async move {
-                            let id = create_context(address.clone());
-                            db.mark_judged(&id).await.unwrap();
-                            let mut lock = cache.write().await;
-                            lock.remove(&address);
-                        }
-                        .into_actor(self),
-                    );
-                }
+                self.queue.send(QueueMessage::Ack(data)).unwrap();
             }
             EventType::Error => {
                 error!("Received error from Watcher: {:?}", parsed.data);
@@ -257,31 +290,14 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                 let data: JudgementRequest = serde_json::from_value(parsed.data).unwrap();
                 debug!("Received new judgement request from Watcher: {:?}", data);
 
-                let db = self.db.clone();
-                ctx.spawn(
-                    async move {
-                        process_request(&db, data.address, data.accounts)
-                            .await
-                            .unwrap();
-                    }
-                    .into_actor(self),
-                );
+                self.queue.send(QueueMessage::NewJudgementRequest(data)).unwrap();
             }
             EventType::PendingJudgementsResponse => {
-                let requests: Vec<JudgementRequest> = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received pending judgments from Watcher: {:?}", requests);
+                let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data).unwrap();
+                debug!("Received pending judgments from Watcher: {:?}", data);
 
-                let db = self.db.clone();
-                ctx.spawn(
-                    async move {
-                        for data in requests {
-                            process_request(&db, data.address, data.accounts)
-                                .await
-                                .unwrap();
-                        }
-                    }
-                    .into_actor(self),
-                );
+                self.queue
+                    .send(QueueMessage::PendingJudgementsRequests(data)).unwrap();
             }
             _ => {
                 warn!("Received unrecognized message from watcher: {:?}", parsed);
@@ -318,9 +334,7 @@ async fn process_request(
     accounts: HashMap<AccountType, String>,
 ) -> Result<()> {
     let id = create_context(address);
-
     let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
-
     db.add_judgement_request(state).await?;
 
     Ok(())
