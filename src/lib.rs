@@ -15,11 +15,11 @@ use std::time::Duration;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
-// Re-exports
-pub use actors::api::run_rest_api_server;
-pub use adapters::run_adapters;
-pub use database::Database;
-pub use notifier::SessionNotifier;
+use actors::api::run_rest_api_server;
+use actors::connector::run_connector;
+use adapters::run_adapters;
+use database::Database;
+use notifier::SessionNotifier;
 
 mod actors;
 mod adapters;
@@ -71,6 +71,7 @@ pub struct AdapterConfig {
     matrix: MatrixConfig,
     twitter: TwitterConfig,
     email: EmailConfig,
+    watcher_endpoint: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -148,7 +149,9 @@ pub fn init_env() -> Result<Config> {
 
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
-    run_adapters(config, db).await
+    let endpoint = config.watcher_endpoint.clone();
+    run_adapters(config, db.clone()).await?;
+    run_connector(endpoint, db).await
 }
 
 async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {

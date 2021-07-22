@@ -12,9 +12,6 @@ pub struct IdentityContext {
 pub struct ChainAddress(String);
 
 impl ChainAddress {
-    pub fn new(val: String) -> Self {
-        ChainAddress::new(val)
-    }
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -63,7 +60,7 @@ impl IdentityField {
         match &mut self.challenge {
             ChallengeType::ExpectedMessage {
                 ref mut expected,
-                second,
+                second: _,
             } => expected,
             _ => panic!(),
         }
@@ -71,7 +68,10 @@ impl IdentityField {
     #[cfg(test)]
     pub fn expected_second(&self) -> &Option<ExpectedMessage> {
         match &self.challenge {
-            ChallengeType::ExpectedMessage { expected, second } => second,
+            ChallengeType::ExpectedMessage {
+                expected: _,
+                second,
+            } => second,
             _ => panic!(),
         }
     }
@@ -79,7 +79,7 @@ impl IdentityField {
     pub fn expected_second_mut(&mut self) -> &mut Option<ExpectedMessage> {
         match &mut self.challenge {
             ChallengeType::ExpectedMessage {
-                expected,
+                expected: _,
                 ref mut second,
             } => second,
             _ => panic!(),
@@ -505,14 +505,6 @@ mod tests {
                 chain: ChainName::Polkadot,
             }
         }
-        pub fn eve() -> Self {
-            IdentityContext {
-                address: ChainAddress(
-                    "1cNyFSmLW4ofr7xh38za6JxLFxcu548LPcfc1E6L9r57SE3".to_string(),
-                ),
-                chain: ChainName::Polkadot,
-            }
-        }
     }
 
     impl JudgementState {
@@ -557,20 +549,6 @@ mod tests {
                     IdentityField::new(IdentityFieldValue::Email("bob@email.com".to_string())),
                     IdentityField::new(IdentityFieldValue::Twitter("@bob".to_string())),
                     IdentityField::new(IdentityFieldValue::Matrix("@bob:matrix.org".to_string())),
-                ],
-            }
-        }
-        pub fn eve() -> Self {
-            JudgementState {
-                context: IdentityContext::eve(),
-                is_fully_verified: false,
-                inserted_timestamp: Timestamp::now(),
-                completion_timestamp: None,
-                fields: vec![
-                    IdentityField::new(IdentityFieldValue::DisplayName("Eve".to_string())),
-                    IdentityField::new(IdentityFieldValue::Email("eve@email.com".to_string())),
-                    IdentityField::new(IdentityFieldValue::Twitter("@eve".to_string())),
-                    IdentityField::new(IdentityFieldValue::Matrix("@eve:matrix.org".to_string())),
                 ],
             }
         }

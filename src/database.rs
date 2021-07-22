@@ -441,21 +441,6 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn log_judgement_provided(&mut self, context: IdentityContext) -> Result<()> {
-        let coll = self.db.collection(EVENT_COLLECTION);
-
-        coll.insert_one(
-            Event::new(
-                NotificationMessage::JudgementProvided(context),
-                self.gen_id(),
-            )
-            .to_document()?,
-            None,
-        )
-        .await?;
-
-        Ok(())
-    }
     pub async fn fetch_completed(&self) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
@@ -475,9 +460,10 @@ impl Database {
 
         Ok(completed)
     }
-    pub async fn remove_judgement_request(&self, address: &ChainAddress) -> Result<()> {
+    pub async fn remove_judgement_request(&self, _address: &ChainAddress) -> Result<()> {
         unimplemented!()
     }
+    #[cfg(test)]
     pub async fn prune_completed(&self, offset: u64) -> Result<usize> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 

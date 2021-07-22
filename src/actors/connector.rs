@@ -14,7 +14,6 @@ use awc::{
 };
 use futures::stream::{SplitSink, StreamExt};
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -22,7 +21,7 @@ use tokio::time::sleep;
 
 type Cache = Arc<RwLock<HashMap<ChainAddress, Timestamp>>>;
 
-async fn run_connector(db: Database, url: String) -> Result<()> {
+pub async fn run_connector(url: String, db: Database) -> Result<()> {
     let cache = Default::default();
     let mut connector = init_connector(&db, url.as_str(), Arc::clone(&cache)).await?;
 
@@ -165,7 +164,7 @@ impl Handler<ClientCommand> for Connector {
     type Result = ();
 
     fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) {
-        let mut address = None;
+        let address;
 
         match msg {
             ClientCommand::ProvideJudgement(id) => {
@@ -180,20 +179,18 @@ impl Handler<ClientCommand> for Connector {
                     .unwrap(),
                 ));
 
-                address = Some(id.address);
+                address = id.address;
             }
         }
 
-        if let Some(address) = address {
-            let cache = Arc::clone(&self.cache);
-            ctx.spawn(
-                async move {
-                    let mut lock = cache.write().await;
-                    lock.insert(address, Timestamp::now());
-                }
-                .into_actor(self),
-            );
-        }
+        let cache = Arc::clone(&self.cache);
+        ctx.spawn(
+            async move {
+                let mut lock = cache.write().await;
+                lock.insert(address, Timestamp::now());
+            }
+            .into_actor(self),
+        );
     }
 }
 
