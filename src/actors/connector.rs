@@ -20,21 +20,20 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 
-type Cache = Arc<RwLock<HashMap<ChainAddress, Timestamp>>>;
-
 pub async fn run_connector(url: String, db: Database) -> Result<()> {
-    // Init process queue.
+    // Init processing queue.
     let (tx, recv) = unbounded_channel();
 
-    let cache = Default::default();
     let mut connector = init_connector(url.as_str(), tx.clone()).await?;
+
+    // Run processing queue for incoming connector messages.
+    run_queue_processor(db.clone(), recv).await;
 
     actix::spawn(async move {
         async fn local(
             connector: &mut Addr<Connector>,
             db: &Database,
             url: &str,
-            cache: Cache,
             tx: UnboundedSender<QueueMessage>,
         ) -> Result<()> {
             // If connection dropped, try to reconnect
@@ -43,20 +42,8 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
                 *connector = init_connector(url, tx).await?
             }
 
-            let mut completed = db.fetch_completed().await?;
-            {
-                let lock = cache.read().await;
-                completed.retain(|state| {
-                    if let Some(timestamp) = lock.get(&state.context.address) {
-                        if Timestamp::now().raw() - timestamp.raw() < 10 {
-                            return false;
-                        }
-                    }
-
-                    true
-                });
-            }
-
+            // Provide judgments.
+            let completed = db.fetch_completed().await?;
             for state in completed {
                 connector.do_send(ClientCommand::ProvideJudgement(state.context));
             }
@@ -69,7 +56,6 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
                 &mut connector,
                 &db,
                 url.as_str(),
-                Arc::clone(&cache),
                 tx.clone(),
             )
             .await
@@ -87,36 +73,65 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
     Ok(())
 }
 
-async fn run_queue_processor(mut recv: UnboundedReceiver<QueueMessage>) {
-    actix::spawn(async move {
+async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMessage>) {
+    fn create_context(address: ChainAddress) -> IdentityContext {
+        let chain = if address.as_str().starts_with("1") {
+            ChainName::Polkadot
+        } else {
+            ChainName::Kusama
+        };
+
+        IdentityContext {
+            address: address,
+            chain: chain,
+        }
+    }
+
+    async fn process_request(
+        db: &Database,
+        address: ChainAddress,
+        accounts: HashMap<AccountType, String>,
+    ) -> Result<()> {
+        let id = create_context(address);
+        let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
+        db.add_judgement_request(state).await?;
+
+        Ok(())
+    }
+
+    async fn local(db: &Database, recv: &mut UnboundedReceiver<QueueMessage>) -> Result<()> {
         while let Some(message) = recv.recv().await {
             match message {
                 QueueMessage::Ack(data) => {
-                    /*
                     // TODO: Check the "result"
-                    let id = create_context(address.clone());
-                    db.mark_judged(&id).await.unwrap();
-                    let mut lock = cache.write().await;
-                    lock.remove(&address);
-                     */
+                    if let Some(address) = data.address {
+                        let context = create_context(address);
+                        db.mark_judged(&context).await?;
+                    }
                 }
                 QueueMessage::NewJudgementRequest(data) => {
-                    /*
-                       process_request(&db, data.address, data.accounts)
-                           .await
-                           .unwrap();
-                    */
+                    process_request(&db, data.address, data.accounts)
+                        .await
+                        .unwrap();
                 }
                 QueueMessage::PendingJudgementsRequests(data) => {
-                    /*
-                       for data in requests {
-                           process_request(&db, data.address, data.accounts)
-                               .await
-                               .unwrap();
-                       }
-                    */
+                    for d in data {
+                        process_request(&db, d.address, d.accounts).await?;
+                    }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    actix::spawn(async move {
+        loop {
+            let _ = local(&db, &mut recv)
+                .await
+                .map_err(|err| error!("Error in connector messaging queue: {:?}", err));
+
+            sleep(Duration::from_secs(10)).await;
         }
     });
 }
@@ -218,9 +233,7 @@ enum ClientCommand {
 impl Handler<ClientCommand> for Connector {
     type Result = ();
 
-    fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) {
-        let address;
-
+    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
         match msg {
             ClientCommand::ProvideJudgement(id) => {
                 self.sink.write(Message::Text(
@@ -233,8 +246,6 @@ impl Handler<ClientCommand> for Connector {
                     })
                     .unwrap(),
                 ));
-
-                address = id.address;
             }
         }
     }
@@ -268,7 +279,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     fn handle(
         &mut self,
         msg: std::result::Result<Frame, WsProtocolError>,
-        ctx: &mut Context<Self>,
+        _ctx: &mut Context<Self>,
     ) {
         let parsed: ResponseMessage<serde_json::Value> = if let Ok(Frame::Text(txt)) = msg {
             serde_json::from_slice(&txt).unwrap()
@@ -290,14 +301,17 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                 let data: JudgementRequest = serde_json::from_value(parsed.data).unwrap();
                 debug!("Received new judgement request from Watcher: {:?}", data);
 
-                self.queue.send(QueueMessage::NewJudgementRequest(data)).unwrap();
+                self.queue
+                    .send(QueueMessage::NewJudgementRequest(data))
+                    .unwrap();
             }
             EventType::PendingJudgementsResponse => {
                 let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data).unwrap();
                 debug!("Received pending judgments from Watcher: {:?}", data);
 
                 self.queue
-                    .send(QueueMessage::PendingJudgementsRequests(data)).unwrap();
+                    .send(QueueMessage::PendingJudgementsRequests(data))
+                    .unwrap();
             }
             _ => {
                 warn!("Received unrecognized message from watcher: {:?}", parsed);
@@ -313,31 +327,6 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         error!("Watcher disconnected");
         ctx.stop()
     }
-}
-
-fn create_context(address: ChainAddress) -> IdentityContext {
-    let chain = if address.as_str().starts_with("1") {
-        ChainName::Polkadot
-    } else {
-        ChainName::Kusama
-    };
-
-    IdentityContext {
-        address: address,
-        chain: chain,
-    }
-}
-
-async fn process_request(
-    db: &Database,
-    address: ChainAddress,
-    accounts: HashMap<AccountType, String>,
-) -> Result<()> {
-    let id = create_context(address);
-    let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
-    db.add_judgement_request(state).await?;
-
-    Ok(())
 }
 
 impl WriteHandler<WsProtocolError> for Connector {}
