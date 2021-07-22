@@ -41,7 +41,10 @@ impl IdentityField {
     #[cfg(test)]
     pub fn expected_message(&self) -> &ExpectedMessage {
         match &self.challenge {
-            ChallengeType::ExpectedMessage { expected, second: _ } => expected,
+            ChallengeType::ExpectedMessage {
+                expected,
+                second: _,
+            } => expected,
             _ => panic!(),
         }
     }

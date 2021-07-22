@@ -1,7 +1,7 @@
 use crate::actors::api::VerifyChallenge;
 use crate::primitives::{
-    ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext, IdentityFieldValue,
-    JudgementState, NotificationMessage, Timestamp,
+    ChainAddress, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
+    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -474,6 +474,9 @@ impl Database {
         }
 
         Ok(completed)
+    }
+    pub async fn remove_judgement_request(&self, address: &ChainAddress) -> Result<()> {
+        unimplemented!()
     }
     pub async fn prune_completed(&self, offset: u64) -> Result<usize> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
