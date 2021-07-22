@@ -234,6 +234,7 @@ pub struct JudgementStateBlanked {
     pub is_fully_verified: bool,
     pub inserted_timestamp: Timestamp,
     pub completion_timestamp: Option<Timestamp>,
+    pub judgement_submitted: bool,
     pub fields: Vec<IdentityFieldBlanked>,
 }
 
@@ -274,6 +275,7 @@ impl From<JudgementState> for JudgementStateBlanked {
             is_fully_verified: s.is_fully_verified,
             inserted_timestamp: s.inserted_timestamp,
             completion_timestamp: s.completion_timestamp,
+            judgement_submitted: s.judgement_submitted,
             fields: s
                 .fields
                 .into_iter()
@@ -309,6 +311,7 @@ pub struct JudgementState {
     pub is_fully_verified: bool,
     pub inserted_timestamp: Timestamp,
     pub completion_timestamp: Option<Timestamp>,
+    pub judgement_submitted: bool,
     pub fields: Vec<IdentityField>,
 }
 
@@ -319,6 +322,7 @@ impl JudgementState {
             is_fully_verified: false,
             inserted_timestamp: Timestamp::now(),
             completion_timestamp: None,
+            judgement_submitted: false,
             fields: fields
                 .into_iter()
                 .map(|val| IdentityField::new(val))
@@ -514,6 +518,7 @@ mod tests {
                 is_fully_verified: false,
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
+                judgement_submitted: false,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
                     IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
@@ -544,6 +549,7 @@ mod tests {
                 is_fully_verified: false,
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
+                judgement_submitted: false,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string())),
                     IdentityField::new(IdentityFieldValue::Email("bob@email.com".to_string())),

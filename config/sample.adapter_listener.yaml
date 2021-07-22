@@ -5,6 +5,7 @@ db:
 instance:
   type: adapter_listener
   config:
+    watcher_endpoint: ws://some.url
     matrix:
       enabled: false
       homeserver: homeserver

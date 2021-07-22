@@ -68,10 +68,10 @@ pub struct NotifierConfig {
 #[serde(rename_all = "snake_case")]
 // TODO: Wrap in `Option`
 pub struct AdapterConfig {
+    watcher_endpoint: String,
     matrix: MatrixConfig,
     twitter: TwitterConfig,
     email: EmailConfig,
-    watcher_endpoint: String,
 }
 
 #[derive(Debug, Deserialize)]

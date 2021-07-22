@@ -6,6 +6,7 @@ instance:
   type: single_instance
   config:
     adapter:
+      watcher_endpoint: ws://some.url
       matrix:
         enabled: false
         homeserver: homeserver

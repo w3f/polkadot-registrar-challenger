@@ -241,7 +241,8 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                 if let Some(address) = data.address {
                     ctx.spawn(
                         async move {
-                            db.remove_judgement_request(&address).await.unwrap();
+                            let id = create_context(address.clone());
+                            db.mark_judged(&id).await.unwrap();
                             let mut lock = cache.write().await;
                             lock.remove(&address);
                         }
@@ -298,21 +299,25 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     }
 }
 
-async fn process_request(
-    db: &Database,
-    address: ChainAddress,
-    accounts: HashMap<AccountType, String>,
-) -> Result<()> {
+fn create_context(address: ChainAddress) -> IdentityContext {
     let chain = if address.as_str().starts_with("1") {
         ChainName::Polkadot
     } else {
         ChainName::Kusama
     };
 
-    let id = IdentityContext {
+    IdentityContext {
         address: address,
         chain: chain,
-    };
+    }
+}
+
+async fn process_request(
+    db: &Database,
+    address: ChainAddress,
+    accounts: HashMap<AccountType, String>,
+) -> Result<()> {
+    let id = create_context(address);
 
     let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
 
