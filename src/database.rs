@@ -1,18 +1,16 @@
 use crate::actors::api::VerifyChallenge;
 use crate::primitives::{
-    ChainAddress, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
-    IdentityField, IdentityFieldValue, JudgementState, MessageId, NotificationMessage, Timestamp,
+    ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext, IdentityFieldValue,
+    JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::{options::UpdateOptions, Client, Database as MongoDb};
+use mongodb::{Client, Database as MongoDb};
 use serde::Serialize;
-use std::collections::HashSet;
 
 const IDENTITY_COLLECTION: &'static str = "identities";
 const EVENT_COLLECTION: &'static str = "event_log";
-const PRUNE_OFFSET: i64 = 1_800;
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -146,7 +144,7 @@ impl Database {
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
             let mut id_state: JudgementState = from_document(doc?)?;
-            let mut field_state = id_state
+            let field_state = id_state
                 .fields
                 .iter_mut()
                 .find(|field| field.value().matches(&message))
@@ -159,7 +157,7 @@ impl Database {
             let context = id_state.context.clone();
             let field_value = field_state.value().clone();
 
-            let mut challenge = field_state.challenge_mut();
+            let challenge = field_state.challenge_mut();
             if !challenge.is_verified() {
                 match challenge {
                     ChallengeType::ExpectedMessage {
@@ -265,7 +263,7 @@ impl Database {
         request.challenge = request.challenge.trim().to_string();
 
         // Query database.
-        let mut try_state = coll
+        let try_state = coll
             .find_one(
                 doc! {
                     "fields.value": request.entry.to_bson()?,
@@ -276,7 +274,7 @@ impl Database {
             .await?;
 
         if let Some(mut state) = try_state {
-            let mut field_state = state
+            let field_state = state
                 .fields
                 .iter_mut()
                 .find(|field| field.value() == &request.entry)
@@ -287,7 +285,10 @@ impl Database {
             let field_value = field_state.value().clone();
 
             match field_state.challenge_mut() {
-                ChallengeType::ExpectedMessage { expected, second } => {
+                ChallengeType::ExpectedMessage {
+                    expected: _,
+                    second,
+                } => {
                     let second = second.as_mut().unwrap();
                     if request.challenge.contains(&second.value) {
                         second.set_verified();
@@ -357,7 +358,7 @@ impl Database {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Query database.
-        let mut try_state = coll
+        let try_state = coll
             .find_one(
                 doc! {
                     "fields.value": field.to_bson()?,
@@ -376,7 +377,10 @@ impl Database {
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
             match field_state.challenge() {
-                ChallengeType::ExpectedMessage { expected, second } => {
+                ChallengeType::ExpectedMessage {
+                    expected: _,
+                    second,
+                } => {
                     if let Some(second) = second {
                         Ok(second.clone())
                     } else {

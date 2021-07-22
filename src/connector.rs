@@ -1,5 +1,6 @@
 use crate::Result;
 use actix::io::SinkWrite;
+use actix::io::WriteHandler;
 use actix::*;
 use actix_codec::Framed;
 use awc::{
@@ -7,16 +8,21 @@ use awc::{
     ws::{Codec, Frame, Message},
     BoxedSocket, Client,
 };
-use actix::io::WriteHandler;
 use futures::stream::{SplitSink, StreamExt};
 use std::time::Duration;
 
-async fn create_connector(endpoint: &str) -> Result<Addr<Connector>> {
-    let (_, framed) = Client::new()
-        .ws(endpoint)
-        .connect()
-        .await
-        .map_err(|err| anyhow!("failed to initiate client connector to {}: {:?}", endpoint, err))?;
+async fn run_connector() -> Result<()> {
+    unimplemented!()
+}
+
+async fn init_connector(endpoint: &str) -> Result<Addr<Connector>> {
+    let (_, framed) = Client::new().ws(endpoint).connect().await.map_err(|err| {
+        anyhow!(
+            "failed to initiate client connector to {}: {:?}",
+            endpoint,
+            err
+        )
+    })?;
 
     let (sink, stream) = framed.split();
     let actor = Connector::create(|ctx| {

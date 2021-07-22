@@ -1,10 +1,8 @@
 use crate::actors::api::{LookupServer, NotifyAccountState};
 use crate::database::Database;
-use crate::primitives::{ExternalMessage, IdentityContext};
-use crate::primitives::{JudgementState, NotificationMessage};
-use crate::Result;
+use crate::primitives::IdentityContext;
+use crate::primitives::JudgementState;
 use actix::prelude::*;
-use actix_broker::{Broker, SystemBroker};
 use std::collections::HashMap;
 use tokio::time::{interval, Duration};
 

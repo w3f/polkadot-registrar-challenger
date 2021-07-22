@@ -6,11 +6,8 @@ extern crate anyhow;
 extern crate serde;
 #[macro_use]
 extern crate async_trait;
-#[macro_use]
-extern crate actix_web;
 
 use actix::clock::sleep;
-use futures::{select, FutureExt};
 use log::LevelFilter;
 use std::env;
 use std::fs;

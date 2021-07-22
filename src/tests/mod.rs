@@ -7,11 +7,9 @@ use crate::notifier::SessionNotifier;
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
-use futures::FutureExt;
 use rand::{thread_rng, Rng};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::future::Future;
 use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;

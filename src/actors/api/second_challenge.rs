@@ -1,9 +1,8 @@
 use super::JsonResult;
 use crate::database::Database;
 use crate::primitives::IdentityFieldValue;
-use crate::Result;
 use actix::prelude::*;
-use actix_web::{get, web, App, Error, HttpResponse, HttpServer};
+use actix_web::{web, HttpResponse};
 
 #[derive(Default)]
 pub struct SecondChallengeVerifier {
@@ -33,7 +32,7 @@ impl Actor for SecondChallengeVerifier {
 impl Handler<VerifyChallenge> for SecondChallengeVerifier {
     type Result = ResponseActFuture<Self, JsonResult<bool>>;
 
-    fn handle(&mut self, msg: VerifyChallenge, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: VerifyChallenge, _ctx: &mut Self::Context) -> Self::Result {
         let db = self.get_db().unwrap().clone();
 
         Box::pin(

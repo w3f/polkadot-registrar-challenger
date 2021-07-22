@@ -2,15 +2,12 @@ use super::JsonResult;
 use crate::database::Database;
 use crate::primitives::{IdentityContext, JudgementStateBlanked, NotificationMessage};
 use actix::prelude::*;
-use actix_broker::{Broker, BrokerIssue, BrokerSubscribe};
+use actix_broker::BrokerSubscribe;
 use actix_web_actors::ws;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-
-// TODO: Set via config.
-pub const REGISTRAR_IDX: usize = 0;
 
 type Subscriber = Recipient<JsonResult<ResponseAccountState>>;
 
@@ -94,7 +91,7 @@ impl Actor for LookupServer {
 impl Handler<SubscribeAccountState> for LookupServer {
     type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, msg: SubscribeAccountState, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: SubscribeAccountState, _ctx: &mut Self::Context) -> Self::Result {
         let db = self.get_db().unwrap().clone();
         let sessions = Arc::clone(&self.sessions);
 
@@ -135,7 +132,7 @@ impl Handler<SubscribeAccountState> for LookupServer {
 impl Handler<NotifyAccountState> for LookupServer {
     type Result = ResponseActFuture<Self, ()>;
 
-    fn handle(&mut self, msg: NotifyAccountState, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: NotifyAccountState, _ctx: &mut Self::Context) -> Self::Result {
         let sessions = Arc::clone(&self.sessions);
 
         Box::pin(

@@ -41,7 +41,7 @@ impl IdentityField {
     #[cfg(test)]
     pub fn expected_message(&self) -> &ExpectedMessage {
         match &self.challenge {
-            ChallengeType::ExpectedMessage { expected, second } => expected,
+            ChallengeType::ExpectedMessage { expected, _second } => expected,
             _ => panic!(),
         }
     }
@@ -464,8 +464,6 @@ pub struct IdentityJudged {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web_actors::ws::Message;
-    use serde::Serialize;
 
     impl IdentityContext {
         pub fn alice() -> Self {
