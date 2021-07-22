@@ -11,6 +11,15 @@ pub struct IdentityContext {
 #[serde(rename_all = "snake_case")]
 pub struct ChainAddress(String);
 
+impl ChainAddress {
+    pub fn new(val: String) -> Self {
+        ChainAddress::new(val)
+    }
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainName {
@@ -82,6 +91,7 @@ impl IdentityField {
     }
 }
 
+// TODO: Should be `From`?
 impl IdentityField {
     pub fn new(val: IdentityFieldValue) -> Self {
         use IdentityFieldValue::*;
@@ -217,7 +227,6 @@ impl IdentityFieldValue {
     }
 }
 
-// TODO: Should those fields be public?
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct JudgementStateBlanked {
@@ -304,6 +313,18 @@ pub struct JudgementState {
 }
 
 impl JudgementState {
+    pub fn new(context: IdentityContext, fields: Vec<IdentityFieldValue>) -> Self {
+        JudgementState {
+            context: context,
+            is_fully_verified: false,
+            inserted_timestamp: Timestamp::now(),
+            completion_timestamp: None,
+            fields: fields
+                .into_iter()
+                .map(|val| IdentityField::new(val))
+                .collect(),
+        }
+    }
     pub fn is_fully_verified(&self) -> bool {
         self.fields
             .iter()

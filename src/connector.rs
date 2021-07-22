@@ -1,4 +1,4 @@
-use crate::primitives::{ChainAddress, IdentityContext, Timestamp};
+use crate::primitives::{ChainAddress, IdentityContext, IdentityFieldValue, Timestamp, ChainName, JudgementState};
 use crate::Database;
 use crate::Result;
 use actix::io::SinkWrite;
@@ -56,14 +56,13 @@ async fn run_connector(db: Database, url: String) -> Result<()> {
 
         loop {
             match local(&mut connector, &db, url.as_str(), Arc::clone(&cache)).await {
-                Ok(_) => {
-                    sleep(Duration::from_secs(1)).await;
-                }
+                Ok(_) => {}
                 Err(err) => {
                     error!("Connector error: {:?}", err);
-                    sleep(Duration::from_secs(10)).await;
                 }
             }
+
+            sleep(Duration::from_secs(1)).await;
         }
     });
 
@@ -136,6 +135,12 @@ pub enum Judgement {
     Reasonable,
     #[serde(rename = "erroneous")]
     Erroneous,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct JudgementRequest {
+    pub address: ChainAddress,
+    pub accounts: HashMap<AccountType, String>,
 }
 
 struct Connector {
@@ -226,6 +231,30 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     );
                 }
             }
+            EventType::NewJudgementRequest => {
+                let data: JudgementRequest = serde_json::from_value(parsed.data).unwrap();
+                debug!("Received acknowledgement from Watcher");
+
+                let db = self.db.clone();
+                ctx.spawn(
+                    async move {
+                        let chain = if data.address.as_str().starts_with("1") {
+                            ChainName::Polkadot
+                        } else {
+                            ChainName::Kusama
+                        };
+
+                        let id = IdentityContext {
+                            address: data.address,
+                            chain: chain,
+                        };
+
+                        let state = JudgementState::new(id, data.accounts.into_iter().map(|a| a.into()).collect());
+                        db.add_judgement_request(state).await.unwrap();
+                    }
+                    .into_actor(self),
+                );
+            }
             _ => {
                 warn!("Received unrecognized message from watcher: {:?}", parsed);
             }
@@ -243,3 +272,43 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 }
 
 impl WriteHandler<WsProtocolError> for Connector {}
+
+#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
+pub enum AccountType {
+    #[serde(rename = "legal_name")]
+    LegalName,
+    #[serde(rename = "display_name")]
+    DisplayName,
+    #[serde(rename = "email")]
+    Email,
+    #[serde(rename = "web")]
+    Web,
+    #[serde(rename = "twitter")]
+    Twitter,
+    #[serde(rename = "matrix")]
+    Matrix,
+    #[serde(rename = "pgpFingerprint")]
+    PGPFingerprint,
+    #[serde(rename = "image")]
+    Image,
+    #[serde(rename = "additional")]
+    Additional,
+}
+
+impl From<(AccountType, String)> for IdentityFieldValue {
+    fn from(val: (AccountType, String)) -> Self {
+        let (ty, value) = val;
+
+        match ty {
+            AccountType::LegalName => IdentityFieldValue::LegalName(value),
+            AccountType::DisplayName => IdentityFieldValue::DisplayName(value),
+            AccountType::Email => IdentityFieldValue::Email(value),
+            AccountType::Web => IdentityFieldValue::Web(value),
+            AccountType::Twitter => IdentityFieldValue::Twitter(value),
+            AccountType::Matrix => IdentityFieldValue::Matrix(value),
+            AccountType::PGPFingerprint => IdentityFieldValue::PGPFingerprint(()),
+            AccountType::Image => IdentityFieldValue::Image(()),
+            AccountType::Additional => IdentityFieldValue::Additional(()),
+        }
+    }
+}
