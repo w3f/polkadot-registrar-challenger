@@ -24,6 +24,7 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
     // Init processing queue.
     let (tx, recv) = unbounded_channel();
 
+    info!("Initializing connection");
     let mut connector = init_connector(url.as_str(), tx.clone()).await?;
 
     // Run processing queue for incoming connector messages.
@@ -239,6 +240,7 @@ impl Handler<ClientCommand> for Connector {
     fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
         match msg {
             ClientCommand::ProvideJudgement(id) => {
+                /*
                 self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
@@ -249,6 +251,7 @@ impl Handler<ClientCommand> for Connector {
                     })
                     .unwrap(),
                 ));
+                 */
             }
         }
     }
