@@ -29,12 +29,12 @@ frame-system = "2.0.0"
 sp-runtime = "2.0.0"
 serde_yaml = "0.8.15"
 async-trait = "0.1.40"
-actix = { version = "0.11.1", features = ["macros"]}
+actix = { version = "0.12.0", features = ["macros"]}
 actix-web = "4.0.0-beta.6"
-actix-broker = "0.4.0"
+actix-broker = "0.4.1"
 actix-codec = "0.3.0"
-actix-web-actors = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.6" } 
-actix-test = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.6" } 
+actix-web-actors = "4.0.0-beta.6"
+actix-test = "0.1.0-beta.3"
 awc = "2.0.3"
 thiserror = "1.0.23"
 anyhow = "1.0.38"
