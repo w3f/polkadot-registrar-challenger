@@ -7,5 +7,5 @@ use system::{run, Result};
 async fn main() -> Result<()> {
     run().await?;
     error!("Service exited unexpectedly");
-    Ok(())
+    panic!();
 }

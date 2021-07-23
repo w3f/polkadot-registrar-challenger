@@ -164,6 +164,7 @@ async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConf
     Ok(())
 }
 
+// TODO: Check for database connectivity.
 pub async fn run() -> Result<()> {
     let root = init_env()?;
     let (db_config, instance) = (root.db, root.instance);

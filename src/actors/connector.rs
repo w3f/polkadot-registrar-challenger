@@ -19,14 +19,18 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::sleep;
 
 pub async fn run_connector(url: String, db: Database) -> Result<()> {
+    info!("Setting up connector to Watcher at endpoint: {}", url);
+
     // Init processing queue.
     let (tx, recv) = unbounded_channel();
 
     let mut connector = init_connector(url.as_str(), tx.clone()).await?;
 
     // Run processing queue for incoming connector messages.
+    info!("Starting processing queue for incoming messages");
     run_queue_processor(db.clone(), recv).await;
 
+    info!("Starting judgments event loop");
     actix::spawn(async move {
         async fn local(
             connector: &mut Addr<Connector>,
@@ -43,6 +47,7 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
             // Provide judgments.
             let completed = db.fetch_completed_not_submitted().await?;
             for state in completed {
+                debug!("Notifying Watcher about judgement: {:?}", state.context);
                 connector.do_send(ClientCommand::ProvideJudgement(state.context));
             }
 
@@ -98,6 +103,7 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
     }
 
     async fn local(db: &Database, recv: &mut UnboundedReceiver<QueueMessage>) -> Result<()> {
+        debug!("Watcher message picked up by queue");
         while let Some(message) = recv.recv().await {
             match message {
                 QueueMessage::Ack(data) => {
