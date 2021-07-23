@@ -1,6 +1,8 @@
 import { AccountStatus, Notification } from "./json";
 
 class ActionListerner {
+    specify_network: HTMLInputElement;
+    specify_address: HTMLInputElement;
     btn_execute_action: HTMLButtonElement;
     div_live_updates_info: HTMLElement;
     div_fully_verified_info: HTMLElement;
@@ -68,13 +70,22 @@ class ActionListerner {
             document
                 .getElementById("unsupported-overview")!;
 
+        this.specify_network = 
+            document
+                .getElementById("specify-network")! as HTMLInputElement;
+
+        this.specify_address = 
+            document
+                .getElementById("specify-address")! as HTMLInputElement;
+
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
             .getElementById("network-options")!
             .addEventListener("click", (e: Event) => {
-                document
-                    .getElementById("specify-network")!
+                this.specify_network
                     .innerText = (e.target as HTMLAnchorElement).innerText;
+                this.btn_execute_action.innerHTML = `Go!`;
+                this.btn_execute_action.disabled = false;
             });
 
         // Handler for choosing action, e.g. "Request Judgement".
@@ -95,11 +106,15 @@ class ActionListerner {
                     + (document.getElementById("specify-address")! as HTMLInputElement).value;
             });
 
+        this.specify_address
+            .addEventListener("input", (_: Event) => {
+                this.btn_execute_action.innerHTML = `Go!`;
+                this.btn_execute_action.disabled = false;
+            });
+
         let params = new URLSearchParams(window.location.search);
         let network = params.get("network");
         let address = params.get("address");
-        console.log(network);
-        console.log(address);
         if (network != null && address != null) {
             (document.getElementById("specify-network")! as HTMLInputElement).innerHTML = capitalizeFirstLetter(network);
             (document.getElementById("specify-address")! as HTMLInputElement).value = address;
@@ -108,6 +123,12 @@ class ActionListerner {
     }
     executeAction() {
         this.btn_execute_action.disabled = true;
+
+                if (this.specify_address.innerHTML.startsWith("1")) {
+                    this.specify_network.value = "Polkadot";
+                } else {
+                    this.specify_network.value = "Kusama";
+                }
 
         const action = document.getElementById("specify-action")!.innerHTML;
         const address = (document.getElementById("specify-address")! as HTMLInputElement).value;
@@ -124,8 +145,6 @@ class ActionListerner {
 
             socket.addEventListener("open", (_: Event) => {
                 socket.send(JSON.stringify({ address: address, chain: network }));
-
-                this.div_live_updates_info.classList.remove("invisible");
             });
 
             socket.addEventListener("message", (event: Event) => {
@@ -141,6 +160,8 @@ class ActionListerner {
 
         const parsed: AccountStatus = JSON.parse(msg.data);
         if (parsed.result_type == "ok") {
+            this.div_live_updates_info.classList.remove("invisible");
+
             // TODO: Check if 'fields` is empty.
 
             table += `
@@ -239,8 +260,7 @@ class ActionListerner {
                     </div>
                 `;
         } else if (parsed.result_type == "err") {
-            this.btn_execute_action
-                .innerHTML = `Go!`;
+            this.btn_execute_action.innerHTML = `Go!`;
             this.btn_execute_action.disabled = false;
         } else {
             // Print unexpected error...
