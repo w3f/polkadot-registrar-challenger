@@ -89,14 +89,19 @@ class ActionListerner {
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => {
-                window.location.href = "?address=" +
-                    (document.getElementById("specify-address")! as HTMLInputElement).value
-                    ;
+                window.location.href = "?network="
+                    + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
+                    + "&address="
+                    + (document.getElementById("specify-address")! as HTMLInputElement).value;
             });
 
         let params = new URLSearchParams(window.location.search);
+        let network = params.get("network");
         let address = params.get("address");
-        if (address != null) {
+        console.log(network);
+        console.log(address);
+        if (network != null && address != null) {
+            (document.getElementById("specify-network")! as HTMLInputElement).innerHTML = capitalizeFirstLetter(network);
             (document.getElementById("specify-address")! as HTMLInputElement).value = address;
             this.executeAction();
         }
@@ -115,7 +120,7 @@ class ActionListerner {
             `;
 
         if (action == "Request Judgement") {
-            const socket = new WebSocket('ws://161.35.213.120/api/account_status');
+            const socket = new WebSocket('ws://localhost:9000/api/account_status');
 
             socket.addEventListener("open", (_: Event) => {
                 socket.send(JSON.stringify({ address: address, chain: network }));
