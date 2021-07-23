@@ -70,11 +70,11 @@ class ActionListerner {
             document
                 .getElementById("unsupported-overview")!;
 
-        this.specify_network = 
+        this.specify_network =
             document
                 .getElementById("specify-network")! as HTMLInputElement;
 
-        this.specify_address = 
+        this.specify_address =
             document
                 .getElementById("specify-address")! as HTMLInputElement;
 
@@ -141,10 +141,12 @@ class ActionListerner {
             `;
 
         if (action == "Request Judgement") {
-            const socket = new WebSocket('ws://localhost:9000/api/account_status');
+            const socket = new WebSocket('ws://localhost:8888/api/account_status');
 
             socket.addEventListener("open", (_: Event) => {
-                socket.send(JSON.stringify({ address: address, chain: network }));
+                let msg = JSON.stringify({ address: address, chain: network });
+                console.log(msg);
+                socket.send(msg);
             });
 
             socket.addEventListener("message", (event: Event) => {
