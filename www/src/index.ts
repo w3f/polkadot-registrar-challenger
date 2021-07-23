@@ -110,6 +110,12 @@ class ActionListerner {
             .addEventListener("input", (_: Event) => {
                 this.btn_execute_action.innerHTML = `Go!`;
                 this.btn_execute_action.disabled = false;
+
+                if (this.specify_address.value.startsWith("1")) {
+                    this.specify_network.innerHTML = "Polkadot";
+                } else {
+                    this.specify_network.innerHTML = "Kusama";
+                }
             });
 
         let params = new URLSearchParams(window.location.search);
@@ -123,12 +129,6 @@ class ActionListerner {
     }
     executeAction() {
         this.btn_execute_action.disabled = true;
-
-                if (this.specify_address.innerHTML.startsWith("1")) {
-                    this.specify_network.value = "Polkadot";
-                } else {
-                    this.specify_network.value = "Kusama";
-                }
 
         const action = document.getElementById("specify-action")!.innerHTML;
         const address = (document.getElementById("specify-address")! as HTMLInputElement).value;
