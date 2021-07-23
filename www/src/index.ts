@@ -239,7 +239,9 @@ class ActionListerner {
                     </div>
                 `;
         } else if (parsed.result_type == "err") {
-
+            this.btn_execute_action
+                .innerHTML = `Go!`;
+            this.btn_execute_action.disabled = false;
         } else {
             // Print unexpected error...
         }
