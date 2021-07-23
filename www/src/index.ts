@@ -199,13 +199,23 @@ class ActionListerner {
                         validity = '<span class="badge bg-warning text-dark">unverified</span>';
                     }
 
+                    // Specify the destination address.
+                    let to = "N/A";
+                    if (field.value.type == "email") {
+                        to = "registrar@web3.foundation";
+                    } else if (field.value.type == "twitter") {
+                        to = "@w3f_registrar";
+                    } else if (field.value.type == "matrix") {
+                        to = "@registrar:web3.foundation";
+                    }
+
                     table += `
                         <tr>
                             <th scope="row">${counter}</th>
                             <td>${capitalizeFirstLetter(field.value.type)}</td>
                             <td>${field.challenge.content.expected.value}</td>
                             <td>${field.value.value}</td>
-                            <td>temp</td>
+                            <td>${to}</td>
                             <td>${validity}</td>
                         </tr>
                     `;
