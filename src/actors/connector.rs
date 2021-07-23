@@ -1,5 +1,5 @@
 use crate::primitives::{
-    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState 
+    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState,
 };
 use crate::Database;
 use crate::Result;
@@ -56,14 +56,7 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
         }
 
         loop {
-            match local(
-                &mut connector,
-                &db,
-                url.as_str(),
-                tx.clone(),
-            )
-            .await
-            {
+            match local(&mut connector, &db, url.as_str(), tx.clone()).await {
                 Ok(_) => {}
                 Err(err) => {
                     error!("Connector error: {:?}", err);
@@ -115,8 +108,7 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
                     }
                 }
                 QueueMessage::NewJudgementRequest(data) => {
-                    process_request(&db, data.address, data.accounts)
-                        .await?
+                    process_request(&db, data.address, data.accounts).await?
                 }
                 QueueMessage::PendingJudgementsRequests(data) => {
                     for d in data {
@@ -240,8 +232,7 @@ impl Handler<ClientCommand> for Connector {
     fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
         match msg {
             ClientCommand::ProvideJudgement(id) => {
-                /*
-                self.sink.write(Message::Text(
+                let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
                         data: JudgementResponse {
@@ -249,9 +240,9 @@ impl Handler<ClientCommand> for Connector {
                             judgement: Judgement::Reasonable,
                         },
                     })
-                    .unwrap(),
+                    .unwrap()
+                    .into(),
                 ));
-                 */
             }
         }
     }
@@ -272,7 +263,7 @@ impl Actor for Connector {
 impl Connector {
     fn heartbeat(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(5, 0), |act, ctx| {
-            act.sink.write(Message::Ping(String::from("").into()));
+            let _ = act.sink.write(Message::Ping(String::from("").into())).unwrap();
             act.heartbeat(ctx);
 
             // TODO: Check timeouts
