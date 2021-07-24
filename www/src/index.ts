@@ -104,11 +104,13 @@ class ActionListerner {
     parseAccountStatus(msg: MessageEvent) {
         const parsed: AccountStatus = JSON.parse(msg.data);
         if (parsed.result_type == "ok") {
+            this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(parsed.message.state);
             this.manager.processUnsupportedOverview(parsed.message.state);
         } else if (parsed.result_type == "err") {
             // TODO: display error
 
+            this.manager.wipeLiveUpdateInfo();
             this.btn_execute_action.innerHTML = `Go!`;
             this.btn_execute_action.disabled = false;
         } else {

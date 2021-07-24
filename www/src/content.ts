@@ -1,6 +1,32 @@
 import { State } from './json';
 
+export function capitalizeFirstLetter(word: string) {
+    return (word.charAt(0).toUpperCase() + word.slice(1))
+        .replace("_", " ");
+}
+
+const BadgeVerified = `
+    <span class="badge bg-success">verified</span>
+`;
+
+const BadgeVerifiedHalf = `
+    <span class="badge bg-info">verified (1/2)</span>
+`;
+
+const BadgeUnverified = `
+    <span class="badge bg-warning text-dark">unverified</span>
+`;
+
+const BadgeValid = `
+    <span class="badge bg-success">valid</span>
+`;
+
+const BadgeInvalid = `
+    <span class="badge bg-danger">invalid</span>
+`;
+
 export class ContentManager {
+    div_live_updates_info: HTMLElement;
 	div_display_name_overview: HTMLElement;
     div_fully_verified_info: HTMLElement;
 	div_verification_overview: HTMLElement;
@@ -8,6 +34,10 @@ export class ContentManager {
 	div_unsupported_overview: HTMLElement;
 
 	constructor() {
+        this.div_live_updates_info =
+			document
+				.getElementById("div-live-updates-info")!;
+
 		this.div_display_name_overview =
 			document
 				.getElementById("div-display-name-overview")!;
@@ -46,11 +76,9 @@ export class ContentManager {
 					} else {
 						validity = BadgeVerified;
 
-                        /*
 						if (field.value.type == "email") {
-							this.div_email_second_challenge.classList.add("invisible");
+                            this.wipeEmailSecondChallengeContent();
 						}
-                        */
 					}
 				} else {
 					validity = BadgeUnverified;
@@ -115,6 +143,16 @@ export class ContentManager {
             this.wipeUnsupportedContent;
         }
     }
+    setLiveUpdateInfo() {
+        this.div_live_updates_info.innerHTML = `
+            <div class="col-10">
+                <p class="text-center"><em>Displaying live updates...</em></p>
+            </div>
+        `;
+    }
+    wipeLiveUpdateInfo() {
+        this.div_live_updates_info.innerHTML = "";
+    }
     setFullyVerifiedContent() {
         this.div_fully_verified_info.innerHTML = `
             <div class="row justify-content-center">
@@ -178,6 +216,9 @@ export class ContentManager {
             </div>
         `;
     }
+    wipeEmailSecondChallengeContent() {
+        this.div_email_second_challenge.innerHTML = "";
+    }
     setUnsupportedContent(list: string) {
         this.div_unsupported_overview.innerHTML = `
             <div class="col-10">
@@ -200,34 +241,3 @@ export class ContentManager {
         this.div_unsupported_overview.innerHTML = "";
     }
 }
-
-export function capitalizeFirstLetter(word: string) {
-    return (word.charAt(0).toUpperCase() + word.slice(1))
-        .replace("_", " ");
-}
-
-const BadgeVerified = `
-    <span class="badge bg-success">verified</span>
-`;
-
-const BadgeVerifiedHalf = `
-    <span class="badge bg-info">verified (1/2)</span>
-`;
-
-const BadgeUnverified = `
-    <span class="badge bg-warning text-dark">unverified</span>
-`;
-
-const BadgeValid = `
-    <span class="badge bg-success">valid</span>
-`;
-
-const BadgeInvalid = `
-    <span class="badge bg-danger">invalid</span>
-`;
-
-const ContentLiveUpdates = `
-	<div class="col-10">
-		<p class="text-center"><em>Displaying live updates...</em></p>
-	</div>
-`;
