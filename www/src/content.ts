@@ -133,14 +133,32 @@ export class ContentManager {
             table += '</tbody>';
 
             // Apply table to the page.
+            this.div_verification_overview.innerHTML = ContentVerificationOverview;
             this.verification_overview.innerHTML = table;
 
             // Display banner if fully verified.
             if (state.is_fully_verified) {
                 this.div_fully_verified_info.innerHTML = ContentFullyVerified;
+            } else {
+                this.div_fully_verified_info.innerHTML = "";
             }
 		}
 	}
+    processUnsupportedOverview(state: State) {
+        let unsupported = "";
+        for (let field of state.fields) {
+            if (field.challenge.challenge_type == "unsupported") {
+                unsupported += `<li>${capitalizeFirstLetter(field.value.type)} ("${field.value.value}")</li>`;
+            }
+        }
+
+        if (unsupported.length != 0) {
+            this.div_unsupported_overview.innerHTML = ContentUnsupportedWarnings;
+            this.unsupported_overview.innerHTML = unsupported;
+        } else {
+            this.div_unsupported_overview.innerHTML = "";
+        }
+    }
 }
 
 export function capitalizeFirstLetter(word: string) {
