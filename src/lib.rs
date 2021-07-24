@@ -303,7 +303,7 @@ mod live_tests {
         };
 
         let notifier = NotifierConfig {
-            api_address: "localhost:8888".to_string(),
+            api_address: "localhost:8001".to_string(),
         };
 
         let t_db = database.clone();

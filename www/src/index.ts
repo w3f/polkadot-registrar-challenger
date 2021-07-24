@@ -1,4 +1,5 @@
 import { AccountStatus, Notification } from "./json";
+import { capitalizeFirstLetter } from './content';
 
 class ActionListerner {
     specify_network: HTMLInputElement;
@@ -141,7 +142,7 @@ class ActionListerner {
             `;
 
         if (action == "Request Judgement") {
-            const socket = new WebSocket('ws://localhost:8888/api/account_status');
+            const socket = new WebSocket('ws://localhost:8001/api/account_status');
 
             socket.addEventListener("open", (_: Event) => {
                 let msg = JSON.stringify({ address: address, chain: network });
@@ -278,11 +279,6 @@ class ActionListerner {
             // Print unexpected error...
         }
     }
-}
-
-function capitalizeFirstLetter(word: string) {
-    return (word.charAt(0).toUpperCase() + word.slice(1))
-        .replace("_", " ");
 }
 
 function display_notification(notifications: Notification[]) {

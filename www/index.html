@@ -38,7 +38,7 @@
                 </p>
             </div>
             <div class="col-md-auto">
-                <h3><span class="badge bg-primary">beta</span></h3>
+                <span class="badge bg-primary align-middle">beta</span>
             </div>
         </div>
     </div>
@@ -65,61 +65,13 @@
             </div>
         </div>
         <div class="container">
-            <div id="div-live-updates-info" class="invisible row justify-content-center">
-                <div class="col-10">
-                    <p class="text-center"><em>Displaying live updates...</em></p>
-                </div>
-            </div>
-            <div id="div-fully-verified-info" class="p-2"></div>
-            <div id="div-display-name-overview" class="invisible row justify-content-center">
-                <div class="col-10">
-                    <h2>Display name check</h2>
-                    <p>The display name <strong id="display-name-value"></strong> is <span
-                            id="display-name-validity"></span></p>
-                </div>
-            </div>
-            <div id="div-verification-overview" class="invisible row justify-content-center">
-                <div class="col-10 table-responsive ">
-                    <h2>Account verification</h2>
-                    <p>The service expects a message <strong>from</strong> the specified account in the on-chain
-                        identity sent <strong>to</strong> the corresponding W3F account containing the
-                        <strong>challenge</strong>. Do note that each account type has its own, individual
-                        challenge.
-                    </p>
-                    <table id="verification-overview" class="table table-striped table-dark"></table>
-                </div>
-            </div>
-            <div id="div-email-second-challenge" class="invisible row justify-content-center p-2">
-                <div class="col-10">
-                    <h2>⚠️️ Additional Challenge</h2>
-                    <p>An message containing an additional challenge was sent to <strong
-                            id="email-second-challenge"></strong>. Please insert that challenge in the following field:
-                    </p>
-                    <div class="input-group">
-                        <input id="specify-second-challenge" type="text" class="form-control"
-                            aria-label="Second challenge verification" placeholder="Challenge...">
-                        <button id="execute-second-challenge" class="col-1 btn btn-primary"
-                            type="button">Verify</button>
-                    </div>
-                </div>
-            </div>
-            <div id="div-unsupported-overview" class="invisible row justify-content-center p-2">
-                <div class="col-10">
-                    <h2>🚨 Unsupported entries</h2>
-                    <ul id="unsupported-overview">
-                    </ul>
-                    <p>The identity on-chain info contains fields that are not supported by the W3F registrar service in
-                        an automated manner and <em>must</em> be removed. If you really want to have those fields
-                        included, please contact the
-                        appropriate authorities as described in the <em>"Need help?"</em> section below. Please prepare
-                        the
-                        appropriate information so the manual verification can be completed as quickly as possible. For
-                        example, if you want to add a web address, please make sure that the website somehow references
-                        your Kusama/Polkadot address.</p>
-                </div>
-            </div>
-            <div class="invisible row justify-content-center p-2">
-            </div>
+            <div id="div-live-updates-info" class="row justify-content-center"></div>
+            <div id="div-fully-verified-info" class="row justify-content-center p-2"></div>
+            <div id="div-display-name-overview" class="row justify-content-center"></div>
+            <div id="div-verification-overview" class="row justify-content-center"></div>
+            <div id="div-email-second-challenge" class="row justify-content-center"></div>
+            <div id="div-unsupported-overview" class="invisible row justify-content-center"></div>
+            <div class="invisible row justify-content-center p-2"></div>
         </div>
     </div>
     </div>
