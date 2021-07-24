@@ -1,75 +1,17 @@
 import { AccountStatus, Notification } from "./json";
-import { capitalizeFirstLetter } from './content';
+import { ContentManager, capitalizeFirstLetter } from './content';
 
 class ActionListerner {
     specify_network: HTMLInputElement;
     specify_address: HTMLInputElement;
     btn_execute_action: HTMLButtonElement;
-    div_live_updates_info: HTMLElement;
-    div_fully_verified_info: HTMLElement;
-
-    div_display_name_overview: HTMLElement;
-    display_name_value: HTMLElement;
-    display_name_validity: HTMLElement;
-
-    div_verification_overview: HTMLElement;
-    verification_overview: HTMLElement;
-
-    div_email_second_challenge: HTMLElement;
-    email_second_challenge: HTMLElement;
-
-    div_unsupported_overview: HTMLElement;
-    unsupported_overview: HTMLElement;
+    manager: ContentManager;
 
     constructor() {
         // Register relevant elements.
-        this.div_live_updates_info =
-            document
-                .getElementById("div-live-updates-info")! as HTMLButtonElement;
-
-        this.div_fully_verified_info =
-            document
-                .getElementById("div-fully-verified-info")! as HTMLButtonElement;
-
         this.btn_execute_action =
             document
                 .getElementById("execute-action")! as HTMLButtonElement;
-
-        this.div_display_name_overview =
-            document
-                .getElementById("div-display-name-overview")!;
-
-        this.display_name_value =
-            document
-                .getElementById("display-name-value")!;
-
-        this.display_name_validity =
-            document
-                .getElementById("display-name-validity")!;
-
-        this.div_verification_overview =
-            document
-                .getElementById("div-verification-overview")!;
-
-        this.div_email_second_challenge =
-            document
-                .getElementById("div-email-second-challenge")!;
-
-        this.email_second_challenge =
-            document
-                .getElementById("email-second-challenge")!;
-
-        this.verification_overview =
-            document
-                .getElementById("verification-overview")!;
-
-        this.div_unsupported_overview =
-            document
-                .getElementById("div-unsupported-overview")!;
-
-        this.unsupported_overview =
-            document
-                .getElementById("unsupported-overview")!;
 
         this.specify_network =
             document
@@ -78,6 +20,8 @@ class ActionListerner {
         this.specify_address =
             document
                 .getElementById("specify-address")! as HTMLInputElement;
+
+        this.manager = new ContentManager;
 
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
@@ -132,8 +76,8 @@ class ActionListerner {
         this.btn_execute_action.disabled = true;
 
         const action = document.getElementById("specify-action")!.innerHTML;
-        const address = (document.getElementById("specify-address")! as HTMLInputElement).value;
-        const network = document.getElementById("specify-network")!.innerHTML.toLowerCase();
+        const address = this.specify_address.value;
+        const network = this.specify_network.innerHTML.toLowerCase();
 
         this.btn_execute_action
             .innerHTML = `
@@ -158,131 +102,19 @@ class ActionListerner {
         }
     }
     parseAccountStatus(msg: MessageEvent) {
-        let table = "";
-        let unsupported = "";
-
         const parsed: AccountStatus = JSON.parse(msg.data);
         if (parsed.result_type == "ok") {
-            this.div_live_updates_info.classList.remove("invisible");
-
-            // TODO: Check if 'fields` is empty.
-
-            table += `
-                <thead>
-                    <tr>
-                        <th scope="col">#</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Challenge</th>
-                        <th scope="col">From</th>
-                        <th scope="col">To</th>
-                        <th scope="col">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-            `;
-
-            let counter = 1;
-            for (let field of parsed.message.state.fields) {
-                if (field.challenge.challenge_type == "expected_message") {
-                    let validity;
-                    if (field.challenge.content.expected.is_verified) {
-                        if (field.challenge.content.second && !field.challenge.content.second!.is_verified) {
-                            validity = '<span class="badge bg-info">verified (1/2)</span>';
-
-                            this.email_second_challenge.innerHTML = `${field.value.value}`;
-                            this.div_email_second_challenge.classList.remove("invisible");
-                        } else {
-                            validity = '<span class="badge bg-success">verified</span>';
-
-                            if (field.value.type == "email") {
-                                this.div_email_second_challenge.classList.add("invisible");
-                            }
-                        }
-                    } else {
-                        validity = '<span class="badge bg-warning text-dark">unverified</span>';
-                    }
-
-                    // Specify the destination address.
-                    let to = "N/A";
-                    if (field.value.type == "email") {
-                        to = "registrar@web3.foundation";
-                    } else if (field.value.type == "twitter") {
-                        to = "@w3f_registrar";
-                    } else if (field.value.type == "matrix") {
-                        to = "@registrar:web3.foundation";
-                    }
-
-                    table += `
-                        <tr>
-                            <th scope="row">${counter}</th>
-                            <td>${capitalizeFirstLetter(field.value.type)}</td>
-                            <td>${field.challenge.content.expected.value}</td>
-                            <td>${field.value.value}</td>
-                            <td>${to}</td>
-                            <td>${validity}</td>
-                        </tr>
-                    `;
-
-                    counter += 1;
-                } else if (field.challenge.challenge_type == "background_check" && field.value.type == "display_name") {
-                    let elem = this.display_name_validity;
-
-                    if (field.challenge.content.passed) {
-                        elem.innerHTML = '<span class="badge bg-success">valid</span>';
-                        elem.classList.add("text-success");
-                    } else {
-                        elem.innerHTML = '<span class="badge bg-danger">invalid</span>';
-                        elem.classList.add("text-danger");
-                    }
-
-                    this.display_name_value.innerHTML = field.value.value;
-                    this.div_display_name_overview.classList.remove("invisible");
-                } else if (field.challenge.challenge_type == "unsupported") {
-                    unsupported += `<li>${capitalizeFirstLetter(field.value.type)} ("${field.value.value}")</li>`;
-                }
-            }
-
-            table += '</tbody>';
-
-            this.verification_overview.innerHTML = table;
-            this.div_verification_overview.classList.remove("invisible");
-
-            if (unsupported.length != 0) {
-                this.unsupported_overview.innerHTML = unsupported;
-                this.div_unsupported_overview.classList.remove("invisible");
-            } else {
-                this.div_unsupported_overview.classList.add("invisible");
-            }
-
-            if (parsed.message.state.is_fully_verified) {
-                this.div_fully_verified_info.innerHTML = `
-                    <div class="row justify-content-center">
-                        <div class="col-10 table-responsive bg-success p-2">
-                            <h2 class="text-center text-white">Identity fully verified! ✔</h2>
-                        </div>
-                    </div>
-                `;
-            } else {
-                this.div_fully_verified_info.innerHTML = '';
-            }
-
-            this.btn_execute_action
-                .innerHTML = `
-                    <div class="spinner-grow spinner-grow-sm" role="status">
-                        <span class="visually-hidden"></span>
-                    </div>
-                `;
+            this.manager.processVerificationOverviewTable(parsed.message.state);
+            this.manager.processUnsupportedOverview(parsed.message.state);
         } else if (parsed.result_type == "err") {
+            // TODO: display error
+
             this.btn_execute_action.innerHTML = `Go!`;
             this.btn_execute_action.disabled = false;
         } else {
             // Print unexpected error...
         }
     }
-}
-
-function display_notification(notifications: Notification[]) {
-
 }
 
 new ActionListerner();
