@@ -63,6 +63,14 @@ class ActionListerner {
                 }
             });
 
+        Array.from(document
+            .getElementsByClassName("toast")!)
+            .forEach(element => {
+                element
+                    .addEventListener("click", (_: Event) => {
+                    });
+            });
+
         let params = new URLSearchParams(window.location.search);
         let network = params.get("network");
         let address = params.get("address");
@@ -104,6 +112,12 @@ class ActionListerner {
     parseAccountStatus(msg: MessageEvent) {
         const parsed: AccountStatus = JSON.parse(msg.data);
         if (parsed.result_type == "ok") {
+            this.btn_execute_action.innerHTML = `
+                <div class="spinner-grow spinner-grow-sm" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            `;
+
             this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(parsed.message.state);
             this.manager.processUnsupportedOverview(parsed.message.state);

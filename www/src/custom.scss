@@ -24,4 +24,8 @@ footer {
 	color: #b4cccc
 }
 
+.toast-container {
+  z-index: 9999;
+}
+
 @import "node_modules/bootstrap/scss/bootstrap.scss";
