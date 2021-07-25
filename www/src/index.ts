@@ -115,7 +115,7 @@ class ActionListerner {
         if (parsed.result_type == "ok") {
             this.btn_execute_action.innerHTML = `
                 <div class="spinner-grow spinner-grow-sm" role="status">
-                    <span class="visually-hidden">Loading...</span>
+                    <span class="visually-hidden"></span>
                 </div>
             `;
 

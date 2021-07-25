@@ -27,74 +27,74 @@ const BadgeInvalid = `
 
 export class ContentManager {
     div_live_updates_info: HTMLElement;
-	div_display_name_overview: HTMLElement;
+    div_display_name_overview: HTMLElement;
     div_fully_verified_info: HTMLElement;
-	div_verification_overview: HTMLElement;
-	div_email_second_challenge: HTMLElement;
-	div_unsupported_overview: HTMLElement;
+    div_verification_overview: HTMLElement;
+    div_email_second_challenge: HTMLElement;
+    div_unsupported_overview: HTMLElement;
 
-	constructor() {
+    constructor() {
         this.div_live_updates_info =
-			document
-				.getElementById("div-live-updates-info")!;
+            document
+                .getElementById("div-live-updates-info")!;
 
-		this.div_display_name_overview =
-			document
-				.getElementById("div-display-name-overview")!;
+        this.div_display_name_overview =
+            document
+                .getElementById("div-display-name-overview")!;
 
         this.div_fully_verified_info =
             document
                 .getElementById("div-fully-verified-info")! as HTMLButtonElement;
 
-		this.div_verification_overview =
-			document
-				.getElementById("div-verification-overview")!;
+        this.div_verification_overview =
+            document
+                .getElementById("div-verification-overview")!;
 
-		this.div_email_second_challenge =
-			document
-				.getElementById("div-email-second-challenge")!;
+        this.div_email_second_challenge =
+            document
+                .getElementById("div-email-second-challenge")!;
 
-		this.div_unsupported_overview =
-			document
-				.getElementById("div-unsupported-overview")!;
-	}
+        this.div_unsupported_overview =
+            document
+                .getElementById("div-unsupported-overview")!;
+    }
 
-	processVerificationOverviewTable(state: State) {
+    processVerificationOverviewTable(state: State) {
         // TODO: Check if 'fields` is empty.
 
         let table = "";
 
         let counter = 1;
-		for (let field of state.fields) {
-			if (field.challenge.challenge_type == "expected_message") {
-				let validity;
-				if (field.challenge.content.expected.is_verified) {
-					if (field.challenge.content.second && !field.challenge.content.second!.is_verified) {
-						validity = BadgeVerifiedHalf;
+        for (let field of state.fields) {
+            if (field.challenge.challenge_type == "expected_message") {
+                let validity;
+                if (field.challenge.content.expected.is_verified) {
+                    if (field.challenge.content.second && !field.challenge.content.second!.is_verified) {
+                        validity = BadgeVerifiedHalf;
 
                         this.setEmailSecondChallengeContent(field.value.value);
-					} else {
-						validity = BadgeVerified;
+                    } else {
+                        validity = BadgeVerified;
 
-						if (field.value.type == "email") {
+                        if (field.value.type == "email") {
                             this.wipeEmailSecondChallengeContent();
-						}
-					}
-				} else {
-					validity = BadgeUnverified;
-				}
+                        }
+                    }
+                } else {
+                    validity = BadgeUnverified;
+                }
 
-				// Specify the destination address.
-				let to = "N/A";
-				if (field.value.type == "email") {
-					to = "registrar@web3.foundation";
-				} else if (field.value.type == "twitter") {
-					to = "@w3f_registrar";
-				} else if (field.value.type == "matrix") {
-					to = "@registrar:web3.foundation";
-				}
+                // Specify the destination address.
+                let to = "N/A";
+                if (field.value.type == "email") {
+                    to = "registrar@web3.foundation";
+                } else if (field.value.type == "twitter") {
+                    to = "@w3f_registrar";
+                } else if (field.value.type == "matrix") {
+                    to = "@registrar:web3.foundation";
+                }
 
-				table += `
+                table += `
                         <tr>
                             <th scope="row">${counter}</th>
                             <td>${capitalizeFirstLetter(field.value.type)}</td>
@@ -105,18 +105,18 @@ export class ContentManager {
                         </tr>
                     `;
 
-				counter += 1;
-			} else if (field.challenge.challenge_type == "background_check" && field.value.type == "display_name") {
+                counter += 1;
+            } else if (field.challenge.challenge_type == "background_check" && field.value.type == "display_name") {
                 let validity;
 
-				if (field.challenge.content.passed) {
+                if (field.challenge.content.passed) {
                     validity = BadgeValid;
-				} else {
-					validity = BadgeInvalid;
-				}
+                } else {
+                    validity = BadgeInvalid;
+                }
 
                 this.setDisplayNameVerification(field.value.value, validity)
-			}
+            }
 
             // Apply table to the page.
             this.setVerificationOverviewContent(table);
@@ -127,8 +127,8 @@ export class ContentManager {
             } else {
                 this.wipeFullyVerifiedContent
             }
-		}
-	}
+        }
+    }
     processUnsupportedOverview(state: State) {
         let unsupported = "";
         for (let field of state.fields) {
@@ -201,27 +201,74 @@ export class ContentManager {
         `;
     }
     setEmailSecondChallengeContent(address: string) {
-        this.div_email_second_challenge.innerHTML = `
-            <div class="col-10">
+        this.div_email_second_challenge.insertAdjacentHTML(
+            "beforeend",
+            `<div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
                 <p>An message containing an additional challenge was sent to <strong>
                     ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
                 </p>
                 <div class="input-group">
-                <input type="text" class="form-control"
+                <input id="specify-second-challenge" type="text" class="form-control"
                     aria-label="Second challenge verification" placeholder="Challenge...">
                 <button id="execute-second-challenge" class="col-1 btn btn-primary"
                     type="button">Verify</button>
                 </div>
-            </div>
-        `;
+            </div>`
+        );
+
+        let input = (document
+            .getElementById("specify-second-challenge")! as HTMLInputElement)
+            .value;
+
+        let button = document
+            .getElementById("execute-second-challenge")! as HTMLButtonElement;
+
+       button 
+            .addEventListener("input", (_: Event) => {
+                button.innerHTML = `Go!`;
+                button.disabled = false;
+            });
+
+        button
+            .addEventListener("click", async (e: Event) => {
+                button.disabled = true;
+                button
+                    .innerHTML = `
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span class="visually-hidden"></span>
+                    `;
+
+                let response = await fetch("http://localhost:8001/api/verify_second_challenge",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json;charset=utf-8"
+                    },
+                    body: JSON.stringify({
+                        entry: address,
+                        challenge: input,
+                    })
+                });
+
+                if (!response.ok) {
+                    console.log("ERROR");
+                }
+
+                button.innerHTML = `
+                    <div class="spinner-grow spinner-grow-sm" role="status">
+                        <span class="visually-hidden"></span>
+                    </div>
+                `;
+            });
     }
     wipeEmailSecondChallengeContent() {
         this.div_email_second_challenge.innerHTML = "";
     }
     setUnsupportedContent(list: string) {
-        this.div_unsupported_overview.innerHTML = `
-            <div class="col-10">
+        this.div_unsupported_overview.insertAdjacentHTML(
+            "beforeend",
+            `<div class="col-10">
                 <h2>🚨 Unsupported entries</h2>
                 <ul>
                     ${list}
@@ -234,8 +281,9 @@ export class ContentManager {
                 appropriate information so the manual verification can be completed as quickly as possible. For
                 example, if you want to add a web address, please make sure that the website somehow references
                 your Kusama/Polkadot address.</p>
-            </div>
-        `;
+            </div>`
+        );
+
     }
     wipeUnsupportedContent() {
         this.div_unsupported_overview.innerHTML = "";
