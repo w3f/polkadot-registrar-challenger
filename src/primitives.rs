@@ -416,15 +416,13 @@ impl From<String> for MessagePart {
 #[serde(rename_all = "snake_case")]
 pub struct Event {
     pub timestamp: Timestamp,
-    pub id: u64,
     pub event: NotificationMessage,
 }
 
 impl Event {
-    pub fn new(event: NotificationMessage, id: u64) -> Self {
+    pub fn new(event: NotificationMessage) -> Self {
         Event {
             timestamp: Timestamp::now(),
-            id: id,
             event: event,
         }
     }

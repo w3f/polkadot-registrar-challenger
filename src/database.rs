@@ -30,15 +30,12 @@ impl<T: Serialize> ToBson for T {
 #[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
-    // TODO: This should be tracked in storage.
-    event_counter: u64,
 }
 
 impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
         Ok(Database {
             db: Client::with_uri_str(uri).await?.database(db),
-            event_counter: Timestamp::now().raw(),
         })
     }
     pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
@@ -108,10 +105,6 @@ impl Database {
 
         Ok(())
     }
-    fn gen_id(&mut self) -> u64 {
-        self.event_counter += 1;
-        self.event_counter
-    }
     // TODO: Merge with 'verify_message'?
     pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
         let events = self.verify_message(message).await?;
@@ -119,7 +112,7 @@ impl Database {
         // Create event statement.
         let coll = self.db.collection(EVENT_COLLECTION);
         for event in events {
-            coll.insert_one(Event::new(event, self.gen_id()).to_document()?, None)
+            coll.insert_one(Event::new(event).to_document()?, None)
                 .await?;
         }
 
@@ -255,7 +248,7 @@ impl Database {
 
         Ok(events)
     }
-    pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
+    pub async fn verify_second_challenge(&mut self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
@@ -351,6 +344,12 @@ impl Database {
             }
         }
 
+        let coll = self.db.collection(EVENT_COLLECTION);
+        for event in events {
+            coll.insert_one(Event::new(event).to_document()?, None)
+                .await?;
+        }
+
         Ok(verified)
     }
     pub async fn fetch_second_challenge(
@@ -395,14 +394,17 @@ impl Database {
             Err(anyhow!("No entry found for {:?}", field))
         }
     }
-    pub async fn fetch_events(&mut self) -> Result<Vec<NotificationMessage>> {
+    pub async fn fetch_events(
+        &mut self,
+        mut after: u64,
+    ) -> Result<(Vec<NotificationMessage>, u64)> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let mut cursor = coll
             .find(
                 doc! {
-                    "id": {
-                        "$gt": self.event_counter.to_bson()?,
+                    "timestamp": {
+                        "$gt": after,
                     }
                 },
                 None,
@@ -414,11 +416,11 @@ impl Database {
             let event = from_document::<Event>(doc?)?;
 
             // Track latest Id.
-            self.event_counter = self.event_counter.max(event.id);
+            after = after.max(event.timestamp.raw());
             events.push(event.event);
         }
 
-        Ok(events)
+        Ok((events, after))
     }
     pub async fn fetch_judgement_state(
         &self,

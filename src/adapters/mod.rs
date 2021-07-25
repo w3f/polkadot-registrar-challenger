@@ -1,6 +1,6 @@
 use crate::database::Database;
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage,
+    ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage, Timestamp,
 };
 use crate::{AdapterConfig, Result};
 use tokio::time::{interval, Duration};
@@ -110,6 +110,7 @@ impl AdapterListener {
         let mut interval = interval(Duration::from_secs(timeout));
 
         let mut db = self.db.clone();
+        let mut event_counter = Timestamp::now().raw();
         actix::spawn(async move {
             loop {
                 // Timeout (skipped the first time);
@@ -138,8 +139,8 @@ impl AdapterListener {
                 // Check if a second challenge must be sent to the user directly.
                 // TODO: One might consider putting this logic into a separate task
                 // with a lower event loop timeout.
-                match db.fetch_events().await {
-                    Ok(events) => {
+                match db.fetch_events(event_counter).await {
+                    Ok((events, new_counter)) => {
                         for event in &events {
                             match event {
                                 NotificationMessage::AwaitingSecondChallenge {
@@ -166,6 +167,8 @@ impl AdapterListener {
                                 _ => {}
                             }
                         }
+
+                        event_counter = new_counter;
                     }
                     // TODO: Unify error handling.
                     Err(err) => {

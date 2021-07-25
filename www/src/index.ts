@@ -122,6 +122,7 @@ class ActionListerner {
             this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(parsed.message.state);
             this.manager.processUnsupportedOverview(parsed.message.state);
+            this.notifications.processNotifications(parsed.message.notifications);
         } else if (parsed.result_type == "err") {
             // TODO: display error
 
@@ -131,8 +132,6 @@ class ActionListerner {
         } else {
             // Print unexpected error...
         }
-
-        this.notifications.processNotifications(parsed.message.notifications);
     }
 }
 

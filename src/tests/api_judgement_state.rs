@@ -131,8 +131,7 @@ async fn verify_invalid_message_bad_challenge() {
         notifications: vec![NotificationMessage::FieldVerificationFailed {
             context: alice.context.clone(),
             field: IdentityFieldValue::Email("alice@email.com".to_string()),
-        }
-        ],
+        }],
     };
 
     // Check response
@@ -249,8 +248,7 @@ async fn verify_valid_message() {
         notifications: vec![NotificationMessage::FieldVerified {
             context: alice.context.clone(),
             field: IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
-        }
-        ],
+        }],
     };
 
     // Check response

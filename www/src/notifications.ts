@@ -44,10 +44,8 @@ export class NotificationHandler {
                     toast.classList.add("hide");
                 });
 
-            this.notify_idx += 1;
-
-            // Cleanup old toast, limit to five max.
-            let old = this.notify_idx - 5;
+            // Cleanup old toast, limit to eight max.
+            let old = this.notify_idx - 8;
             if (old >= 0) {
                 let toast: HTMLElement | null = document
                     .getElementById(`toast-${old}`);
@@ -57,6 +55,8 @@ export class NotificationHandler {
                     toast.classList.add("hide");
                 }
             }
+
+            this.notify_idx += 1;
         }
     }
 }
