@@ -186,17 +186,17 @@ impl Database {
                                 )
                                 .await?;
 
-                                events.push(NotificationMessage::FieldVerified(
-                                    context.clone(),
-                                    field_value.clone(),
-                                ));
+                                events.push(NotificationMessage::FieldVerified {
+                                    context: context.clone(),
+                                    field: field_value.clone(),
+                                });
 
                                 // TODO: Document
                                 if second.is_some() {
-                                    events.push(NotificationMessage::AwaitingSecondChallenge(
-                                        context.clone(),
-                                        field_value,
-                                    ));
+                                    events.push(NotificationMessage::AwaitingSecondChallenge {
+                                        context: context.clone(),
+                                        field: field_value,
+                                    });
                                 }
                             } else {
                                 // Update field state.
@@ -214,10 +214,10 @@ impl Database {
                                 )
                                 .await?;
 
-                                events.push(NotificationMessage::FieldVerificationFailed(
-                                    context.clone(),
-                                    field_value,
-                                ));
+                                events.push(NotificationMessage::FieldVerificationFailed {
+                                    context: context.clone(),
+                                    field: field_value,
+                                });
                             }
                         }
                     }
@@ -247,7 +247,9 @@ impl Database {
                 )
                 .await?;
 
-                events.push(NotificationMessage::IdentityFullyVerified(context.clone()));
+                events.push(NotificationMessage::IdentityFullyVerified {
+                    context: context.clone(),
+                });
             }
         }
 
@@ -309,15 +311,15 @@ impl Database {
                         )
                         .await?;
 
-                        events.push(NotificationMessage::SecondFieldVerified(
-                            context.clone(),
-                            field_value.clone(),
-                        ));
+                        events.push(NotificationMessage::SecondFieldVerified {
+                            context: context.clone(),
+                            field: field_value.clone(),
+                        });
                     } else {
-                        events.push(NotificationMessage::SecondFieldVerificationFailed(
-                            context.clone(),
-                            field_value.clone(),
-                        ));
+                        events.push(NotificationMessage::SecondFieldVerificationFailed {
+                            context: context.clone(),
+                            field: field_value.clone(),
+                        });
                     }
                 }
                 _ => {
@@ -343,7 +345,9 @@ impl Database {
                 )
                 .await?;
 
-                events.push(NotificationMessage::IdentityFullyVerified(context.clone()));
+                events.push(NotificationMessage::IdentityFullyVerified {
+                    context: context.clone(),
+                });
             }
         }
 

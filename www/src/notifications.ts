@@ -1,4 +1,5 @@
-import { Notification } from "./json";
+import { capitalizeFirstLetter } from "./content.js";
+import { Notification, NotificationFieldContext } from "./json";
 
 class NotificationHandler {
 	notify_idx: number
@@ -53,10 +54,11 @@ class NotificationHandler {
 	}
 }
 
-function notificationTypeResolver(notification: Notification) {
+function notificationTypeResolver(notification: Notification): string {
     switch (notification.type) {
         case "field_verified": {
-            ""
+            let data: NotificationFieldContext = JSON.parse(notification.value);
+            return `The ${capitalizeFirstLetter(data.field.type)} "${data.field.value}" as been verified.`
         }
         case "field_verification_failed": {
 
@@ -79,8 +81,10 @@ function notificationTypeResolver(notification: Notification) {
         case "judgement_provided": {
 
         }
-        default {
+        default: {
             // TODO
         }
     }
+
+    return ""
 }

@@ -453,15 +453,37 @@ impl Event {
 // TODO: Rename
 // TODO: Migrate to enum-structs.
 pub enum NotificationMessage {
-    FieldVerified(IdentityContext, IdentityFieldValue),
-    FieldVerificationFailed(IdentityContext, IdentityFieldValue),
-    SecondFieldVerified(IdentityContext, IdentityFieldValue),
-    SecondFieldVerificationFailed(IdentityContext, IdentityFieldValue),
-    AwaitingSecondChallenge(IdentityContext, IdentityFieldValue),
-    IdentityFullyVerified(IdentityContext),
-    JudgementProvided(IdentityContext),
+    FieldVerified {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    FieldVerificationFailed {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    SecondFieldVerified {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    SecondFieldVerificationFailed {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    AwaitingSecondChallenge {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    IdentityFullyVerified {
+        context: IdentityContext,
+    },
+    JudgementProvided {
+        context: IdentityContext,
+    },
     // TODO: Make use of this
-    NotSupported(IdentityContext, IdentityFieldValue),
+    NotSupported {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
 }
 
 impl NotificationMessage {
@@ -469,14 +491,14 @@ impl NotificationMessage {
         use NotificationMessage::*;
 
         match self {
-            FieldVerified(ctx, _) => ctx,
-            FieldVerificationFailed(ctx, _) => ctx,
-            SecondFieldVerified(ctx, _) => ctx,
-            SecondFieldVerificationFailed(ctx, _) => ctx,
-            AwaitingSecondChallenge(ctx, _) => ctx,
-            IdentityFullyVerified(ctx) => ctx,
-            JudgementProvided(ctx) => ctx,
-            NotSupported(ctx, _) => ctx,
+            FieldVerified { context, field: _ } => context,
+            FieldVerificationFailed { context, field: _ } => context,
+            SecondFieldVerified { context, field: _ } => context,
+            SecondFieldVerificationFailed { context, field: _ } => context,
+            AwaitingSecondChallenge { context, field: _ } => context,
+            IdentityFullyVerified { context } => context,
+            JudgementProvided { context } => context,
+            NotSupported { context, field: _ } => context,
         }
     }
 }

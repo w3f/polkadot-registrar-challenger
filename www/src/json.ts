@@ -49,5 +49,10 @@ export interface Expected {
 
 export interface Notification {
     type: string;
-    value: any[];
+    value: any;
+}
+
+export interface NotificationFieldContext {
+    context: Context,
+    field: FieldValue,
 }

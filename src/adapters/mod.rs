@@ -142,16 +142,17 @@ impl AdapterListener {
                     Ok(events) => {
                         for event in &events {
                             match event {
-                                NotificationMessage::AwaitingSecondChallenge(_, field_value) => {
-                                    match field_value {
+                                NotificationMessage::AwaitingSecondChallenge {
+                                    context: _,
+                                    field,
+                                } => {
+                                    match field {
                                         IdentityFieldValue::Email(to) => {
                                             if adapter.name() == "email" {
                                                 // TODO: Handle unwrap.
                                                 debug!("Sending second challenge to {}", to);
-                                                let challenge = db
-                                                    .fetch_second_challenge(field_value)
-                                                    .await
-                                                    .unwrap();
+                                                let challenge =
+                                                    db.fetch_second_challenge(field).await.unwrap();
 
                                                 adapter
                                                     .send_message(to.as_str(), challenge.into())

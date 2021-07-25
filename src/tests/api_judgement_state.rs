@@ -128,10 +128,11 @@ async fn verify_invalid_message_bad_challenge() {
 
     let expected = ResponseAccountState {
         state: alice.clone().into(),
-        notifications: vec![NotificationMessage::FieldVerificationFailed(
-            alice.context.clone(),
-            IdentityFieldValue::Email("alice@email.com".to_string()),
-        )],
+        notifications: vec![NotificationMessage::FieldVerificationFailed {
+            context: alice.context.clone(),
+            field: IdentityFieldValue::Email("alice@email.com".to_string()),
+        }
+        ],
     };
 
     // Check response
@@ -245,10 +246,11 @@ async fn verify_valid_message() {
     // The expected message (field verified successfully).
     let expected = ResponseAccountState {
         state: alice.clone().into(),
-        notifications: vec![NotificationMessage::FieldVerified(
-            alice.context.clone(),
-            IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
-        )],
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+        }
+        ],
     };
 
     // Check response
