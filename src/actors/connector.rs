@@ -263,7 +263,10 @@ impl Actor for Connector {
 impl Connector {
     fn heartbeat(&self, ctx: &mut Context<Self>) {
         ctx.run_later(Duration::new(5, 0), |act, ctx| {
-            let _ = act.sink.write(Message::Ping(String::from("").into())).unwrap();
+            let _ = act
+                .sink
+                .write(Message::Ping(String::from("").into()))
+                .unwrap();
             act.heartbeat(ctx);
 
             // TODO: Check timeouts

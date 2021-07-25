@@ -200,6 +200,7 @@ pub async fn run() -> Result<()> {
 #[cfg(test)]
 mod live_tests {
     use super::*;
+    use crate::actors::api::VerifyChallenge;
     use crate::primitives::{
         ExpectedMessage, ExternalMessage, ExternalMessageType, JudgementState, MessageId, Timestamp,
     };
@@ -267,9 +268,17 @@ mod live_tests {
                                 // If the first challenge has been verified, verify the
                                 // second challenge if it exists.
                                 if expected.is_verified && second.is_some() {
-                                    let second = field.expected_second_mut().as_mut().unwrap();
-                                    second.set_verified();
-                                    second.to_message_parts()
+                                    db.verify_second_challenge(VerifyChallenge {
+                                        entry: field.value().clone(),
+                                        challenge: second.as_ref().unwrap().value.clone(),
+                                    })
+                                    .await
+                                    .unwrap();
+
+                                    // Filler, will be ignored.
+                                    let expected = field.expected_message_mut();
+                                    expected.set_verified();
+                                    expected.to_message_parts()
                                 } else {
                                     let expected = field.expected_message_mut();
                                     expected.set_verified();

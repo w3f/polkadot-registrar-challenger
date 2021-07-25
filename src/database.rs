@@ -322,9 +322,7 @@ impl Database {
                 }
                 _ => {
                     // TODO: Should panic
-                    return Err(anyhow!(
-                        "Invalid challenge type when verifying message. This is a bug"
-                    ));
+                    return Err(anyhow!("Invalid challenge type when verifying message"));
                 }
             }
 

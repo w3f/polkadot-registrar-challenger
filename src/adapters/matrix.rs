@@ -56,6 +56,7 @@ impl MatrixClient {
             .await;
 
         // Start backend syncing service
+        info!("Executing background sync");
         let settings = SyncSettings::default().token(
             client
                 .sync_token()
@@ -63,8 +64,10 @@ impl MatrixClient {
                 .ok_or(anyhow!("Failed to acquire sync token"))?,
         );
 
-        info!("Executing background sync");
-        client.sync(settings).await;
+        let t_client = client.clone();
+        actix::spawn(async move {
+            t_client.clone().sync(settings).await;
+        });
 
         Ok(MatrixClient {
             client: client,
