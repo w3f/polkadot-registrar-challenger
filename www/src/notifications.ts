@@ -2,23 +2,24 @@ import { capitalizeFirstLetter } from "./content.js";
 import { Notification, NotificationFieldContext } from "./json";
 
 export class NotificationHandler {
-	notify_idx: number
-	div_notifications: HTMLElement;
+    notify_idx: number
+    div_notifications: HTMLElement;
 
-	constructor() {
-		this.notify_idx = 0;
+    constructor() {
+        this.notify_idx = 0;
 
-		this.div_notifications =
-				document
-					.getElementById("div-notifications")!;
-	}
+        this.div_notifications =
+            document
+                .getElementById("div-notifications")!;
+    }
 
-	processNotifications(notifications: Notification[]) {
+    processNotifications(notifications: Notification[]) {
         for (let notify of notifications) {
             let [message, color] = notificationTypeResolver(notify);
 
-            this.div_notifications.innerHTML += `
-                <div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
+            this.div_notifications.insertAdjacentHTML(
+                "beforeend",
+                `<div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
                     aria-atomic="true">
                     <div class="d-flex">
                         <div class="toast-body">
@@ -28,15 +29,17 @@ export class NotificationHandler {
                             aria-label="Close"></button>
                     </div>
                 </div>
-            `;
-
-            let toast: HTMLElement = document
-                .getElementById(`toast-${this.notify_idx}`)!;
+            `
+            );
 
             // Add handler for close button.
+            let idx = this.notify_idx;
             document
-                .getElementById(`toast-${this.notify_idx}-close-btn`)!
+                .getElementById(`toast-${idx}-close-btn`)!
                 .addEventListener("click", (e: Event) => {
+                    let toast: HTMLElement = document
+                        .getElementById(`toast-${idx}`)!;
+
                     toast.classList.remove("show");
                     toast.classList.add("hide");
                 });
@@ -46,14 +49,16 @@ export class NotificationHandler {
             // Cleanup old toast, limit to five max.
             let old = this.notify_idx - 5;
             if (old >= 0) {
-                let toast: HTMLElement = document
-                    .getElementById(`toast-${this.notify_idx}`)!;
+                let toast: HTMLElement | null = document
+                    .getElementById(`toast-${old}`);
 
-                toast.classList.remove("show");
-                toast.classList.add("hide");
+                if (toast) {
+                    toast.classList.remove("show");
+                    toast.classList.add("hide");
+                }
             }
         }
-	}
+    }
 }
 
 function notificationTypeResolver(notification: Notification): [string, string] {
@@ -61,42 +66,42 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         case "field_verified": {
             let data = notification.value as NotificationFieldContext;
             return [
-            `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" is verified. Challenge is valid.`,
-            "bg-success text-light",
+                `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" is verified. Challenge is valid.`,
+                "bg-success text-light",
             ]
         }
         case "field_verification_failed": {
             let data = notification.value as NotificationFieldContext;
             return [
-            `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" failed to get verified. Invalid challenge.`,
-            "bg-danger text-light"
+                `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" failed to get verified. Invalid challenge.`,
+                "bg-danger text-light"
             ]
         }
         case "second_field_verified": {
             let data = notification.value as NotificationFieldContext;
             return [
-            `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" is fully verified. Additional challenge is valid.`,
-            "bg-success text-light"
+                `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" is fully verified. Additional challenge is valid.`,
+                "bg-success text-light"
             ]
         }
         case "second_field_verification_failed": {
             let data = notification.value as NotificationFieldContext;
             return [
-            `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" failed to get verified. The additional challenge is invalid.`,
-            "bg-danger text-light"
+                `${capitalizeFirstLetter(data.field.type)} account "${data.field.value}" failed to get verified. The additional challenge is invalid.`,
+                "bg-danger text-light"
             ]
         }
         case "awaiting_second_challenge": {
             let data = notification.value as NotificationFieldContext;
             return [
-            `A second challenge was sent to ${capitalizeFirstLetter(data.field.type)} account "${data.field.value}".`,
-            "bg-info text-dark"
+                `A second challenge was sent to ${capitalizeFirstLetter(data.field.type)} account "${data.field.value}".`,
+                "bg-info text-dark"
             ]
         }
         case "identity_fully_verified": {
             return [
-            `<strong>Verification process completed!</strong> Judgement will be issued shortly.`,
-            "bg-success text-light"
+                `<strong>Verification process completed!</strong> Judgement will be issued shortly.`,
+                "bg-success text-light"
             ]
         }
         case "judgement_provided": {
