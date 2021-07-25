@@ -205,7 +205,7 @@ export class ContentManager {
             <div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
                 <p>An message containing an additional challenge was sent to <strong>
-                    ${address}</strong>. Please insert that challenge in the following field:
+                    ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
                 </p>
                 <div class="input-group">
                 <input type="text" class="form-control"

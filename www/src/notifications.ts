@@ -94,7 +94,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         case "awaiting_second_challenge": {
             let data = notification.value as NotificationFieldContext;
             return [
-                `A second challenge was sent to ${capitalizeFirstLetter(data.field.type)} account "${data.field.value}".`,
+                `A second challenge was sent to ${capitalizeFirstLetter(data.field.type)} account "<strong>${data.field.value}</strong>". Please also check the <strong>spam</strong> folder.`,
                 "bg-info text-dark"
             ]
         }
