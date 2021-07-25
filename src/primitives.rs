@@ -414,23 +414,6 @@ impl From<String> for MessagePart {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct Notification {
-    #[serde(rename = "type")]
-    ty: NotificationType,
-    message: NotificationMessage,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NotificationType {
-    Success,
-    Info,
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub struct Event {
     pub timestamp: Timestamp,
     pub id: u64,

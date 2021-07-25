@@ -1,11 +1,13 @@
 import { AccountStatus, Notification } from "./json";
 import { ContentManager, capitalizeFirstLetter } from './content';
+import { NotificationHandler } from "./notifications";
 
 class ActionListerner {
     specify_network: HTMLInputElement;
     specify_address: HTMLInputElement;
     btn_execute_action: HTMLButtonElement;
     manager: ContentManager;
+    notifications: NotificationHandler;
 
     constructor() {
         // Register relevant elements.
@@ -22,6 +24,7 @@ class ActionListerner {
                 .getElementById("specify-address")! as HTMLInputElement;
 
         this.manager = new ContentManager;
+        this.notifications = new NotificationHandler;
 
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
@@ -98,13 +101,11 @@ class ActionListerner {
 
             socket.addEventListener("open", (_: Event) => {
                 let msg = JSON.stringify({ address: address, chain: network });
-                console.log(msg);
                 socket.send(msg);
             });
 
             socket.addEventListener("message", (event: Event) => {
                 let msg = (event as MessageEvent);
-                console.log(msg.data);
                 this.parseAccountStatus(msg);
             });
         }
@@ -130,6 +131,8 @@ class ActionListerner {
         } else {
             // Print unexpected error...
         }
+
+        this.notifications.processNotifications(parsed.message.notifications);
     }
 }
 
