@@ -33,19 +33,21 @@ impl MatrixClient {
         // Setup client
         let client_config = ClientConfig::new().store_path(db_path);
 
-        let homeserver = Url::parse(homeserver).expect("Couldn't parse the homeserver URL");
+        let homeserver = Url::parse(homeserver)?;
         let client = Client::new_with_config(homeserver, client_config)?;
 
         // Login with credentials
+        info!("Login with credentials");
         client
             .login(username, password, None, Some("w3f-registrar-bot"))
             .await?;
 
         // Sync up, avoid responding to old messages.
-        let messages = Arc::new(Mutex::new(vec![]));
+        info!("Syncing client");
         client.sync_once(SyncSettings::default()).await?;
 
         // Add event handler
+        let messages = Arc::new(Mutex::new(vec![]));
         client
             .set_event_handler(Box::new(Listener::new(
                 client.clone(),
@@ -61,6 +63,7 @@ impl MatrixClient {
                 .ok_or(anyhow!("Failed to acquire sync token"))?,
         );
 
+        info!("Executing background sync");
         client.sync(settings).await;
 
         Ok(MatrixClient {

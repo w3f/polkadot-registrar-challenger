@@ -51,10 +51,3 @@ export interface Notification {
     type: string;
     value: any[];
 }
-
-export interface Value2 {
-    address: string;
-    chain: string;
-    type: string;
-    value: string;
-}

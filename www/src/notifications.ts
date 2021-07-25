@@ -52,3 +52,35 @@ class NotificationHandler {
         }
 	}
 }
+
+function notificationTypeResolver(notification: Notification) {
+    switch (notification.type) {
+        case "field_verified": {
+            ""
+        }
+        case "field_verification_failed": {
+
+        }
+        case "second_field_verified": {
+
+        }
+        case "second_field_verification": {
+
+        }
+        case "second_field_verification_failed": {
+
+        }
+        case "awaiting_second_challenge": {
+
+        }
+        case "identity_fully_verified": {
+
+        }
+        case "judgement_provided": {
+
+        }
+        default {
+            // TODO
+        }
+    }
+}
