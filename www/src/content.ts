@@ -204,7 +204,7 @@ export class ContentManager {
         this.div_email_second_challenge.innerHTML = `
             <div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
-                <p>An message containing an additional challenge was sent to <strong>
+                <p>A message sent from <strong>registrar@web3.foundation</strong> containing an additional challenge was sent to <strong>
                     ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
                 </p>
                 <div class="input-group">
@@ -255,6 +255,7 @@ export class ContentManager {
                     body: body,
                 });
 
+                // TODO:
                 //let x = response.json();
 
                 button.innerHTML = `
