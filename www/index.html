@@ -16,7 +16,7 @@
     <title>W3F Registrar</title>
 </head>
 
-<body class="bg-secondary text-white">
+<body class="d-flex flex-column min-vh-100 bg-secondary text-white">
     <!-- Optional JavaScript; choose one of the two! -->
 
     <!-- Option 1: Bootstrap Bundle with Popper -->
@@ -30,56 +30,57 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.min.js" integrity="sha384-Atwg2Pkwv9vp0ygtn1JAojH0nYbwNJLPhwyoVbhoPwBhjQPR5VtM2+xf0Uwh9KtT" crossorigin="anonymous"></script>
     -->
 
-    <div aria-live="polite" aria-atomic="true" class="position-relative">
-        <div id="div-notifications" class="toast-container position-absolute top-0 end-0 p-3"></div>
-    </div>
-
-    <div class="container p-4 text-center">
-        <div class="row justify-content-center">
-            <div class="col-md-auto">
-                <h1><img src="assets/w3f.png" height="50px"> Registrar #0</h1>
-                <p id="intro-text" class="text-center"><em>Identity registrar service for Polkadot and
-                        Kusama.<br>Provided by the <a href="https://web3.foundation/">Web3 Foundation.</a></em>
-                </p>
-            </div>
-            <div class="col-md-auto">
-                <span class="badge bg-primary align-middle">beta</span>
-            </div>
+    <main class="flex-fill">
+        <div aria-live="polite" aria-atomic="true" class="position-relative">
+            <div id="div-notifications" class="toast-container position-absolute top-0 end-0 p-3"></div>
         </div>
-    </div>
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-10">
-                <div class="input-group">
-                    <button id="specify-network" class="col-2 btn btn-primary dropdown-toggle" type="button"
-                        data-bs-toggle="dropdown" aria-expanded="false">Polkadot</button>
-                    <ul id="network-options" class="dropdown-menu">
-                        <li><a class="dropdown-item">Polkadot</a></li>
-                        <li><a class="dropdown-item">Kusama</a></li>
-                    </ul>
-                    <button id="specify-action" class="col-3 btn btn-outline-primary dropdown-toggle" type="button"
-                        data-bs-toggle="dropdown" aria-expanded="false">Request Judgement</button>
-                    <ul id="action-options" class="dropdown-menu">
-                        <li><a class="dropdown-item">Request Judgement</a></li>
-                        <li><a class="dropdown-item">Check Username</a></li>
-                    </ul>
-                    <input id="specify-address" type="text" class="form-control"
-                        aria-label="Text input with dropdown button" placeholder="Account address...">
-                    <button id="execute-action" class="col-1 btn btn-primary" type="button">Go!</button>
+
+        <div class="container p-4 text-center">
+            <div class="row justify-content-center">
+                <div class="col-md-auto">
+                    <h1><img src="assets/w3f.png" height="50px"> Registrar #0</h1>
+                    <p id="intro-text" class="text-center"><em>Identity registrar service for Polkadot and
+                            Kusama.<br>Provided by the <a href="https://web3.foundation/">Web3 Foundation.</a></em>
+                    </p>
+                </div>
+                <div class="col-md-auto">
+                    <span class="badge bg-primary align-middle">beta</span>
                 </div>
             </div>
         </div>
         <div class="container">
-            <div id="div-live-updates-info" class="row justify-content-center"></div>
-            <div id="div-fully-verified-info" class="row justify-content-center p-2"></div>
-            <div id="div-display-name-overview" class="row justify-content-center"></div>
-            <div id="div-verification-overview" class="row justify-content-center p-2"></div>
-            <div id="div-email-second-challenge" class="row justify-content-center p-2"></div>
-            <div id="div-unsupported-overview" class="row justify-content-center p-2"></div>
+            <div class="row justify-content-center">
+                <div class="col-10">
+                    <div class="input-group">
+                        <button id="specify-network" class="col-2 btn btn-primary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">Polkadot</button>
+                        <ul id="network-options" class="dropdown-menu">
+                            <li><a class="dropdown-item">Polkadot</a></li>
+                            <li><a class="dropdown-item">Kusama</a></li>
+                        </ul>
+                        <button id="specify-action" class="col-3 btn btn-outline-primary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">Request Judgement</button>
+                        <ul id="action-options" class="dropdown-menu">
+                            <li><a class="dropdown-item">Request Judgement</a></li>
+                            <li><a class="dropdown-item">Check Username</a></li>
+                        </ul>
+                        <input id="specify-address" type="text" class="form-control"
+                            aria-label="Text input with dropdown button" placeholder="Account address...">
+                        <button id="execute-action" class="col-1 btn btn-primary" type="button">Go!</button>
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div id="div-live-updates-info" class="row justify-content-center"></div>
+                <div id="div-fully-verified-info" class="row justify-content-center p-2"></div>
+                <div id="div-display-name-overview" class="row justify-content-center p-2"></div>
+                <div id="div-verification-overview" class="row justify-content-center p-2"></div>
+                <div id="div-email-second-challenge" class="row justify-content-center p-2"></div>
+                <div id="div-unsupported-overview" class="row justify-content-center p-2"></div>
+            </div>
         </div>
-    </div>
-    </div>
-    <footer id="help-notice" class="bg-primary">
+    </main>
+    <footer class="footer bg-primary">
         <div class="container">
             <div class="row justify-content-center text-white">
                 <div class="col-10">
