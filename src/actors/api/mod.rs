@@ -3,8 +3,9 @@ use crate::database::Database;
 use crate::Result;
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
-use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, http, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
+use actix_cors::Cors;
 use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
 
 mod judgement_state;
@@ -32,9 +33,12 @@ pub async fn run_rest_api_server(addr: &str, db: Database) -> Result<Addr<Lookup
 
     // Run the WS server.
     let server = HttpServer::new(move || {
+        let cors = Cors::permissive();
+
         App::new()
+            .wrap(cors)
             .service(web::resource("/api/account_status").to(account_status_server_route))
-            .service(web::resource("/api/verify_second_challenge").to(verify_second_challenge))
+            .route("/api/verify_second_challenge", web::post().to(verify_second_challenge))
     })
     .bind(addr)?;
 

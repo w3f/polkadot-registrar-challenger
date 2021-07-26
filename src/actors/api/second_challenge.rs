@@ -37,6 +37,7 @@ impl Handler<VerifyChallenge> for SecondChallengeVerifier {
 
         Box::pin(
             async move {
+                debug!("Received second challenge: {:?}", msg);
                 db.verify_second_challenge(msg)
                     .await
                     .map(|b| JsonResult::Ok(b))

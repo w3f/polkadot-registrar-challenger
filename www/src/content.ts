@@ -215,9 +215,8 @@ export class ContentManager {
                 </div>
             </div>`;
 
-        let input = (document
-            .getElementById("specify-second-challenge")! as HTMLInputElement)
-            .value;
+        let second_challenge = document
+            .getElementById("specify-second-challenge")! as HTMLInputElement;
 
         let button = document
             .getElementById("execute-second-challenge")! as HTMLButtonElement;
@@ -237,21 +236,26 @@ export class ContentManager {
                         <span class="visually-hidden"></span>
                     `;
 
+                let body = JSON.stringify({
+                    entry: {
+                        type: "email",
+                        value: address,
+                    },
+                    challenge: second_challenge.value,
+                });
+
+                console.log(body);
+
                 let response = await fetch("http://localhost:8001/api/verify_second_challenge",
                 {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json;charset=utf-8"
+                        "Content-Type": "application/json",
                     },
-                    body: JSON.stringify({
-                        entry: address,
-                        challenge: input,
-                    })
+                    body: body,
                 });
 
-                if (!response.ok) {
-                    console.log("ERROR");
-                }
+                //let x = response.json();
 
                 button.innerHTML = `
                     <div class="spinner-grow spinner-grow-sm" role="status">
