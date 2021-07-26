@@ -201,9 +201,8 @@ export class ContentManager {
         `;
     }
     setEmailSecondChallengeContent(address: string) {
-        this.div_email_second_challenge.insertAdjacentHTML(
-            "beforeend",
-            `<div class="col-10">
+        this.div_email_second_challenge.innerHTML = `
+            <div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
                 <p>An message containing an additional challenge was sent to <strong>
                     ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
@@ -214,8 +213,7 @@ export class ContentManager {
                 <button id="execute-second-challenge" class="col-1 btn btn-primary"
                     type="button">Verify</button>
                 </div>
-            </div>`
-        );
+            </div>`;
 
         let input = (document
             .getElementById("specify-second-challenge")! as HTMLInputElement)
@@ -266,9 +264,8 @@ export class ContentManager {
         this.div_email_second_challenge.innerHTML = "";
     }
     setUnsupportedContent(list: string) {
-        this.div_unsupported_overview.insertAdjacentHTML(
-            "beforeend",
-            `<div class="col-10">
+        this.div_unsupported_overview.innerHTML = `
+            <div class="col-10">
                 <h2>🚨 Unsupported entries</h2>
                 <ul>
                     ${list}
@@ -281,8 +278,8 @@ export class ContentManager {
                 appropriate information so the manual verification can be completed as quickly as possible. For
                 example, if you want to add a web address, please make sure that the website somehow references
                 your Kusama/Polkadot address.</p>
-            </div>`
-        );
+            </div>
+        `;
 
     }
     wipeUnsupportedContent() {
