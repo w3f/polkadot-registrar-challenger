@@ -207,7 +207,7 @@ impl SmtpImapClient {
             .from(self.user.as_str())
             .subject("W3F Registrar Verification Service")
             .text(format!(
-                "Insert the following challenge into the web interface: {:?}",
+                "Insert the following challenge into the web interface: {}",
                 message
             ))
             .build()?;

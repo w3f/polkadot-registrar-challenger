@@ -3,7 +3,7 @@ use crate::database::Database;
 use crate::Result;
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
-use actix_web::{web, http, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use actix_cors::Cors;
 use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
