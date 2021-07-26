@@ -31,6 +31,9 @@ pub async fn run_connector(url: String, db: Database) -> Result<()> {
     info!("Starting processing queue for incoming messages");
     run_queue_processor(db.clone(), recv).await;
 
+    info!("Requesting pending judgments from Watcher");
+    connector.do_send(ClientCommand::RequestPendingJudgements);
+
     info!("Starting judgments event loop");
     actix::spawn(async move {
         async fn local(
@@ -173,7 +176,7 @@ pub enum EventType {
     #[serde(rename = "judgementResult")]
     JudgementResult,
     #[serde(rename = "pendingJudgementsRequest")]
-    PendingJudgementsRequests,
+    PendingJudgementsRequest,
     #[serde(rename = "pendingJudgementsResponse")]
     PendingJudgementsResponse,
     #[serde(rename = "displayNamesRequest")]
@@ -224,6 +227,7 @@ struct Connector {
 #[rtype(result = "()")]
 enum ClientCommand {
     ProvideJudgement(IdentityContext),
+    RequestPendingJudgements,
 }
 
 impl Handler<ClientCommand> for Connector {
@@ -239,6 +243,16 @@ impl Handler<ClientCommand> for Connector {
                             address: id.address.clone(),
                             judgement: Judgement::Reasonable,
                         },
+                    })
+                    .unwrap()
+                    .into(),
+                ));
+            }
+            ClientCommand::RequestPendingJudgements => {
+                let _ = self.sink.write(Message::Text(
+                    serde_json::to_string(&ResponseMessage {
+                        event: EventType::PendingJudgementsRequest,
+                        data: (),
                     })
                     .unwrap()
                     .into(),
