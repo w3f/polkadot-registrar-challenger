@@ -9,6 +9,7 @@ extern crate async_trait;
 
 use actix::clock::sleep;
 use log::LevelFilter;
+use primitives::ChainName;
 use std::env;
 use std::fs;
 use std::time::Duration;
@@ -44,6 +45,7 @@ pub enum InstanceType {
     SingleInstance(SingleInstanceConfig),
 }
 
+// TODO: Do all of those need to be pubic fields?
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct SingleInstanceConfig {
@@ -66,12 +68,17 @@ pub struct NotifierConfig {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-// TODO: Wrap in `Option`
 pub struct AdapterConfig {
-    watcher_endpoint: String,
-    matrix: MatrixConfig,
-    twitter: TwitterConfig,
-    email: EmailConfig,
+    pub watcher: Vec<WatcherConfig>,
+    pub matrix: MatrixConfig,
+    pub twitter: TwitterConfig,
+    pub email: EmailConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WatcherConfig {
+    pub network: ChainName,
+    pub endpoint: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -149,9 +156,9 @@ pub fn init_env() -> Result<Config> {
 
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
-    let endpoint = config.watcher_endpoint.clone();
+    let watchers = config.watcher.clone();
     run_adapters(config, db.clone()).await?;
-    run_connector(endpoint, db).await
+    run_connector(db, watchers).await
 }
 
 async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {

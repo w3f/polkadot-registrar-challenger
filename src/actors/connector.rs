@@ -1,8 +1,7 @@
 use crate::primitives::{
     ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState,
 };
-use crate::Database;
-use crate::Result;
+use crate::{Database, Result, WatcherConfig};
 use actix::io::SinkWrite;
 use actix::io::WriteHandler;
 use actix::*;
@@ -18,57 +17,69 @@ use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::sleep;
 
-pub async fn run_connector(url: String, db: Database) -> Result<()> {
-    info!("Setting up connector to Watcher at endpoint: {}", url);
+pub async fn run_connector(db: Database, watchers: Vec<WatcherConfig>) -> Result<()> {
+    info!(
+        "Setting up connector to Watcher(s) at endpoint: {:?}",
+        watchers
+    );
 
     // Init processing queue.
     let (tx, recv) = unbounded_channel();
-
-    info!("Initializing connection");
-    let mut connector = init_connector(url.as_str(), tx.clone()).await?;
 
     // Run processing queue for incoming connector messages.
     info!("Starting processing queue for incoming messages");
     run_queue_processor(db.clone(), recv).await;
 
-    info!("Requesting pending judgments from Watcher");
-    connector.do_send(ClientCommand::RequestPendingJudgements);
+    info!("Initializing connection");
+    for config in watchers {
+        let db = db.clone();
+        let tx = tx.clone();
 
-    info!("Starting judgments event loop");
-    actix::spawn(async move {
-        async fn local(
-            connector: &mut Addr<Connector>,
-            db: &Database,
-            url: &str,
-            tx: UnboundedSender<QueueMessage>,
-        ) -> Result<()> {
-            // If connection dropped, try to reconnect
-            if !connector.connected() {
-                warn!("Connection to Watcher dropped, trying to reconnect...");
-                *connector = init_connector(url, tx).await?
-            }
+        let mut connector = init_connector(config.endpoint.as_str(), tx.clone()).await?;
 
-            // Provide judgments.
-            let completed = db.fetch_completed_not_submitted().await?;
-            for state in completed {
-                debug!("Notifying Watcher about judgement: {:?}", state.context);
-                connector.do_send(ClientCommand::ProvideJudgement(state.context));
-            }
+        info!("Requesting pending judgments from Watcher");
+        connector.do_send(ClientCommand::RequestPendingJudgements);
 
-            Ok(())
-        }
-
-        loop {
-            match local(&mut connector, &db, url.as_str(), tx.clone()).await {
-                Ok(_) => {}
-                Err(err) => {
-                    error!("Connector error: {:?}", err);
+        info!("Starting judgments event loop");
+        actix::spawn(async move {
+            async fn local(
+                connector: &mut Addr<Connector>,
+                db: &Database,
+                config: &WatcherConfig,
+                tx: UnboundedSender<QueueMessage>,
+            ) -> Result<()> {
+                // If connection dropped, try to reconnect
+                if !connector.connected() {
+                    warn!("Connection to Watcher dropped, trying to reconnect...");
+                    *connector = init_connector(config.endpoint.as_str(), tx).await?
                 }
+
+                // Provide judgments.
+                let completed = db.fetch_completed_not_submitted().await?;
+                for state in completed {
+                    if state.context.chain == config.network {
+                        debug!("Notifying Watcher about judgement: {:?}", state.context);
+                        connector.do_send(ClientCommand::ProvideJudgement(state.context));
+                    } else {
+                        debug!("Skipping judgement on connector assigned to {:?}: {:?}", config.network, state.context);
+                    }
+                }
+
+                Ok(())
             }
 
-            sleep(Duration::from_secs(1)).await;
-        }
-    });
+            loop {
+                match local(&mut connector, &db, &config, tx.clone()).await {
+                    Ok(_) => {}
+                    Err(err) => {
+                        error!("Connector error: {:?}", err);
+                    }
+                }
+
+                sleep(Duration::from_secs(1)).await;
+            }
+        });
+    }
 
     Ok(())
 }
