@@ -1,9 +1,9 @@
 export interface AccountStatus {
     result_type: string;
-    message: Message;
+    message: any;
 }
 
-export interface Message {
+export interface ValidMessage {
     state: State;
     notifications: Notification[];
 }

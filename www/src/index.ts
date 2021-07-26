@@ -1,4 +1,4 @@
-import { AccountStatus, Notification } from "./json";
+import { ValidMessage, AccountStatus, Notification } from "./json";
 import { ContentManager, capitalizeFirstLetter } from './content';
 import { NotificationHandler } from "./notifications";
 
@@ -119,12 +119,14 @@ class ActionListerner {
                 </div>
             `;
 
+            let message: ValidMessage = parsed.message;
             this.manager.setLiveUpdateInfo();
-            this.manager.processVerificationOverviewTable(parsed.message.state);
-            this.manager.processUnsupportedOverview(parsed.message.state);
-            this.notifications.processNotifications(parsed.message.notifications);
+            this.manager.processVerificationOverviewTable(message.state);
+            this.manager.processUnsupportedOverview(message.state);
+            this.notifications.processNotifications(message.notifications);
         } else if (parsed.result_type == "err") {
-            // TODO: display error
+            let message: string = parsed.message;
+            this.notifications.displayError(message);
 
             this.manager.wipeLiveUpdateInfo();
             this.btn_execute_action.innerHTML = `Go!`;

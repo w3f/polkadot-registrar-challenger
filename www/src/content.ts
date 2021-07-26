@@ -221,7 +221,7 @@ export class ContentManager {
         let button = document
             .getElementById("execute-second-challenge")! as HTMLButtonElement;
 
-       button 
+        second_challenge
             .addEventListener("input", (_: Event) => {
                 button.innerHTML = `Go!`;
                 button.disabled = false;

@@ -17,6 +17,10 @@ export class NotificationHandler {
         for (let notify of notifications) {
             let [message, color] = notificationTypeResolver(notify);
 
+            this.displayNotification(message, color);
+        }
+    }
+    displayNotification(message: string, color: string) {
             this.div_notifications.insertAdjacentHTML(
                 "beforeend",
                 `<div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
@@ -57,7 +61,9 @@ export class NotificationHandler {
             }
 
             this.notify_idx += 1;
-        }
+    }
+    displayError(message: string) {
+        this.displayNotification(message, "bg-danger text-light");
     }
 }
 
