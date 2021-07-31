@@ -37,6 +37,9 @@ pub async fn run_connector(db: Database, watchers: Vec<WatcherConfig>) -> Result
 
         let mut connector = init_connector(config.endpoint.as_str(), tx.clone()).await?;
 
+        info!("Requesting active display names from Watcher");
+        connector.do_send(ClientCommand::RequestDisplayNames);
+
         info!("Requesting pending judgments from Watcher");
         connector.do_send(ClientCommand::RequestPendingJudgements);
 
