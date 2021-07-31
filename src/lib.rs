@@ -119,18 +119,12 @@ fn open_config() -> Result<Config> {
     let content = fs::read_to_string("config.yaml")
         .or_else(|_| fs::read_to_string("/etc/registrar/config.yaml"))
         .map_err(|_| {
-            eprintln!("Failed to open config at 'config.yaml' or '/etc/registrar/config.yaml'.");
-            std::process::exit(1);
-        })
-        .unwrap();
+            anyhow!("Failed to open config at 'config.yaml' or '/etc/registrar/config.yaml'.")
+        })?;
 
     // Parse config file as JSON.
     let config = serde_yaml::from_str::<Config>(&content)
-        .map_err(|err| {
-            eprintln!("Failed to parse config: {}", err);
-            std::process::exit(1);
-        })
-        .unwrap();
+        .map_err(|err| anyhow!("Failed to parse config: {:?}", err))?;
 
     Ok(config)
 }
