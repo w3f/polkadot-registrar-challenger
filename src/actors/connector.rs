@@ -61,7 +61,10 @@ pub async fn run_connector(db: Database, watchers: Vec<WatcherConfig>) -> Result
                         debug!("Notifying Watcher about judgement: {:?}", state.context);
                         connector.do_send(ClientCommand::ProvideJudgement(state.context));
                     } else {
-                        debug!("Skipping judgement on connector assigned to {:?}: {:?}", config.network, state.context);
+                        debug!(
+                            "Skipping judgement on connector assigned to {:?}: {:?}",
+                            config.network, state.context
+                        );
                     }
                 }
 
@@ -239,6 +242,7 @@ struct Connector {
 enum ClientCommand {
     ProvideJudgement(IdentityContext),
     RequestPendingJudgements,
+    RequestDisplayNames,
 }
 
 impl Handler<ClientCommand> for Connector {
@@ -263,6 +267,16 @@ impl Handler<ClientCommand> for Connector {
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::PendingJudgementsRequest,
+                        data: (),
+                    })
+                    .unwrap()
+                    .into(),
+                ));
+            }
+            ClientCommand::RequestDisplayNames => {
+                let _ = self.sink.write(Message::Text(
+                    serde_json::to_string(&ResponseMessage {
+                        event: EventType::DisplayNamesRequest,
                         data: (),
                     })
                     .unwrap()
