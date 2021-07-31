@@ -225,6 +225,13 @@ pub(crate) struct JudgementRequest {
     pub accounts: HashMap<AccountType, String>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DisplayNameEntry {
+    display_name: String,
+    address: ChainAddress,
+}
+
 #[derive(Debug, Clone)]
 enum QueueMessage {
     Ack(AckResponse),
@@ -351,6 +358,12 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                 self.queue
                     .send(QueueMessage::PendingJudgementsRequests(data))
                     .unwrap();
+            }
+            EventType::DisplayNamesResponse => {
+                let data: Vec<DisplayNameEntry> = serde_json::from_value(parsed.data).unwrap();
+                debug!("Received Display Names");
+
+                // TODO.
             }
             _ => {
                 warn!("Received unrecognized message from watcher: {:?}", parsed);
