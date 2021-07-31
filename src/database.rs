@@ -486,7 +486,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn insert_display_name(&self, name: DisplayNameEntry) -> Result<()> {
+    pub async fn insert_display_name(&self, name: &DisplayNameEntry) -> Result<()> {
         let coll = self.db.collection::<DisplayNameEntry>(DISPLAY_NAMES);
 
         coll.update_one(
@@ -508,8 +508,18 @@ impl Database {
         Ok(())
     }
     pub async fn fetch_display_names(&self) -> Result<Vec<DisplayNameEntry>> {
-        unimplemented!()
+        let coll = self.db.collection::<DisplayNameEntry>(DISPLAY_NAMES);
+
+        let mut cursor = coll.find(doc! {}, None).await?;
+
+        let mut names = vec![];
+        while let Some(doc) = cursor.next().await {
+            names.push(doc?);
+        }
+
+        Ok(names)
     }
+    // TODO: Consider creating an event.
     pub async fn insert_display_name_violations(
         &self,
         context: &IdentityContext,
@@ -523,44 +533,8 @@ impl Database {
                 "fields.value.type": "display_name",
             },
             doc! {
-                "fields.$.challenge.content.violations": violations.to_bson()?
-            },
-            None,
-        )
-        .await?;
-
-        Ok(())
-    }
-    #[cfg(test)]
-    pub async fn prune_completed(&self, offset: u64) -> Result<usize> {
-        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
-
-        let res = coll
-            .delete_many(
-                doc! {
-                    "is_fully_verified": true.to_bson()?,
-                    "completion_timestamp": {
-                        "$lt": Timestamp::now().raw() - offset,
-                    }
-                },
-                None,
-            )
-            .await?;
-
-        Ok(res.deleted_count as usize)
-    }
-    #[cfg(test)]
-    pub async fn set_display_name_valid(&self, name: &str) -> Result<()> {
-        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
-
-        coll.update_one(
-            doc! {
-                "fields.value.type": "display_name",
-                "fields.value.value": name.to_bson()?,
-            },
-            doc! {
                 "$set": {
-                    "fields.$.challenge.content.passed": true.to_bson()?,
+                    "fields.$.challenge.content.violations": violations.to_bson()?
                 }
             },
             None,

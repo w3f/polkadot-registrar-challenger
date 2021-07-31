@@ -18,6 +18,10 @@ impl DisplayNameVerifier {
         }
     }
     pub async fn verify_display_name(&self, state: &JudgementState) -> Result<()> {
+        if !self.config.enabled {
+            return Ok(())
+        }
+
         let name = if let Some(name) = state.display_name() {
             name
         } else {
@@ -38,9 +42,13 @@ impl DisplayNameVerifier {
             }
         }
 
-        self.db
-            .insert_display_name_violations(&state.context, &violations)
-            .await?;
+        if !violations.is_empty() {
+            self.db
+                .insert_display_name_violations(&state.context, &violations)
+                .await?;
+        } else {
+            // TODO: Set valid.
+        }
 
         Ok(())
     }

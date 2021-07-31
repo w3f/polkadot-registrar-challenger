@@ -154,7 +154,7 @@ async fn run_queue_processor(
                 }
                 QueueMessage::ActiveDisplayNames(data) => {
                     for name in data {
-                        db.insert_display_name(name).await?;
+                        db.insert_display_name(&name).await?;
                     }
                 }
             }

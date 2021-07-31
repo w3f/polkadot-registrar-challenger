@@ -68,6 +68,7 @@ impl IdentityField {
         }
     }
     #[cfg(test)]
+    // TODO: Why wrapped in Option?
     pub fn expected_second(&self) -> &Option<ExpectedMessage> {
         match &self.challenge {
             ChallengeType::ExpectedMessage {
@@ -90,6 +91,15 @@ impl IdentityField {
     #[cfg(test)]
     pub fn failed_attempts_mut(&mut self) -> &mut isize {
         &mut self.failed_attempts
+    }
+    #[cfg(test)]
+    pub fn expected_display_name_check_mut(&mut self) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
+        match &mut self.challenge {
+            ChallengeType::DisplayNameCheck { passed, violations } => {
+                (passed, violations)
+            }
+            _ => panic!(),
+        }
     }
 }
 
@@ -592,6 +602,12 @@ mod tests {
                 ExternalMessageType::Twitter(n) => IdentityFieldValue::Twitter(n),
                 ExternalMessageType::Matrix(n) => IdentityFieldValue::Matrix(n),
             }
+        }
+    }
+
+    impl From<&str> for ChainAddress {
+        fn from(val: &str) -> Self {
+            ChainAddress(val.to_string())
         }
     }
 }

@@ -13,6 +13,7 @@ use serde::Serialize;
 use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;
+mod display_name_verification;
 
 trait ToWsMessage {
     fn to_ws(&self) -> Message;
