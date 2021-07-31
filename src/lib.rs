@@ -25,6 +25,7 @@ use notifier::SessionNotifier;
 mod actors;
 mod adapters;
 mod database;
+mod display_name;
 mod notifier;
 mod primitives;
 #[cfg(test)]

@@ -507,6 +507,12 @@ impl Database {
 
         Ok(())
     }
+    pub async fn fetch_display_names(&self) -> Result<Vec<DisplayNameEntry>> {
+        unimplemented!()
+    }
+    pub async fn insert_violations(&self, context: &IdentityContext) -> Result<()> {
+        unimplemented!()
+    }
     #[cfg(test)]
     pub async fn prune_completed(&self, offset: u64) -> Result<usize> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);

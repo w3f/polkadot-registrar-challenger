@@ -334,6 +334,22 @@ impl JudgementState {
             .iter()
             .all(|field| field.challenge.is_verified())
     }
+    pub fn display_name(&self) -> Option<&str> {
+        self.fields
+            .iter()
+            .find(|field| {
+                match field.value() {
+                    IdentityFieldValue::DisplayName(_) => true,
+                    _ => false
+                }
+            })
+            .map(|field| {
+                match field.value() {
+                    IdentityFieldValue::DisplayName(name) => name.as_str(),
+                    _ => panic!("Failed to get display name. This is a bug."),
+                }
+            })
+    }
     #[cfg(test)]
     pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
         self.fields.iter().find(|field| &field.value == ty).unwrap()
