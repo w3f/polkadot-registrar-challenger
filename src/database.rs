@@ -1,4 +1,5 @@
 use crate::actors::api::VerifyChallenge;
+use crate::actors::connector::DisplayNameEntry;
 use crate::primitives::{
     ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext, IdentityFieldValue,
     JudgementState, NotificationMessage, Timestamp,
@@ -6,11 +7,13 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
+use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
 use serde::Serialize;
 
 const IDENTITY_COLLECTION: &'static str = "identities";
 const EVENT_COLLECTION: &'static str = "event_log";
+const DISPLAY_NAMES: &'static str = "display_names";
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -478,6 +481,27 @@ impl Database {
                 }
             },
             None,
+        )
+        .await?;
+
+        Ok(())
+    }
+    pub async fn insert_display_name(&self, name: DisplayNameEntry) -> Result<()> {
+        let coll = self.db.collection::<DisplayNameEntry>(DISPLAY_NAMES);
+
+        coll.update_one(
+            doc! {
+                "display_name": name.display_name.to_bson()?,
+                "address": name.address.to_bson()?,
+            },
+            doc! {
+                "$setOnInsert": name.to_bson()?,
+            },
+            {
+                let mut opt = UpdateOptions::default();
+                opt.upsert = Some(true);
+                Some(opt)
+            },
         )
         .await?;
 

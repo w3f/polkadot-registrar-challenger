@@ -128,8 +128,13 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
                     process_request(&db, data.address, data.accounts).await?
                 }
                 QueueMessage::PendingJudgementsRequests(data) => {
-                    for d in data {
-                        process_request(&db, d.address, d.accounts).await?;
+                    for r in data {
+                        process_request(&db, r.address, r.accounts).await?;
+                    }
+                }
+                QueueMessage::ActiveDisplayNames(data) => {
+                    for name in data {
+                        db.insert_display_name(name).await?;
                     }
                 }
             }
@@ -226,10 +231,10 @@ pub(crate) struct JudgementRequest {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DisplayNameEntry {
-    display_name: String,
-    address: ChainAddress,
+pub struct DisplayNameEntry {
+    #[serde(alias = "displayName")]
+    pub display_name: String,
+    pub address: ChainAddress,
 }
 
 #[derive(Debug, Clone)]
@@ -237,6 +242,7 @@ enum QueueMessage {
     Ack(AckResponse),
     NewJudgementRequest(JudgementRequest),
     PendingJudgementsRequests(Vec<JudgementRequest>),
+    ActiveDisplayNames(Vec<DisplayNameEntry>),
 }
 
 struct Connector {
@@ -363,7 +369,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: Vec<DisplayNameEntry> = serde_json::from_value(parsed.data)?;
                     debug!("Received Display Names");
 
-                    // TODO.
+                    queue.send(QueueMessage::ActiveDisplayNames(data))?
                 }
                 _ => {
                     warn!("Received unrecognized message from watcher: {:?}", parsed);
