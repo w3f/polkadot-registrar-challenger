@@ -1,5 +1,7 @@
 use actix::Message;
 
+use crate::actors::connector::DisplayNameEntry;
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
@@ -139,7 +141,7 @@ pub enum ChallengeType {
     },
     DisplayNameCheck {
         passed: bool,
-        violations: Vec<Violation>,
+        violations: Vec<DisplayNameEntry>,
     },
     Unsupported,
 }
@@ -263,13 +265,10 @@ pub enum ChallengeTypeBlanked {
     },
     DisplayNameCheck {
         passed: bool,
-        violations: Vec<Violation>,
+        violations: Vec<DisplayNameEntry>,
     },
     Unsupported,
 }
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Violation(String);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ExpectedMessageBlanked {

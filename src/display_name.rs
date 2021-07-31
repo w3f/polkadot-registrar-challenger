@@ -1,17 +1,23 @@
 use crate::database::Database;
 use crate::primitives::JudgementState;
-use crate::Result;
+use crate::{DisplayNameConfig, Result};
 use strsim::jaro;
 
 const VIOLATIONS_CAP: usize = 5;
 
 pub struct DisplayNameVerifier {
     db: Database,
-    limit: f64,
+    config: DisplayNameConfig,
 }
 
 impl DisplayNameVerifier {
-    pub async fn verify_display_name(&self, state: JudgementState) -> Result<()> {
+    pub fn new(db: Database, config: DisplayNameConfig) -> Self {
+        DisplayNameVerifier {
+            db: db,
+            config: config,
+        }
+    }
+    pub async fn verify_display_name(&self, state: &JudgementState) -> Result<()> {
         let name = if let Some(name) = state.display_name() {
             name
         } else {
@@ -22,7 +28,7 @@ impl DisplayNameVerifier {
         let mut violations = vec![];
 
         for existing in current {
-            if is_too_similar(&name, &existing.display_name, self.limit) {
+            if is_too_similar(&name, &existing.display_name, self.config.limit) {
                 // Only show up to `VIOLATIONS_CAP` violations.
                 if violations.len() == VIOLATIONS_CAP {
                     break;
@@ -31,6 +37,10 @@ impl DisplayNameVerifier {
                 violations.push(existing);
             }
         }
+
+        self.db
+            .insert_display_name_violations(&state.context, &violations)
+            .await?;
 
         Ok(())
     }

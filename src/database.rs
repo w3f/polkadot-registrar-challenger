@@ -41,7 +41,7 @@ impl Database {
             db: Client::with_uri_str(uri).await?.database(db),
         })
     }
-    pub async fn add_judgement_request(&self, request: JudgementState) -> Result<()> {
+    pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
@@ -61,7 +61,7 @@ impl Database {
 
             // Determine which fields should be updated.
             let mut to_add = vec![];
-            for new_field in request.fields {
+            for new_field in &request.fields {
                 // If the current field value is the same as the new one, insert
                 // the current field state back into storage. If the value is
                 // new, insert/update the current field state.
@@ -72,7 +72,7 @@ impl Database {
                 {
                     to_add.push(current_field.clone());
                 } else {
-                    to_add.push(new_field);
+                    to_add.push(new_field.clone());
                 }
             }
 
@@ -510,8 +510,26 @@ impl Database {
     pub async fn fetch_display_names(&self) -> Result<Vec<DisplayNameEntry>> {
         unimplemented!()
     }
-    pub async fn insert_violations(&self, context: &IdentityContext) -> Result<()> {
-        unimplemented!()
+    pub async fn insert_display_name_violations(
+        &self,
+        context: &IdentityContext,
+        violations: &Vec<DisplayNameEntry>,
+    ) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        coll.update_one(
+            doc! {
+                "context": context.to_bson()?,
+                "fields.value.type": "display_name",
+            },
+            doc! {
+                "fields.$.challenge.content.violations": violations.to_bson()?
+            },
+            None,
+        )
+        .await?;
+
+        Ok(())
     }
     #[cfg(test)]
     pub async fn prune_completed(&self, offset: u64) -> Result<usize> {

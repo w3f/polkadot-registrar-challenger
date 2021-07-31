@@ -67,10 +67,11 @@ pub struct NotifierConfig {
     pub api_address: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct AdapterConfig {
     pub watcher: Vec<WatcherConfig>,
+    pub display_name: DisplayNameConfig,
     pub matrix: MatrixConfig,
     pub twitter: TwitterConfig,
     pub email: EmailConfig,
@@ -82,7 +83,13 @@ pub struct WatcherConfig {
     pub endpoint: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
+pub struct DisplayNameConfig {
+    pub enabled: bool,
+    pub limit: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct MatrixConfig {
     pub enabled: bool,
@@ -92,7 +99,7 @@ pub struct MatrixConfig {
     pub db_path: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct TwitterConfig {
     pub enabled: bool,
@@ -103,7 +110,7 @@ pub struct TwitterConfig {
     pub request_interval: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct EmailConfig {
     pub enabled: bool,
@@ -151,9 +158,11 @@ pub fn init_env() -> Result<Config> {
 
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
+
+    // TODO: Pretty all the clones?
     let watchers = config.watcher.clone();
-    run_adapters(config, db.clone()).await?;
-    run_connector(db, watchers).await
+    run_adapters(config.clone(), db.clone()).await?;
+    run_connector(db, watchers, config.display_name).await
 }
 
 async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {

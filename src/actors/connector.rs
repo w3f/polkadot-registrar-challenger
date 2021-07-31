@@ -1,7 +1,8 @@
+use crate::display_name::DisplayNameVerifier;
 use crate::primitives::{
     ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState,
 };
-use crate::{Database, Result, WatcherConfig};
+use crate::{Database, DisplayNameConfig, Result, WatcherConfig};
 use actix::io::SinkWrite;
 use actix::io::WriteHandler;
 use actix::*;
@@ -17,7 +18,11 @@ use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::sleep;
 
-pub async fn run_connector(db: Database, watchers: Vec<WatcherConfig>) -> Result<()> {
+pub async fn run_connector(
+    db: Database,
+    watchers: Vec<WatcherConfig>,
+    dn_config: DisplayNameConfig,
+) -> Result<()> {
     info!(
         "Setting up connector to Watcher(s) at endpoint: {:?}",
         watchers
@@ -28,7 +33,7 @@ pub async fn run_connector(db: Database, watchers: Vec<WatcherConfig>) -> Result
 
     // Run processing queue for incoming connector messages.
     info!("Starting processing queue for incoming messages");
-    run_queue_processor(db.clone(), recv).await;
+    run_queue_processor(db.clone(), recv, dn_config).await;
 
     info!("Initializing connection");
     for config in watchers {
@@ -90,7 +95,11 @@ pub async fn run_connector(db: Database, watchers: Vec<WatcherConfig>) -> Result
     Ok(())
 }
 
-async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMessage>) {
+async fn run_queue_processor(
+    db: Database,
+    mut recv: UnboundedReceiver<QueueMessage>,
+    dn_config: DisplayNameConfig,
+) {
     fn create_context(address: ChainAddress) -> IdentityContext {
         let chain = if address.as_str().starts_with("1") {
             ChainName::Polkadot
@@ -108,15 +117,23 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
         db: &Database,
         address: ChainAddress,
         accounts: HashMap<AccountType, String>,
+        dn_verifier: &DisplayNameVerifier,
     ) -> Result<()> {
         let id = create_context(address);
         let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
-        db.add_judgement_request(state).await?;
+        db.add_judgement_request(&state).await?;
+        dn_verifier.verify_display_name(&state).await?;
 
         Ok(())
     }
 
-    async fn local(db: &Database, recv: &mut UnboundedReceiver<QueueMessage>) -> Result<()> {
+    let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config);
+
+    async fn local(
+        db: &Database,
+        recv: &mut UnboundedReceiver<QueueMessage>,
+        dn_verifier: &DisplayNameVerifier,
+    ) -> Result<()> {
         debug!("Watcher message picked up by queue");
         while let Some(message) = recv.recv().await {
             match message {
@@ -128,11 +145,11 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
                     }
                 }
                 QueueMessage::NewJudgementRequest(data) => {
-                    process_request(&db, data.address, data.accounts).await?
+                    process_request(&db, data.address, data.accounts, &dn_verifier).await?
                 }
                 QueueMessage::PendingJudgementsRequests(data) => {
                     for r in data {
-                        process_request(&db, r.address, r.accounts).await?;
+                        process_request(&db, r.address, r.accounts, &dn_verifier).await?;
                     }
                 }
                 QueueMessage::ActiveDisplayNames(data) => {
@@ -148,7 +165,7 @@ async fn run_queue_processor(db: Database, mut recv: UnboundedReceiver<QueueMess
 
     actix::spawn(async move {
         loop {
-            let _ = local(&db, &mut recv)
+            let _ = local(&db, &mut recv, &dn_verifier)
                 .await
                 .map_err(|err| error!("Error in connector messaging queue: {:?}", err));
 
