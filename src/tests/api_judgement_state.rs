@@ -12,7 +12,7 @@ async fn current_judgement_state_single_identity() {
 
     // Insert judgement request.
     let alice = JudgementState::alice();
-    db.add_judgement_request(alice.clone()).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
 
     // Subscribe to endpoint.
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
@@ -37,8 +37,8 @@ async fn current_judgement_state_multiple_inserts() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     // Multiple inserts of the same request. Must not cause bad behavior.
-    db.add_judgement_request(alice.clone()).await.unwrap();
-    db.add_judgement_request(alice.clone()).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
 
     // Subscribe to endpoint.
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
@@ -63,8 +63,8 @@ async fn current_judgement_state_multiple_identities() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    db.add_judgement_request(alice.clone()).await.unwrap();
-    db.add_judgement_request(bob.clone()).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
@@ -97,8 +97,8 @@ async fn verify_invalid_message_bad_challenge() {
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    db.add_judgement_request(alice.clone()).await.unwrap();
-    db.add_judgement_request(bob.clone()).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
@@ -158,8 +158,8 @@ async fn verify_invalid_message_bad_origin() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    db.add_judgement_request(alice.clone()).await.unwrap();
-    db.add_judgement_request(bob.clone()).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
@@ -209,8 +209,8 @@ async fn verify_valid_message() {
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    db.add_judgement_request(alice.clone()).await.unwrap();
-    db.add_judgement_request(bob.clone()).await.unwrap();
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
