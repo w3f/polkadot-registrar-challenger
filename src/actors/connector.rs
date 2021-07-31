@@ -312,8 +312,8 @@ impl Connector {
             let _ = act
                 .sink
                 .write(Message::Ping(String::from("").into()))
-                .unwrap();
-            act.heartbeat(ctx);
+                .map(|_| act.heartbeat(ctx))
+                .map_err(|err| error!("Failed to send heartbeat to Watcher: {:?}", err));
 
             // TODO: Check timeouts
         });
@@ -327,47 +327,54 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         msg: std::result::Result<Frame, WsProtocolError>,
         _ctx: &mut Context<Self>,
     ) {
-        let parsed: ResponseMessage<serde_json::Value> = if let Ok(Frame::Text(txt)) = msg {
-            serde_json::from_slice(&txt).unwrap()
-        } else {
-            return;
-        };
+        fn local(
+            queue: &mut UnboundedSender<QueueMessage>,
+            msg: std::result::Result<Frame, WsProtocolError>,
+        ) -> Result<()> {
+            let parsed: ResponseMessage<serde_json::Value> = if let Ok(Frame::Text(txt)) = msg {
+                serde_json::from_slice(&txt)?
+            } else {
+                return Err(anyhow!("invalid message, expected text"));
+            };
 
-        match parsed.event {
-            EventType::Ack => {
-                let data: AckResponse = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received acknowledgement from Watcher: {:?}", data);
+            match parsed.event {
+                EventType::Ack => {
+                    let data: AckResponse = serde_json::from_value(parsed.data)?;
+                    debug!("Received acknowledgement from Watcher: {:?}", data);
 
-                self.queue.send(QueueMessage::Ack(data)).unwrap();
-            }
-            EventType::Error => {
-                error!("Received error from Watcher: {:?}", parsed.data);
-            }
-            EventType::NewJudgementRequest => {
-                let data: JudgementRequest = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received new judgement request from Watcher: {:?}", data);
+                    queue.send(QueueMessage::Ack(data))?;
+                }
+                EventType::Error => {
+                    error!("Received error from Watcher: {:?}", parsed.data);
+                }
+                EventType::NewJudgementRequest => {
+                    let data: JudgementRequest = serde_json::from_value(parsed.data)?;
+                    debug!("Received new judgement request from Watcher: {:?}", data);
 
-                self.queue
-                    .send(QueueMessage::NewJudgementRequest(data))
-                    .unwrap();
-            }
-            EventType::PendingJudgementsResponse => {
-                let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received pending judgments from Watcher: {:?}", data);
+                    queue.send(QueueMessage::NewJudgementRequest(data))?
+                }
+                EventType::PendingJudgementsResponse => {
+                    let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
+                    debug!("Received pending judgments from Watcher: {:?}", data);
 
-                self.queue
-                    .send(QueueMessage::PendingJudgementsRequests(data))
-                    .unwrap();
-            }
-            EventType::DisplayNamesResponse => {
-                let data: Vec<DisplayNameEntry> = serde_json::from_value(parsed.data).unwrap();
-                debug!("Received Display Names");
+                    queue.send(QueueMessage::PendingJudgementsRequests(data))?
+                }
+                EventType::DisplayNamesResponse => {
+                    let data: Vec<DisplayNameEntry> = serde_json::from_value(parsed.data)?;
+                    debug!("Received Display Names");
 
-                // TODO.
+                    // TODO.
+                }
+                _ => {
+                    warn!("Received unrecognized message from watcher: {:?}", parsed);
+                }
             }
-            _ => {
-                warn!("Received unrecognized message from watcher: {:?}", parsed);
-            }
+
+            Ok(())
+        }
+
+        if let Err(err) = local(&mut self.queue, msg) {
+            error!("Failed to process message in websocket stream: {:?}", err);
         }
     }
 
