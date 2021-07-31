@@ -103,7 +103,10 @@ impl IdentityField {
                 PGPFingerprint(_) => ChallengeType::Unsupported,
                 Image(_) => ChallengeType::Unsupported,
                 Additional(_) => ChallengeType::Unsupported,
-                DisplayName(_) => ChallengeType::BackgroundCheck { passed: false },
+                DisplayName(_) => ChallengeType::DisplayNameCheck {
+                    passed: false,
+                    violations: vec![],
+                },
                 Email(_) => ChallengeType::ExpectedMessage {
                     expected: ExpectedMessage::random(),
                     second: Some(ExpectedMessage::random()),
@@ -134,8 +137,9 @@ pub enum ChallengeType {
         expected: ExpectedMessage,
         second: Option<ExpectedMessage>,
     },
-    BackgroundCheck {
+    DisplayNameCheck {
         passed: bool,
+        violations: Vec<Violation>,
     },
     Unsupported,
 }
@@ -150,7 +154,10 @@ impl ChallengeType {
                     expected.is_verified
                 }
             }
-            ChallengeType::BackgroundCheck { passed } => *passed,
+            ChallengeType::DisplayNameCheck {
+                passed,
+                violations: _,
+            } => *passed,
             ChallengeType::Unsupported => false,
         }
     }
@@ -254,14 +261,17 @@ pub enum ChallengeTypeBlanked {
         expected: ExpectedMessage,
         second: Option<ExpectedMessageBlanked>,
     },
-    BackgroundCheck {
+    DisplayNameCheck {
         passed: bool,
+        violations: Vec<Violation>,
     },
     Unsupported,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+pub struct Violation(String);
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ExpectedMessageBlanked {
     // IMPORTANT: This value is blanked.
     // pub value: String,
@@ -291,8 +301,11 @@ impl From<JudgementState> for JudgementStateBlanked {
                                     }),
                                 }
                             }
-                            ChallengeType::BackgroundCheck { passed } => {
-                                ChallengeTypeBlanked::BackgroundCheck { passed: passed }
+                            ChallengeType::DisplayNameCheck { passed, violations } => {
+                                ChallengeTypeBlanked::DisplayNameCheck {
+                                    passed: passed,
+                                    violations: violations,
+                                }
                             }
                             ChallengeType::Unsupported => ChallengeTypeBlanked::Unsupported,
                         }
@@ -337,17 +350,13 @@ impl JudgementState {
     pub fn display_name(&self) -> Option<&str> {
         self.fields
             .iter()
-            .find(|field| {
-                match field.value() {
-                    IdentityFieldValue::DisplayName(_) => true,
-                    _ => false
-                }
+            .find(|field| match field.value() {
+                IdentityFieldValue::DisplayName(_) => true,
+                _ => false,
             })
-            .map(|field| {
-                match field.value() {
-                    IdentityFieldValue::DisplayName(name) => name.as_str(),
-                    _ => panic!("Failed to get display name. This is a bug."),
-                }
+            .map(|field| match field.value() {
+                IdentityFieldValue::DisplayName(name) => name.as_str(),
+                _ => panic!("Failed to get display name. This is a bug."),
             })
     }
     #[cfg(test)]

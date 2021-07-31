@@ -15,7 +15,7 @@ impl DisplayNameVerifier {
         let name = if let Some(name) = state.display_name() {
             name
         } else {
-            return Ok(())
+            return Ok(());
         };
 
         let current = self.db.fetch_display_names().await?;
@@ -31,8 +31,6 @@ impl DisplayNameVerifier {
                 violations.push(existing);
             }
         }
-
-
 
         Ok(())
     }
