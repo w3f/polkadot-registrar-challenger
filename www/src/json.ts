@@ -1,6 +1,6 @@
 // TODO: Rename
 export interface AccountStatus {
-    result_type: string;
+    type: string;
     message: any;
 }
 
@@ -34,7 +34,7 @@ export interface FieldValue {
 }
 
 export interface Challenge {
-    challenge_type: string;
+    type: string;
     content: any;
 }
 

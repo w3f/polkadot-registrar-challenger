@@ -500,7 +500,6 @@ impl Database {
             doc! {
                 "$set": {
                     "judgement_submitted": true,
-                    "completion_timestamp": Timestamp::now().raw(),
                 }
             },
             None,

@@ -150,7 +150,7 @@ class ActionListerner {
     }
     parseDisplayNameCheck(data: AccountStatus, display_name: string) {
         console.log(data);
-        if (data.result_type == "ok") {
+        if (data.type == "ok") {
             let check: CheckDisplayNameResult = data.message;
             if (check.type == "ok") {
                 this.manager.setDisplayNameVerification(display_name, BadgeValid);
@@ -160,7 +160,7 @@ class ActionListerner {
             } else {
                 // TODO
             }
-        } else if (data.result_type == "err") {
+        } else if (data.type == "err") {
             // TODO
         } else {
             // TODO
@@ -176,7 +176,7 @@ class ActionListerner {
     }
     parseAccountStatus(msg: MessageEvent) {
         const parsed: AccountStatus = JSON.parse(msg.data);
-        if (parsed.result_type == "ok") {
+        if (parsed.type == "ok") {
             this.btn_execute_action.innerHTML = `
                 <div class="spinner-grow spinner-grow-sm" role="status">
                     <span class="visually-hidden"></span>
@@ -193,7 +193,7 @@ class ActionListerner {
             if (message.state.is_fully_verified && message.notifications.length == 0) {
                 this.notifications.displayNotification("The identity has been fully verified!", "bg-success text-light")
             }
-        } else if (parsed.result_type == "err") {
+        } else if (parsed.type == "err") {
             let message: string = parsed.message;
             this.notifications.displayError(message);
 

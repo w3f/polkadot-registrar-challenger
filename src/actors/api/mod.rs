@@ -19,7 +19,7 @@ pub use self::second_challenge::VerifyChallenge;
 
 // TODO: Unify all "*_type" values as just "type". See JSON output.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
-#[serde(rename_all = "snake_case", tag = "result_type", content = "message")]
+#[serde(rename_all = "snake_case", tag = "type", content = "message")]
 #[rtype(result = "()")]
 // TODO: Rename this
 pub enum JsonResult<T> {

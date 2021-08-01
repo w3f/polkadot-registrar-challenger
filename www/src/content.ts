@@ -66,7 +66,7 @@ export class ContentManager {
 
         let counter = 1;
         for (let field of state.fields) {
-            if (field.challenge.challenge_type == "expected_message") {
+            if (field.challenge.type == "expected_message") {
                 let validity;
                 if (field.challenge.content.expected.is_verified) {
                     if (field.challenge.content.second && !field.challenge.content.second!.is_verified) {
@@ -106,7 +106,7 @@ export class ContentManager {
                     `;
 
                 counter += 1;
-            } else if (field.challenge.challenge_type == "display_name_check") {
+            } else if (field.challenge.type == "display_name_check") {
                 let validity;
 
                 let challenge: DisplayNameChallenge = field.challenge.content;
@@ -125,7 +125,7 @@ export class ContentManager {
     processUnsupportedOverview(state: State) {
         let unsupported = "";
         for (let field of state.fields) {
-            if (field.challenge.challenge_type == "unsupported") {
+            if (field.challenge.type == "unsupported") {
                 unsupported += `<li>${capitalizeFirstLetter(field.value.type)} ("${field.value.value}")</li>`;
             }
         }

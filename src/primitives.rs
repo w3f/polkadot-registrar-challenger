@@ -120,7 +120,7 @@ impl IdentityField {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "challenge_type", content = "content")]
+#[serde(rename_all = "snake_case", tag = "type", content = "content")]
 pub enum ChallengeType {
     ExpectedMessage {
         expected: ExpectedMessage,
@@ -244,7 +244,7 @@ pub struct IdentityFieldBlanked {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "challenge_type", content = "content")]
+#[serde(rename_all = "snake_case", tag = "type", content = "content")]
 pub enum ChallengeTypeBlanked {
     ExpectedMessage {
         expected: ExpectedMessage,
