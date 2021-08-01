@@ -182,7 +182,7 @@ export class ContentManager {
         this.div_display_name_overview.innerHTML = `
             <div class="col-10 ">
                 <h2>Display name check</h2>
-                <p>The display name <strong>${name}</strong> is ${BadgeInvalid}. It's too similar to existing display name(s):</p>
+                <p>The display name <strong>${name}</strong> is ${BadgeInvalid}. It's too similar to (an) existing display name(s):</p>
                 <ul>
                     ${listed}
                 </ul>
