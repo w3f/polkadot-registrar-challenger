@@ -6,7 +6,7 @@ use matrix_sdk::events::room::message::MessageEventContent;
 use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
 use matrix_sdk::room::Room;
 use matrix_sdk::{Client, ClientConfig, EventHandler, SyncSettings};
-use ruma::events::room::message::MessageType;
+use ruma::events::room::message::{MessageType, TextMessageEventContent};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
@@ -78,7 +78,7 @@ impl MatrixClient {
 
 struct Listener {
     client: Client,
-    // TODO: Rename?
+    // TODO: Should probably just be a mpsc channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
@@ -127,27 +127,35 @@ impl EventHandler for Listener {
     }
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
         if let Room::Joined(_) = room {
-            match &event.content.msgtype {
-                MessageType::Text(content) => {
-                    debug!("Received message from {}", event.sender);
+            let msg_body = if let SyncMessageEvent {
+                content:
+                    MessageEventContent {
+                        msgtype: MessageType::Text(TextMessageEventContent { body: msg_body, .. }),
+                        ..
+                    },
+                ..
+            } = event
+            {
+                msg_body
+            } else {
+                debug!("Received unacceptable message type from {}", event.sender);
+                return;
+            };
 
-                    // Add external message to inner field. That field is then
-                    // fetched by the `Adapter` implementation.
-                    let mut lock = self.messages.lock().await;
-                    (*lock).push(ExternalMessage {
-                        origin: ExternalMessageType::Matrix(event.sender.to_string()),
-                        // A message UID is not relevant regarding a live
-                        // message listener. The Matrix SDK handles
-                        // synchronization.
-                        id: 0u32.into(),
-                        timestamp: Timestamp::now(),
-                        values: vec![content.body.to_string().into()],
-                    });
-                }
-                _ => {
-                    debug!("Received unacceptable message type from {}", event.sender);
-                }
-            }
+            debug!("Received message from {}", event.sender);
+
+            // Add external message to inner field. That field is then
+            // fetched by the `Adapter` implementation.
+            let mut lock = self.messages.lock().await;
+            (*lock).push(ExternalMessage {
+                origin: ExternalMessageType::Matrix(event.sender.to_string()),
+                // A message UID is not relevant regarding a live
+                // message listener. The Matrix SDK handles
+                // synchronization.
+                id: 0u32.into(),
+                timestamp: Timestamp::now(),
+                values: vec![msg_body.to_string().into()],
+            });
         }
     }
 }
