@@ -95,9 +95,7 @@ impl IdentityField {
     #[cfg(test)]
     pub fn expected_display_name_check_mut(&mut self) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
         match &mut self.challenge {
-            ChallengeType::DisplayNameCheck { passed, violations } => {
-                (passed, violations)
-            }
+            ChallengeType::DisplayNameCheck { passed, violations } => (passed, violations),
             _ => panic!(),
         }
     }

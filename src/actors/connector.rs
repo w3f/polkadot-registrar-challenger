@@ -153,8 +153,14 @@ async fn run_queue_processor(
                     }
                 }
                 QueueMessage::ActiveDisplayNames(data) => {
-                    for name in data {
-                        db.insert_display_name(&name).await?;
+                    for d in data {
+                        let context = create_context(d.address);
+                        let entry = DisplayNameEntry {
+                            context: context,
+                            display_name: d.display_name,
+                        };
+
+                        db.insert_display_name(&entry).await?;
                     }
                 }
             }
@@ -250,11 +256,19 @@ pub(crate) struct JudgementRequest {
     pub accounts: HashMap<AccountType, String>,
 }
 
+// TODO: Move to primitives.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayNameEntry {
+    pub context: IdentityContext,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+/// The entry as sent by the Watcher. Then converted into `DisplayNameEntry`.
+pub struct DisplayNameEntryRaw {
+    pub address: ChainAddress,
     #[serde(alias = "displayName")]
     pub display_name: String,
-    pub address: ChainAddress,
 }
 
 #[derive(Debug, Clone)]
@@ -262,7 +276,7 @@ enum QueueMessage {
     Ack(AckResponse),
     NewJudgementRequest(JudgementRequest),
     PendingJudgementsRequests(Vec<JudgementRequest>),
-    ActiveDisplayNames(Vec<DisplayNameEntry>),
+    ActiveDisplayNames(Vec<DisplayNameEntryRaw>),
 }
 
 struct Connector {
@@ -386,7 +400,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     queue.send(QueueMessage::PendingJudgementsRequests(data))?
                 }
                 EventType::DisplayNamesResponse => {
-                    let data: Vec<DisplayNameEntry> = serde_json::from_value(parsed.data)?;
+                    let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     debug!("Received Display Names");
 
                     queue.send(QueueMessage::ActiveDisplayNames(data))?

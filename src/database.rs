@@ -492,7 +492,7 @@ impl Database {
         coll.update_one(
             doc! {
                 "display_name": name.display_name.to_bson()?,
-                "address": name.address.to_bson()?,
+                "context": name.context.to_bson()?,
             },
             doc! {
                 "$setOnInsert": name.to_bson()?,

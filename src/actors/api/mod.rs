@@ -8,9 +8,9 @@ use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpSe
 use actix_web_actors::ws;
 use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
 
+mod display_name_check;
 mod judgement_state;
 mod second_challenge;
-mod display_name_check;
 
 // Reexport
 pub use self::judgement_state::{LookupServer, NotifyAccountState, ResponseAccountState};

@@ -19,7 +19,7 @@ impl DisplayNameVerifier {
     }
     pub async fn verify_display_name(&self, state: &JudgementState) -> Result<()> {
         if !self.config.enabled {
-            return Ok(())
+            return Ok(());
         }
 
         let name = if let Some(name) = state.display_name() {
