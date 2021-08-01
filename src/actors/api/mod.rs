@@ -10,6 +10,7 @@ use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
 
 mod judgement_state;
 mod second_challenge;
+mod display_name_check;
 
 // Reexport
 pub use self::judgement_state::{LookupServer, NotifyAccountState, ResponseAccountState};

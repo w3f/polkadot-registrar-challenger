@@ -4,21 +4,19 @@ use crate::primitives::IdentityFieldValue;
 use actix::prelude::*;
 use actix_web::{web, HttpResponse};
 
-#[derive(Default)]
 pub struct SecondChallengeVerifier {
-    // Database is wrapped in `Option' since implementing `SystemService`
-    // requires this type to implement `Default` (which `Database` itself does not).
-    db: Option<Database>,
+    db: Database,
+}
+
+impl Default for SecondChallengeVerifier {
+    fn default() -> Self {
+        panic!("SecondChallengeVerifier is not initialized");
+    }
 }
 
 impl SecondChallengeVerifier {
     pub fn new(db: Database) -> Self {
-        SecondChallengeVerifier { db: Some(db) }
-    }
-    fn get_db(&self) -> crate::Result<&Database> {
-        self.db.as_ref().ok_or(anyhow!(
-            "No database is configured for SecondChallengeVerifier registry service"
-        ))
+        SecondChallengeVerifier { db: db }
     }
 }
 
@@ -33,7 +31,7 @@ impl Handler<VerifyChallenge> for SecondChallengeVerifier {
     type Result = ResponseActFuture<Self, JsonResult<bool>>;
 
     fn handle(&mut self, msg: VerifyChallenge, _ctx: &mut Self::Context) -> Self::Result {
-        let mut db = self.get_db().unwrap().clone();
+        let mut db = self.db.clone();
 
         Box::pin(
             async move {
