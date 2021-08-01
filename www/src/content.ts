@@ -181,7 +181,7 @@ export class ContentManager {
 
         let hint = "";
         if (show_hint) {
-            hint = `<p><strong>Hint:</strong> You can check for valid display names by selecting <em>Check Display Name</em> in the search bar.</p>`
+            hint = `<p><strong>Hint:</strong> You can check for valid display names by selecting <em>"Validate Display Name"</em> in the search bar.</p>`
         }
 
         this.div_display_name_overview.innerHTML = `

@@ -54,7 +54,7 @@ class ActionListerner {
                         + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
                         + "&address="
                         + (document.getElementById("specify-address")! as HTMLInputElement).value;
-                } else if (action == "Check Username") {
+                } else if (action == "Validate Display Name") {
                     this.executeAction();
                 }
             });
@@ -115,7 +115,7 @@ class ActionListerner {
                 let msg = (event as MessageEvent);
                 this.parseAccountStatus(msg);
             });
-        } else if (action == "Check Username") {
+        } else if (action == "Validate Display Name") {
             let display_name = address;
             (async () => {
                 let body = JSON.stringify({
