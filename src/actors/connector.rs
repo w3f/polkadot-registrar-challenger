@@ -371,10 +371,10 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             queue: &mut UnboundedSender<QueueMessage>,
             msg: std::result::Result<Frame, WsProtocolError>,
         ) -> Result<()> {
-            let parsed: ResponseMessage<serde_json::Value> = if let Ok(Frame::Text(txt)) = msg {
-                serde_json::from_slice(&txt)?
-            } else {
-                return Err(anyhow!("invalid message, expected text"));
+            let parsed: ResponseMessage<serde_json::Value> = match msg {
+                Ok(Frame::Text(txt)) => serde_json::from_slice(&txt)?,
+                Ok(Frame::Pong(_)) => return Ok(()),
+                _ => return Err(anyhow!("invalid message, expected text: {:?}", msg)),
             };
 
             match parsed.event {

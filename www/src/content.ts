@@ -1,4 +1,4 @@
-import { State, Violation } from './json';
+import { DisplayNameChallenge, State, Violation } from './json';
 
 export function capitalizeFirstLetter(word: string) {
     return (word.charAt(0).toUpperCase() + word.slice(1))
@@ -17,7 +17,7 @@ const BadgeUnverified = `
     <span class="badge bg-warning text-dark">unverified</span>
 `;
 
-const BadgeValid = `
+export const BadgeValid = `
     <span class="badge bg-success">valid</span>
 `;
 
@@ -106,16 +106,16 @@ export class ContentManager {
                     `;
 
                 counter += 1;
-            } else if (field.challenge.challenge_type == "background_check" && field.value.type == "display_name") {
+            } else if (field.challenge.challenge_type == "display_name_check") {
                 let validity;
 
-                if (field.challenge.content.passed) {
-                    validity = BadgeValid;
+                let challenge: DisplayNameChallenge = field.challenge.content;
+                if (challenge.passed) {
+                    this.setDisplayNameVerification(field.value.value, BadgeValid);
                 } else {
                     validity = BadgeInvalid;
+                    this.setDisplayNameViolation(field.value.value, challenge.violations);
                 }
-
-                this.setDisplayNameVerification(field.value.value, validity)
             }
 
             // Apply table to the page.
@@ -176,13 +176,13 @@ export class ContentManager {
     setDisplayNameViolation(name: string, violations: Violation[]) {
         let listed = "";
         for (let v of violations) {
-            listed += `<li>"${v.display_name}" (by account ${v.context.address})</li>`
+            listed += `<li>"${v.display_name}" (by account <em>${v.context.address}</em>)</li>`
         }
 
         this.div_display_name_overview.innerHTML = `
             <div class="col-10 ">
                 <h2>Display name check</h2>
-                <p>The display name <strong>${name}</strong> is ${BadgeInvalid}</p>
+                <p>The display name <strong>${name}</strong> is ${BadgeInvalid}. It's too similar to existing display name(s):</p>
                 <ul>
                     ${listed}
                 </ul>

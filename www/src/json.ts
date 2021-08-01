@@ -33,13 +33,17 @@ export interface FieldValue {
 
 export interface Challenge {
     challenge_type: string;
-    content: Content;
+    content: any;
 }
 
 export interface Content {
-    passed?: boolean;
     expected: Expected;
     second?: Expected;
+}
+
+export interface DisplayNameChallenge {
+    passed: boolean;
+    violations: Violation[];
 }
 
 export interface Expected {

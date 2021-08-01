@@ -1,5 +1,5 @@
 import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
-import { ContentManager, capitalizeFirstLetter } from './content';
+import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
 
 class ActionListerner {
@@ -48,10 +48,15 @@ class ActionListerner {
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => {
-                window.location.href = "?network="
-                    + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
-                    + "&address="
-                    + (document.getElementById("specify-address")! as HTMLInputElement).value;
+                let action = document.getElementById("specify-action")!.innerHTML;
+                if (action == "Request Judgement") {
+                    window.location.href = "?network="
+                        + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
+                        + "&address="
+                        + (document.getElementById("specify-address")! as HTMLInputElement).value;
+                } else if (action == "Check Username") {
+                    this.executeAction();
+                }
             });
 
         this.specify_address
@@ -77,6 +82,7 @@ class ActionListerner {
         let params = new URLSearchParams(window.location.search);
         let network = params.get("network");
         let address = params.get("address");
+
         if (network != null && address != null) {
             (document.getElementById("specify-network")! as HTMLInputElement).innerHTML = capitalizeFirstLetter(network);
             (document.getElementById("specify-address")! as HTMLInputElement).value = address;
@@ -116,7 +122,7 @@ class ActionListerner {
                     check: display_name,
                 });
 
-                let response = await fetch("http://localhost:8001/api/verify_second_challenge",
+                let response = await fetch("http://localhost:8001/api/check_display_name",
                 {
                     method: "POST",
                     headers: {
@@ -131,13 +137,14 @@ class ActionListerner {
         }
     }
     parseDisplayNameCheck(data: AccountStatus, display_name: string) {
+        console.log(data);
         if (data.result_type == "ok") {
             let check: CheckDisplayNameResult = data.message;
             if (check.type == "ok") {
-
+                this.manager.setDisplayNameVerification(display_name, BadgeValid);
             } else if (check.type = "violations") {
                 let violations: Violation[] = check.value;
-
+                this.manager.setDisplayNameViolation(display_name, violations);
             } else {
                 // TODO
             }

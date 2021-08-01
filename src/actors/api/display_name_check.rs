@@ -40,7 +40,7 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
             async move {
                 trace!("Received a similarities check: {:?}", msg);
                 verifier
-                    .check_similarities(msg.check.display_name.as_str())
+                    .check_similarities(msg.check.as_str())
                     .await
                     .map(|violations| {
                         let outcome = if violations.is_empty() {
@@ -68,7 +68,7 @@ pub enum Outcome {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[rtype(result = "JsonResult<Outcome>")]
 pub struct CheckDisplayName {
-    pub check: DisplayNameEntry,
+    pub check: String,
 }
 
 pub async fn check_display_name(req: web::Json<CheckDisplayName>) -> HttpResponse {
