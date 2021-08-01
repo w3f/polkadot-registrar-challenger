@@ -19,6 +19,7 @@ class ActionListerner {
             document
                 .getElementById("specify-network")! as HTMLInputElement;
 
+        // TODO: Rename this element.
         this.specify_address =
             document
                 .getElementById("specify-address")! as HTMLInputElement;
@@ -68,6 +69,17 @@ class ActionListerner {
                     this.specify_network.innerHTML = "Polkadot";
                 } else {
                     this.specify_network.innerHTML = "Kusama";
+                }
+            });
+
+        // Bind 'Enter' key to action button.
+        this.specify_address
+            .addEventListener("keyup", (event: Event) => {
+                // Number 13 is the "Enter" key on the keyboard
+                if ((event as KeyboardEvent).keyCode === 13) {
+                    // Cancel the default action, if needed
+                    event.preventDefault();
+                    this.btn_execute_action.click();
                 }
             });
 
@@ -123,13 +135,13 @@ class ActionListerner {
                 });
 
                 let response = await fetch("http://localhost:8001/api/check_display_name",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: body,
-                });
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: body,
+                    });
 
                 let result: AccountStatus = JSON.parse(await response.text());
                 this.parseDisplayNameCheck(result, display_name);
