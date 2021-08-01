@@ -1,8 +1,10 @@
+// TODO: Rename
 export interface AccountStatus {
     result_type: string;
     message: any;
 }
 
+// TODO: Rename
 export interface ValidMessage {
     state: State;
     notifications: Notification[];

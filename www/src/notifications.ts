@@ -72,6 +72,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         case "identity_inserted": {
             return [
                 `The judgement request has been discovered by the registrar service.`,
+                // TODO: Specify those as constants.
                 "bg-info text-dark"
             ]
         }

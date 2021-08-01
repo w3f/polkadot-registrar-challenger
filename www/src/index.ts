@@ -176,6 +176,11 @@ class ActionListerner {
             this.manager.processVerificationOverviewTable(message.state);
             this.manager.processUnsupportedOverview(message.state);
             this.notifications.processNotifications(message.notifications);
+
+            // This notification should only be displayed if no other notifications are available.
+            if (message.state.is_fully_verified && message.notifications.length == 0) {
+                this.notifications.displayNotification("The identity has been fully verified!", "bg-success text-light")
+            }
         } else if (parsed.result_type == "err") {
             let message: string = parsed.message;
             this.notifications.displayError(message);

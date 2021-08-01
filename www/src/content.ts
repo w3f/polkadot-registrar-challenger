@@ -117,10 +117,10 @@ export class ContentManager {
                     this.setDisplayNameViolation(field.value.value, challenge.violations, true);
                 }
             }
-
-            // Apply table to the page.
-            this.setVerificationOverviewContent(table);
         }
+
+        // Apply table to the page.
+        this.setVerificationOverviewContent(table);
     }
     processUnsupportedOverview(state: State) {
         let unsupported = "";
