@@ -120,13 +120,6 @@ export class ContentManager {
 
             // Apply table to the page.
             this.setVerificationOverviewContent(table);
-
-            // Display banner if fully verified.
-            if (state.is_fully_verified) {
-                this.setFullyVerifiedContent
-            } else {
-                this.wipeFullyVerifiedContent
-            }
         }
     }
     processUnsupportedOverview(state: State) {
@@ -152,18 +145,6 @@ export class ContentManager {
     }
     wipeLiveUpdateInfo() {
         this.div_live_updates_info.innerHTML = "";
-    }
-    setFullyVerifiedContent() {
-        this.div_fully_verified_info.innerHTML = `
-            <div class="row justify-content-center">
-                <div class="col-10 table-responsive bg-success p-2">
-                    <h2 class="text-center text-white">Identity fully verified! ✔</h2>
-                </div>
-            </div>
-        `;
-    }
-    wipeFullyVerifiedContent() {
-        this.div_fully_verified_info.innerHTML = "";
     }
     setDisplayNameVerification(name: string, validity: string) {
         this.div_display_name_overview.innerHTML = `
@@ -282,12 +263,6 @@ export class ContentManager {
 
                 // TODO:
                 //let x = response.json();
-
-                button.innerHTML = `
-                    <div class="spinner-grow spinner-grow-sm" role="status">
-                        <span class="visually-hidden"></span>
-                    </div>
-                `;
             });
     }
     wipeEmailSecondChallengeContent() {

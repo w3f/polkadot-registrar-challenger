@@ -69,6 +69,18 @@ export class NotificationHandler {
 
 function notificationTypeResolver(notification: Notification): [string, string] {
     switch (notification.type) {
+        case "identity_inserted": {
+            return [
+                `The judgement request has been discovered by the registrar service.`,
+                "bg-info text-dark"
+            ]
+        }
+        case "identity_updated": {
+            return [
+                `On-chain identity information has been modified.`,
+                "bg-info text-dark"
+            ]
+        }
         case "field_verified": {
             let data = notification.value as NotificationFieldContext;
             return [
@@ -111,6 +123,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
             ]
         }
         case "judgement_provided": {
+
         }
         default: {
             // TODO
