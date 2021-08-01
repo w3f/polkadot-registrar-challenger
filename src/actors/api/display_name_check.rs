@@ -1,12 +1,11 @@
 use super::JsonResult;
 use crate::actors::connector::DisplayNameEntry;
 use crate::database::Database;
-use crate::primitives::IdentityFieldValue;
+use crate::{display_name::DisplayNameVerifier, DisplayNameConfig};
 use actix::prelude::*;
-use actix_web::{web, HttpResponse};
 
 pub struct DisplayNameChecker {
-    db: Database,
+    verifier: DisplayNameVerifier,
 }
 
 impl Default for DisplayNameChecker {
@@ -16,8 +15,10 @@ impl Default for DisplayNameChecker {
 }
 
 impl DisplayNameChecker {
-    pub fn new(db: Database) -> Self {
-        DisplayNameChecker { db: db }
+    pub fn new(db: Database, config: DisplayNameConfig) -> Self {
+        DisplayNameChecker {
+            verifier: DisplayNameVerifier::new(db, config),
+        }
     }
 }
 
@@ -29,17 +30,41 @@ impl Actor for DisplayNameChecker {
 }
 
 impl Handler<CheckDisplayName> for DisplayNameChecker {
-    type Result = ResponseActFuture<Self, JsonResult<bool>>;
+    type Result = ResponseActFuture<Self, JsonResult<Outcome>>;
 
     fn handle(&mut self, msg: CheckDisplayName, _ctx: &mut Self::Context) -> Self::Result {
-        let mut db = self.db.clone();
+        let verifier = self.verifier.clone();
 
-        unimplemented!()
+        Box::pin(
+            async move {
+                debug!("");
+                verifier
+                    .check_similarities(msg.check.display_name.as_str())
+                    .await
+                    .map(|violations| {
+                        let outcome = if violations.is_empty() {
+                            Outcome::Ok
+                        } else {
+                            Outcome::Violations(violations)
+                        };
+
+                        JsonResult::Ok(outcome)
+                    })
+                    .unwrap()
+            }
+            .into_actor(self),
+        )
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Outcome {
+    Ok,
+    Violations(Vec<DisplayNameEntry>),
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Message)]
-#[rtype(result = "JsonResult<bool>")]
+#[rtype(result = "JsonResult<Outcome>")]
 pub struct CheckDisplayName {
-    pub display_name: DisplayNameEntry,
+    pub check: DisplayNameEntry,
 }

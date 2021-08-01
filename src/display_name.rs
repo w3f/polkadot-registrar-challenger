@@ -1,3 +1,4 @@
+use crate::actors::connector::DisplayNameEntry;
 use crate::database::Database;
 use crate::primitives::JudgementState;
 use crate::{DisplayNameConfig, Result};
@@ -5,6 +6,7 @@ use strsim::jaro;
 
 const VIOLATIONS_CAP: usize = 5;
 
+#[derive(Debug, Clone)]
 pub struct DisplayNameVerifier {
     db: Database,
     config: DisplayNameConfig,
@@ -17,6 +19,23 @@ impl DisplayNameVerifier {
             config: config,
         }
     }
+    pub async fn check_similarities(&self, name: &str) -> Result<Vec<DisplayNameEntry>> {
+        let current = self.db.fetch_display_names().await?;
+
+        let mut violations = vec![];
+        for existing in current {
+            if is_too_similar(&name, &existing.display_name, self.config.limit) {
+                // Only show up to `VIOLATIONS_CAP` violations.
+                if violations.len() == VIOLATIONS_CAP {
+                    break;
+                }
+
+                violations.push(existing);
+            }
+        }
+
+        Ok(violations)
+    }
     pub async fn verify_display_name(&self, state: &JudgementState) -> Result<()> {
         if !self.config.enabled {
             return Ok(());
@@ -28,19 +47,7 @@ impl DisplayNameVerifier {
             return Ok(());
         };
 
-        let current = self.db.fetch_display_names().await?;
-        let mut violations = vec![];
-
-        for existing in current {
-            if is_too_similar(&name, &existing.display_name, self.config.limit) {
-                // Only show up to `VIOLATIONS_CAP` violations.
-                if violations.len() == VIOLATIONS_CAP {
-                    break;
-                }
-
-                violations.push(existing);
-            }
-        }
+        let violations = self.check_similarities(name).await?;
 
         if !violations.is_empty() {
             self.db
