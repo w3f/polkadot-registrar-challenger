@@ -59,6 +59,7 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
 pub enum Outcome {
     Ok,
     Violations(Vec<DisplayNameEntry>),

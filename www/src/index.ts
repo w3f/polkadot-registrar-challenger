@@ -1,4 +1,4 @@
-import { ValidMessage, AccountStatus, Notification } from "./json";
+import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
 import { ContentManager, capitalizeFirstLetter } from './content';
 import { NotificationHandler } from "./notifications";
 
@@ -87,6 +87,7 @@ class ActionListerner {
         this.btn_execute_action.disabled = true;
 
         const action = document.getElementById("specify-action")!.innerHTML;
+        // TODO: Rename this, can be both address or display name.
         const address = this.specify_address.value;
         const network = this.specify_network.innerHTML.toLowerCase();
 
@@ -108,6 +109,42 @@ class ActionListerner {
                 let msg = (event as MessageEvent);
                 this.parseAccountStatus(msg);
             });
+        } else if (action == "Check Username") {
+            let display_name = address;
+            (async () => {
+                let body = JSON.stringify({
+                    check: display_name,
+                });
+
+                let response = await fetch("http://localhost:8001/api/verify_second_challenge",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: body,
+                });
+
+                let result: AccountStatus = JSON.parse(await response.text());
+                this.parseDisplayNameCheck(result, display_name);
+            })();
+        }
+    }
+    parseDisplayNameCheck(data: AccountStatus, display_name: string) {
+        if (data.result_type == "ok") {
+            let check: CheckDisplayNameResult = data.message;
+            if (check.type == "ok") {
+
+            } else if (check.type = "violations") {
+                let violations: Violation[] = check.value;
+
+            } else {
+                // TODO
+            }
+        } else if (data.result_type == "err") {
+            // TODO
+        } else {
+            // TODO
         }
     }
     parseAccountStatus(msg: MessageEvent) {
@@ -132,7 +169,7 @@ class ActionListerner {
             this.btn_execute_action.innerHTML = `Go!`;
             this.btn_execute_action.disabled = false;
         } else {
-            // Print unexpected error...
+            // TODO: Print unexpected error...
         }
     }
 }

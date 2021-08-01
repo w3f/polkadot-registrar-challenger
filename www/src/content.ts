@@ -1,4 +1,4 @@
-import { State } from './json';
+import { State, Violation } from './json';
 
 export function capitalizeFirstLetter(word: string) {
     return (word.charAt(0).toUpperCase() + word.slice(1))
@@ -170,6 +170,22 @@ export class ContentManager {
             <div class="col-10 ">
                 <h2>Display name check</h2>
                 <p>The display name <strong>${name}</strong> is ${validity}</p>
+            </div>
+        `;
+    }
+    setDisplayNameViolation(name: string, violations: Violation[]) {
+        let listed = "";
+        for (let v of violations) {
+            listed += `<li>"${v.display_name}" (by account ${v.context.address})</li>`
+        }
+
+        this.div_display_name_overview.innerHTML = `
+            <div class="col-10 ">
+                <h2>Display name check</h2>
+                <p>The display name <strong>${name}</strong> is ${BadgeInvalid}</p>
+                <ul>
+                    ${listed}
+                </ul>
             </div>
         `;
     }

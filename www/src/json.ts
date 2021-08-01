@@ -53,6 +53,16 @@ export interface Notification {
 }
 
 export interface NotificationFieldContext {
+    context: Context;
+    field: FieldValue;
+}
+
+export interface CheckDisplayNameResult {
+    type: string;
+    value: any;
+}
+
+export interface Violation {
     context: Context,
-    field: FieldValue,
+    display_name: string,
 }
