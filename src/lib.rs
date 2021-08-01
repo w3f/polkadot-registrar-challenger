@@ -65,16 +65,17 @@ pub struct DatabaseConfig {
 #[serde(rename_all = "snake_case")]
 pub struct NotifierConfig {
     pub api_address: String,
+    pub display_name: DisplayNameConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct AdapterConfig {
     pub watcher: Vec<WatcherConfig>,
-    pub display_name: DisplayNameConfig,
     pub matrix: MatrixConfig,
     pub twitter: TwitterConfig,
     pub email: EmailConfig,
+    pub display_name: DisplayNameConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -165,9 +166,12 @@ async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfi
     run_connector(db, watchers, config.display_name).await
 }
 
-async fn config_session_notifier(db_config: DatabaseConfig, config: NotifierConfig) -> Result<()> {
+async fn config_session_notifier(
+    db_config: DatabaseConfig,
+    not_config: NotifierConfig,
+) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.db_name).await?;
-    let lookup = run_rest_api_server(&config.api_address, db.clone()).await?;
+    let lookup = run_rest_api_server(not_config, db.clone()).await?;
 
     // TODO: Should be executed in `run_rest_api_server`
     actix::spawn(async move { SessionNotifier::new(db, lookup).run_blocking().await });

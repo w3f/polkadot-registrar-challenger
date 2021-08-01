@@ -3,6 +3,7 @@ use crate::actors::connector::DisplayNameEntry;
 use crate::database::Database;
 use crate::{display_name::DisplayNameVerifier, DisplayNameConfig};
 use actix::prelude::*;
+use actix_web::{web, HttpResponse};
 
 pub struct DisplayNameChecker {
     verifier: DisplayNameVerifier,
@@ -37,7 +38,7 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
 
         Box::pin(
             async move {
-                debug!("");
+                trace!("Received a similarities check: {:?}", msg);
                 verifier
                     .check_similarities(msg.check.display_name.as_str())
                     .await
@@ -67,4 +68,13 @@ pub enum Outcome {
 #[rtype(result = "JsonResult<Outcome>")]
 pub struct CheckDisplayName {
     pub check: DisplayNameEntry,
+}
+
+pub async fn check_display_name(req: web::Json<CheckDisplayName>) -> HttpResponse {
+    HttpResponse::Ok().json(
+        DisplayNameChecker::from_registry()
+            .send(req.into_inner())
+            .await
+            .unwrap(),
+    )
 }

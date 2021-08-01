@@ -1,11 +1,12 @@
 use self::judgement_state::WsAccountStatusSession;
 use crate::database::Database;
-use crate::Result;
+use crate::{NotifierConfig, Result};
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_cors::Cors;
 use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
+use display_name_check::{check_display_name, DisplayNameChecker};
 use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
 
 mod display_name_check;
@@ -26,11 +27,15 @@ pub enum JsonResult<T> {
     Err(String),
 }
 
-pub async fn run_rest_api_server(addr: &str, db: Database) -> Result<Addr<LookupServer>> {
+pub async fn run_rest_api_server(
+    config: NotifierConfig,
+    db: Database,
+) -> Result<Addr<LookupServer>> {
     // Add configured actor to the registry.
     let actor = LookupServer::new(db.clone()).start();
     SystemRegistry::set(actor.clone());
-    SystemRegistry::set(SecondChallengeVerifier::new(db).start());
+    SystemRegistry::set(SecondChallengeVerifier::new(db.clone()).start());
+    SystemRegistry::set(DisplayNameChecker::new(db, config.display_name).start());
 
     // Run the WS server.
     let server = HttpServer::new(move || {
@@ -43,8 +48,12 @@ pub async fn run_rest_api_server(addr: &str, db: Database) -> Result<Addr<Lookup
                 "/api/verify_second_challenge",
                 web::post().to(verify_second_challenge),
             )
+            .route(
+                "/api/check_display_name",
+                web::post().to(check_display_name),
+            )
     })
-    .bind(addr)?;
+    .bind(config.api_address.as_str())?;
 
     server.run();
     Ok(actor)
@@ -61,24 +70,43 @@ async fn account_status_server_route(
 pub mod tests {
     use super::*;
     use crate::database::Database;
+    use crate::DisplayNameConfig;
     use actix_test::{start, TestServer};
+
+    impl Default for DisplayNameConfig {
+        fn default() -> Self {
+            DisplayNameConfig {
+                enabled: false,
+                limit: 0.85,
+            }
+        }
+    }
 
     #[cfg(test)]
     // TODO: Unify this with the `run_rest_api_server_blocking` function above.
     pub async fn run_test_server(db: Database) -> (TestServer, Addr<LookupServer>) {
         // TODO: Use Actor::create?
         let actor = LookupServer::new(db.clone()).start();
-        let verifier = SecondChallengeVerifier::new(db.clone()).start();
 
         let t_actor = actor.clone();
         let server = start(move || {
             // Add configured actor to the registry.
             SystemRegistry::set(t_actor.clone());
-            SystemRegistry::set(verifier.clone());
+            SystemRegistry::set(SecondChallengeVerifier::new(db.clone()).start());
+            SystemRegistry::set(
+                DisplayNameChecker::new(db.clone(), DisplayNameConfig::default()).start(),
+            );
 
             App::new()
                 .service(web::resource("/api/account_status").to(account_status_server_route))
-                .service(web::resource("/api/verify_second_challenge").to(verify_second_challenge))
+                .route(
+                    "/api/verify_second_challenge",
+                    web::post().to(verify_second_challenge),
+                )
+                .route(
+                    "/api/check_display_name",
+                    web::post().to(check_display_name),
+                )
         });
 
         (server, actor)
