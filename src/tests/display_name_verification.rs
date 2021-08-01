@@ -32,7 +32,7 @@ async fn valid_display_name() {
     let verifier = DisplayNameVerifier::new(db.clone(), config());
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
+    let mut alice = JudgementState::alice();
     db.add_judgement_request(&alice).await.unwrap();
     verifier.verify_display_name(&alice).await.unwrap();
 
@@ -41,11 +41,20 @@ async fn valid_display_name() {
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
+    // Set expected result.
+    let mut field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
+    let (passed, violations) = field.expected_display_name_check_mut();
+    *passed = true;
+    *violations = vec![];
+
+    let expected = ResponseAccountState {
+        state: alice.into(),
+        // TODO: Should probably have some.
+        notifications: vec![],
+    };
+
     // Check current state.
-    assert_eq!(
-        resp,
-        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
-    );
+    assert_eq!(resp, JsonResult::Ok(expected));
 }
 
 #[actix::test]
@@ -87,5 +96,5 @@ async fn invalid_display_name() {
     };
 
     // Check expected state.
-    assert_eq!(resp, JsonResult::Ok(expected),);
+    assert_eq!(resp, JsonResult::Ok(expected));
 }

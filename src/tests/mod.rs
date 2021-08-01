@@ -34,10 +34,6 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
     }
 }
 
-async fn wait() {
-    sleep(Duration::from_secs(1)).await;
-}
-
 async fn new_env() -> (Database, TestServer, MessageInjector) {
     // Setup MongoDb database.
     let random: u32 = thread_rng().gen_range(u32::MIN, u32::MAX);

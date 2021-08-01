@@ -519,6 +519,25 @@ impl Database {
 
         Ok(names)
     }
+    pub async fn set_display_name_valid(&self, context: &IdentityContext) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        coll.update_one(
+            doc! {
+                "context": context.to_bson()?,
+                "fields.value.type": "display_name",
+            },
+            doc! {
+                "$set": {
+                    "fields.$.challenge.content.passed": true,
+                }
+            },
+            None,
+        )
+        .await?;
+
+        Ok(())
+    }
     // TODO: Consider creating an event.
     pub async fn insert_display_name_violations(
         &self,
@@ -534,6 +553,7 @@ impl Database {
             },
             doc! {
                 "$set": {
+                    "fields.$.challenge.content.passed": false,
                     "fields.$.challenge.content.violations": violations.to_bson()?
                 }
             },

@@ -26,7 +26,6 @@ async fn current_judgement_state_single_identity() {
     );
 
     // Empty stream.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -52,7 +51,6 @@ async fn current_judgement_state_multiple_inserts() {
     );
 
     // Empty stream.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -86,7 +84,6 @@ async fn current_judgement_state_multiple_identities() {
     );
 
     // Empty stream.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -147,7 +144,6 @@ async fn verify_invalid_message_bad_challenge() {
     );
 
     // Empty stream.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -186,7 +182,6 @@ async fn verify_invalid_message_bad_origin() {
         .await;
 
     // No response is sent.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 
     // Other judgement states must be unaffected.
@@ -198,7 +193,6 @@ async fn verify_invalid_message_bad_origin() {
     );
 
     // Empty stream.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 }
 
@@ -264,6 +258,5 @@ async fn verify_valid_message() {
     );
 
     // Empty stream.
-    wait().await;
     assert!(stream.next().now_or_never().is_none());
 }

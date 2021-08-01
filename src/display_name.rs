@@ -54,7 +54,7 @@ impl DisplayNameVerifier {
                 .insert_display_name_violations(&state.context, &violations)
                 .await?;
         } else {
-            // TODO: Set valid.
+            self.db.set_display_name_valid(&state.context).await?;
         }
 
         Ok(())
