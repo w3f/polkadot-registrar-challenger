@@ -68,27 +68,6 @@ impl IdentityField {
         }
     }
     #[cfg(test)]
-    // TODO: Why wrapped in Option?
-    pub fn expected_second(&self) -> &Option<ExpectedMessage> {
-        match &self.challenge {
-            ChallengeType::ExpectedMessage {
-                expected: _,
-                second,
-            } => second,
-            _ => panic!(),
-        }
-    }
-    #[cfg(test)]
-    pub fn expected_second_mut(&mut self) -> &mut Option<ExpectedMessage> {
-        match &mut self.challenge {
-            ChallengeType::ExpectedMessage {
-                expected: _,
-                ref mut second,
-            } => second,
-            _ => panic!(),
-        }
-    }
-    #[cfg(test)]
     pub fn failed_attempts_mut(&mut self) -> &mut isize {
         &mut self.failed_attempts
     }
@@ -559,22 +538,6 @@ mod tests {
                     IdentityField::new(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
                 ],
             }
-        }
-        pub fn alice_add_unsupported(&mut self) {
-            // Prevent duplicates.
-            self.remove_unsupported();
-
-            self.fields.append(&mut vec![
-                IdentityField::new(IdentityFieldValue::LegalName("Alice Cooper".to_string())),
-                IdentityField::new(IdentityFieldValue::Web("alice.com".to_string())),
-            ])
-        }
-        pub fn remove_unsupported(&mut self) {
-            self.fields.retain(|field| match field.value {
-                IdentityFieldValue::LegalName(_) => false,
-                IdentityFieldValue::Web(_) => false,
-                _ => true,
-            })
         }
         pub fn bob() -> Self {
             JudgementState {

@@ -2,12 +2,9 @@ use super::*;
 use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::actors::connector::DisplayNameEntry;
 use crate::display_name::DisplayNameVerifier;
-use crate::primitives::{
-    ChainAddress, ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext,
-    IdentityFieldValue, JudgementState, MessageId, NotificationMessage, Timestamp,
-};
+use crate::primitives::{IdentityContext, IdentityFieldValue, JudgementState};
 use crate::DisplayNameConfig;
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 
 impl From<&str> for DisplayNameEntry {
     fn from(val: &str) -> Self {
@@ -42,7 +39,7 @@ async fn valid_display_name() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Set expected result.
-    let mut field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
+    let field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
     let (passed, violations) = field.expected_display_name_check_mut();
     *passed = true;
     *violations = vec![];
@@ -84,7 +81,7 @@ async fn invalid_display_name() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Set expected result.
-    let mut field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
+    let field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
     let (passed, violations) = field.expected_display_name_check_mut();
     *passed = false;
     *violations = names;
