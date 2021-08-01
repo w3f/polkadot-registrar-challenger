@@ -144,7 +144,7 @@ class ActionListerner {
                 this.manager.setDisplayNameVerification(display_name, BadgeValid);
             } else if (check.type = "violations") {
                 let violations: Violation[] = check.value;
-                this.manager.setDisplayNameViolation(display_name, violations);
+                this.manager.setDisplayNameViolation(display_name, violations, false);
             } else {
                 // TODO
             }
@@ -153,6 +153,14 @@ class ActionListerner {
         } else {
             // TODO
         }
+
+        this.btn_execute_action.innerHTML = `Go!`;
+        this.btn_execute_action.disabled = false;
+
+        this.manager.wipeLiveUpdateInfo();
+        this.manager.wipeVerificationOverviewContent();
+        this.manager.wipeEmailSecondChallengeContent();
+        this.manager.wipeUnsupportedContent();
     }
     parseAccountStatus(msg: MessageEvent) {
         const parsed: AccountStatus = JSON.parse(msg.data);

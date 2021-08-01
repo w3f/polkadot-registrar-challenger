@@ -443,6 +443,12 @@ impl Event {
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 #[rtype(result = "()")]
 pub enum NotificationMessage {
+    IdentityInserted {
+        context: IdentityContext,
+    },
+    IdentityUpdated {
+        context: IdentityContext,
+    },
     FieldVerified {
         context: IdentityContext,
         field: IdentityFieldValue,
@@ -481,6 +487,8 @@ impl NotificationMessage {
         use NotificationMessage::*;
 
         match self {
+            IdentityInserted { context } => context,
+            IdentityUpdated { context } => context,
             FieldVerified { context, field: _ } => context,
             FieldVerificationFailed { context, field: _ } => context,
             SecondFieldVerified { context, field: _ } => context,

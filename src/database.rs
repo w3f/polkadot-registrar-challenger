@@ -43,6 +43,7 @@ impl Database {
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
+        let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
         // field gets updated during pending judgement process).
@@ -88,6 +89,7 @@ impl Database {
             current.fields = to_add;
 
             // Update the final value in database.
+            // TODO: Check modified count.
             coll.update_one(
                 doc! {
                     "context": request.context.to_bson()?
@@ -101,9 +103,28 @@ impl Database {
                 None,
             )
             .await?;
-            // TODO: Check modified count.
+
+            // Create event.
+            event_log
+                .insert_one(
+                    Event::new(NotificationMessage::IdentityUpdated {
+                        context: request.context.clone(),
+                    }),
+                    None,
+                )
+                .await?;
         } else {
             coll.insert_one(request.to_document()?, None).await?;
+
+            // Create event.
+            event_log
+                .insert_one(
+                    Event::new(NotificationMessage::IdentityInserted {
+                        context: request.context.clone(),
+                    }),
+                    None,
+                )
+                .await?;
         }
 
         Ok(())

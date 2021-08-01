@@ -114,7 +114,7 @@ export class ContentManager {
                     this.setDisplayNameVerification(field.value.value, BadgeValid);
                 } else {
                     validity = BadgeInvalid;
-                    this.setDisplayNameViolation(field.value.value, challenge.violations);
+                    this.setDisplayNameViolation(field.value.value, challenge.violations, true);
                 }
             }
 
@@ -173,10 +173,15 @@ export class ContentManager {
             </div>
         `;
     }
-    setDisplayNameViolation(name: string, violations: Violation[]) {
+    setDisplayNameViolation(name: string, violations: Violation[], show_hint: boolean) {
         let listed = "";
         for (let v of violations) {
             listed += `<li>"${v.display_name}" (by account <em>${v.context.address}</em>)</li>`
+        }
+
+        let hint = "";
+        if (show_hint) {
+            hint = `<p><strong>Hint:</strong> You can check for valid display names by selecting <em>Check Display Name</em> in the search bar.</p>`
         }
 
         this.div_display_name_overview.innerHTML = `
@@ -186,6 +191,7 @@ export class ContentManager {
                 <ul>
                     ${listed}
                 </ul>
+                ${hint}
             </div>
         `;
     }
@@ -215,6 +221,9 @@ export class ContentManager {
                 </table>
             </div>
         `;
+    }
+    wipeVerificationOverviewContent() {
+        this.div_verification_overview.innerHTML = "";
     }
     setEmailSecondChallengeContent(address: string) {
         this.div_email_second_challenge.innerHTML = `
