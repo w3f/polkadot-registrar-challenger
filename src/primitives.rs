@@ -229,8 +229,8 @@ pub struct JudgementStateBlanked {
     pub context: IdentityContext,
     pub is_fully_verified: bool,
     pub inserted_timestamp: Timestamp,
-    pub completion_timestamp: Option<Timestamp>,
     pub judgement_submitted: bool,
+    pub completion_timestamp: Option<Timestamp>,
     pub fields: Vec<IdentityFieldBlanked>,
 }
 

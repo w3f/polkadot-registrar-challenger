@@ -489,8 +489,9 @@ impl Database {
 
         Ok(completed)
     }
-    pub async fn set_submitted(&self, context: &IdentityContext) -> Result<()> {
+    pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+        let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
         coll.update_one(
             doc! {
@@ -499,11 +500,22 @@ impl Database {
             doc! {
                 "$set": {
                     "judgement_submitted": true,
+                    "completion_timestamp": Timestamp::now().raw(),
                 }
             },
             None,
         )
         .await?;
+
+        // Create event.
+        event_log
+            .insert_one(
+                Event::new(NotificationMessage::JudgementProvided {
+                    context: context.clone(),
+                }),
+                None,
+            )
+            .await?;
 
         Ok(())
     }

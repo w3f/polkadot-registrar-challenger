@@ -139,9 +139,13 @@ async fn run_queue_processor(
             match message {
                 QueueMessage::Ack(data) => {
                     // TODO: Check the "result"
-                    if let Some(address) = data.address {
-                        let context = create_context(address);
-                        db.set_submitted(&context).await?;
+                    if data.result == "judgement given" {
+                        let context = create_context(data.address.ok_or(anyhow!(
+                            "no address specified in 'judgement given' response from Watcher"
+                        ))?);
+
+                        info!("Marking {:?} as judged", context);
+                        db.set_judged(&context).await?;
                     }
                 }
                 QueueMessage::NewJudgementRequest(data) => {
