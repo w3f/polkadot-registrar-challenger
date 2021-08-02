@@ -6,7 +6,11 @@ instance:
   type: single_instance
   config:
     adapter:
-      watcher_endpoint: ws://some.url
+      watcher:
+        - network: kusama
+          endpoint: ws://localhost:8000
+        - network: polkadot
+          endpoint: ws://localhost:8001
       matrix:
         enabled: false
         homeserver: homeserver
@@ -28,5 +32,11 @@ instance:
         user: user
         password: password
         request_interval: 5
+      display_name:
+        enabled: true
+        limit: 0.85
     notifier:
       api_address: 127.0.0.1:80 
+      display_name:
+        enabled: true
+        limit: 0.85

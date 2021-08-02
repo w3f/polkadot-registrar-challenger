@@ -5,7 +5,11 @@ db:
 instance:
   type: adapter_listener
   config:
-    watcher_endpoint: ws://some.url
+    watcher:
+      - network: kusama
+        endpoint: ws://localhost:8000
+      - network: polkadot
+        endpoint: ws://localhost:8001
     matrix:
       enabled: false
       homeserver: homeserver
