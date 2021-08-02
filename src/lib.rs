@@ -39,7 +39,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type", content = "config")]
+#[serde(rename_all = "snake_case", tag = "a_type", content = "config")]
 pub enum InstanceType {
     AdapterListener(AdapterConfig),
     SessionNotifier(NotifierConfig),
@@ -58,7 +58,7 @@ pub struct SingleInstanceConfig {
 #[serde(rename_all = "snake_case")]
 pub struct DatabaseConfig {
     pub uri: String,
-    pub db_name: String,
+    pub name: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,7 +158,7 @@ pub fn init_env() -> Result<Config> {
 }
 
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
-    let db = Database::new(&db_config.uri, &db_config.db_name).await?;
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
 
     // TODO: Pretty all the clones?
     let watchers = config.watcher.clone();
@@ -170,7 +170,7 @@ async fn config_session_notifier(
     db_config: DatabaseConfig,
     not_config: NotifierConfig,
 ) -> Result<()> {
-    let db = Database::new(&db_config.uri, &db_config.db_name).await?;
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
     let lookup = run_rest_api_server(not_config, db.clone()).await?;
 
     // TODO: Should be executed in `run_rest_api_server`
