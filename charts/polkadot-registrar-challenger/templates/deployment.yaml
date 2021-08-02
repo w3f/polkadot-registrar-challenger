@@ -16,12 +16,12 @@ spec:
     spec:
       containers:
         - name: {{ .Chart.Name }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           volumeMounts:
-          - name: app
-            mountPath: /app/
+          - name: config
+            mountPath: /etc/registrar
       volumes:
-      - name: app
+      - name: config
         configMap:
           name: {{ .Release.Name }}
