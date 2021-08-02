@@ -12,18 +12,14 @@ image:
 {{- if eq .Environment.Name "production" }}
 
 config:
-  log_level: debug
-  db:
-    uri: mongodb://localhost:27017/
-    db_name: registrar_db
   instance:
     type: adapter_listener
     config:
       watcher:
         - network: kusama
-          endpoint: ws://localhost:8000
-        - network: polkadot
           endpoint: ws://localhost:8001
+        - network: polkadot
+          endpoint: ws://localhost:8002
       matrix:
         enabled: true
         homeserver: https://matrix.web3.foundation

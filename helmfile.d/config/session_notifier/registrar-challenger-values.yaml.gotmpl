@@ -12,14 +12,10 @@ image:
 {{- if eq .Environment.Name "production" }}
 
 config:
-  log_level: debug
-  db:
-    uri: mongodb://localhost:27017/
-    db_name: registrar_db
   instance:
     type: session_notifier
     config:
-      api_address: 127.0.0.1:80
+      api_address: 127.0.0.1:8000
       display_name:
         enabled: true
         limit: 0.85
