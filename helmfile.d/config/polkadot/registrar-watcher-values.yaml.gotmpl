@@ -1,0 +1,13 @@
+config:
+  node:
+    endpoint: "ws://polkadot-rpc-node-base-services-external-websockets.polkadot:9944"
+  registrar:
+    index: 0
+    proxy:
+      enabled: true
+      primaryAccount: {{ env "REGISTRAR_POLKADOT_PRIMARY_ADDR" }}
+
+secret:
+  registrarPasswordValue: {{ env "REGISTRAR_POLKADOT_PASS" }}
+  registrarWalletValue: |
+    {{ env "REGISTRAR_POLKADOT_WALLET" }}    
