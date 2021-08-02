@@ -14,8 +14,8 @@ image:
 config:
   log_level: debug
   db:
-    uri: mongodb://localhost:27017/
-    db_name: registrar_db
+    uri: "mongodb://{{ env "MONGO_USERNAME" | default "username" }}:{{ env "MONGO_PASSWORD" | default "password123" }}@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017/{{ env "MONGO_DB" | default "registrar" }}"
+    name: {{ env "MONGO_DB" | default "registrar" }}
 
 resources:
   requests:
