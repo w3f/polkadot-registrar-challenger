@@ -1,14 +1,3 @@
-environment: {{ .Environment.Name }}
-
-{{ if eq .Environment.Name "ci" }}
-image:
-  tag: {{ env "CIRCLE_SHA1" | default "kind" }}
-{{ else if eq .Environment.Name "local" }}
-image:
-  repo: localhost:5000/polkadot-registrar-watcher
-  tag: latest
-{{ end }}
-
 config:
   port: 3000
   portWs: 3001
@@ -18,7 +7,6 @@ config:
       walletFilePath: '/app/keystore/wallet/wallet.json'
       passwordFilePath: '/app/keystore/password/password'
 
-{{- if eq .Environment.Name "production" }}
 resources:
   requests:
     cpu: "300m"
@@ -26,4 +14,3 @@ resources:
   limits:
     cpu: "500m"
     memory: "700Mi"
-{{- end }}    

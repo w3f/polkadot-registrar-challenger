@@ -14,7 +14,7 @@ auth:
   rootPassword: {{ env "MONGO_ROOT_PASSWORD" | default "root123123" }}
   username: {{ env "MONGO_USERNAME" | default "username" }}
   password: {{ env "MONGO_PASSWORD" | default "password123" }}
-  database: {{ env "MONGO_DB" | default "monitor" }}
+  database: {{ env "MONGO_DB" | default "registrar" }}
   replicaSetKey: {{ env "MONGO_RS_KEY" | default "rskey123456789" }}
 
 tls:
