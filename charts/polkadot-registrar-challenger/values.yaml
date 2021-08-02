@@ -5,28 +5,49 @@ image:
   tag: v0.1.34
 
 config:
-  port: 8080
-  registrar_db_path: "/app/db/registrar/registrar.db"
-  matrix_db_path: "/app/db/matrix/matrix.db"
-  log_level: "DEBUG"
-  watcher_url: "ws://localhost:3001"
-  enable_watcher: true
-  enable_accounts: true
-  enable_health_check: true
-  matrix_homeserver: "https://matrix.web3.foundation"
-  matrix_username: "test-account"
-  matrix_password: "XXXXXX"
-  twitter_screen_name: "twitter_screen_name"
-  twitter_api_key: "twitter_api_key"
-  twitter_api_secret: "twitter_api_secret"
-  twitter_token: "twitter_token"
-  twitter_token_secret: "twitter_token_secret"
-  imap_server: "imap.gmail.com"
-  email_server: "smtp-relay.gmail.com"
-  email_inbox: "INBOX"
-  email_user: "test@test.test"
-  email_password: "email_password"
-   
+  log_level: debug
+  db:
+    uri: mongodb://localhost:27017/
+    db_name: registrar_db
+  instance:
+    type: single_instance
+    config:
+      adapter:
+        watcher:
+          - network: kusama
+            endpoint: ws://localhost:8000
+          - network: polkadot
+            endpoint: ws://localhost:8001
+        matrix:
+          enabled: true
+          homeserver: https://matrix.org
+          username: matrix_username
+          password: matrix_password
+          db_path: /tmp/matrix.db
+        twitter:
+          enabled: false
+          api_key: twitter_api_key
+          api_secret: twitter_api_secret
+          token: twitter_token
+          token_secret: twitter_token_secret
+          request_interval: 300
+        email:
+          enabled: true
+          smtp_server: smtp_server
+          imap_server: imap_server
+          inbox: INBOX
+          user: email_user
+          password: email_password
+          request_interval: 5
+        display_name:
+          enabled: true
+          limit: 0.85
+      notifier:
+        api_address: 127.0.0.1:80
+        display_name:
+          enabled: true
+          limit: 0.85
+
 resources: 
   requests:
     cpu: "300m"

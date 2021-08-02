@@ -1,0 +1,60 @@
+environment: {{ .Environment.Name }}
+
+{{ if eq .Environment.Name "ci" }}
+image:
+  tag: {{ env "CIRCLE_SHA1" | default "kind" }}
+{{ else if eq .Environment.Name "local" }}
+image:
+  repo: localhost:5000/polkadot-registrar-challenger
+  tag: latest
+{{ end }}
+
+{{- if eq .Environment.Name "production" }}
+
+config:
+  log_level: debug
+  db:
+    uri: mongodb://localhost:27017/
+    db_name: registrar_db
+  instance:
+    type: adapter_listener
+    config:
+      watcher:
+        - network: kusama
+          endpoint: ws://localhost:8000
+        - network: polkadot
+          endpoint: ws://localhost:8001
+      matrix:
+        enabled: true
+        homeserver: https://matrix.web3.foundation
+        username: {{ env MATRIX_USER }}
+        password: {{ env MATRIX_PASSWORD }}
+        db_path: /tmp/matrix.db
+      twitter:
+        enabled: false
+        api_key: {{ env TWITTER_API_KEY }}
+        api_secret: {{ env TWITTER_API_SECRET }}
+        token: {{ env TWITTER_TOKEN }}
+        token_secret: {{ env TWITTER_TOKEN_SECRET }}
+        request_interval: 300
+      email:
+        enabled: true
+        smtp_server: smtp-relay.gmail.com
+        imap_server: imap.gmail.com
+        inbox: INBOX
+        user: {{ env EMAIL_USER }}
+        password: {{ env EMAIL_PASSWORD }}
+        request_interval: 5
+      display_name:
+        enabled: true
+        limit: 0.85
+
+resources:
+  requests:
+    cpu: "300m"
+    memory: "500Mi"
+  limits:
+    cpu: "500m"
+    memory: "700Mi"
+
+{{- end }}
