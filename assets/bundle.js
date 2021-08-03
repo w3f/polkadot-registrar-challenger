@@ -396,7 +396,7 @@ class ActionListerner {
                 let body = JSON.stringify({
                     check: display_name,
                 });
-                let response = yield fetch("https//registrar-backend.web3.foundation/api/check_display_name", {
+                let response = yield fetch("https://registrar-backend.web3.foundation/api/check_display_name", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
