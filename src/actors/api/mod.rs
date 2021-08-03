@@ -27,6 +27,10 @@ pub enum JsonResult<T> {
     Err(String),
 }
 
+async fn healthcheck() -> HttpResponse {
+    HttpResponse::Ok().body("OK")
+}
+
 pub async fn run_rest_api_server(
     config: NotifierConfig,
     db: Database,
@@ -43,6 +47,10 @@ pub async fn run_rest_api_server(
 
         App::new()
             .wrap(cors)
+            .route(
+                "/healthcheck",
+                web::post().to(healthcheck),
+            )
             .service(web::resource("/api/account_status").to(account_status_server_route))
             .route(
                 "/api/verify_second_challenge",
