@@ -53,8 +53,6 @@ class ActionListerner {
                 } else if (target == "Validate Display Name" ) {
                     this.specify_address.placeholder = "Display Name..."
                     this.specify_action.innerText = target;
-                } else {
-                    // TODO
                 }
             });
 
@@ -144,6 +142,7 @@ class ActionListerner {
             (async () => {
                 let body = JSON.stringify({
                     check: display_name,
+                    chain: network,
                 });
 
                 let response = await fetch("https://registrar-backend.web3.foundation/api/check_display_name",

@@ -1,8 +1,8 @@
 use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
 use crate::primitives::{
-    ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext, IdentityFieldValue,
-    JudgementState, NotificationMessage, Timestamp,
+    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
+    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -539,10 +539,17 @@ impl Database {
 
         Ok(())
     }
-    pub async fn fetch_display_names(&self) -> Result<Vec<DisplayNameEntry>> {
+    pub async fn fetch_display_names(&self, chain: ChainName) -> Result<Vec<DisplayNameEntry>> {
         let coll = self.db.collection::<DisplayNameEntry>(DISPLAY_NAMES);
 
-        let mut cursor = coll.find(doc! {}, None).await?;
+        let mut cursor = coll
+            .find(
+                doc! {
+                    "context.chain": chain.to_bson()?,
+                },
+                None,
+            )
+            .await?;
 
         let mut names = vec![];
         while let Some(doc) = cursor.next().await {

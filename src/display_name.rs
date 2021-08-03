@@ -1,6 +1,6 @@
 use crate::actors::connector::DisplayNameEntry;
 use crate::database::Database;
-use crate::primitives::JudgementState;
+use crate::primitives::{ChainName, JudgementState};
 use crate::{DisplayNameConfig, Result};
 use strsim::jaro;
 
@@ -19,8 +19,12 @@ impl DisplayNameVerifier {
             config: config,
         }
     }
-    pub async fn check_similarities(&self, name: &str) -> Result<Vec<DisplayNameEntry>> {
-        let current = self.db.fetch_display_names().await?;
+    pub async fn check_similarities(
+        &self,
+        name: &str,
+        chain: ChainName,
+    ) -> Result<Vec<DisplayNameEntry>> {
+        let current = self.db.fetch_display_names(chain).await?;
 
         let mut violations = vec![];
         for existing in current {
@@ -47,7 +51,7 @@ impl DisplayNameVerifier {
             return Ok(());
         };
 
-        let violations = self.check_similarities(name).await?;
+        let violations = self.check_similarities(name, state.context.chain).await?;
 
         if !violations.is_empty() {
             self.db

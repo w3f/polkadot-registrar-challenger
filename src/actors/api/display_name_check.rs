@@ -1,6 +1,7 @@
 use super::JsonResult;
 use crate::actors::connector::DisplayNameEntry;
 use crate::database::Database;
+use crate::primitives::ChainName;
 use crate::{display_name::DisplayNameVerifier, DisplayNameConfig};
 use actix::prelude::*;
 use actix_web::{web, HttpResponse};
@@ -40,7 +41,7 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
             async move {
                 trace!("Received a similarities check: {:?}", msg);
                 verifier
-                    .check_similarities(msg.check.as_str())
+                    .check_similarities(msg.check.as_str(), msg.chain)
                     .await
                     .map(|violations| {
                         let outcome = if violations.is_empty() {
@@ -69,6 +70,7 @@ pub enum Outcome {
 #[rtype(result = "JsonResult<Outcome>")]
 pub struct CheckDisplayName {
     pub check: String,
+    pub chain: ChainName,
 }
 
 pub async fn check_display_name(req: web::Json<CheckDisplayName>) -> HttpResponse {
