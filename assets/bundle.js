@@ -325,9 +325,6 @@ class ActionListerner {
                 this.specify_address.placeholder = "Display Name...";
                 this.specify_action.innerText = target;
             }
-            else {
-                // TODO
-            }
         });
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
@@ -407,6 +404,7 @@ class ActionListerner {
             (() => __awaiter(this, void 0, void 0, function* () {
                 let body = JSON.stringify({
                     check: display_name,
+                    chain: network,
                 });
                 let response = yield fetch("https://registrar-backend.web3.foundation/api/check_display_name", {
                     method: "POST",
