@@ -409,7 +409,7 @@ class ActionListerner {
         }
     }
     parseDisplayNameCheck(data, display_name) {
-        console.log(data);
+        document.getElementById("introduction").innerHTML = "";
         if (data.type == "ok") {
             let check = data.message;
             if (check.type == "ok") {
@@ -439,6 +439,7 @@ class ActionListerner {
     parseAccountStatus(msg) {
         const parsed = JSON.parse(msg.data);
         if (parsed.type == "ok") {
+            document.getElementById("introduction").innerHTML = "";
             this.btn_execute_action.innerHTML = `
                 <div class="spinner-grow spinner-grow-sm" role="status">
                     <span class="visually-hidden"></span>
