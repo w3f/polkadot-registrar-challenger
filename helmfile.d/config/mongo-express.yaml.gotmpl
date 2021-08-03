@@ -17,4 +17,4 @@ certificate:
 domain: w3f.tech
 
 mongodb:
-  host: "mongodb://{{ env "MONGO_USERNAME" | default "username" }}:{{ env "MONGO_PASSWORD" | default "password123" }}@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017/{{ env "MONGO_DB" | default "monitor" }}?replicaSet=rs0"
+  host: "mongodb://{{ env "MONGO_USERNAME" | default "username" }}:{{ env "MONGO_PASSWORD" | default "password123" }}@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017/{{ env "MONGO_DB" | default "registrar" }}?replicaSet=rs0"
