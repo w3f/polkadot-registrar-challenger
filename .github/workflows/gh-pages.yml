@@ -9,11 +9,11 @@ jobs:
 
       - name: Install and Build
         run: |
-          yarn
+          yarn --cwd www/
           yarn global add typescript
           yarn global add browserify
           yarn global add node-sass
-          yarn build
+          yarn build --cwd www/
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@4.1.4
