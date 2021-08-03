@@ -1,0 +1,14 @@
+{{ if .Values.backendPort }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  ports:
+  - name: api
+    port: {{ .Values.backendPort }}
+  selector:
+    app: {{ .Release.Name }}
+{{ end }}

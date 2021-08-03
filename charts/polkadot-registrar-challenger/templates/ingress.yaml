@@ -19,4 +19,8 @@ spec:
         backend:
           serviceName: {{ .Release.Name }}
           servicePort: {{ .Values.backendPort }}
+      - path: /api/
+        backend:
+          serviceName: {{ .Release.Name }}
+          servicePort: {{ .Values.backendPort }}
 {{ end }}

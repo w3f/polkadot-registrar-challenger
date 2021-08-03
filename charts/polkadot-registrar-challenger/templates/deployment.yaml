@@ -25,6 +25,12 @@ spec:
           ports:
           - name: api
             containerPort: {{ .Values.backendPort }}
+          livenessProbe:
+            httpGet:
+              path: /healthcheck
+              port: {{ .Values.backendPort }}
+            initialDelaySeconds: 10
+            timeoutSeconds: 200
           {{ end }}
       volumes:
       - name: config
