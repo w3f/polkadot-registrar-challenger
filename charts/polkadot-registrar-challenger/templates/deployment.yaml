@@ -21,6 +21,11 @@ spec:
           volumeMounts:
           - name: config
             mountPath: /etc/registrar
+          {{ if .Values.backendPort }}
+          ports:
+          - name: api
+            containerPort: {{ .Values.backendPort }}
+          {{ end }}
       volumes:
       - name: config
         configMap:
