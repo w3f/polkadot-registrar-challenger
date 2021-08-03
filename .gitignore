@@ -1,5 +1,6 @@
-/target
-/www/dist
+target
+www/dist
+www/build
 config*
 !helmfile.d/config
 scripts/load-env.sh
