@@ -481,6 +481,9 @@ impl Database {
                 doc! {
                     "is_fully_verified": true,
                     "judgement_submitted": false,
+                    "issue_judgement_at": {
+                        "$lt": Timestamp::now().to_bson()?,
+                    }
                 },
                 None,
             )
