@@ -13,7 +13,7 @@ jobs:
           yarn global add typescript
           yarn global add browserify
           yarn global add node-sass
-          yarn build --cwd www/
+          yarn --cwd www/ build
 
       - name: Deploy 🚀
         uses: JamesIves/github-pages-deploy-action@4.1.4
