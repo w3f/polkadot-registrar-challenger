@@ -37,7 +37,7 @@ class ActionListerner {
                 this.btn_execute_action.disabled = false;
             });
 
-        // Handler for choosing action, e.g. "Request Judgement".
+        // Handler for choosing action, e.g. "Check Judgement".
         document
             .getElementById("action-options")!
             .addEventListener("click", (e: Event) => {
@@ -50,7 +50,7 @@ class ActionListerner {
         this.btn_execute_action
             .addEventListener("click", (_: Event) => {
                 let action = document.getElementById("specify-action")!.innerHTML;
-                if (action == "Request Judgement") {
+                if (action == "Check Judgement") {
                     window.location.href = "?network="
                         + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
                         + "&address="
@@ -115,7 +115,7 @@ class ActionListerner {
                 <span class="visually-hidden"></span>
             `;
 
-        if (action == "Request Judgement") {
+        if (action == "Check Judgement") {
             const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
 
             socket.addEventListener("open", (_: Event) => {
