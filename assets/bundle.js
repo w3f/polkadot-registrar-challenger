@@ -291,6 +291,9 @@ class ActionListerner {
         this.btn_execute_action =
             document
                 .getElementById("execute-action");
+        this.specify_action =
+            document
+                .getElementById("specify-action");
         this.specify_network =
             document
                 .getElementById("specify-network");
@@ -313,9 +316,18 @@ class ActionListerner {
         document
             .getElementById("action-options")
             .addEventListener("click", (e) => {
-            document
-                .getElementById("specify-action")
-                .innerText = e.target.innerText;
+            let target = e.target.innerText;
+            if (target == "Check Judgement") {
+                this.specify_address.placeholder = "Account address...";
+                this.specify_action.innerText = target;
+            }
+            else if (target == "Validate Display Name") {
+                this.specify_address.placeholder = "Display Name...";
+                this.specify_action.innerText = target;
+            }
+            else {
+                // TODO
+            }
         });
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
