@@ -380,7 +380,7 @@ class ActionListerner {
                 <span class="visually-hidden"></span>
             `;
         if (action == "Request Judgement") {
-            const socket = new WebSocket('ws://registrar-backend.web3.foundation/api/account_status');
+            const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
             socket.addEventListener("open", (_) => {
                 let msg = JSON.stringify({ address: address, chain: network });
                 socket.send(msg);
@@ -396,7 +396,7 @@ class ActionListerner {
                 let body = JSON.stringify({
                     check: display_name,
                 });
-                let response = yield fetch("http://registrar-backend.web3.foundation/api/check_display_name", {
+                let response = yield fetch("https//registrar-backend.web3.foundation/api/check_display_name", {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
