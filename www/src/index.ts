@@ -4,6 +4,7 @@ import { NotificationHandler } from "./notifications";
 
 class ActionListerner {
     specify_network: HTMLInputElement;
+    specify_action: HTMLInputElement;
     specify_address: HTMLInputElement;
     btn_execute_action: HTMLButtonElement;
     manager: ContentManager;
@@ -14,6 +15,10 @@ class ActionListerner {
         this.btn_execute_action =
             document
                 .getElementById("execute-action")! as HTMLButtonElement;
+
+        this.specify_action =
+            document
+                .getElementById("specify-action")! as HTMLInputElement;
 
         this.specify_network =
             document
@@ -41,9 +46,16 @@ class ActionListerner {
         document
             .getElementById("action-options")!
             .addEventListener("click", (e: Event) => {
-                document
-                    .getElementById("specify-action")!
-                    .innerText = (e.target as HTMLAnchorElement).innerText;
+                let target = (e.target as HTMLAnchorElement).innerText;
+                if (target == "Check Judgement") {
+                    this.specify_address.placeholder = "Account address..."
+                    this.specify_action.innerText = target;
+                } else if (target == "Validate Display Name" ) {
+                    this.specify_address.placeholder = "Display Name..."
+                    this.specify_action.innerText = target;
+                } else {
+                    // TODO
+                }
             });
 
         // Handler for executing action and communicating with the backend API.
