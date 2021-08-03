@@ -116,7 +116,7 @@ class ActionListerner {
             `;
 
         if (action == "Request Judgement") {
-            const socket = new WebSocket('ws://localhost:8001/api/account_status');
+            const socket = new WebSocket('ws://registrar-backend.web3.foundation/api/account_status');
 
             socket.addEventListener("open", (_: Event) => {
                 let msg = JSON.stringify({ address: address, chain: network });
@@ -134,7 +134,7 @@ class ActionListerner {
                     check: display_name,
                 });
 
-                let response = await fetch("http://localhost:8001/api/check_display_name",
+                let response = await fetch("http://registrar-backend.web3.foundation/api/check_display_name",
                     {
                         method: "POST",
                         headers: {
