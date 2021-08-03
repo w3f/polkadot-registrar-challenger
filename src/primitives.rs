@@ -229,8 +229,8 @@ pub struct JudgementStateBlanked {
     pub context: IdentityContext,
     pub is_fully_verified: bool,
     pub inserted_timestamp: Timestamp,
-    pub judgement_submitted: bool,
     pub completion_timestamp: Option<Timestamp>,
+    pub judgement_submitted: bool,
     pub fields: Vec<IdentityFieldBlanked>,
 }
 
@@ -311,6 +311,7 @@ pub struct JudgementState {
     pub inserted_timestamp: Timestamp,
     pub completion_timestamp: Option<Timestamp>,
     pub judgement_submitted: bool,
+    pub issue_judgement_at: Option<Timestamp>,
     pub fields: Vec<IdentityField>,
 }
 
@@ -322,6 +323,7 @@ impl JudgementState {
             inserted_timestamp: Timestamp::now(),
             completion_timestamp: None,
             judgement_submitted: false,
+            issue_judgement_at: None,
             fields: fields
                 .into_iter()
                 .map(|val| IdentityField::new(val))
@@ -407,6 +409,10 @@ impl Timestamp {
             .as_secs();
 
         Timestamp(time)
+    }
+    pub fn with_offset(offset: u64) -> Self {
+        let now = Self::now();
+        Timestamp(now.0 + offset)
     }
     pub fn raw(&self) -> u64 {
         self.0
@@ -531,6 +537,7 @@ mod tests {
         }
     }
 
+    // TODO: Use JudgementState::new().
     impl JudgementState {
         pub fn alice() -> Self {
             JudgementState {
@@ -539,6 +546,7 @@ mod tests {
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 judgement_submitted: false,
+                issue_judgement_at: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
                     IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
@@ -554,6 +562,7 @@ mod tests {
                 inserted_timestamp: Timestamp::now(),
                 completion_timestamp: None,
                 judgement_submitted: false,
+                issue_judgement_at: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string())),
                     IdentityField::new(IdentityFieldValue::Email("bob@email.com".to_string())),

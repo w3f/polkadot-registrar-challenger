@@ -119,7 +119,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         }
         case "identity_fully_verified": {
             return [
-                `<strong>Verification process completed!</strong> Judgement will be issued shortly.`,
+                `<strong>Verification process completed!</strong> Judgement will be issued in a couple of minutes.`,
                 "bg-success text-light"
             ]
         }
