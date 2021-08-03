@@ -49,7 +49,7 @@ pub async fn run_rest_api_server(
             .wrap(cors)
             .route(
                 "/healthcheck",
-                web::post().to(healthcheck),
+                web::get().to(healthcheck),
             )
             .service(web::resource("/api/account_status").to(account_status_server_route))
             .route(
