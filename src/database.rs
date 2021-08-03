@@ -473,7 +473,7 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn fetch_completed_not_submitted(&self) -> Result<Vec<JudgementState>> {
+    pub async fn fetch_judgement_candidates(&self) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut cursor = coll

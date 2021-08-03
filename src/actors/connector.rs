@@ -63,7 +63,7 @@ pub async fn run_connector(
                 }
 
                 // Provide judgments.
-                let completed = db.fetch_completed_not_submitted().await?;
+                let completed = db.fetch_judgement_candidates().await?;
                 for state in completed {
                     if state.context.chain == config.network {
                         debug!("Notifying Watcher about judgement: {:?}", state.context);
