@@ -87,6 +87,15 @@ pub mod tests {
         }
     }
 
+    impl<T> JsonResult<T> {
+        pub fn unwrap(self) -> T  {
+            match self {
+                JsonResult::Ok(t) => t,
+                _ => panic!("called unwrap on a Err value")
+            }
+        }
+    }
+
     #[cfg(test)]
     // TODO: Unify this with the `run_rest_api_server_blocking` function above.
     pub async fn run_test_server(db: Database) -> (TestServer, Addr<LookupServer>) {

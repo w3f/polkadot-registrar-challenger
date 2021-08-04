@@ -25,6 +25,12 @@ async fn current_judgement_state_single_identity() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
 
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
@@ -49,6 +55,12 @@ async fn current_judgement_state_multiple_inserts() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -75,6 +87,12 @@ async fn current_judgement_state_multiple_identities() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
 
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
     // Check state of Bob
@@ -83,6 +101,12 @@ async fn current_judgement_state_multiple_identities() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -145,6 +169,12 @@ async fn verify_invalid_message_bad_challenge() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
 
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
@@ -194,6 +224,12 @@ async fn verify_invalid_message_bad_origin() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -260,6 +296,12 @@ async fn verify_valid_message() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
