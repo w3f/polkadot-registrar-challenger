@@ -88,10 +88,10 @@ pub mod tests {
     }
 
     impl<T> JsonResult<T> {
-        pub fn unwrap(self) -> T  {
+        pub fn unwrap(self) -> T {
             match self {
                 JsonResult::Ok(t) => t,
-                _ => panic!("called unwrap on a Err value")
+                _ => panic!("called unwrap on a Err value"),
             }
         }
     }

@@ -80,7 +80,7 @@ async fn current_judgement_state_multiple_identities() {
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
 
-    // Check current state.
+    // Check current state (Alice).
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
@@ -95,7 +95,7 @@ async fn current_judgement_state_multiple_identities() {
 
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
-    // Check state of Bob
+    // Check current state (Bob).
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
@@ -160,7 +160,20 @@ async fn verify_invalid_message_bad_challenge() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Other judgement states must be unaffected.
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
+    // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
@@ -213,10 +226,10 @@ async fn verify_invalid_message_bad_origin() {
         })
         .await;
 
-    // No response is sent.
+    // No response is sent. The service ignores unknown senders.
     assert!(stream.next().now_or_never().is_none());
 
-    // Other judgement states must be unaffected.
+    // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
@@ -288,7 +301,35 @@ async fn verify_valid_message() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Other judgement states must be unaffected.
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    // VERIFIED
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .expected_message()
+            .is_verified,
+        true
+    );
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
+    // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
@@ -299,6 +340,27 @@ async fn verify_valid_message() {
 
     // Explicit tests.
     let resp = resp.unwrap();
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("bob@email.com".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Twitter("@bob".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Matrix("@bob:matrix.org".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
     assert_eq!(resp.state.is_fully_verified, false);
     assert_eq!(resp.state.completion_timestamp, None);
     assert_eq!(resp.state.judgement_submitted, false);

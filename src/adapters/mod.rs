@@ -210,7 +210,7 @@ pub mod tests {
             }
 
             // Give the adapter enough time to fetch and process messages.
-            sleep(Duration::from_secs(2)).await;
+            sleep(Duration::from_secs(3)).await;
         }
     }
 
