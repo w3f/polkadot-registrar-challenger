@@ -2,8 +2,8 @@ use super::*;
 use crate::actors::api::VerifyChallenge;
 use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext,
-    JudgementState, MessageId, NotificationMessage, Timestamp,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, JudgementState,
+    MessageId, NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};

@@ -70,7 +70,7 @@ impl Database {
                 if let Some(current_field) = current
                     .fields
                     .iter()
-                    .find(|current| current.value() == new_field.value())
+                    .find(|current| current.value == new_field.value)
                 {
                     to_add.push(current_field.clone());
                 } else {
@@ -165,7 +165,7 @@ impl Database {
             let field_state = id_state
                 .fields
                 .iter_mut()
-                .find(|field| field.value().matches(&message))
+                .find(|field| field.value.matches(&message))
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
@@ -173,9 +173,9 @@ impl Database {
             // invalid if otherwise).
 
             let context = id_state.context.clone();
-            let field_value = field_state.value().clone();
+            let field_value = field_state.value.clone();
 
-            let challenge = field_state.challenge_mut();
+            let challenge = &mut field_state.challenge;
             if !challenge.is_verified() {
                 match challenge {
                     ChallengeType::ExpectedMessage {
@@ -317,14 +317,14 @@ impl Database {
             let field_state = state
                 .fields
                 .iter_mut()
-                .find(|field| field.value() == &request.entry)
+                .find(|field| field.value == request.entry)
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
             let context = state.context.clone();
-            let field_value = field_state.value().clone();
+            let field_value = field_state.value.clone();
 
-            match field_state.challenge_mut() {
+            match &mut field_state.challenge {
                 ChallengeType::ExpectedMessage {
                     expected: _,
                     second,
@@ -401,11 +401,11 @@ impl Database {
             let field_state = state
                 .fields
                 .iter()
-                .find(|f| f.value() == field)
+                .find(|f| &f.value == field)
                 // Technically, this should never return an error...
                 .ok_or(anyhow!("Failed to select field when verifying message"))?;
 
-            match field_state.challenge() {
+            match &field_state.challenge {
                 ChallengeType::ExpectedMessage {
                     expected: _,
                     second,

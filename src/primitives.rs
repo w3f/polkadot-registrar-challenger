@@ -35,76 +35,6 @@ pub struct IdentityField {
     pub failed_attempts: isize,
 }
 
-impl IdentityField {
-    // TODO: deprecate this.
-    pub fn value(&self) -> &IdentityFieldValue {
-        &self.value
-    }
-    // TODO: deprecate this.
-    pub fn challenge(&self) -> &ChallengeType {
-        &self.challenge
-    }
-    // TODO: deprecate this.
-    pub fn challenge_mut(&mut self) -> &mut ChallengeType {
-        &mut self.challenge
-    }
-    // TODO: Move to tests module.
-    #[cfg(test)]
-    pub fn expected_message(&self) -> &ExpectedMessage {
-        match &self.challenge {
-            ChallengeType::ExpectedMessage {
-                expected,
-                second: _,
-            } => expected,
-            _ => panic!(),
-        }
-    }
-    #[cfg(test)]
-    pub fn expected_second(&self) -> &ExpectedMessage {
-        match &self.challenge {
-            ChallengeType::ExpectedMessage {
-                expected: _,
-                second,
-            } => second.as_ref().unwrap(),
-            _ => panic!(),
-        }
-    }
-    // TODO: Move to tests module.
-    #[cfg(test)]
-    pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
-        match &mut self.challenge {
-            ChallengeType::ExpectedMessage {
-                ref mut expected,
-                second: _,
-            } => expected,
-            _ => panic!(),
-        }
-    }
-    // TODO: Move to tests module.
-    #[cfg(test)]
-    pub fn expected_second_mut(&mut self) -> &mut ExpectedMessage {
-        match &mut self.challenge {
-            ChallengeType::ExpectedMessage {
-                expected: _,
-                ref mut second,
-            } => second.as_mut().unwrap(),
-            _ => panic!(),
-        }
-    }
-    #[cfg(test)]
-    // TODO: deprecate this.
-    pub fn failed_attempts_mut(&mut self) -> &mut isize {
-        &mut self.failed_attempts
-    }
-    #[cfg(test)]
-    pub fn expected_display_name_check_mut(&mut self) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
-        match &mut self.challenge {
-            ChallengeType::DisplayNameCheck { passed, violations } => (passed, violations),
-            _ => panic!(),
-        }
-    }
-}
-
 // TODO: Should be `From`?
 impl IdentityField {
     pub fn new(val: IdentityFieldValue) -> Self {
@@ -363,11 +293,11 @@ impl JudgementState {
     pub fn display_name(&self) -> Option<&str> {
         self.fields
             .iter()
-            .find(|field| match field.value() {
+            .find(|field| match field.value {
                 IdentityFieldValue::DisplayName(_) => true,
                 _ => false,
             })
-            .map(|field| match field.value() {
+            .map(|field| match &field.value {
                 IdentityFieldValue::DisplayName(name) => name.as_str(),
                 _ => panic!("Failed to get display name. This is a bug."),
             })
@@ -646,6 +576,54 @@ mod tests {
     impl From<&str> for ChainAddress {
         fn from(val: &str) -> Self {
             ChainAddress(val.to_string())
+        }
+    }
+
+    impl IdentityField {
+        pub fn expected_message(&self) -> &ExpectedMessage {
+            match &self.challenge {
+                ChallengeType::ExpectedMessage {
+                    expected,
+                    second: _,
+                } => expected,
+                _ => panic!(),
+            }
+        }
+        pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
+            match &mut self.challenge {
+                ChallengeType::ExpectedMessage {
+                    ref mut expected,
+                    second: _,
+                } => expected,
+                _ => panic!(),
+            }
+        }
+        pub fn expected_second(&self) -> &ExpectedMessage {
+            match &self.challenge {
+                ChallengeType::ExpectedMessage {
+                    expected: _,
+                    second,
+                } => second.as_ref().unwrap(),
+                _ => panic!(),
+            }
+        }
+        pub fn expected_second_mut(&mut self) -> &mut ExpectedMessage {
+            match &mut self.challenge {
+                ChallengeType::ExpectedMessage {
+                    expected: _,
+                    ref mut second,
+                } => second.as_mut().unwrap(),
+                _ => panic!(),
+            }
+        }
+        pub fn failed_attempts_mut(&mut self) -> &mut isize {
+            &mut self.failed_attempts
+        }
+        pub fn expected_display_name_check_mut(&mut self) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
+            match &mut self.challenge {
+                ChallengeType::DisplayNameCheck { passed, violations } => (passed, violations),
+                _ => panic!(),
+            }
         }
     }
 }
