@@ -2,7 +2,7 @@ use super::*;
 use crate::actors::api::VerifyChallenge;
 use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext,
     JudgementState, MessageId, NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
@@ -26,12 +26,6 @@ async fn current_judgement_state_single_identity() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -58,12 +52,6 @@ async fn current_judgement_state_multiple_inserts() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
@@ -89,12 +77,6 @@ async fn current_judgement_state_multiple_identities() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
     // Check current state (Bob).
@@ -103,12 +85,6 @@ async fn current_judgement_state_multiple_identities() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -160,19 +136,6 @@ async fn verify_invalid_message_bad_challenge() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
@@ -181,12 +144,6 @@ async fn verify_invalid_message_bad_challenge() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -237,12 +194,6 @@ async fn verify_invalid_message_bad_origin() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -301,34 +252,6 @@ async fn verify_valid_message() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    // VERIFIED
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_MATRIX())
-            .expected_message()
-            .is_verified,
-        true
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
@@ -337,33 +260,6 @@ async fn verify_valid_message() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_EMAIL())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_MATRIX())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -426,34 +322,6 @@ async fn verify_valid_message_duplicate_account_name() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    // VERIFIED
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_MATRIX())
-            .expected_message()
-            .is_verified,
-        true
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     // Other judgement states must be unaffected (Bob), but will receive a "failed attempt".
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
@@ -464,34 +332,6 @@ async fn verify_valid_message_duplicate_account_name() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_EMAIL())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    // NOT VERIFIED, even though both have the same account specified.
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_MATRIX())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -551,42 +391,6 @@ async fn verify_valid_message_awaiting_second_challenge() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    // VERIFIED
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_message()
-            .is_verified,
-        true
-    );
-    // NOT VERIFIED. Second challenge is still required.
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_second()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_MATRIX())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     // Check for `AwaitingSecondChallenge` notification.
     let expected = ResponseAccountState {
         state: alice.clone().into(),
@@ -637,42 +441,6 @@ async fn verify_valid_message_awaiting_second_challenge() {
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Explicit tests.
-    let resp = resp.unwrap();
-    // VERIFIED
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_message()
-            .is_verified,
-        true
-    );
-    // VERIFIED
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_EMAIL())
-            .expected_second()
-            .is_verified,
-        true
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::ALICE_MATRIX())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
-
     // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
@@ -681,33 +449,6 @@ async fn verify_valid_message_awaiting_second_challenge() {
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
-
-    // Explicit tests.
-    let resp = resp.unwrap();
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_EMAIL())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_TWITTER())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(
-        resp.state
-            .get_field(&F::BOB_MATRIX())
-            .expected_message()
-            .is_verified,
-        false
-    );
-    assert_eq!(resp.state.is_fully_verified, false);
-    assert_eq!(resp.state.completion_timestamp, None);
-    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
