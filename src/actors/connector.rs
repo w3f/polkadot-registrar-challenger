@@ -87,7 +87,7 @@ pub async fn run_connector(
                     }
                 }
 
-                sleep(Duration::from_secs(1)).await;
+                sleep(Duration::from_secs(10)).await;
             }
         });
     }

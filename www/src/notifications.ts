@@ -124,7 +124,10 @@ function notificationTypeResolver(notification: Notification): [string, string] 
             ]
         }
         case "judgement_provided": {
-
+            return [
+                `<strong>Judgement has been submitted!</strong>`,
+                "bg-success text-light"
+            ]
         }
         default: {
             // TODO
