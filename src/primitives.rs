@@ -619,7 +619,9 @@ mod tests {
         pub fn failed_attempts_mut(&mut self) -> &mut isize {
             &mut self.failed_attempts
         }
-        pub fn expected_display_name_check_mut(&mut self) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
+        pub fn expected_display_name_check_mut(
+            &mut self,
+        ) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
             match &mut self.challenge {
                 ChallengeType::DisplayNameCheck { passed, violations } => (passed, violations),
                 _ => panic!(),

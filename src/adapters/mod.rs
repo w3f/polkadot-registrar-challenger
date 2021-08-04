@@ -146,24 +146,23 @@ impl AdapterListener {
                                 NotificationMessage::AwaitingSecondChallenge {
                                     context: _,
                                     field,
-                                } => {
-                                    match field {
-                                        IdentityFieldValue::Email(to) => {
-                                            if adapter.name() == "email" {
-                                                // TODO: Handle unwrap.
-                                                debug!("Sending second challenge to {}", to);
-                                                let challenge =
-                                                    db.fetch_second_challenge(field).await.unwrap();
-
-                                                adapter
-                                                    .send_message(to.as_str(), challenge.into())
-                                                    .await
-                                                    .unwrap();
-                                            }
+                                } => match field {
+                                    IdentityFieldValue::Email(to) => {
+                                        if adapter.name() == "email" {
+                                            debug!("Sending second challenge to {}", to);
+                                            if let Ok(challenge) = db
+                                                .fetch_second_challenge(field)
+                                                .await
+                                                .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
+                                                    let _ = adapter
+                                                        .send_message(to.as_str(), challenge.into())
+                                                        .await
+                                                        .map_err(|err| error!("Failed to send second challenge to {} ({} adapter): {:?}", to, adapter.name(), err));
+                                                    }
                                         }
-                                        _ => {}
                                     }
-                                }
+                                    _ => {}
+                                },
                                 _ => {}
                             }
                         }

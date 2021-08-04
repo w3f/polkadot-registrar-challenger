@@ -25,7 +25,7 @@ pub async fn run_connector(
 ) -> Result<()> {
     if watchers.is_empty() {
         warn!("No watcher is configured. Cannot process any requests or issue judgments");
-        return Ok(())
+        return Ok(());
     }
 
     // Init processing queue.
