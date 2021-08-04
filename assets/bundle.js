@@ -588,11 +588,15 @@ function notificationTypeResolver(notification) {
         }
         case "identity_fully_verified": {
             return [
-                `<strong>Verification process completed!</strong> Judgement will be issued shortly.`,
+                `<strong>Verification process completed!</strong> Judgement will be issued in a couple of minutes.`,
                 "bg-success text-light"
             ];
         }
         case "judgement_provided": {
+            return [
+                `<strong>Judgement has been submitted!</strong>`,
+                "bg-success text-light"
+            ];
         }
         default: {
             // TODO
