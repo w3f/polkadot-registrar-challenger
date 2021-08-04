@@ -52,7 +52,10 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
 
                         JsonResult::Ok(outcome)
                     })
-                    .unwrap()
+                    .map_err(|err| {
+                        error!("Failed to check for display name similarities: {:?}", err)
+                    })
+                    .unwrap_or(JsonResult::Err("Backend error, contact admin".to_string()))
             }
             .into_actor(self),
         )

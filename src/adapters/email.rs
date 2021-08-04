@@ -120,6 +120,7 @@ impl SmtpImapClient {
             return Ok(vec![]);
         }
 
+        // Unwrap is fine since length of sequence is checked above.
         let min = recent_seq.iter().min().unwrap();
         let max = recent_seq.iter().max().unwrap();
 

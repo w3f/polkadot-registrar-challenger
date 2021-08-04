@@ -97,8 +97,17 @@ impl Handler<SubscribeAccountState> for LookupServer {
             async move {
                 let (id, subscriber) = (msg.id_context, msg.subscriber);
 
-                // TODO: Handle unwrap?
-                if let Some(state) = db.fetch_judgement_state(&id).await.unwrap() {
+                let state = if let Ok(state) = db
+                    .fetch_judgement_state(&id)
+                    .await
+                    .map_err(|err| error!("Failed to fetch judgement state: {:?}", err))
+                {
+                    state
+                } else {
+                    return ();
+                };
+
+                if let Some(state) = state {
                     if subscriber
                         .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
                             state,

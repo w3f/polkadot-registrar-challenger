@@ -39,7 +39,7 @@ impl Handler<VerifyChallenge> for SecondChallengeVerifier {
                 db.verify_second_challenge(msg)
                     .await
                     .map(|b| JsonResult::Ok(b))
-                    .unwrap()
+                    .unwrap_or(JsonResult::Err("Backend error, contact admin".to_string()))
             }
             .into_actor(self),
         )

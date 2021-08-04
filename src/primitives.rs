@@ -302,17 +302,6 @@ impl JudgementState {
                 _ => panic!("Failed to get display name. This is a bug."),
             })
     }
-    #[cfg(test)]
-    pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
-        self.fields.iter().find(|field| &field.value == ty).unwrap()
-    }
-    #[cfg(test)]
-    pub fn get_field_mut<'a>(&'a mut self, ty: &IdentityFieldValue) -> &'a mut IdentityField {
-        self.fields
-            .iter_mut()
-            .find(|field| &field.value == ty)
-            .unwrap()
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
@@ -525,6 +514,15 @@ mod tests {
                     IdentityField::new(IdentityFieldValue::BOB_MATRIX()),
                 ],
             }
+        }
+        pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
+            self.fields.iter().find(|field| &field.value == ty).unwrap()
+        }
+        pub fn get_field_mut<'a>(&'a mut self, ty: &IdentityFieldValue) -> &'a mut IdentityField {
+            self.fields
+                .iter_mut()
+                .find(|field| &field.value == ty)
+                .unwrap()
         }
     }
 
