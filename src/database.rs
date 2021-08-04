@@ -192,12 +192,12 @@ impl Database {
                                 // TODO: Filter by context?
                                 coll.update_one(
                                     doc! {
+                                        "context": context.to_bson()?,
                                         "fields.value": message.origin.to_bson()?,
-                                        "fields.challenge.content.expected.value": expected.value.to_bson()?,
                                     },
                                     doc! {
                                         "$set": {
-                                            "fields.$.challenge.content.expected.is_verified": true.to_bson()?,
+                                            "fields.$.challenge.content.expected.is_verified": true,
                                         }
                                     },
                                     None,
@@ -218,9 +218,9 @@ impl Database {
                                 }
                             } else {
                                 // Update field state.
-                                // TODO: Filter by context?
-                                coll.update_one(
+                                coll.update_many(
                                     doc! {
+                                        "context": context.to_bson()?,
                                         "fields.value": message.origin.to_bson()?,
                                     },
                                     doc! {

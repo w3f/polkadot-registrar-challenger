@@ -368,3 +368,134 @@ async fn verify_valid_message() {
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
+
+#[actix::test]
+async fn verify_valid_message_duplicate_account_name() {
+    let (db, mut api, injector) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement requests.
+    let mut alice = JudgementState::alice();
+    let mut bob = JudgementState::bob();
+
+    // Bob also has the same Matrix account as Alice.
+    bob.get_field_mut(&IdentityFieldValue::Matrix("@bob:matrix.org".to_string()))
+        .value = IdentityFieldValue::Matrix("@alice:matrix.org".to_string());
+
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&bob).await.unwrap();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Send valid message.
+    injector
+        .send(ExternalMessage {
+            origin: ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+            id: MessageId::from(0u32),
+            timestamp: Timestamp::now(),
+            values: alice
+                .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+                .expected_message()
+                .to_message_parts(),
+        })
+        .await;
+
+    // Email account of Alice is now verified
+    alice
+        .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+        .expected_message_mut()
+        .set_verified();
+
+    // The expected message (field verified successfully).
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+        }],
+    };
+
+    // Check response
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    // VERIFIED
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .expected_message()
+            .is_verified,
+        true
+    );
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
+    // Other judgement states must be unaffected (Bob), but will receive a "failed attempt" regardless.
+    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+
+    *bob
+        .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+        .failed_attempts_mut() = 1;
+
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
+    );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("bob@email.com".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Twitter("@bob".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    // NOT VERIFIED, even though both have the same account specified.
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}

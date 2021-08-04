@@ -29,19 +29,22 @@ pub enum ChainName {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityField {
-    value: IdentityFieldValue,
-    challenge: ChallengeType,
+    pub value: IdentityFieldValue,
+    pub challenge: ChallengeType,
     // TODO: Change this to usize.
-    failed_attempts: isize,
+    pub failed_attempts: isize,
 }
 
 impl IdentityField {
+    // TODO: deprecate this.
     pub fn value(&self) -> &IdentityFieldValue {
         &self.value
     }
+    // TODO: deprecate this.
     pub fn challenge(&self) -> &ChallengeType {
         &self.challenge
     }
+    // TODO: deprecate this.
     pub fn challenge_mut(&mut self) -> &mut ChallengeType {
         &mut self.challenge
     }
@@ -68,6 +71,7 @@ impl IdentityField {
         }
     }
     #[cfg(test)]
+    // TODO: deprecate this.
     pub fn failed_attempts_mut(&mut self) -> &mut isize {
         &mut self.failed_attempts
     }
