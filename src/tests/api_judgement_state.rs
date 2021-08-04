@@ -372,13 +372,13 @@ async fn verify_valid_message_awaiting_second_challenge() {
         })
         .await;
 
-    // Email account of Alice is now verified
+    // Email account of Alice is now verified, but not the second challenge.
     alice
         .get_field_mut(&F::ALICE_EMAIL())
         .expected_message_mut()
         .set_verified();
 
-    // The expected message (field verified successfully).
+    // Check for `FieldVerified` notification.
     let expected = ResponseAccountState {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerified {
@@ -387,7 +387,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
         }],
     };
 
-    // Check response
+    // Check response.
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
@@ -400,7 +400,6 @@ async fn verify_valid_message_awaiting_second_challenge() {
         }],
     };
 
-    // Check response
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
@@ -414,6 +413,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
             .clone(),
     };
 
+    // Send it to the API endpoint.
     let res = api
         .post("/api/verify_second_challenge")
         .send_json(&challenge)
@@ -428,7 +428,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
         .expected_second_mut()
         .set_verified();
 
-    // Check for `SecondFieldVerified`.
+    // Check for `SecondFieldVerified` notification.
     let expected = ResponseAccountState {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::SecondFieldVerified {
@@ -437,11 +437,10 @@ async fn verify_valid_message_awaiting_second_challenge() {
         }],
     };
 
-    // Check response
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 
-    // Other judgement states must be unaffected (Bob).
+    // Other judgement state must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
