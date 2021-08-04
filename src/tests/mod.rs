@@ -4,6 +4,7 @@ use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
 use crate::notifier::SessionNotifier;
+use crate::primitives::IdentityFieldValue;
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
@@ -13,6 +14,10 @@ use serde::Serialize;
 
 mod api_judgement_state;
 mod display_name_verification;
+mod explicit;
+
+// Convenience type
+type F = IdentityFieldValue;
 
 trait ToWsMessage {
     fn to_ws(&self) -> Message;

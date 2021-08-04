@@ -8,9 +8,6 @@ use crate::primitives::{
 use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
-// Convenience type
-type F = IdentityFieldValue;
-
 #[actix::test]
 async fn current_judgement_state_single_identity() {
     let (db, mut api, _) = new_env().await;
