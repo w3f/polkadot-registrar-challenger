@@ -27,6 +27,7 @@ fn config() -> DisplayNameConfig {
 async fn valid_display_name() {
     let (db, mut api, _) = new_env().await;
     let verifier = DisplayNameVerifier::new(db.clone(), config());
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let mut alice = JudgementState::alice();
@@ -34,9 +35,7 @@ async fn valid_display_name() {
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Set expected result.
     let field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
@@ -51,6 +50,7 @@ async fn valid_display_name() {
     };
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 }
 
@@ -58,6 +58,7 @@ async fn valid_display_name() {
 async fn invalid_display_name() {
     let (db, mut api, _) = new_env().await;
     let verifier = DisplayNameVerifier::new(db.clone(), config());
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Pre-fill database with active display names
     let names = vec![
@@ -76,9 +77,7 @@ async fn invalid_display_name() {
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Set expected result.
     let field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
@@ -93,5 +92,6 @@ async fn invalid_display_name() {
     };
 
     // Check expected state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
 }

@@ -15,8 +15,6 @@ async fn current_judgement_state_single_identity() {
     let alice = JudgementState::alice();
     db.add_judgement_request(&alice).await.unwrap();
 
-    wait().await;
-
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
 
@@ -42,8 +40,6 @@ async fn current_judgement_state_multiple_inserts() {
     db.add_judgement_request(&alice).await.unwrap();
     db.add_judgement_request(&alice).await.unwrap();
 
-    wait().await;
-
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
 
@@ -68,8 +64,6 @@ async fn current_judgement_state_multiple_identities() {
     let bob = JudgementState::bob();
     db.add_judgement_request(&alice).await.unwrap();
     db.add_judgement_request(&bob).await.unwrap();
-
-    wait().await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -104,8 +98,6 @@ async fn verify_invalid_message_bad_challenge() {
     let bob = JudgementState::bob();
     db.add_judgement_request(&alice).await.unwrap();
     db.add_judgement_request(&bob).await.unwrap();
-
-    wait().await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -168,8 +160,6 @@ async fn verify_invalid_message_bad_origin() {
     db.add_judgement_request(&alice).await.unwrap();
     db.add_judgement_request(&bob).await.unwrap();
 
-    wait().await;
-
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
 
@@ -219,8 +209,6 @@ async fn verify_valid_message() {
     let bob = JudgementState::bob();
     db.add_judgement_request(&alice).await.unwrap();
     db.add_judgement_request(&bob).await.unwrap();
-
-    wait().await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();

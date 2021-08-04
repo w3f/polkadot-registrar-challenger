@@ -15,10 +15,6 @@ use tokio::time::{sleep, Duration};
 mod api_judgement_state;
 mod display_name_verification;
 
-pub async fn wait() {
-    sleep(Duration::from_secs(1));
-}
-
 trait ToWsMessage {
     fn to_ws(&self) -> Message;
 }
