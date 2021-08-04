@@ -9,21 +9,27 @@ use futures::{FutureExt, SinkExt, StreamExt};
 #[actix::test]
 async fn current_judgement_state_single_identity() {
     let (db, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let alice = JudgementState::alice();
     db.add_judgement_request(&alice).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -32,6 +38,7 @@ async fn current_judgement_state_single_identity() {
 #[actix::test]
 async fn current_judgement_state_multiple_inserts() {
     let (db, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let alice = JudgementState::alice();
@@ -40,15 +47,20 @@ async fn current_judgement_state_multiple_inserts() {
     db.add_judgement_request(&alice).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -57,6 +69,7 @@ async fn current_judgement_state_multiple_inserts() {
 #[actix::test]
 async fn current_judgement_state_multiple_identities() {
     let (db, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let alice = JudgementState::alice();
@@ -65,23 +78,35 @@ async fn current_judgement_state_multiple_identities() {
     db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
 
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
+    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+
+    // Check state of Bob
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -90,6 +115,7 @@ async fn current_judgement_state_multiple_identities() {
 #[actix::test]
 async fn verify_invalid_message_bad_challenge() {
     let (db, mut api, injector) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
@@ -98,11 +124,10 @@ async fn verify_invalid_message_bad_challenge() {
     db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -137,11 +162,18 @@ async fn verify_invalid_message_bad_challenge() {
 
     // Other judgement states must be unaffected.
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -150,6 +182,7 @@ async fn verify_invalid_message_bad_challenge() {
 #[actix::test]
 async fn verify_invalid_message_bad_origin() {
     let (db, mut api, injector) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let alice = JudgementState::alice();
@@ -158,11 +191,10 @@ async fn verify_invalid_message_bad_origin() {
     db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -186,11 +218,18 @@ async fn verify_invalid_message_bad_origin() {
 
     // Other judgement states must be unaffected.
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
@@ -199,6 +238,7 @@ async fn verify_invalid_message_bad_origin() {
 #[actix::test]
 async fn verify_valid_message() {
     let (db, mut api, injector) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
@@ -207,11 +247,10 @@ async fn verify_valid_message() {
     db.add_judgement_request(&bob).await.unwrap();
 
     // Subscribe to endpoint.
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
     // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -251,11 +290,18 @@ async fn verify_valid_message() {
 
     // Other judgement states must be unaffected.
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());

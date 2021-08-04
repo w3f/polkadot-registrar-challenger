@@ -9,6 +9,7 @@ use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
+use rand::{thread_rng, Rng};
 use serde::Serialize;
 
 const IDENTITY_COLLECTION: &'static str = "identities";
@@ -248,29 +249,49 @@ impl Database {
 
             std::mem::drop(field_state);
 
-            // Check if all fields have been verified.
-            if id_state.is_fully_verified() {
-                coll.update_one(
-                    doc! {
-                        "context": id_state.context.to_bson()?,
-                    },
-                    doc! {
-                        "$set": {
-                            "is_fully_verified": true.to_bson()?,
-                            "completion_timestamp": Timestamp::now().to_bson()?,
-                        }
-                    },
-                    None,
-                )
-                .await?;
-
-                events.push(NotificationMessage::IdentityFullyVerified {
-                    context: context.clone(),
-                });
-            }
+            // Check if the identity is fully verified.
+            self.process_fully_verified(&id_state)
+                .await?
+                .map(|event| events.push(event));
         }
 
         Ok(events)
+    }
+    /// Check if all fields have been verified.
+    pub async fn process_fully_verified(
+        &self,
+        state: &JudgementState,
+    ) -> Result<Option<NotificationMessage>> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        if state.is_fully_verified() {
+            // Create a timed delay for issuing judgments. Between 30 seconds to 5 minutes.
+            // TODO: Explain reasoning.
+            let now = Timestamp::now();
+            let offset = thread_rng().gen_range(30, 300);
+            let issue_at = Timestamp::with_offset(offset);
+
+            coll.update_one(
+                doc! {
+                    "context": state.context.to_bson()?,
+                },
+                doc! {
+                    "$set": {
+                        "is_fully_verified": true.to_bson()?,
+                        "completion_timestamp": now.to_bson()?,
+                        "issue_judgement_at": issue_at.to_bson()?,
+                    }
+                },
+                None,
+            )
+            .await?;
+
+            return Ok(Some(NotificationMessage::IdentityFullyVerified {
+                context: state.context.clone(),
+            }));
+        }
+
+        Ok(None)
     }
     pub async fn verify_second_challenge(&mut self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
@@ -345,27 +366,10 @@ impl Database {
                 }
             }
 
-            // TODO: Move this into its own function.
-            // Check if all fields have been verified.
-            if state.is_fully_verified() {
-                coll.update_one(
-                    doc! {
-                        "context": state.context.to_bson()?,
-                    },
-                    doc! {
-                        "$set": {
-                            "is_fully_verified": true.to_bson()?,
-                            "completion_timestamp": Timestamp::now().to_bson()?,
-                        }
-                    },
-                    None,
-                )
-                .await?;
-
-                events.push(NotificationMessage::IdentityFullyVerified {
-                    context: context.clone(),
-                });
-            }
+            // Check if the identity is fully verified.
+            self.process_fully_verified(&state)
+                .await?
+                .map(|event| events.push(event));
         }
 
         let coll = self.db.collection(EVENT_COLLECTION);
@@ -469,7 +473,7 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn fetch_completed_not_submitted(&self) -> Result<Vec<JudgementState>> {
+    pub async fn fetch_judgement_candidates(&self) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut cursor = coll
@@ -477,6 +481,9 @@ impl Database {
                 doc! {
                     "is_fully_verified": true,
                     "judgement_submitted": false,
+                    "issue_judgement_at": {
+                        "$lt": Timestamp::now().to_bson()?,
+                    }
                 },
                 None,
             )
