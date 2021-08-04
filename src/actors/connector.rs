@@ -43,9 +43,6 @@ pub async fn run_connector(
 
         let mut connector = init_connector(config.endpoint.as_str(), tx.clone()).await?;
 
-        info!("Requesting active display names from Watcher");
-        connector.do_send(ClientCommand::RequestDisplayNames);
-
         info!("Requesting pending judgments from Watcher");
         connector.do_send(ClientCommand::RequestPendingJudgements);
 
@@ -76,6 +73,9 @@ pub async fn run_connector(
                         );
                     }
                 }
+
+                // Request current/active display names.
+                connector.do_send(ClientCommand::RequestDisplayNames);
 
                 Ok(())
             }
