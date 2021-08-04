@@ -264,7 +264,7 @@ impl Database {
     ) -> Result<Option<NotificationMessage>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
-        if state.is_fully_verified() {
+        if state.check_full_verification() {
             // Create a timed delay for issuing judgments. Between 30 seconds to 5 minutes.
             // TODO: Explain reasoning.
             let now = Timestamp::now();

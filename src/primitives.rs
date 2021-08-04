@@ -385,7 +385,7 @@ impl JudgementState {
                 .collect(),
         }
     }
-    pub fn is_fully_verified(&self) -> bool {
+    pub fn check_full_verification(&self) -> bool {
         self.fields
             .iter()
             .all(|field| field.challenge.is_verified())
