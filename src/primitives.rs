@@ -259,13 +259,6 @@ pub struct JudgementStateBlanked {
     pub fields: Vec<IdentityFieldBlanked>,
 }
 
-impl JudgementStateBlanked {
-    #[cfg(test)]
-    pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityFieldBlanked {
-        self.fields.iter().find(|field| &field.value == ty).unwrap()
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityFieldBlanked {
@@ -273,29 +266,6 @@ pub struct IdentityFieldBlanked {
     challenge: ChallengeTypeBlanked,
     // TODO: Change this to usize.
     failed_attempts: isize,
-}
-
-impl IdentityFieldBlanked {
-    #[cfg(test)]
-    pub fn expected_message(&self) -> &ExpectedMessage {
-        match &self.challenge {
-            ChallengeTypeBlanked::ExpectedMessage {
-                expected,
-                second: _,
-            } => expected,
-            _ => panic!(),
-        }
-    }
-    #[cfg(test)]
-    pub fn expected_second(&self) -> &ExpectedMessageBlanked {
-        match &self.challenge {
-            ChallengeTypeBlanked::ExpectedMessage {
-                expected: _,
-                second,
-            } => second.as_ref().unwrap(),
-            _ => panic!(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
