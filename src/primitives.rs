@@ -265,6 +265,16 @@ impl IdentityFieldBlanked {
             _ => panic!(),
         }
     }
+    #[cfg(test)]
+    pub fn expected_second(&self) -> &ExpectedMessageBlanked {
+        match &self.challenge {
+            ChallengeTypeBlanked::ExpectedMessage {
+                expected: _,
+                second,
+            } => second.as_ref().unwrap(),
+            _ => panic!(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
