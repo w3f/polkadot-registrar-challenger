@@ -23,10 +23,10 @@ pub async fn run_connector(
     watchers: Vec<WatcherConfig>,
     dn_config: DisplayNameConfig,
 ) -> Result<()> {
-    info!(
-        "Setting up connector to Watcher(s) at endpoint: {:?}",
-        watchers
-    );
+    if watchers.is_empty() {
+        warn!("No watcher is configured. Cannot process any requests or issue judgments");
+        return Ok(())
+    }
 
     // Init processing queue.
     let (tx, recv) = unbounded_channel();
@@ -35,8 +35,9 @@ pub async fn run_connector(
     info!("Starting processing queue for incoming messages");
     run_queue_processor(db.clone(), recv, dn_config).await;
 
-    info!("Initializing connection");
     for config in watchers {
+        info!("Initializing connection to Watcher: {:?}", config);
+
         let db = db.clone();
         let tx = tx.clone();
 
@@ -134,7 +135,7 @@ async fn run_queue_processor(
         recv: &mut UnboundedReceiver<QueueMessage>,
         dn_verifier: &DisplayNameVerifier,
     ) -> Result<()> {
-        debug!("Watcher message picked up by queue");
+        info!("Starting event loop for incoming messages");
         while let Some(message) = recv.recv().await {
             match message {
                 QueueMessage::Ack(data) => {
