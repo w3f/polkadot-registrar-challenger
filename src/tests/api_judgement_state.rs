@@ -8,6 +8,9 @@ use crate::primitives::{
 use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
+// Convenience type
+type F = IdentityFieldValue;
+
 #[actix::test]
 async fn current_judgement_state_single_identity() {
     let (db, mut api, _) = new_env().await;
@@ -147,14 +150,14 @@ async fn verify_invalid_message_bad_challenge() {
 
     // The expected message (field verification failed).
     *alice
-        .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
+        .get_field_mut(&F::alice_email())
         .failed_attempts_mut() = 1;
 
     let expected = ResponseAccountState {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerificationFailed {
             context: alice.context.clone(),
-            field: IdentityFieldValue::Email("alice@email.com".to_string()),
+            field: F::alice_email(),
         }],
     };
 
@@ -166,7 +169,7 @@ async fn verify_invalid_message_bad_challenge() {
     let resp = resp.unwrap();
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_message()
             .is_verified,
         false
@@ -222,7 +225,7 @@ async fn verify_invalid_message_bad_origin() {
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
             values: alice
-                .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+                .get_field(&F::alice_email())
                 .expected_message()
                 .to_message_parts(),
         })
@@ -278,7 +281,7 @@ async fn verify_valid_message() {
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
             values: alice
-                .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+                .get_field(&F::alice_matrix())
                 .expected_message()
                 .to_message_parts(),
         })
@@ -286,7 +289,7 @@ async fn verify_valid_message() {
 
     // Matrix account of Alice is now verified
     alice
-        .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+        .get_field_mut(&F::alice_matrix())
         .expected_message_mut()
         .set_verified();
 
@@ -295,7 +298,7 @@ async fn verify_valid_message() {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerified {
             context: alice.context.clone(),
-            field: IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+            field: F::alice_matrix(),
         }],
     };
 
@@ -307,14 +310,14 @@ async fn verify_valid_message() {
     let resp = resp.unwrap();
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .get_field(&F::alice_twitter())
             .expected_message()
             .is_verified,
         false
@@ -322,7 +325,7 @@ async fn verify_valid_message() {
     // VERIFIED
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .get_field(&F::alice_matrix())
             .expected_message()
             .is_verified,
         true
@@ -344,21 +347,21 @@ async fn verify_valid_message() {
     let resp = resp.unwrap();
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("bob@email.com".to_string()))
+            .get_field(&F::bob_email())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@bob".to_string()))
+            .get_field(&F::bob_twitter())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@bob:matrix.org".to_string()))
+            .get_field(&F::bob_matrix())
             .expected_message()
             .is_verified,
         false
@@ -381,8 +384,8 @@ async fn verify_valid_message_duplicate_account_name() {
     let mut bob = JudgementState::bob();
 
     // Bob also has the same Matrix account as Alice.
-    bob.get_field_mut(&IdentityFieldValue::Matrix("@bob:matrix.org".to_string()))
-        .value = IdentityFieldValue::Matrix("@alice:matrix.org".to_string());
+    bob.get_field_mut(&F::bob_matrix())
+        .value = F::alice_matrix();
 
     db.add_judgement_request(&alice).await.unwrap();
     db.add_judgement_request(&bob).await.unwrap();
@@ -404,7 +407,7 @@ async fn verify_valid_message_duplicate_account_name() {
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
             values: alice
-                .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+                .get_field(&F::alice_matrix())
                 .expected_message()
                 .to_message_parts(),
         })
@@ -412,7 +415,7 @@ async fn verify_valid_message_duplicate_account_name() {
 
     // Email account of Alice is now verified
     alice
-        .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+        .get_field_mut(&F::alice_matrix())
         .expected_message_mut()
         .set_verified();
 
@@ -421,7 +424,7 @@ async fn verify_valid_message_duplicate_account_name() {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerified {
             context: alice.context.clone(),
-            field: IdentityFieldValue::Matrix("@alice:matrix.org".to_string()),
+            field: F::alice_matrix(),
         }],
     };
 
@@ -433,14 +436,14 @@ async fn verify_valid_message_duplicate_account_name() {
     let resp = resp.unwrap();
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .get_field(&F::alice_twitter())
             .expected_message()
             .is_verified,
         false
@@ -448,7 +451,7 @@ async fn verify_valid_message_duplicate_account_name() {
     // VERIFIED
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .get_field(&F::alice_matrix())
             .expected_message()
             .is_verified,
         true
@@ -460,7 +463,7 @@ async fn verify_valid_message_duplicate_account_name() {
     // Other judgement states must be unaffected (Bob), but will receive a "failed attempt".
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
-    *bob.get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+    *bob.get_field_mut(&F::alice_matrix())
         .failed_attempts_mut() = 1;
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
@@ -473,14 +476,14 @@ async fn verify_valid_message_duplicate_account_name() {
     let resp = resp.unwrap();
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("bob@email.com".to_string()))
+            .get_field(&F::bob_email())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@bob".to_string()))
+            .get_field(&F::bob_twitter())
             .expected_message()
             .is_verified,
         false
@@ -488,7 +491,7 @@ async fn verify_valid_message_duplicate_account_name() {
     // NOT VERIFIED, even though both have the same account specified.
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .get_field(&F::alice_matrix())
             .expected_message()
             .is_verified,
         false
@@ -530,7 +533,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
             id: MessageId::from(0u32),
             timestamp: Timestamp::now(),
             values: alice
-                .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+                .get_field(&F::alice_email())
                 .expected_message()
                 .to_message_parts(),
         })
@@ -538,7 +541,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
 
     // Email account of Alice is now verified
     alice
-        .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
+        .get_field_mut(&F::alice_email())
         .expected_message_mut()
         .set_verified();
 
@@ -547,7 +550,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::FieldVerified {
             context: alice.context.clone(),
-            field: IdentityFieldValue::Email("alice@email.com".to_string()),
+            field: F::alice_email(),
         }],
     };
 
@@ -560,7 +563,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
     // VERIFIED
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_message()
             .is_verified,
         true
@@ -568,21 +571,21 @@ async fn verify_valid_message_awaiting_second_challenge() {
     // NOT VERIFIED. Second challenge is still required.
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_second()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .get_field(&F::alice_twitter())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .get_field(&F::alice_matrix())
             .expected_message()
             .is_verified,
         false
@@ -596,7 +599,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::AwaitingSecondChallenge {
             context: alice.context.clone(),
-            field: IdentityFieldValue::Email("alice@email.com".to_string()),
+            field: F::alice_email(),
         }],
     };
 
@@ -606,9 +609,9 @@ async fn verify_valid_message_awaiting_second_challenge() {
 
     // Verify second challenge.
     let challenge = VerifyChallenge {
-        entry: IdentityFieldValue::Email("alice@email.com".to_string()),
+        entry: F::alice_email(),
         challenge: alice
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_second()
             .value
             .clone(),
@@ -624,7 +627,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
 
     // Second challenge of email account of Alice is now verified
     alice
-        .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
+        .get_field_mut(&F::alice_email())
         .expected_second_mut()
         .set_verified();
 
@@ -633,7 +636,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::SecondFieldVerified {
             context: alice.context.clone(),
-            field: IdentityFieldValue::Email("alice@email.com".to_string()),
+            field: F::alice_email(),
         }],
     };
 
@@ -646,7 +649,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
     // VERIFIED
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_message()
             .is_verified,
         true
@@ -654,21 +657,21 @@ async fn verify_valid_message_awaiting_second_challenge() {
     // VERIFIED
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .get_field(&F::alice_email())
             .expected_second()
             .is_verified,
         true
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .get_field(&F::alice_twitter())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .get_field(&F::alice_matrix())
             .expected_message()
             .is_verified,
         false
@@ -690,21 +693,21 @@ async fn verify_valid_message_awaiting_second_challenge() {
     let resp = resp.unwrap();
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Email("bob@email.com".to_string()))
+            .get_field(&F::bob_email())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Twitter("@bob".to_string()))
+            .get_field(&F::bob_twitter())
             .expected_message()
             .is_verified,
         false
     );
     assert_eq!(
         resp.state
-            .get_field(&IdentityFieldValue::Matrix("@bob:matrix.org".to_string()))
+            .get_field(&F::bob_matrix())
             .expected_message()
             .is_verified,
         false

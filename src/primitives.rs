@@ -638,6 +638,27 @@ mod tests {
         }
     }
 
+    impl IdentityFieldValue {
+        pub fn alice_email() -> Self {
+            IdentityFieldValue::Email("alice@email.com".to_string())
+        }
+        pub fn alice_matrix() -> Self {
+            IdentityFieldValue::Matrix("@alice:matrix.org".to_string())
+        }
+        pub fn alice_twitter() -> Self {
+            IdentityFieldValue::Twitter("@alice".to_string())
+        }
+        pub fn bob_email() -> Self {
+            IdentityFieldValue::Email("bob@email.com".to_string())
+        }
+        pub fn bob_matrix() -> Self {
+            IdentityFieldValue::Matrix("@bob:matrix.org".to_string())
+        }
+        pub fn bob_twitter() -> Self {
+            IdentityFieldValue::Twitter("@bob".to_string())
+        }
+    }
+
     impl From<&str> for ChainAddress {
         fn from(val: &str) -> Self {
             ChainAddress(val.to_string())
