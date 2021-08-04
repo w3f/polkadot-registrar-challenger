@@ -1,9 +1,11 @@
 use super::*;
+use crate::actors::api::VerifyChallenge;
 use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::primitives::{
     ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, IdentityFieldValue,
     JudgementState, MessageId, NotificationMessage, Timestamp,
 };
+use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
@@ -458,8 +460,7 @@ async fn verify_valid_message_duplicate_account_name() {
     // Other judgement states must be unaffected (Bob), but will receive a "failed attempt".
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
 
-    *bob
-        .get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+    *bob.get_field_mut(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
         .failed_attempts_mut() = 1;
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
@@ -547,14 +548,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
         notifications: vec![NotificationMessage::FieldVerified {
             context: alice.context.clone(),
             field: IdentityFieldValue::Email("alice@email.com".to_string()),
-        },
-        /*
-        NotificationMessage::AwaitingSecondChallenge {
-            context: alice.context.clone(),
-            field: IdentityFieldValue::Email("alice@email.com".to_string()),
-        }
-         */
-        ],
+        }],
     };
 
     // Check response
@@ -600,17 +594,88 @@ async fn verify_valid_message_awaiting_second_challenge() {
     // Check for `AwaitingSecondChallenge` notification.
     let expected = ResponseAccountState {
         state: alice.clone().into(),
-        notifications: vec![
-        NotificationMessage::AwaitingSecondChallenge {
+        notifications: vec![NotificationMessage::AwaitingSecondChallenge {
             context: alice.context.clone(),
             field: IdentityFieldValue::Email("alice@email.com".to_string()),
-        }
-        ],
+        }],
     };
 
     // Check response
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Verify second challenge.
+    let challenge = VerifyChallenge {
+        entry: IdentityFieldValue::Email("alice@email.com".to_string()),
+        challenge: alice
+            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .expected_second()
+            .value
+            .clone(),
+    };
+
+    let res = api
+        .post("/api/verify_second_challenge")
+        .send_json(&challenge)
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Second challenge of email account of Alice is now verified
+    alice
+        .get_field_mut(&IdentityFieldValue::Email("alice@email.com".to_string()))
+        .expected_second_mut()
+        .set_verified();
+
+    // Check for `SecondFieldVerified`.
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::SecondFieldVerified {
+            context: alice.context.clone(),
+            field: IdentityFieldValue::Email("alice@email.com".to_string()),
+        }],
+    };
+
+    // Check response
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Explicit tests.
+    let resp = resp.unwrap();
+    // VERIFIED
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .expected_message()
+            .is_verified,
+        true
+    );
+    // VERIFIED
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Email("alice@email.com".to_string()))
+            .expected_second()
+            .is_verified,
+        true
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Twitter("@alice".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(
+        resp.state
+            .get_field(&IdentityFieldValue::Matrix("@alice:matrix.org".to_string()))
+            .expected_message()
+            .is_verified,
+        false
+    );
+    assert_eq!(resp.state.is_fully_verified, false);
+    assert_eq!(resp.state.completion_timestamp, None);
+    assert_eq!(resp.state.judgement_submitted, false);
 
     // Other judgement states must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();

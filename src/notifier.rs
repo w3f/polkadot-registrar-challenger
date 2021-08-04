@@ -22,7 +22,6 @@ impl SessionNotifier {
     pub async fn run_blocking(mut self) {
         let mut interval = interval(Duration::from_secs(1));
 
-        //let mut event_counter = Timestamp::now().raw();
         let mut event_counter = Timestamp::now().raw();
         loop {
             interval.tick().await;

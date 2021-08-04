@@ -59,6 +59,16 @@ impl IdentityField {
             _ => panic!(),
         }
     }
+    #[cfg(test)]
+    pub fn expected_second(&self) -> &ExpectedMessage {
+        match &self.challenge {
+            ChallengeType::ExpectedMessage {
+                expected: _,
+                second,
+            } => second.as_ref().unwrap(),
+            _ => panic!(),
+        }
+    }
     // TODO: Move to tests module.
     #[cfg(test)]
     pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
@@ -67,6 +77,17 @@ impl IdentityField {
                 ref mut expected,
                 second: _,
             } => expected,
+            _ => panic!(),
+        }
+    }
+    // TODO: Move to tests module.
+    #[cfg(test)]
+    pub fn expected_second_mut(&mut self) -> &mut ExpectedMessage {
+        match &mut self.challenge {
+            ChallengeType::ExpectedMessage {
+                expected: _,
+                ref mut second,
+            } => second.as_mut().unwrap(),
             _ => panic!(),
         }
     }
