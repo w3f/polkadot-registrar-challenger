@@ -604,9 +604,9 @@ mod tests {
                 issue_judgement_at: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Alice".to_string())),
-                    IdentityField::new(IdentityFieldValue::Email("alice@email.com".to_string())),
-                    IdentityField::new(IdentityFieldValue::Twitter("@alice".to_string())),
-                    IdentityField::new(IdentityFieldValue::Matrix("@alice:matrix.org".to_string())),
+                    IdentityField::new(IdentityFieldValue::ALICE_EMAIL()),
+                    IdentityField::new(IdentityFieldValue::ALICE_TWITTER()),
+                    IdentityField::new(IdentityFieldValue::ALICE_MATRIX()),
                 ],
             }
         }
@@ -620,9 +620,9 @@ mod tests {
                 issue_judgement_at: None,
                 fields: vec![
                     IdentityField::new(IdentityFieldValue::DisplayName("Bob".to_string())),
-                    IdentityField::new(IdentityFieldValue::Email("bob@email.com".to_string())),
-                    IdentityField::new(IdentityFieldValue::Twitter("@bob".to_string())),
-                    IdentityField::new(IdentityFieldValue::Matrix("@bob:matrix.org".to_string())),
+                    IdentityField::new(IdentityFieldValue::BOB_EMAIL()),
+                    IdentityField::new(IdentityFieldValue::BOB_TWITTER()),
+                    IdentityField::new(IdentityFieldValue::BOB_MATRIX()),
                 ],
             }
         }
@@ -639,22 +639,28 @@ mod tests {
     }
 
     impl IdentityFieldValue {
-        pub fn alice_email() -> Self {
+        #[allow(non_snake_case)]
+        pub fn ALICE_EMAIL() -> Self {
             IdentityFieldValue::Email("alice@email.com".to_string())
         }
-        pub fn alice_matrix() -> Self {
+        #[allow(non_snake_case)]
+        pub fn ALICE_MATRIX() -> Self {
             IdentityFieldValue::Matrix("@alice:matrix.org".to_string())
         }
-        pub fn alice_twitter() -> Self {
+        #[allow(non_snake_case)]
+        pub fn ALICE_TWITTER() -> Self {
             IdentityFieldValue::Twitter("@alice".to_string())
         }
-        pub fn bob_email() -> Self {
+        #[allow(non_snake_case)]
+        pub fn BOB_EMAIL() -> Self {
             IdentityFieldValue::Email("bob@email.com".to_string())
         }
-        pub fn bob_matrix() -> Self {
+        #[allow(non_snake_case)]
+        pub fn BOB_MATRIX() -> Self {
             IdentityFieldValue::Matrix("@bob:matrix.org".to_string())
         }
-        pub fn bob_twitter() -> Self {
+        #[allow(non_snake_case)]
+        pub fn BOB_TWITTER() -> Self {
             IdentityFieldValue::Twitter("@bob".to_string())
         }
     }
