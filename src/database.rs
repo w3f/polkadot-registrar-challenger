@@ -329,6 +329,7 @@ impl Database {
                     expected: _,
                     second,
                 } => {
+                    // Unwrap is fine, since the query above ensures this is available.
                     let second = second.as_mut().unwrap();
                     if request.challenge.contains(&second.value) {
                         second.set_verified();
@@ -361,8 +362,7 @@ impl Database {
                     }
                 }
                 _ => {
-                    // TODO: Should panic
-                    return Err(anyhow!("Invalid challenge type when verifying message"));
+                    panic!("Invalid challenge type when verifying message");
                 }
             }
 

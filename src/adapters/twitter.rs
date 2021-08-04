@@ -154,6 +154,7 @@ impl TwitterHandler {
         messages.retain(|message| !self.cache.contains(&message.id.into()));
 
         if messages.is_empty() {
+            debug!("No new Twitter messages found");
             return Ok(vec![]);
         } else {
             debug!("Fetched {} message(-s)", messages.len());

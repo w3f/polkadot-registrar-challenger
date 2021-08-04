@@ -55,25 +55,23 @@ impl From<NotifyAccountState> for ResponseAccountState {
     }
 }
 
-#[derive(Default)]
 pub struct LookupServer {
-    // Database is wrapped in `Option' since implementing `SystemService`
-    // requires this type to implement `Default` (which `Database` itself does not).
-    db: Option<Database>,
+    db: Database,
     sessions: Arc<RwLock<HashMap<IdentityContext, Vec<Subscriber>>>>,
+}
+
+impl Default for LookupServer {
+    fn default() -> Self {
+        panic!()
+    }
 }
 
 impl LookupServer {
     pub fn new(db: Database) -> Self {
         LookupServer {
-            db: Some(db),
+            db: db,
             sessions: Default::default(),
         }
-    }
-    fn get_db(&self) -> crate::Result<&Database> {
-        self.db.as_ref().ok_or(anyhow!(
-            "No database is configured for LookupServer registry service"
-        ))
     }
 }
 
@@ -92,7 +90,7 @@ impl Handler<SubscribeAccountState> for LookupServer {
     type Result = ResponseActFuture<Self, ()>;
 
     fn handle(&mut self, msg: SubscribeAccountState, _ctx: &mut Self::Context) -> Self::Result {
-        let db = self.get_db().unwrap().clone();
+        let db = self.db.clone();
         let sessions = Arc::clone(&self.sessions);
 
         Box::pin(
