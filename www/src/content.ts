@@ -252,7 +252,7 @@ export class ContentManager {
 
                 console.log(body);
 
-                let response = await fetch("http://localhost:8001/api/verify_second_challenge",
+                let response = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
                 {
                     method: "POST",
                     headers: {
