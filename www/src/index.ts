@@ -1,6 +1,7 @@
 import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
 import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
+import WebsocketHeartbeatJs from 'websocket-heartbeat-js';
 
 class ActionListerner {
     specify_network: HTMLInputElement;
@@ -50,7 +51,7 @@ class ActionListerner {
                 if (target == "Check Judgement") {
                     this.specify_address.placeholder = "Account address..."
                     this.specify_action.innerText = target;
-                } else if (target == "Validate Display Name" ) {
+                } else if (target == "Validate Display Name") {
                     this.specify_address.placeholder = "Display Name..."
                     this.specify_action.innerText = target;
                 }
@@ -126,17 +127,17 @@ class ActionListerner {
             `;
 
         if (action == "Check Judgement") {
-            const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+            const socket = new WebsocketHeartbeatJs({ url: 'wss://registrar-backend.web3.foundation/api/account_status' });
 
-            socket.addEventListener("open", (_: Event) => {
+            socket.onopen = () => {
                 let msg = JSON.stringify({ address: address, chain: network });
                 socket.send(msg);
-            });
+            };
 
-            socket.addEventListener("message", (event: Event) => {
+            socket.onmessage = (event: Event) => {
                 let msg = (event as MessageEvent);
                 this.parseAccountStatus(msg);
-            });
+            };
         } else if (action == "Validate Display Name") {
             let display_name = address;
             (async () => {
