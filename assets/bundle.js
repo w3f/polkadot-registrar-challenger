@@ -233,7 +233,7 @@ class ContentManager {
                 challenge: second_challenge.value,
             });
             console.log(body);
-            let response = yield fetch("http://localhost:8001/api/verify_second_challenge", {
+            let response = yield fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
