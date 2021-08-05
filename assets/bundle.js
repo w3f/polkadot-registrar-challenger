@@ -467,7 +467,7 @@ class ActionListerner {
             this.notifications.processNotifications(message.notifications);
             // This notification should only be displayed if no other notifications are available.
             if (message.state.is_fully_verified && message.notifications.length == 0) {
-                this.notifications.displayNotification("The identity has been fully verified!", "bg-success text-light");
+                this.notifications.displayNotification("The identity has been fully verified!", "bg-success text-light", true);
             }
         }
         else if (parsed.type == "err") {
@@ -499,10 +499,10 @@ class NotificationHandler {
     processNotifications(notifications) {
         for (let notify of notifications) {
             let [message, color] = notificationTypeResolver(notify);
-            this.displayNotification(message, color);
+            this.displayNotification(message, color, false);
         }
     }
-    displayNotification(message, color) {
+    displayNotification(message, color, show_final) {
         this.div_notifications.insertAdjacentHTML("beforeend", `<div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
                     aria-atomic="true">
                     <div class="d-flex">
@@ -525,7 +525,11 @@ class NotificationHandler {
             toast.classList.add("hide");
         });
         // Cleanup old toast, limit to eight max.
-        let old = this.notify_idx - 8;
+        let max = 8;
+        if (show_final) {
+            max = 1;
+        }
+        let old = this.notify_idx - max;
         if (old >= 0) {
             let toast = document
                 .getElementById(`toast-${old}`);
@@ -537,7 +541,7 @@ class NotificationHandler {
         this.notify_idx += 1;
     }
     displayError(message) {
-        this.displayNotification(message, "bg-danger text-light");
+        this.displayNotification(message, "bg-danger text-light", false);
     }
 }
 exports.NotificationHandler = NotificationHandler;
