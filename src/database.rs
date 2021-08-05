@@ -118,6 +118,7 @@ impl Database {
             coll.insert_one(request.to_document()?, None).await?;
 
             // Create event.
+            // TODO: Implement method fro creating events.
             event_log
                 .insert_one(
                     Event::new(NotificationMessage::IdentityInserted {
@@ -189,7 +190,6 @@ impl Database {
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
                                 // specified).
-                                // TODO: Filter by context?
                                 coll.update_one(
                                     doc! {
                                         "context": context.to_bson()?,
@@ -335,7 +335,6 @@ impl Database {
                         second.set_verified();
                         verified = true;
 
-                        // TODO: Filter by context?
                         coll.update_one(
                             doc! {
                                 "fields.value": request.entry.to_bson()?,
