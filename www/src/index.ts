@@ -204,7 +204,7 @@ class ActionListerner {
 
             // This notification should only be displayed if no other notifications are available.
             if (message.state.is_fully_verified && message.notifications.length == 0) {
-                this.notifications.displayNotification("The identity has been fully verified!", "bg-success text-light")
+                this.notifications.displayNotification("The identity has been fully verified!", "bg-success text-light", true)
             }
         } else if (parsed.type == "err") {
             let message: string = parsed.message;

@@ -17,10 +17,10 @@ export class NotificationHandler {
         for (let notify of notifications) {
             let [message, color] = notificationTypeResolver(notify);
 
-            this.displayNotification(message, color);
+            this.displayNotification(message, color, false);
         }
     }
-    displayNotification(message: string, color: string) {
+    displayNotification(message: string, color: string, show_final: boolean) {
             this.div_notifications.insertAdjacentHTML(
                 "beforeend",
                 `<div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
@@ -49,7 +49,12 @@ export class NotificationHandler {
                 });
 
             // Cleanup old toast, limit to eight max.
-            let old = this.notify_idx - 8;
+            let max = 8;
+            if (show_final) {
+                max = 1;
+            }
+
+            let old = this.notify_idx - max;
             if (old >= 0) {
                 let toast: HTMLElement | null = document
                     .getElementById(`toast-${old}`);
@@ -63,7 +68,7 @@ export class NotificationHandler {
             this.notify_idx += 1;
     }
     displayError(message: string) {
-        this.displayNotification(message, "bg-danger text-light");
+        this.displayNotification(message, "bg-danger text-light", false);
     }
 }
 
