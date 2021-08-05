@@ -16,14 +16,14 @@ config:
         password: {{ env "MATRIX_PASSWORD" }}
         db_path: /tmp/matrix.db
       twitter:
-        enabled: false
+        enabled: true
         api_key: {{ env "TWITTER_API_KEY" }}
         api_secret: {{ env "TWITTER_API_SECRET" }}
         token: {{ env "TWITTER_TOKEN" }}
         token_secret: {{ env "TWITTER_TOKEN_SECRET" }}
         request_interval: 300
       email:
-        enabled: false
+        enabled: true
         smtp_server: smtp-relay.gmail.com
         imap_server: imap.gmail.com
         inbox: INBOX
