@@ -185,6 +185,7 @@ export class ContentManager {
                     <strong>challenge</strong>. Do note that each account type has its own, individual
                     challenge.
                 </p>
+                <p><em>Note:</em> Twitter verification can take about 5 minutes.</p>
                 <table id="verification-overview" class="table table-striped table-dark">
                     <thead>
                         <tr>

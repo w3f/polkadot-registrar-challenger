@@ -190,6 +190,11 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 
         match msg {
             ws::Message::Text(msg) => {
+                if msg == "heartbeat" {
+                    ctx.pong(b"pong");
+                    return ();
+                }
+
                 if let Ok(context) = serde_json::from_slice::<IdentityContext>(msg.as_bytes()) {
                     // Subscribe the the specified identity context.
                     // TODO: Return value directly?
