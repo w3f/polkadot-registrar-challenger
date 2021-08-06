@@ -1245,11 +1245,6 @@ verror@1.10.0:
     core-util-is "1.0.2"
     extsprintf "^1.2.0"
 
-websocket-heartbeat-js@^1.0.13:
-  version "1.0.13"
-  resolved "https://registry.yarnpkg.com/websocket-heartbeat-js/-/websocket-heartbeat-js-1.0.13.tgz#0393f0e25f5614f98232748970d518e9e3bc0704"
-  integrity sha512-vegug/lUsnKqVbvrRtTx+fTB0b/VcW4YDyEzs62y3hoEA9IjEQXltagMMAp0OrUloCT74V9JEVPZk30nfr3RvA==
-
 which-module@^2.0.0:
   version "2.0.0"
   resolved "https://registry.yarnpkg.com/which-module/-/which-module-2.0.0.tgz#d9ef07dce77b9902b8a3a8fa4b31c3e3f7e6e87a"

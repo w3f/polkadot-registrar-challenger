@@ -1,7 +1,7 @@
 import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
 import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
-import WebsocketHeartbeatJs from 'websocket-heartbeat-js';
+import { setTokenSourceMapRange } from "typescript";
 
 class ActionListerner {
     specify_network: HTMLInputElement;
@@ -127,7 +127,11 @@ class ActionListerner {
             `;
 
         if (action == "Check Judgement") {
-            const socket = new WebsocketHeartbeatJs({ url: 'wss://registrar-backend.web3.foundation/api/account_status' });
+            const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+
+            window.setInterval(() => {
+                socket.send("heartbeat");
+            }, 30000);
 
             socket.onopen = () => {
                 let msg = JSON.stringify({ address: address, chain: network });
