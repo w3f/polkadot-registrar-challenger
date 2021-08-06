@@ -1,7 +1,6 @@
 import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
 import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
-import { setTokenSourceMapRange } from "typescript";
 
 class ActionListerner {
     specify_network: HTMLInputElement;
