@@ -300,6 +300,8 @@ impl TwitterHandler {
         let resp = self.client.execute(request).await?;
         let txt = resp.text().await?;
 
+        debug!("Twitter response: {:?}", txt);
+
         serde_json::from_str::<T>(&txt).map_err(|err| err.into())
     }
     async fn lookup_twitter_id(
