@@ -346,6 +346,8 @@ impl TwitterHandler {
             screen_name: String,
         }
 
+        debug!("Params: {:?}", params);
+
         let user_objects = self
             .get_request::<Vec<UserObject>>(
                 "https://api.twitter.com/1.1/users/lookup.json",

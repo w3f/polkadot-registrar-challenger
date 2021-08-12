@@ -180,6 +180,7 @@ async fn run_queue_processor(
                 .await
                 .map_err(|err| error!("Error in connector messaging queue: {:?}", err));
 
+            // 10 second pause between errors.
             sleep(Duration::from_secs(10)).await;
         }
     });

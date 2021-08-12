@@ -26,9 +26,6 @@ impl SessionNotifier {
             server: &Addr<LookupServer>,
             event_counter: &mut u64,
         ) -> Result<()> {
-            // Fetch events based on intervals until ["Change
-            // Streams"](https://docs.mongodb.com/manual/changeStreams/) are
-            // implemented in the Rust MongoDb driver.
             let (events, new_counter) = db.fetch_events(*event_counter).await?;
             let mut cache: HashMap<IdentityContext, JudgementState> = HashMap::new();
 
@@ -68,6 +65,9 @@ impl SessionNotifier {
                 error!("Error in session notifier event loop: {:?}", err);
             }
 
+            // Fetch events based on intervals until ["Change
+            // Streams"](https://docs.mongodb.com/manual/changeStreams/) are
+            // implemented in the Rust MongoDb driver.
             sleep(Duration::from_secs(1)).await;
         }
     }
