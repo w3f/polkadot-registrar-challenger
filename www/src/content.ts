@@ -91,7 +91,7 @@ export class ContentManager {
                 } else if (field.value.type == "twitter") {
                     to = "@w3f_registrar";
                 } else if (field.value.type == "matrix") {
-                    to = "@registrar:web3.foundation";
+                    to = "@registrar-v2:web3.foundation";
                 }
 
                 table += `
