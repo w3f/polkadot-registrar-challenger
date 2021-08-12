@@ -83,7 +83,7 @@ class ContentManager {
                     to = "@w3f_registrar";
                 }
                 else if (field.value.type == "matrix") {
-                    to = "@registrar:web3.foundation";
+                    to = "@registrar-v2:web3.foundation";
                 }
                 table += `
                         <tr>
