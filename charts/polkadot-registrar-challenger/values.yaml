@@ -1,8 +1,8 @@
 environment: production
 
 image:
-  repository: web3f/polkadot-registrar-challenger
-  tag: v0.2.1
+  repository: lamafab/polkadot-registrar-challenger
+  tag: v0.2.2
   pullPolicy: Always
 
 config:
