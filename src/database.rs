@@ -271,9 +271,10 @@ impl Database {
             let offset = thread_rng().gen_range(30, 300);
             let issue_at = Timestamp::with_offset(offset);
 
-            coll.update_one(
+            let res = coll.update_one(
                 doc! {
                     "context": state.context.to_bson()?,
+                    "is_fully_verified": false,
                 },
                 doc! {
                     "$set": {
@@ -286,9 +287,11 @@ impl Database {
             )
             .await?;
 
-            return Ok(Some(NotificationMessage::IdentityFullyVerified {
-                context: state.context.clone(),
-            }));
+            if res.modified_count > 0 {
+                return Ok(Some(NotificationMessage::IdentityFullyVerified {
+                    context: state.context.clone(),
+                }));
+            }
         }
 
         Ok(None)
