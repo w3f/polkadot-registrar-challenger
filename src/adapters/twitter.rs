@@ -177,10 +177,12 @@ impl TwitterHandler {
 
         // Lookup Twitter Ids and insert those into the cache.
         debug!("Looking up Twitter Ids");
-        let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
-        self.twitter_ids.extend(lookup_results);
+        if !to_lookup.is_empty() {
+            let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
+            self.twitter_ids.extend(lookup_results);
+        }
 
-        // Parse al messages into `TwitterMessage`.
+        // Parse all messages into `TwitterMessage`.
         let mut parsed_messages = vec![];
         for message in messages {
             let sender = self
@@ -190,7 +192,6 @@ impl TwitterHandler {
                 .clone();
 
             let id = message.id.into();
-            self.cache.insert(id);
 
             parsed_messages.push(ExternalMessage {
                 origin: ExternalMessageType::Twitter(sender),
@@ -198,6 +199,8 @@ impl TwitterHandler {
                 timestamp: Timestamp::now(),
                 values: vec![message.message.into()],
             });
+
+            self.cache.insert(id);
         }
 
         Ok(parsed_messages)
