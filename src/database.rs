@@ -499,9 +499,10 @@ impl Database {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
         let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
-        coll.update_one(
+        let res = coll.update_one(
             doc! {
                 "context": context.to_bson()?,
+                "judgement_submitted": false,
             },
             doc! {
                 "$set": {
@@ -513,14 +514,16 @@ impl Database {
         .await?;
 
         // Create event.
-        event_log
-            .insert_one(
-                Event::new(NotificationMessage::JudgementProvided {
-                    context: context.clone(),
-                }),
-                None,
-            )
-            .await?;
+        if res.modified_count > 0 {
+            event_log
+                .insert_one(
+                    Event::new(NotificationMessage::JudgementProvided {
+                        context: context.clone(),
+                    }),
+                    None,
+                )
+                .await?;
+        }
 
         Ok(())
     }
