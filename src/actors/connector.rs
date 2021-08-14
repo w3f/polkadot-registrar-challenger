@@ -234,6 +234,8 @@ pub enum EventType {
     DisplayNamesRequest,
     #[serde(rename = "displayNamesResponse")]
     DisplayNamesResponse,
+    #[serde(rename = "judgementUnrequested")]
+    JudgementUnrequested,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -410,6 +412,9 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     debug!("Received Display Names");
 
                     queue.send(QueueMessage::ActiveDisplayNames(data))?
+                }
+                EventType::JudgementUnrequested => {
+                    debug!("Judgement unrequested: {:?}", parsed);
                 }
                 _ => {
                     warn!("Received unrecognized message from watcher: {:?}", parsed);
