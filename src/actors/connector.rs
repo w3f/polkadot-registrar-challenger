@@ -301,7 +301,7 @@ impl DisplayNameEntryRaw {
 fn try_decode_hex(display_name: &mut String) {
     if display_name.starts_with("0x") {
         // Might be a false positive. Leave it as is if it cannot be decoded.
-        if let Ok(name) = hex::decode(&display_name) {
+        if let Ok(name) = hex::decode(&display_name[2..]) {
             if let Ok(name) = String::from_utf8(name) {
                 *display_name = name;
             }
