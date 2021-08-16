@@ -271,21 +271,22 @@ impl Database {
             let offset = thread_rng().gen_range(30, 300);
             let issue_at = Timestamp::with_offset(offset);
 
-            let res = coll.update_one(
-                doc! {
-                    "context": state.context.to_bson()?,
-                    "is_fully_verified": false,
-                },
-                doc! {
-                    "$set": {
-                        "is_fully_verified": true.to_bson()?,
-                        "completion_timestamp": now.to_bson()?,
-                        "issue_judgement_at": issue_at.to_bson()?,
-                    }
-                },
-                None,
-            )
-            .await?;
+            let res = coll
+                .update_one(
+                    doc! {
+                        "context": state.context.to_bson()?,
+                        "is_fully_verified": false,
+                    },
+                    doc! {
+                        "$set": {
+                            "is_fully_verified": true.to_bson()?,
+                            "completion_timestamp": now.to_bson()?,
+                            "issue_judgement_at": issue_at.to_bson()?,
+                        }
+                    },
+                    None,
+                )
+                .await?;
 
             if res.modified_count > 0 {
                 return Ok(Some(NotificationMessage::IdentityFullyVerified {
@@ -502,19 +503,20 @@ impl Database {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
         let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
-        let res = coll.update_one(
-            doc! {
-                "context": context.to_bson()?,
-                "judgement_submitted": false,
-            },
-            doc! {
-                "$set": {
-                    "judgement_submitted": true,
-                }
-            },
-            None,
-        )
-        .await?;
+        let res = coll
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                    "judgement_submitted": false,
+                },
+                doc! {
+                    "$set": {
+                        "judgement_submitted": true,
+                    }
+                },
+                None,
+            )
+            .await?;
 
         // Create event.
         if res.modified_count > 0 {

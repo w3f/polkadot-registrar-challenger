@@ -117,10 +117,19 @@ async fn run_queue_processor(
     async fn process_request(
         db: &Database,
         address: ChainAddress,
-        accounts: HashMap<AccountType, String>,
+        mut accounts: HashMap<AccountType, String>,
         dn_verifier: &DisplayNameVerifier,
     ) -> Result<()> {
         let id = create_context(address);
+
+        // Decode display name if appropriate.
+        accounts
+            .iter_mut()
+            .find(|(ty, _)| *ty == &AccountType::DisplayName)
+            .map(|(_, val)| {
+                try_decode_hex(val);
+            });
+
         let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
         db.add_judgement_request(&state).await?;
         dn_verifier.verify_display_name(&state).await?;
@@ -158,7 +167,9 @@ async fn run_queue_processor(
                     }
                 }
                 QueueMessage::ActiveDisplayNames(data) => {
-                    for d in data {
+                    for mut d in data {
+                        d.try_decode_hex();
+
                         let context = create_context(d.address);
                         let entry = DisplayNameEntry {
                             context: context,
@@ -277,6 +288,25 @@ pub struct DisplayNameEntryRaw {
     pub address: ChainAddress,
     #[serde(alias = "displayName")]
     pub display_name: String,
+}
+
+impl DisplayNameEntryRaw {
+    /// Display names with emojis are represented in HEX form. Decode the
+    /// display name, assuming it can be decoded...
+    pub fn try_decode_hex(&mut self) {
+        try_decode_hex(&mut self.display_name);
+    }
+}
+
+fn try_decode_hex(display_name: &mut String) {
+    if display_name.starts_with("0x") {
+        // Might be a false positive. Leave it as is if it cannot be decoded.
+        if let Ok(name) = hex::decode(&display_name) {
+            if let Ok(name) = String::from_utf8(name) {
+                *display_name = name;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
