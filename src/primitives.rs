@@ -1,411 +1,629 @@
-use base58::FromBase58;
-use failure::err_msg;
+use actix::Message;
 
-use rand::{thread_rng, Rng};
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use schnorrkel::keys::PublicKey as SchnorrkelPubKey;
-use schnorrkel::sign::Signature as SchnorrkelSignature;
-use serde::de::Error as SerdeError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::convert::TryFrom;
-use std::fmt::{self, Debug, Display};
-use std::result::Result as StdResult;
-use std::time::{SystemTime, UNIX_EPOCH};
+use crate::actors::connector::DisplayNameEntry;
 
-pub type Result<T> = StdResult<T, failure::Error>;
-
-pub fn unix_time() -> u64 {
-    let start = SystemTime::now();
-    start
-        .duration_since(UNIX_EPOCH)
-        .expect("Time went backwards")
-        .as_secs()
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityContext {
+    pub address: ChainAddress,
+    pub chain: ChainName,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PubKey(SchnorrkelPubKey);
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ChainAddress(String);
 
-impl PubKey {
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.to_bytes()
+impl ChainAddress {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
-impl From<SchnorrkelPubKey> for PubKey {
-    fn from(value: SchnorrkelPubKey) -> Self {
-        PubKey(value)
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChainName {
+    Polkadot,
+    Kusama,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityField {
+    pub value: IdentityFieldValue,
+    pub challenge: ChallengeType,
+    // TODO: Change this to usize.
+    pub failed_attempts: isize,
+}
+
+// TODO: Should be `From`?
+impl IdentityField {
+    pub fn new(val: IdentityFieldValue) -> Self {
+        use IdentityFieldValue::*;
+
+        let challenge = {
+            match val {
+                LegalName(_) => ChallengeType::Unsupported,
+                Web(_) => ChallengeType::Unsupported,
+                PGPFingerprint(_) => ChallengeType::Unsupported,
+                Image(_) => ChallengeType::Unsupported,
+                Additional(_) => ChallengeType::Unsupported,
+                DisplayName(_) => ChallengeType::DisplayNameCheck {
+                    passed: false,
+                    violations: vec![],
+                },
+                Email(_) => ChallengeType::ExpectedMessage {
+                    expected: ExpectedMessage::random(),
+                    second: Some(ExpectedMessage::random()),
+                },
+                Twitter(_) => ChallengeType::ExpectedMessage {
+                    expected: ExpectedMessage::random(),
+                    second: None,
+                },
+                Matrix(_) => ChallengeType::ExpectedMessage {
+                    expected: ExpectedMessage::random(),
+                    second: None,
+                },
+            }
+        };
+
+        IdentityField {
+            value: val,
+            challenge: challenge,
+            failed_attempts: 0,
+        }
     }
 }
 
-impl TryFrom<Vec<u8>> for PubKey {
-    type Error = failure::Error;
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "content")]
+pub enum ChallengeType {
+    ExpectedMessage {
+        expected: ExpectedMessage,
+        second: Option<ExpectedMessage>,
+    },
+    DisplayNameCheck {
+        passed: bool,
+        violations: Vec<DisplayNameEntry>,
+    },
+    Unsupported,
+}
 
-    fn try_from(value: Vec<u8>) -> Result<Self> {
-        Ok(PubKey(
-            SchnorrkelPubKey::from_bytes(&value).map_err(|_| err_msg("invalid public key"))?,
-        ))
+impl ChallengeType {
+    pub fn is_verified(&self) -> bool {
+        match self {
+            ChallengeType::ExpectedMessage { expected, second } => {
+                if let Some(second) = second {
+                    expected.is_verified && second.is_verified
+                } else {
+                    expected.is_verified
+                }
+            }
+            ChallengeType::DisplayNameCheck {
+                passed,
+                violations: _,
+            } => *passed,
+            ChallengeType::Unsupported => false,
+        }
     }
 }
 
-impl Serialize for PubKey {
-    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&hex::encode(self.to_bytes()))
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ExpectedMessage {
+    pub value: String,
+    pub is_verified: bool,
+}
+
+impl ExpectedMessage {
+    pub fn random() -> Self {
+        use rand::{thread_rng, Rng};
+
+        let random: [u8; 16] = thread_rng().gen();
+        ExpectedMessage {
+            value: hex::encode(random),
+            is_verified: false,
+        }
+    }
+    pub fn verify_message(&mut self, message: &ExternalMessage) -> bool {
+        for value in &message.values {
+            if value.0.contains(&self.value) {
+                self.set_verified();
+                return true;
+            }
+        }
+
+        false
+    }
+    pub fn set_verified(&mut self) {
+        self.is_verified = true;
+    }
+    #[cfg(test)]
+    pub fn to_message_parts(&self) -> Vec<MessagePart> {
+        vec![self.value.clone().into()]
     }
 }
 
-impl<'de> Deserialize<'de> for PubKey {
-    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let hex_str = <String as Deserialize>::deserialize(deserializer)?;
-        Ok(PubKey(
-            SchnorrkelPubKey::from_bytes(
-                &hex::decode(hex_str)
-                    .map_err(|_| SerdeError::custom("failed to decode public key from hex"))?,
-            )
-            .map_err(|_| SerdeError::custom("failed creating public key from bytes"))?,
-        ))
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+pub enum IdentityFieldValue {
+    LegalName(String),
+    DisplayName(String),
+    Email(String),
+    Web(String),
+    Twitter(String),
+    Matrix(String),
+    PGPFingerprint(()),
+    Image(()),
+    Additional(()),
+}
+
+impl IdentityFieldValue {
+    // TODO: Rename
+    pub fn matches(&self, message: &ExternalMessage) -> bool {
+        match self {
+            IdentityFieldValue::Email(n1) => match &message.origin {
+                ExternalMessageType::Email(n2) => n1 == n2,
+                _ => false,
+            },
+            IdentityFieldValue::Twitter(n1) => match &message.origin {
+                ExternalMessageType::Twitter(n2) => n1 == n2,
+                _ => false,
+            },
+            IdentityFieldValue::Matrix(n1) => match &message.origin {
+                ExternalMessageType::Matrix(n2) => n1 == n2,
+                _ => false,
+            },
+            _ => false,
+        }
     }
 }
 
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct Signature(SchnorrkelSignature);
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct JudgementStateBlanked {
+    pub context: IdentityContext,
+    pub is_fully_verified: bool,
+    pub inserted_timestamp: Timestamp,
+    pub completion_timestamp: Option<Timestamp>,
+    pub judgement_submitted: bool,
+    pub fields: Vec<IdentityFieldBlanked>,
+}
 
-impl From<SchnorrkelSignature> for Signature {
-    fn from(value: SchnorrkelSignature) -> Self {
-        Signature(value)
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityFieldBlanked {
+    value: IdentityFieldValue,
+    challenge: ChallengeTypeBlanked,
+    // TODO: Change this to usize.
+    failed_attempts: isize,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "content")]
+pub enum ChallengeTypeBlanked {
+    ExpectedMessage {
+        expected: ExpectedMessage,
+        second: Option<ExpectedMessageBlanked>,
+    },
+    DisplayNameCheck {
+        passed: bool,
+        violations: Vec<DisplayNameEntry>,
+    },
+    Unsupported,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ExpectedMessageBlanked {
+    // IMPORTANT: This value is blanked.
+    // pub value: String,
+    pub is_verified: bool,
+}
+
+impl From<JudgementState> for JudgementStateBlanked {
+    fn from(s: JudgementState) -> Self {
+        JudgementStateBlanked {
+            context: s.context,
+            is_fully_verified: s.is_fully_verified,
+            inserted_timestamp: s.inserted_timestamp,
+            completion_timestamp: s.completion_timestamp,
+            judgement_submitted: s.judgement_submitted,
+            fields: s
+                .fields
+                .into_iter()
+                .map(|f| IdentityFieldBlanked {
+                    value: f.value,
+                    challenge: {
+                        match f.challenge {
+                            ChallengeType::ExpectedMessage { expected, second } => {
+                                ChallengeTypeBlanked::ExpectedMessage {
+                                    expected: expected,
+                                    second: second.map(|s| ExpectedMessageBlanked {
+                                        is_verified: s.is_verified,
+                                    }),
+                                }
+                            }
+                            ChallengeType::DisplayNameCheck { passed, violations } => {
+                                ChallengeTypeBlanked::DisplayNameCheck {
+                                    passed: passed,
+                                    violations: violations,
+                                }
+                            }
+                            ChallengeType::Unsupported => ChallengeTypeBlanked::Unsupported,
+                        }
+                    },
+                    failed_attempts: f.failed_attempts,
+                })
+                .collect(),
+        }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct NetAccount(String);
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct JudgementState {
+    pub context: IdentityContext,
+    pub is_fully_verified: bool,
+    pub inserted_timestamp: Timestamp,
+    pub completion_timestamp: Option<Timestamp>,
+    pub judgement_submitted: bool,
+    pub issue_judgement_at: Option<Timestamp>,
+    pub fields: Vec<IdentityField>,
+}
+
+impl JudgementState {
+    pub fn new(context: IdentityContext, fields: Vec<IdentityFieldValue>) -> Self {
+        JudgementState {
+            context: context,
+            is_fully_verified: false,
+            inserted_timestamp: Timestamp::now(),
+            completion_timestamp: None,
+            judgement_submitted: false,
+            issue_judgement_at: None,
+            fields: fields
+                .into_iter()
+                .map(|val| IdentityField::new(val))
+                .collect(),
+        }
+    }
+    pub fn check_full_verification(&self) -> bool {
+        self.fields
+            .iter()
+            .all(|field| field.challenge.is_verified())
+    }
+    pub fn display_name(&self) -> Option<&str> {
+        self.fields
+            .iter()
+            .find(|field| match field.value {
+                IdentityFieldValue::DisplayName(_) => true,
+                _ => false,
+            })
+            .map(|field| match &field.value {
+                IdentityFieldValue::DisplayName(name) => name.as_str(),
+                _ => panic!("Failed to get display name. This is a bug."),
+            })
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
+#[serde(rename_all = "snake_case")]
+#[rtype(result = "()")]
+pub struct ExternalMessage {
+    pub origin: ExternalMessageType,
+    pub id: MessageId,
+    pub timestamp: Timestamp,
+    pub values: Vec<MessagePart>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+pub enum ExternalMessageType {
+    Email(String),
+    Twitter(String),
+    Matrix(String),
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct MessageId(u64);
+
+impl From<u64> for MessageId {
+    fn from(val: u64) -> Self {
+        MessageId(val)
+    }
+}
+
+impl From<u32> for MessageId {
+    fn from(val: u32) -> Self {
+        MessageId::from(val as u64)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    pub fn now() -> Self {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let start = SystemTime::now();
+        let time = start
+            .duration_since(UNIX_EPOCH)
+            .expect("Failed to calculate UNIX time")
+            .as_secs();
+
+        Timestamp(time)
+    }
+    pub fn with_offset(offset: u64) -> Self {
+        let now = Self::now();
+        Timestamp(now.0 + offset)
+    }
+    pub fn raw(&self) -> u64 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct MessagePart(String);
+
+impl From<String> for MessagePart {
+    fn from(val: String) -> Self {
+        MessagePart(val)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Event {
+    pub timestamp: Timestamp,
+    pub event: NotificationMessage,
+}
+
+impl Event {
+    pub fn new(event: NotificationMessage) -> Self {
+        Event {
+            timestamp: Timestamp::now(),
+            event: event,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
+#[serde(rename_all = "snake_case", tag = "type", content = "value")]
+#[rtype(result = "()")]
+pub enum NotificationMessage {
+    IdentityInserted {
+        context: IdentityContext,
+    },
+    IdentityUpdated {
+        context: IdentityContext,
+    },
+    FieldVerified {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    FieldVerificationFailed {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    SecondFieldVerified {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    SecondFieldVerificationFailed {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    AwaitingSecondChallenge {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+    IdentityFullyVerified {
+        context: IdentityContext,
+    },
+    JudgementProvided {
+        context: IdentityContext,
+    },
+    // TODO: Make use of this
+    NotSupported {
+        context: IdentityContext,
+        field: IdentityFieldValue,
+    },
+}
+
+impl NotificationMessage {
+    pub fn context(&self) -> &IdentityContext {
+        use NotificationMessage::*;
+
+        match self {
+            IdentityInserted { context } => context,
+            IdentityUpdated { context } => context,
+            FieldVerified { context, field: _ } => context,
+            FieldVerificationFailed { context, field: _ } => context,
+            SecondFieldVerified { context, field: _ } => context,
+            SecondFieldVerificationFailed { context, field: _ } => context,
+            AwaitingSecondChallenge { context, field: _ } => context,
+            IdentityFullyVerified { context } => context,
+            JudgementProvided { context } => context,
+            NotSupported { context, field: _ } => context,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityJudged {
+    context: IdentityContext,
+    timestamp: Timestamp,
+}
 
 #[cfg(test)]
-impl From<&SchnorrkelPubKey> for NetAccount {
-    fn from(value: &SchnorrkelPubKey) -> Self {
-        use base58::ToBase58;
+mod tests {
+    use super::*;
 
-        // The address here is technically invalid, but it contains enough
-        // information in order to extract a public key out of it. So for
-        // testing this is sufficient.
-        NetAccount::from(format!("1{}", value.to_bytes().to_base58()))
-    }
-}
-
-impl ToSql for NetAccount {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        use ToSqlOutput::*;
-        use ValueRef::*;
-
-        Ok(Borrowed(Text(self.as_str().as_bytes())))
-    }
-}
-
-impl FromSql for NetAccount {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value {
-            ValueRef::Text(val) => Ok(NetAccount(
-                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
-            )),
-            _ => Err(FromSqlError::InvalidType),
+    impl IdentityContext {
+        pub fn alice() -> Self {
+            IdentityContext {
+                address: ChainAddress(
+                    "1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP".to_string(),
+                ),
+                chain: ChainName::Polkadot,
+            }
+        }
+        pub fn bob() -> Self {
+            IdentityContext {
+                address: ChainAddress(
+                    "1b3NhsSEqWSQwS6nPGKgCrSjv9Kp13CnhraLV5Coyd8ooXB".to_string(),
+                ),
+                chain: ChainName::Polkadot,
+            }
         }
     }
-}
 
-impl NetAccount {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-    #[cfg(test)]
-    pub fn alice() -> Self {
-        NetAccount::from("14GcE3qBiEnAyg2sDfadT3fQhWd2Z3M59tWi1CvVV8UwxUfU")
-    }
-    #[cfg(test)]
-    pub fn bob() -> Self {
-        NetAccount::from("163AnENMFr6k4UWBGdHG9dTWgrDmnJgmh3HBBZuVWhUTTU5C")
-    }
-    #[cfg(test)]
-    pub fn eve() -> Self {
-        NetAccount::from("13gjXZKFPCELoVN56R2KopsNKAb6xqHwaCfWA8m4DG4s9xGQ")
-    }
-}
-
-impl From<String> for NetAccount {
-    fn from(value: String) -> Self {
-        NetAccount(value)
-    }
-}
-
-impl From<&str> for NetAccount {
-    fn from(value: &str) -> Self {
-        NetAccount(value.to_owned())
-    }
-}
-
-#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct Account(String);
-
-impl FromSql for Account {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value {
-            ValueRef::Text(val) => Ok(Account(
-                String::from_utf8(val.to_vec()).map_err(|_| FromSqlError::InvalidType)?,
-            )),
-            _ => Err(FromSqlError::InvalidType),
+    // TODO: Use JudgementState::new().
+    impl JudgementState {
+        pub fn alice() -> Self {
+            JudgementState {
+                context: IdentityContext::alice(),
+                is_fully_verified: false,
+                inserted_timestamp: Timestamp::now(),
+                completion_timestamp: None,
+                judgement_submitted: false,
+                issue_judgement_at: None,
+                fields: vec![
+                    IdentityField::new(IdentityFieldValue::ALICE_DISPLAY_NAME()),
+                    IdentityField::new(IdentityFieldValue::ALICE_EMAIL()),
+                    IdentityField::new(IdentityFieldValue::ALICE_TWITTER()),
+                    IdentityField::new(IdentityFieldValue::ALICE_MATRIX()),
+                ],
+            }
+        }
+        pub fn bob() -> Self {
+            JudgementState {
+                context: IdentityContext::bob(),
+                is_fully_verified: false,
+                inserted_timestamp: Timestamp::now(),
+                completion_timestamp: None,
+                judgement_submitted: false,
+                issue_judgement_at: None,
+                fields: vec![
+                    IdentityField::new(IdentityFieldValue::BOB_DISPLAY_NAME()),
+                    IdentityField::new(IdentityFieldValue::BOB_EMAIL()),
+                    IdentityField::new(IdentityFieldValue::BOB_TWITTER()),
+                    IdentityField::new(IdentityFieldValue::BOB_MATRIX()),
+                ],
+            }
+        }
+        pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
+            self.fields.iter().find(|field| &field.value == ty).unwrap()
+        }
+        pub fn get_field_mut<'a>(&'a mut self, ty: &IdentityFieldValue) -> &'a mut IdentityField {
+            self.fields
+                .iter_mut()
+                .find(|field| &field.value == ty)
+                .unwrap()
         }
     }
-}
 
-impl ToSql for Account {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        use ToSqlOutput::*;
-        use ValueRef::*;
-
-        Ok(Borrowed(Text(self.as_str().as_bytes())))
-    }
-}
-
-impl Account {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-impl From<String> for Account {
-    fn from(value: String) -> Self {
-        Account(value)
-    }
-}
-
-impl From<&str> for Account {
-    fn from(value: &str) -> Self {
-        Account(value.to_owned())
-    }
-}
-
-impl fmt::Display for Account {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-/// The Polkadot/Kusama address including the extracted public key.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub struct NetworkAddress {
-    address: NetAccount,
-    pub_key: PubKey,
-}
-
-impl NetworkAddress {
-    pub fn address(&self) -> &NetAccount {
-        &self.address
-    }
-    pub fn pub_key(&self) -> &PubKey {
-        &self.pub_key
-    }
-}
-
-impl TryFrom<NetAccount> for NetworkAddress {
-    type Error = failure::Error;
-
-    fn try_from(value: NetAccount) -> Result<Self> {
-        let bytes = value
-            .as_str()
-            .from_base58()
-            .map_err(|_| err_msg("failed to decode address from base58"))?;
-
-        if bytes.len() < 33 {
-            return Err(err_msg("invalid address"));
-        }
-
-        Ok(NetworkAddress {
-            address: value,
-            pub_key: PubKey::try_from(bytes[1..33].to_vec())?,
-        })
-    }
-}
-
-#[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
-pub enum AccountType {
-    #[serde(rename = "legal_name")]
-    LegalName,
-    #[serde(rename = "display_name")]
-    DisplayName,
-    #[serde(rename = "email")]
-    Email,
-    #[serde(rename = "web")]
-    Web,
-    #[serde(rename = "twitter")]
-    Twitter,
-    #[serde(rename = "matrix")]
-    Matrix,
-    #[serde(rename = "pgpFingerprint")]
-    PGPFingerprint,
-    #[serde(rename = "image")]
-    Image,
-    #[serde(rename = "additional")]
-    Additional,
-    // Reserved types for internal communication.
-    //
-    // Websocket connection to Watcher
-    ReservedConnector,
-    // Matrix emitter which reacts on Matrix messages
-    ReservedEmitter,
-}
-
-impl Display for AccountType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use AccountType::*;
-
-        match self {
-            LegalName => write!(f, "Legal Name"),
-            DisplayName => write!(f, "Display Name"),
-            Email => write!(f, "Email"),
-            Web => write!(f, "Web"),
-            Twitter => write!(f, "Twitter"),
-            Matrix => write!(f, "Matrix"),
-            PGPFingerprint => write!(f, "PGP Fingerprint"),
-            Image => write!(f, "Image"),
-            Additional => write!(f, "Additional"),
-            ReservedConnector => Err(fmt::Error),
-            ReservedEmitter => Err(fmt::Error),
+    impl From<ExternalMessageType> for IdentityFieldValue {
+        fn from(val: ExternalMessageType) -> Self {
+            match val {
+                ExternalMessageType::Email(n) => IdentityFieldValue::Email(n),
+                ExternalMessageType::Twitter(n) => IdentityFieldValue::Twitter(n),
+                ExternalMessageType::Matrix(n) => IdentityFieldValue::Matrix(n),
+            }
         }
     }
-}
 
-impl ToSql for AccountType {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        use AccountType::*;
-        use ToSqlOutput::*;
-        use ValueRef::*;
-
-        match self {
-            LegalName => Ok(Borrowed(Text(b"legal_name"))),
-            DisplayName => Ok(Borrowed(Text(b"display_name"))),
-            Email => Ok(Borrowed(Text(b"email"))),
-            Web => Ok(Borrowed(Text(b"web"))),
-            Twitter => Ok(Borrowed(Text(b"twitter"))),
-            Matrix => Ok(Borrowed(Text(b"matrix"))),
-            PGPFingerprint => Ok(Borrowed(Text(b"pgp_fingerprint"))),
-            Image => Ok(Borrowed(Text(b"image"))),
-            Additional => Ok(Borrowed(Text(b"additional"))),
-            ReservedConnector => Err(rusqlite::Error::InvalidQuery),
-            ReservedEmitter => Err(rusqlite::Error::InvalidQuery),
+    impl IdentityFieldValue {
+        #[allow(non_snake_case)]
+        pub fn ALICE_DISPLAY_NAME() -> Self {
+            IdentityFieldValue::DisplayName("Alice".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn ALICE_EMAIL() -> Self {
+            IdentityFieldValue::Email("alice@email.com".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn ALICE_MATRIX() -> Self {
+            IdentityFieldValue::Matrix("@alice:matrix.org".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn ALICE_TWITTER() -> Self {
+            IdentityFieldValue::Twitter("@alice".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn BOB_DISPLAY_NAME() -> Self {
+            IdentityFieldValue::DisplayName("Bob".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn BOB_EMAIL() -> Self {
+            IdentityFieldValue::Email("bob@email.com".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn BOB_MATRIX() -> Self {
+            IdentityFieldValue::Matrix("@bob:matrix.org".to_string())
+        }
+        #[allow(non_snake_case)]
+        pub fn BOB_TWITTER() -> Self {
+            IdentityFieldValue::Twitter("@bob".to_string())
         }
     }
-}
 
-impl FromSql for AccountType {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value {
-            ValueRef::Text(val) => match val {
-                b"legal_name" => Ok(AccountType::LegalName),
-                b"display_name" => Ok(AccountType::DisplayName),
-                b"email" => Ok(AccountType::Email),
-                b"web" => Ok(AccountType::Web),
-                b"twitter" => Ok(AccountType::Twitter),
-                b"matrix" => Ok(AccountType::Matrix),
-                b"pgp_fingerprint" => Ok(AccountType::PGPFingerprint),
-                b"image" => Ok(AccountType::Image),
-                b"additional" => Ok(AccountType::Additional),
-                _ => Err(FromSqlError::InvalidType),
-            },
-            _ => Err(FromSqlError::InvalidType),
+    impl From<&str> for ChainAddress {
+        fn from(val: &str) -> Self {
+            ChainAddress(val.to_string())
         }
     }
-}
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum ChallengeStatus {
-    #[serde(rename = "unconfirmed")]
-    Unconfirmed,
-    #[serde(rename = "accepted")]
-    Accepted,
-    #[serde(rename = "rejected")]
-    Rejected,
-}
-
-impl ToSql for ChallengeStatus {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
-        use ChallengeStatus::*;
-        use ToSqlOutput::*;
-        use ValueRef::*;
-
-        match self {
-            Unconfirmed => Ok(Borrowed(Text(b"unconfirmed"))),
-            Accepted => Ok(Borrowed(Text(b"accepted"))),
-            Rejected => Ok(Borrowed(Text(b"rejected"))),
+    impl IdentityField {
+        pub fn expected_message(&self) -> &ExpectedMessage {
+            match &self.challenge {
+                ChallengeType::ExpectedMessage {
+                    expected,
+                    second: _,
+                } => expected,
+                _ => panic!(),
+            }
         }
-    }
-}
-
-impl FromSql for ChallengeStatus {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match value {
-            ValueRef::Text(val) => match val {
-                b"unconfirmed" => Ok(ChallengeStatus::Unconfirmed),
-                b"accepted" => Ok(ChallengeStatus::Accepted),
-                b"rejected" => Ok(ChallengeStatus::Rejected),
-                _ => Err(FromSqlError::InvalidType),
-            },
-            _ => Err(FromSqlError::InvalidType),
+        pub fn expected_message_mut(&mut self) -> &mut ExpectedMessage {
+            match &mut self.challenge {
+                ChallengeType::ExpectedMessage {
+                    ref mut expected,
+                    second: _,
+                } => expected,
+                _ => panic!(),
+            }
         }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct Challenge(pub String);
-
-impl Challenge {
-    pub fn gen_random() -> Challenge {
-        let random: [u8; 16] = thread_rng().gen();
-        Challenge(hex::encode(random))
-    }
-    #[cfg(test)]
-    pub fn gen_fixed() -> Challenge {
-        let data: [u8; 16] = [1; 16];
-        Challenge(hex::encode(data))
-    }
-    pub fn verify_challenge(&self, pub_key: &PubKey, sig: &Signature) -> bool {
-        pub_key
-            .0
-            .verify_simple(b"substrate", self.0.as_bytes(), &sig.0)
-            .is_ok()
-    }
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Judgement {
-    #[serde(rename = "reasonable")]
-    Reasonable,
-    #[serde(rename = "erroneous")]
-    Erroneous,
-}
-
-pub trait Fatal<T> {
-    fn fatal(self) -> T;
-}
-
-impl<T: Debug, E: Debug> Fatal<T> for StdResult<T, E> {
-    fn fatal(self) -> T {
-        if self.is_err() {
-            let err = self.unwrap_err();
-            panic!("Fatal error encountered. Report as a bug: {:?}", err);
+        pub fn expected_second(&self) -> &ExpectedMessage {
+            match &self.challenge {
+                ChallengeType::ExpectedMessage {
+                    expected: _,
+                    second,
+                } => second.as_ref().unwrap(),
+                _ => panic!(),
+            }
         }
-
-        self.unwrap()
-    }
-}
-
-impl<T: Debug> Fatal<T> for Option<T> {
-    fn fatal(self) -> T {
-        self.expect("Fatal error encountered. Report as a bug.")
+        pub fn expected_second_mut(&mut self) -> &mut ExpectedMessage {
+            match &mut self.challenge {
+                ChallengeType::ExpectedMessage {
+                    expected: _,
+                    ref mut second,
+                } => second.as_mut().unwrap(),
+                _ => panic!(),
+            }
+        }
+        pub fn failed_attempts_mut(&mut self) -> &mut isize {
+            &mut self.failed_attempts
+        }
+        pub fn expected_display_name_check_mut(
+            &mut self,
+        ) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
+            match &mut self.challenge {
+                ChallengeType::DisplayNameCheck { passed, violations } => (passed, violations),
+                _ => panic!(),
+            }
+        }
     }
 }

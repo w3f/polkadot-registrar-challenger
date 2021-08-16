@@ -1,0 +1,14 @@
+replicaCount: 2
+
+config:
+  instance:
+    a_type: session_notifier
+    config:
+      api_address: 0.0.0.0:8000
+      display_name:
+        enabled: true
+        limit: 0.85
+
+useDomain: true
+domain: web3.foundation
+backendPort: 8000

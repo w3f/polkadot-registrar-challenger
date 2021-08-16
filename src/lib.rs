@@ -1,95 +1,139 @@
 #[macro_use]
 extern crate log;
 #[macro_use]
-extern crate async_trait;
+extern crate anyhow;
 #[macro_use]
 extern crate serde;
 #[macro_use]
-extern crate failure;
+extern crate async_trait;
 
-use adapters::{
-    DisplayNameHandler, EmailHandler, EmailTransport, MatrixHandler, MatrixTransport,
-    TwitterHandler, TwitterTransport,
-};
-pub use adapters::{MatrixClient, SmtpImapClientBuilder, TwitterBuilder};
-use comms::{CommsMain, CommsVerifier};
-use connector::{Connector, ConnectorInitTransports};
-pub use connector::{
-    ConnectorReaderTransport, ConnectorWriterTransport, WebSocketReader, WebSocketWriter,
-    WebSockets,
-};
-pub use db::Database;
-pub use health_check::HealthCheck;
-use manager::{IdentityManager, IdentityManagerConfig};
-pub use primitives::Account;
-use primitives::{AccountType, Fatal, Result};
+use actix::clock::sleep;
+use log::LevelFilter;
+use primitives::ChainName;
 use std::env;
-use std::fs::File;
-use std::io::prelude::*;
-use std::process::exit;
-#[cfg(test)]
-use std::sync::Arc;
-#[cfg(test)]
-use tests::mocks::{ConnectorMocker, ConnectorReaderMocker, EventManager};
-use tokio::time::{self, Duration};
+use std::fs;
+use std::time::Duration;
 
-pub mod adapters;
-mod comms;
-mod connector;
-mod db;
-mod health_check;
-mod manager;
+pub type Result<T> = std::result::Result<T, anyhow::Error>;
+
+use actors::api::run_rest_api_server;
+use actors::connector::run_connector;
+use adapters::run_adapters;
+use database::Database;
+use notifier::SessionNotifier;
+
+mod actors;
+mod adapters;
+mod database;
+mod display_name;
+mod notifier;
 mod primitives;
 #[cfg(test)]
 mod tests;
-mod verifier;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub registrar_db_path: String,
-    pub matrix_db_path: String,
-    pub log_level: log::LevelFilter,
-    pub watcher_url: String,
-    pub enable_watcher: bool,
-    pub enable_accounts: bool,
-    pub enable_health_check: bool,
-    //
-    pub matrix_homeserver: String,
-    pub matrix_username: String,
-    pub matrix_password: String,
-    //
-    pub twitter_screen_name: String,
-    pub twitter_api_key: String,
-    pub twitter_api_secret: String,
-    pub twitter_token: String,
-    pub twitter_token_secret: String,
-    //
-    pub email_server: String,
+    pub log_level: LevelFilter,
+    pub db: DatabaseConfig,
+    pub instance: InstanceType,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "a_type", content = "config")]
+pub enum InstanceType {
+    AdapterListener(AdapterConfig),
+    SessionNotifier(NotifierConfig),
+    SingleInstance(SingleInstanceConfig),
+}
+
+// TODO: Do all of those need to be pubic fields?
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct SingleInstanceConfig {
+    pub adapter: AdapterConfig,
+    pub notifier: NotifierConfig,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct DatabaseConfig {
+    pub uri: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct NotifierConfig {
+    pub api_address: String,
+    pub display_name: DisplayNameConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AdapterConfig {
+    pub watcher: Vec<WatcherConfig>,
+    pub matrix: MatrixConfig,
+    pub twitter: TwitterConfig,
+    pub email: EmailConfig,
+    pub display_name: DisplayNameConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WatcherConfig {
+    pub network: ChainName,
+    pub endpoint: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DisplayNameConfig {
+    pub enabled: bool,
+    pub limit: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct MatrixConfig {
+    pub enabled: bool,
+    pub homeserver: String,
+    pub username: String,
+    pub password: String,
+    pub db_path: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TwitterConfig {
+    pub enabled: bool,
+    pub api_key: String,
+    pub api_secret: String,
+    pub token: String,
+    pub token_secret: String,
+    pub request_interval: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct EmailConfig {
+    pub enabled: bool,
+    pub smtp_server: String,
     pub imap_server: String,
-    pub email_inbox: String,
-    pub email_user: String,
-    pub email_password: String,
+    pub inbox: String,
+    pub user: String,
+    pub password: String,
+    pub request_interval: u64,
 }
 
 fn open_config() -> Result<Config> {
     // Open config file.
-    let mut file = File::open("config.json")
-        .or_else(|_| File::open("/etc/registrar/config.json"))
+    let content = fs::read_to_string("config.yaml")
+        .or_else(|_| fs::read_to_string("/etc/registrar/config.yaml"))
         .map_err(|_| {
-            eprintln!("Failed to open config at 'config.json' or '/etc/registrar/config.json'.");
-            std::process::exit(1);
-        })
-        .fatal();
+            anyhow!("Failed to open config at 'config.yaml' or '/etc/registrar/config.yaml'.")
+        })?;
 
     // Parse config file as JSON.
-    let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
-    let config = serde_json::from_str::<Config>(&contents)
-        .map_err(|err| {
-            eprintln!("Failed to parse config: {}", err);
-            std::process::exit(1);
-        })
-        .fatal();
+    let config = serde_yaml::from_str::<Config>(&content)
+        .map_err(|err| anyhow!("Failed to parse config: {:?}", err))?;
 
     Ok(config)
 }
@@ -104,7 +148,7 @@ pub fn init_env() -> Result<Config> {
     } else {
         println!("Setting log level to '{}' from config.", config.log_level);
         env_logger::builder()
-            .filter_module("registrar", config.log_level)
+            .filter_module("system", config.log_level)
             .init();
     }
 
@@ -113,187 +157,57 @@ pub fn init_env() -> Result<Config> {
     Ok(config)
 }
 
-pub async fn block() {
-    let mut interval = time::interval(Duration::from_secs(60));
-    loop {
-        interval.tick().await;
-    }
+async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
+
+    // TODO: Pretty all the clones?
+    let watchers = config.watcher.clone();
+    run_adapters(config.clone(), db.clone()).await?;
+    run_connector(db, watchers, config.display_name).await
 }
 
-pub async fn run<
-    C: ConnectorInitTransports<W, R, Endpoint = P>,
-    W: 'static + Send + Sync + ConnectorWriterTransport,
-    R: 'static + Send + Sync + ConnectorReaderTransport,
-    P: 'static + Send + Sync + Clone,
-    M: MatrixTransport,
-    T: Clone + TwitterTransport,
-    E: Clone + EmailTransport,
->(
-    enable_watcher: bool,
-    watcher_url: P,
-    db2: Database,
-    matrix_transport: M,
-    twitter_transport: T,
-    email_transport: E,
+async fn config_session_notifier(
+    db_config: DatabaseConfig,
+    not_config: NotifierConfig,
 ) -> Result<()> {
-    let (_, c_connector) = run_adapters(
-        db2.clone(),
-        Default::default(),
-        matrix_transport,
-        twitter_transport,
-        email_transport,
-    )
-    .await?;
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
+    let lookup = run_rest_api_server(not_config, db.clone()).await?;
 
-    if enable_watcher {
-        info!("Trying to connect to Watcher");
-        let mut counter = 0;
-        let mut interval = time::interval(Duration::from_secs(5));
-
-        let connector;
-        loop {
-            interval.tick().await;
-
-            if let Ok(con) = Connector::new::<C>(watcher_url.clone(), c_connector.clone()).await {
-                info!("Connecting to Watcher succeeded");
-                connector = con;
-                break;
-            } else {
-                warn!("Connecting to Watcher failed, trying again...");
-            }
-
-            if counter == 2 {
-                error!("Failed connecting to Watcher, exiting...");
-                exit(1);
-            }
-
-            counter += 1;
-        }
-
-        info!("Starting Watcher connector task, listening...");
-        tokio::spawn(async move {
-            connector.start::<C>().await;
-        });
-    } else {
-        warn!("Watcher connector task is disabled. Cannot process any requests...");
-    }
+    // TODO: Should be executed in `run_rest_api_server`
+    actix::spawn(async move { SessionNotifier::new(db, lookup).run_blocking().await });
 
     Ok(())
 }
 
-#[cfg(test)]
-pub async fn test_run<
-    M: MatrixTransport,
-    T: Clone + TwitterTransport,
-    E: Clone + EmailTransport,
->(
-    event_manager: Arc<EventManager>,
-    db2: Database,
-    identity_manager_config: IdentityManagerConfig,
-    matrix_transport: M,
-    twitter_transport: T,
-    email_transport: E,
-) -> Result<TestRunReturn> {
-    let (c_matrix, c_connector) = run_adapters(
-        db2.clone(),
-        identity_manager_config,
-        matrix_transport,
-        twitter_transport,
-        email_transport,
-    )
-    .await?;
+// TODO: Check for database connectivity.
+pub async fn run() -> Result<()> {
+    let root = init_env()?;
+    let (db_config, instance) = (root.db, root.instance);
 
-    let mut connector = Connector::new::<ConnectorMocker>(event_manager.clone(), c_connector)
-        .await
-        .unwrap();
+    match instance {
+        InstanceType::AdapterListener(config) => {
+            info!("Starting adapter listener instance");
+            config_adapter_listener(db_config, config).await?;
+        }
+        InstanceType::SessionNotifier(config) => {
+            info!("Starting session notifier instance");
+            config_session_notifier(db_config, config).await?;
+        }
+        InstanceType::SingleInstance(config) => {
+            info!("Starting adapter listener and session notifier instances");
+            let (adapter_config, notifier_config) = (config.adapter, config.notifier);
 
-    let (writer, reader) = ConnectorMocker::init(event_manager).await.unwrap();
-    connector.set_writer_reader(writer.clone(), reader.clone());
+            let t1_db_config = db_config.clone();
+            let t2_db_config = db_config;
 
-    tokio::spawn(async move {
-        connector.start::<ConnectorMocker>().await;
-    });
+            config_adapter_listener(t1_db_config, adapter_config).await?;
+            config_session_notifier(t2_db_config, notifier_config).await?;
+        }
+    }
 
-    time::delay_for(Duration::from_secs(1)).await;
+    info!("Setup completed");
 
-    Ok(TestRunReturn {
-        matrix: c_matrix,
-        reader: reader,
-    })
-}
-
-#[cfg(test)]
-pub struct TestRunReturn {
-    matrix: CommsMain,
-    reader: ConnectorReaderMocker,
-}
-
-async fn run_adapters<
-    M: MatrixTransport,
-    T: Clone + TwitterTransport,
-    E: Clone + EmailTransport,
->(
-    db2: Database,
-    identity_manager_config: IdentityManagerConfig,
-    mut matrix_transport: M,
-    twitter_transport: T,
-    email_transport: E,
-) -> Result<(CommsMain, CommsVerifier)> {
-    info!("Setting up manager");
-    let mut manager = IdentityManager::new(db2.clone(), identity_manager_config)?;
-
-    info!("Setting up communication channels");
-    let c_connector = manager.register_comms(AccountType::ReservedConnector);
-    let c_emitter = manager.register_comms(AccountType::ReservedEmitter);
-    let c_display_name = manager.register_comms(AccountType::DisplayName);
-    let c_matrix = manager.register_comms(AccountType::Matrix);
-    let c_twitter = manager.register_comms(AccountType::Twitter);
-    let c_email = manager.register_comms(AccountType::Email);
-
-    // Since the Matrix event emitter runs in the background, the handling of
-    // messages must be tested by using this `CommsVerifier` handle and sending
-    // `TriggerMatrixEmitter` messages.
-    let main_matrix = manager.get_comms(&AccountType::Matrix)?.clone();
-
-    info!("Starting manager task");
-    tokio::spawn(async move {
-        manager.start().await;
-    });
-
-    info!("Starting display name handler");
-    let l_db = db2.clone();
-    tokio::spawn(async move {
-        DisplayNameHandler::new(l_db, c_display_name, 0.85)
-            .start()
-            .await;
-    });
-
-    info!("Starting Matrix task");
-    let l_db = db2.clone();
-    let l_c_matrix = c_matrix.clone();
-    tokio::spawn(async move {
-        matrix_transport.run_emitter(l_db.clone(), c_emitter).await;
-
-        MatrixHandler::new(l_db, l_c_matrix, matrix_transport)
-            .start()
-            .await;
-    });
-
-    info!("Starting Twitter task");
-    let l_db = db2.clone();
-    tokio::spawn(async move {
-        TwitterHandler::new(l_db, c_twitter)
-            .start(twitter_transport)
-            .await;
-    });
-
-    info!("Starting Email task");
-    let l_db = db2.clone();
-    tokio::spawn(async move {
-        EmailHandler::new(l_db, c_email)
-            .start(email_transport)
-            .await;
-    });
-
-    Ok((main_matrix, c_connector))
+    loop {
+        sleep(Duration::from_secs(u64::MAX)).await;
+    }
 }

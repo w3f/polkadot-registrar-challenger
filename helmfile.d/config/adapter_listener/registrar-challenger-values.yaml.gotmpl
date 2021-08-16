@@ -1,0 +1,35 @@
+replicaCount: 1
+
+config:
+  instance:
+    a_type: adapter_listener
+    config:
+      watcher:
+        - network: kusama
+          endpoint: ws://kusama-registrar-watcher:3001
+        - network: polkadot
+          endpoint: ws://polkadot-registrar-watcher:3001
+      matrix:
+        enabled: true
+        homeserver: https://matrix.web3.foundation
+        username: {{ env "MATRIX_USER" }}
+        password: {{ env "MATRIX_PASSWORD" }}
+        db_path: /tmp/matrix.db
+      twitter:
+        enabled: true
+        api_key: {{ env "TWITTER_API_KEY" }}
+        api_secret: {{ env "TWITTER_API_SECRET" }}
+        token: {{ env "TWITTER_TOKEN" }}
+        token_secret: {{ env "TWITTER_TOKEN_SECRET" }}
+        request_interval: 300
+      email:
+        enabled: true
+        smtp_server: smtp-relay.gmail.com
+        imap_server: imap.gmail.com
+        inbox: INBOX
+        user: {{ env "EMAIL_USER" }}
+        password: {{ env "EMAIL_PASSWORD" }}
+        request_interval: 5
+      display_name:
+        enabled: true
+        limit: 0.85

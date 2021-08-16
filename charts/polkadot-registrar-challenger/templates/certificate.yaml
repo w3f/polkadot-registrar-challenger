@@ -1,0 +1,12 @@
+{{ if and (.Values.useCertificate | default false) (.Values.useDomain | default false) }}
+apiVersion: cert-manager.io/v1alpha2
+kind: Certificate
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  secretName: registrar-backend-tls
+  issuerRef:
+    name: letsencrypt
+  dnsNames:
+  - registrar-backend.{{ .Values.domain }}
+{{ end }}

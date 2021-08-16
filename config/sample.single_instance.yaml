@@ -1,0 +1,42 @@
+log_level: debug
+db:
+  uri: mongodb://localhost:27017/
+  db_name: registrar_db
+instance:
+  type: single_instance
+  config:
+    adapter:
+      watcher:
+        - network: kusama
+          endpoint: ws://localhost:8000
+        - network: polkadot
+          endpoint: ws://localhost:8001
+      matrix:
+        enabled: false
+        homeserver: homeserver
+        username: username
+        password: password
+        db_path: db_path
+      twitter:
+        enabled: false
+        api_key: key
+        api_secret: secret
+        token: token
+        token_secret: secret
+        request_interval: 300
+      email:
+        enabled: false
+        smtp_server: server
+        imap_server: server
+        inbox: inbox
+        user: user
+        password: password
+        request_interval: 5
+      display_name:
+        enabled: true
+        limit: 0.85
+    notifier:
+      api_address: 127.0.0.1:80 
+      display_name:
+        enabled: true
+        limit: 0.85

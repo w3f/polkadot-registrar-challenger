@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<style>
+    .container {
+        margin: 1em;
+    }
+</style>
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="assets/custom.css" rel="stylesheet">
+    <title>W3F Registrar Service</title>
+</head>
+
+<body class="d-flex flex-column min-vh-100 bg-secondary text-white">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-gtEjrD/SeCtmISkJkNUaaKMoLD0//ElJ19smozuHV6z3Iehds+3Ulb9Bn9Plx0x4"
+        crossorigin="anonymous"></script>
+
+    <main class="flex-fill">
+        <div aria-live="polite" aria-atomic="true" class="position-relative">
+            <div id="div-notifications" class="toast-container position-absolute top-0 end-0 p-3"></div>
+        </div>
+
+        <div class="container p-4 text-center">
+            <div class="row justify-content-center">
+                <div class="col-md-auto">
+                    <h1><img src="assets/w3f.png" height="50px"> Registrar #0</h1>
+                    <p id="intro-text" class="text-center"><em>Identity registrar service for Polkadot and
+                            Kusama.<br>Provided by the <a href="https://web3.foundation/">Web3 Foundation.</a></em>
+                    </p>
+                </div>
+                <div class="col-md-auto">
+                    <span class="badge bg-primary align-middle">beta</span>
+                </div>
+            </div>
+        </div>
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-10">
+                    <div class="input-group">
+                        <button id="specify-network" class="col-2 btn btn-primary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">Polkadot</button>
+                        <ul id="network-options" class="dropdown-menu">
+                            <li><a class="dropdown-item">Polkadot</a></li>
+                            <li><a class="dropdown-item">Kusama</a></li>
+                        </ul>
+                        <button id="specify-action" class="col-3 btn btn-outline-primary dropdown-toggle" type="button"
+                            data-bs-toggle="dropdown" aria-expanded="false">Check Judgement</button>
+                        <ul id="action-options" class="dropdown-menu">
+                            <li><a class="dropdown-item">Check Judgement</a></li>
+                            <li><a class="dropdown-item">Validate Display Name</a></li>
+                        </ul>
+                        <input id="specify-address" type="text" class="form-control"
+                            aria-label="Text input with dropdown button" placeholder="Account address...">
+                        <button id="execute-action" class="col-1 btn btn-primary" type="button">Go!</button>
+                    </div>
+                </div>
+            </div>
+            <div class="container">
+                <div id="introduction" class="row justify-content-center">
+                    <div class="col-10 p-4">
+                        <p>We provide affordable identity judgments on Kusama and Polkadot.</p>
+                        <ol>
+                            <li>Request judgement from our registrar in <a href="https://polkadot.js.org/apps/#/extrinsics">PolkadotJs</a>.</li>
+                            <li><em>Check Judgement</em> in the search bar above.</li>
+                        </ol>
+                        <p>A full guide is available in <a href="https://wiki.polkadot.network/docs/learn-identity">our Polkadot Wiki</a>, respectively <a href="https://wiki.polkadot.network/docs/learn-identity#requesting-judgement">how to request judgement</a>.</p>
+                        <hr>
+                        <p></p>
+                        <h3>Kusama</h3>
+                        <ul>
+                            <li>Registrar index: <strong>0</strong></li>
+                            <li>Max fee: <strong>0.04 KSM</strong></li>
+                        </ul>
+                        <h3>Polkadot</h3>
+                        <ul>
+                            <li>Registrar index: <strong>0</strong></li>
+                            <li>Max fee: <strong>0 DOT</strong></li>
+                        </ul>
+                    </div>
+                </div>
+                <div id="div-live-updates-info" class="row justify-content-center"></div>
+                <div id="div-fully-verified-info" class="row justify-content-center p-2"></div>
+                <div id="div-display-name-overview" class="row justify-content-center p-2"></div>
+                <div id="div-verification-overview" class="row justify-content-center p-2"></div>
+                <div id="div-email-second-challenge" class="row justify-content-center p-2"></div>
+                <div id="div-unsupported-overview" class="row justify-content-center p-2"></div>
+            </div>
+        </div>
+    </main>
+    <footer class="footer bg-primary">
+        <div class="container">
+            <div class="row justify-content-center text-white">
+                <div class="col-10">
+                    <h2>Need help?</h2>
+                    <p>Please provide your Kusama/Polkadot address (or this URL in your browser) upfront and describe
+                        your issue when contacting us.
+                    </p>
+                    <ul>
+                        <li>
+                            <strong>Guide</strong>: <a class="text-white"
+                                href="https://wiki.polkadot.network/docs/learn-identity">wiki.polkadot.network</a>
+                        </li>
+                        <li>
+                            <strong>Email Support</strong>: <a class="text-white"
+                                href="mailto:support@polkadot.network">support@polkadot.network</a>
+                        </li>
+                        <li>
+                            <strong>Matrix: </strong>: <a class="text-white" href="https://matrix.to/#/!GZgKgjojqCoHkfDtOV:web3.foundation?via=web3.foundation">!GZgKgjojqCoHkfDtOV:web3.foundation</a> <span class="badge bg-warning text-dark">fastest</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="assets/bundle.js"></script>
+</body>
+
+</html>

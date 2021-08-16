@@ -2,9 +2,9 @@
 # Cargo Build Stage
 # ------------------------------------------------------------------------------
 
-FROM rust:1.46.0 AS builder
+FROM rust:1.53.0 AS builder
 
-RUN apt-get update && apt-get install -y libssl-dev cmake
+RUN apt-get update && apt-get install -y libssl-dev gcc cmake
 
 # RUN rustup default nightly
 
@@ -20,8 +20,8 @@ RUN echo "fn main() {println!(\"if you see this, the build broke\")}" > src/bin/
 
 RUN cargo build --release 
 
-RUN rm -f target/release/deps/*registrar*
-RUN rm -rf src
+RUN cargo clean -p registrar
+RUN rm -rf target/release/.fingerprint/registrar*
 
 COPY . .
 
@@ -36,7 +36,6 @@ FROM debian:buster-slim
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates sqlite3
 RUN update-ca-certificates --fresh
 
-COPY --from=builder /app/target/release/registrar-bot /usr/local/bin
-COPY config.sample.json /etc/registrar/config.json
+COPY --from=builder /app/target/release/registrar /usr/local/bin
 
-CMD ["/usr/local/bin/registrar-bot"]
+CMD ["/usr/local/bin/registrar"]

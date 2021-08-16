@@ -1,16 +1,65 @@
-use crate::primitives::Challenge;
-use tokio::time::{self, Duration};
+use crate::actors::api::tests::run_test_server;
+use crate::actors::api::JsonResult;
+use crate::adapters::tests::MessageInjector;
+use crate::adapters::AdapterListener;
+use crate::database::Database;
+use crate::notifier::SessionNotifier;
+use crate::primitives::IdentityFieldValue;
+use actix_http::ws::{Frame, ProtocolError};
+use actix_test::TestServer;
+use actix_web_actors::ws::Message;
+use rand::{thread_rng, Rng};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
-mod email_adapter;
-mod matrix_adapter;
-pub mod mocks;
-mod twitter_adapter;
+mod api_judgement_state;
+mod display_name_verification;
+mod explicit;
 
-// Generate a random db path
-fn db_path() -> String {
-    format!("/tmp/sqlite_{}", Challenge::gen_random().as_str())
+// Convenience type
+type F = IdentityFieldValue;
+
+trait ToWsMessage {
+    fn to_ws(&self) -> Message;
 }
 
-async fn pause() {
-    time::delay_for(Duration::from_secs(5)).await;
+impl<T: Serialize> ToWsMessage for T {
+    fn to_ws(&self) -> Message {
+        Message::Text(serde_json::to_string(&self).unwrap().into())
+    }
+}
+
+impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonResult<T> {
+    fn from(val: Option<Result<Frame, ProtocolError>>) -> Self {
+        match val.unwrap().unwrap() {
+            Frame::Text(t) => serde_json::from_slice::<JsonResult<T>>(&t).unwrap(),
+            _ => panic!(),
+        }
+    }
+}
+
+async fn new_env() -> (Database, TestServer, MessageInjector) {
+    // Setup MongoDb database.
+    let random: u32 = thread_rng().gen_range(u32::MIN, u32::MAX);
+    let db = Database::new(
+        "mongodb://localhost:27017/",
+        &format!("registrar_test_{}", random),
+    )
+    .await
+    .unwrap();
+
+    // Setup API
+    let (server, actor) = run_test_server(db.clone()).await;
+
+    // Setup message verifier and injector.
+    let injector = MessageInjector::new();
+    let listener = AdapterListener::new(db.clone()).await;
+    listener.start_message_adapter(injector.clone(), 1).await;
+
+    let t_db = db.clone();
+    actix::spawn(async move {
+        SessionNotifier::new(t_db, actor).run_blocking().await;
+    });
+
+    (db, server, injector)
 }

@@ -1,0 +1,16 @@
+@font-face { font-family: WorkSans; src: url("../assets/WorkSans-VariableFont_wght.ttf") format("truetype"); } 
+
+$primary: #E6007A;
+$secondary: #182424;
+$body-color: #182424;
+$headings-font-family: WorkSans;
+
+#intro-text {
+	color: #b4cccc
+}
+
+.toast-container {
+  z-index: 9999;
+}
+
+@import "node_modules/bootstrap/scss/bootstrap.scss";
