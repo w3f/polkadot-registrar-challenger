@@ -211,8 +211,8 @@ export class ContentManager {
         this.div_email_second_challenge.innerHTML = `
             <div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
-                <p>A message sent from <strong>registrar@web3.foundation</strong> containing an additional challenge was sent to <strong>
-                    ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
+                <p>A message was sent from <em>registrar@web3.foundation</em> to <strong>${address}</strong> containing an additional challenge
+                    (make sure to check the spam folder). Please insert that challenge into the following field:
                 </p>
                 <div class="input-group">
                 <input id="specify-second-challenge" type="text" class="form-control"

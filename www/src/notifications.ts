@@ -118,7 +118,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         case "awaiting_second_challenge": {
             let data = notification.value as NotificationFieldContext;
             return [
-                `A second challenge was sent to ${capitalizeFirstLetter(data.field.type)} account "<strong>${data.field.value}</strong>". Please also check the <strong>spam</strong> folder.`,
+                `A second challenge was sent to ${capitalizeFirstLetter(data.field.type)} account "${data.field.value}". Please also check the spam folder.`,
                 "bg-info text-dark"
             ]
         }
@@ -130,7 +130,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         }
         case "judgement_provided": {
             return [
-                `<strong>Judgement has been submitted!</strong>`,
+                `Judgement has been submitted!`,
                 "bg-success text-light"
             ]
         }
