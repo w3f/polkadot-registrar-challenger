@@ -199,8 +199,8 @@ class ContentManager {
         this.div_email_second_challenge.innerHTML = `
             <div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
-                <p>A message sent from <strong>registrar@web3.foundation</strong> containing an additional challenge was sent to <strong>
-                    ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
+                <p>A message was sent from <em>registrar@web3.foundation</em> to <strong>${address}</strong> containing an additional challenge
+                    (make sure to check the spam folder). Please insert that challenge into the following field:
                 </p>
                 <div class="input-group">
                 <input id="specify-second-challenge" type="text" class="form-control"
@@ -590,7 +590,7 @@ function notificationTypeResolver(notification) {
         case "awaiting_second_challenge": {
             let data = notification.value;
             return [
-                `A second challenge was sent to ${content_js_1.capitalizeFirstLetter(data.field.type)} account "<strong>${data.field.value}</strong>". Please also check the <strong>spam</strong> folder.`,
+                `A second challenge was sent to ${content_js_1.capitalizeFirstLetter(data.field.type)} account "${data.field.value}". Please also check the spam folder.`,
                 "bg-info text-dark"
             ];
         }
@@ -602,7 +602,7 @@ function notificationTypeResolver(notification) {
         }
         case "judgement_provided": {
             return [
-                `<strong>Judgement has been submitted!</strong>`,
+                `Judgement has been submitted!`,
                 "bg-success text-light"
             ];
         }
