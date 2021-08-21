@@ -180,11 +180,8 @@ export class ContentManager {
         this.div_verification_overview.innerHTML = `
             <div class="col-10 table-responsive ">
                 <h2>Account verification</h2>
-                <p>The service expects a message <strong>from</strong> the specified account in the on-chain
-                    identity sent <strong>to</strong> the corresponding W3F account containing the
-                    <strong>challenge</strong>. Do note that each account type has its own, individual
-                    challenge.
-                </p>
+                <p>Send each provided challenge <strong>from</strong> your account <strong>to</strong> the corresponding W3F account.
+                    You can just copy and paste the challenge directly.</p>
                 <p><em>Note:</em> Twitter verification can take about 5 minutes.</p>
                 <table id="verification-overview" class="table table-striped table-dark">
                     <thead>
