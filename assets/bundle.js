@@ -370,7 +370,7 @@ class ActionListerner {
         let network = params.get("network");
         let address = params.get("address");
         if (network != null && address != null) {
-            document.getElementById("specify-network").innerHTML = content_1.capitalizeFirstLetter(network);
+            document.getElementById("specify-network").innerHTML = (0, content_1.capitalizeFirstLetter)(network);
             document.getElementById("specify-address").value = address;
             this.executeAction();
         }
@@ -559,35 +559,35 @@ function notificationTypeResolver(notification) {
         case "field_verified": {
             let data = notification.value;
             return [
-                `${content_js_1.capitalizeFirstLetter(data.field.type)} account "${data.field.value}" is verified. Challenge is valid.`,
+                `${(0, content_js_1.capitalizeFirstLetter)(data.field.type)} account "${data.field.value}" is verified. Challenge is valid.`,
                 "bg-success text-light",
             ];
         }
         case "field_verification_failed": {
             let data = notification.value;
             return [
-                `${content_js_1.capitalizeFirstLetter(data.field.type)} account "${data.field.value}" failed to get verified. Invalid challenge.`,
+                `${(0, content_js_1.capitalizeFirstLetter)(data.field.type)} account "${data.field.value}" failed to get verified. Invalid challenge.`,
                 "bg-danger text-light"
             ];
         }
         case "second_field_verified": {
             let data = notification.value;
             return [
-                `${content_js_1.capitalizeFirstLetter(data.field.type)} account "${data.field.value}" is fully verified. Additional challenge is valid.`,
+                `${(0, content_js_1.capitalizeFirstLetter)(data.field.type)} account "${data.field.value}" is fully verified. Additional challenge is valid.`,
                 "bg-success text-light"
             ];
         }
         case "second_field_verification_failed": {
             let data = notification.value;
             return [
-                `${content_js_1.capitalizeFirstLetter(data.field.type)} account "${data.field.value}" failed to get verified. The additional challenge is invalid.`,
+                `${(0, content_js_1.capitalizeFirstLetter)(data.field.type)} account "${data.field.value}" failed to get verified. The additional challenge is invalid.`,
                 "bg-danger text-light"
             ];
         }
         case "awaiting_second_challenge": {
             let data = notification.value;
             return [
-                `A second challenge was sent to ${content_js_1.capitalizeFirstLetter(data.field.type)} account "${data.field.value}". Please also check the spam folder.`,
+                `A second challenge was sent to ${(0, content_js_1.capitalizeFirstLetter)(data.field.type)} account "${data.field.value}". Please also check the spam folder.`,
                 "bg-info text-dark"
             ];
         }
