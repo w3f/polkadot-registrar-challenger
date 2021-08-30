@@ -144,14 +144,14 @@ impl AdapterListener {
                         for event in &events {
                             match event {
                                 NotificationMessage::AwaitingSecondChallenge {
-                                    context: _,
+                                    context,
                                     field,
                                 } => match field {
                                     IdentityFieldValue::Email(to) => {
                                         if adapter.name() == "email" {
                                             debug!("Sending second challenge to {}", to);
                                             if let Ok(challenge) = db
-                                                .fetch_second_challenge(field)
+                                                .fetch_second_challenge(&context, field)
                                                 .await
                                                 .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
                                                     let _ = adapter

@@ -385,6 +385,7 @@ impl Database {
     }
     pub async fn fetch_second_challenge(
         &self,
+        context: &IdentityContext,
         field: &IdentityFieldValue,
     ) -> Result<ExpectedMessage> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
@@ -393,6 +394,7 @@ impl Database {
         let try_state = coll
             .find_one(
                 doc! {
+                    "context": context.to_bson()?,
                     "fields.value": field.to_bson()?,
                 },
                 None,
