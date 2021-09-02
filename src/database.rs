@@ -78,13 +78,10 @@ impl Database {
                 }
             }
 
-            // Check verification status.
-            current.is_fully_verified = if !to_add.is_empty() {
-                // (Re-)set validity if new fields are available.
-                false
-            } else {
-                current.is_fully_verified
-            };
+            // Reset verification status is fields have been modified.
+            if !to_add.is_empty() {
+                current.is_fully_verified = false;
+            }
 
             // Set new fields.
             current.fields = to_add;
@@ -97,7 +94,6 @@ impl Database {
                 },
                 doc! {
                     "$set": {
-                        "is_fully_verified": current.is_fully_verified.to_bson()?,
                         "fields": current.fields.to_bson()?
                     }
                 },
@@ -114,6 +110,12 @@ impl Database {
                     None,
                 )
                 .await?;
+
+            // Check full verification status.
+            if let Some(event) = self.process_fully_verified(&current).await? {
+                // Create event.
+                event_log.insert_one(Event::new(event), None).await?;
+            }
         } else {
             coll.insert_one(request.to_document()?, None).await?;
 
@@ -258,7 +260,7 @@ impl Database {
         Ok(events)
     }
     /// Check if all fields have been verified.
-    pub async fn process_fully_verified(
+    async fn process_fully_verified(
         &self,
         state: &JudgementState,
     ) -> Result<Option<NotificationMessage>> {
@@ -574,12 +576,12 @@ impl Database {
 
         Ok(names)
     }
-    pub async fn set_display_name_valid(&self, context: &IdentityContext) -> Result<()> {
+    pub async fn set_display_name_valid(&self, state: &JudgementState) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         coll.update_one(
             doc! {
-                "context": context.to_bson()?,
+                "context": state.context.to_bson()?,
                 "fields.value.type": "display_name",
             },
             doc! {
@@ -590,6 +592,14 @@ impl Database {
             None,
         )
         .await?;
+
+        let events = self.process_fully_verified(&state).await?;
+
+        if let Some(event) = events {
+            let coll = self.db.collection(EVENT_COLLECTION);
+            coll.insert_one(Event::new(event).to_document()?, None)
+                .await?;
+        }
 
         Ok(())
     }
