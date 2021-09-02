@@ -86,7 +86,6 @@ impl Database {
             current.fields = to_add;
 
             // Update the final value in database.
-            // TODO: Check modified count.
             coll.update_one(
                 doc! {
                     "context": request.context.to_bson()?
@@ -120,9 +119,7 @@ impl Database {
 
         Ok(())
     }
-    // TODO: Merge with 'verify_message'?
     pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
-        // TODO: Specify type on `collection`.
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -185,7 +182,6 @@ impl Database {
                                 })
                                 .await?;
 
-                                // TODO: Document
                                 if second.is_some() {
                                     self.insert_event(
                                         NotificationMessage::AwaitingSecondChallenge {
@@ -240,8 +236,9 @@ impl Database {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         if state.check_full_verification() {
-            // Create a timed delay for issuing judgments. Between 30 seconds to 5 minutes.
-            // TODO: Explain reasoning.
+            // Create a timed delay for issuing judgments. Between 30 seconds to
+            // 5 minutes. This is used to prevent timing attacks where a user
+            // updates the identity right before the judgement is issued.
             let now = Timestamp::now();
             let offset = thread_rng().gen_range(30, 300);
             let issue_at = Timestamp::with_offset(offset);
