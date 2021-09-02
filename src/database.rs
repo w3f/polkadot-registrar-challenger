@@ -77,7 +77,7 @@ impl Database {
                 }
             }
 
-            // Reset verification status is fields have been modified.
+            // Reset verification status if fields have been modified.
             if !to_add.is_empty() {
                 current.is_fully_verified = false;
             }
@@ -119,7 +119,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
+    pub async fn verify_message(&mut self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -139,8 +139,7 @@ impl Database {
                 .fields
                 .iter_mut()
                 .find(|field| field.value.matches(&message))
-                // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .unwrap();
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
@@ -223,8 +222,6 @@ impl Database {
                 }
             }
 
-            std::mem::drop(field_state);
-
             // Check if the identity is fully verified.
             self.process_fully_verified(&id_state).await?;
         }
@@ -274,29 +271,27 @@ impl Database {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
-        let mut events = vec![];
 
         // Trim received challenge, just in case.
         request.challenge = request.challenge.trim().to_string();
 
         // Query database.
-        let try_state = coll
-            .find_one(
+        let mut cursor = coll
+            .find(
                 doc! {
                     "fields.value": request.entry.to_bson()?,
-                    "fields.challenge.content.second.value": request.challenge.to_bson()?,
                 },
                 None,
             )
             .await?;
 
-        if let Some(mut state) = try_state {
+        while let Some(state) = cursor.next().await {
+            let mut state = state?;
             let field_state = state
                 .fields
                 .iter_mut()
                 .find(|field| field.value == request.entry)
-                // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .unwrap();
 
             let context = state.context.clone();
             let field_value = field_state.value.clone();
@@ -306,7 +301,12 @@ impl Database {
                     expected: _,
                     second,
                 } => {
-                    // Unwrap is fine, since the query above ensures this is available.
+                    // This should never happens, but the provided field value
+                    // depends on user input, so...
+                    if second.is_none() {
+                        continue;
+                    }
+
                     let second = second.as_mut().unwrap();
                     if request.challenge.contains(&second.value) {
                         second.set_verified();
@@ -326,15 +326,17 @@ impl Database {
                         )
                         .await?;
 
-                        events.push(NotificationMessage::SecondFieldVerified {
+                        self.insert_event(NotificationMessage::SecondFieldVerified {
                             context: context.clone(),
                             field: field_value.clone(),
-                        });
+                        })
+                        .await?;
                     } else {
-                        events.push(NotificationMessage::SecondFieldVerificationFailed {
+                        self.insert_event(NotificationMessage::SecondFieldVerificationFailed {
                             context: context.clone(),
                             field: field_value.clone(),
-                        });
+                        })
+                        .await?;
                     }
                 }
                 _ => {
@@ -555,7 +557,6 @@ impl Database {
 
         Ok(())
     }
-    // TODO: Consider creating an event.
     pub async fn insert_display_name_violations(
         &self,
         context: &IdentityContext,

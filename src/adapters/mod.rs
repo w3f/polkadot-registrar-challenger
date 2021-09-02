@@ -122,7 +122,7 @@ impl AdapterListener {
                         for message in messages {
                             debug!("Processing message from: {:?}", message.origin);
                             let _ = db
-                                .process_message(&message)
+                                .verify_message(&message)
                                 .await
                                 .map_err(|err| error!("Error when verifying message: {:?}", err));
                         }

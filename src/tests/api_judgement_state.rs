@@ -452,3 +452,112 @@ async fn verify_valid_message_awaiting_second_challenge() {
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
+
+#[actix::test]
+async fn verify_invalid_message_awaiting_second_challenge() {
+    let (db, mut api, injector) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement requests.
+    let mut alice = JudgementState::alice();
+    let bob = JudgementState::bob();
+
+    db.add_judgement_request(&alice).await.unwrap();
+    db.add_judgement_request(&bob).await.unwrap();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Send valid message.
+    injector
+        .send(ExternalMessage {
+            origin: ExternalMessageType::Email("alice@email.com".to_string()),
+            id: MessageId::from(0u32),
+            timestamp: Timestamp::now(),
+            values: alice
+                .get_field(&F::ALICE_EMAIL())
+                .expected_message()
+                .to_message_parts(),
+        })
+        .await;
+
+    // Email account of Alice is now verified, but not the second challenge.
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_message_mut()
+        .set_verified();
+
+    // Check for `FieldVerified` notification.
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    // Check response.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Check for `AwaitingSecondChallenge` notification.
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::AwaitingSecondChallenge {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Send invalid second challenge.
+    let challenge = VerifyChallenge {
+        entry: F::ALICE_EMAIL(),
+        challenge: "INVALID".to_string(),
+    };
+
+    println!("GOT HERE");
+    // Send it to the API endpoint.
+    let res = api
+        .post("/api/verify_second_challenge")
+        .send_json(&challenge)
+        .await
+        .unwrap();
+
+    println!("DONE");
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Check for `SecondFieldVerified` notification.
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::SecondFieldVerificationFailed {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+    println!("ASD");
+
+    // Other judgement state must be unaffected (Bob).
+    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
+    );
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}
