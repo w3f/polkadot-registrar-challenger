@@ -44,7 +44,6 @@ impl Database {
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
-        let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
         // field gets updated during pending judgement process).
@@ -102,51 +101,27 @@ impl Database {
             .await?;
 
             // Create event.
-            event_log
-                .insert_one(
-                    Event::new(NotificationMessage::IdentityUpdated {
-                        context: request.context.clone(),
-                    }),
-                    None,
-                )
-                .await?;
+            self.insert_event(NotificationMessage::IdentityUpdated {
+                context: request.context.clone(),
+            })
+            .await?;
 
             // Check full verification status.
-            if let Some(event) = self.process_fully_verified(&current).await? {
-                // Create event.
-                event_log.insert_one(Event::new(event), None).await?;
-            }
+            self.process_fully_verified(&current).await?;
         } else {
             coll.insert_one(request.to_document()?, None).await?;
 
             // Create event.
-            // TODO: Implement method fro creating events.
-            event_log
-                .insert_one(
-                    Event::new(NotificationMessage::IdentityInserted {
-                        context: request.context.clone(),
-                    }),
-                    None,
-                )
-                .await?;
+            self.insert_event(NotificationMessage::IdentityInserted {
+                context: request.context.clone(),
+            })
+            .await?;
         }
 
         Ok(())
     }
     // TODO: Merge with 'verify_message'?
     pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
-        let events = self.verify_message(message).await?;
-
-        // Create event statement.
-        let coll = self.db.collection(EVENT_COLLECTION);
-        for event in events {
-            coll.insert_one(Event::new(event).to_document()?, None)
-                .await?;
-        }
-
-        Ok(())
-    }
-    async fn verify_message(&self, message: &ExternalMessage) -> Result<Vec<NotificationMessage>> {
         // TODO: Specify type on `collection`.
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
@@ -159,8 +134,6 @@ impl Database {
                 None,
             )
             .await?;
-
-        let mut events = vec![];
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
@@ -206,17 +179,21 @@ impl Database {
                                 )
                                 .await?;
 
-                                events.push(NotificationMessage::FieldVerified {
+                                self.insert_event(NotificationMessage::FieldVerified {
                                     context: context.clone(),
                                     field: field_value.clone(),
-                                });
+                                })
+                                .await?;
 
                                 // TODO: Document
                                 if second.is_some() {
-                                    events.push(NotificationMessage::AwaitingSecondChallenge {
-                                        context: context.clone(),
-                                        field: field_value,
-                                    });
+                                    self.insert_event(
+                                        NotificationMessage::AwaitingSecondChallenge {
+                                            context: context.clone(),
+                                            field: field_value,
+                                        },
+                                    )
+                                    .await?;
                                 }
                             } else {
                                 // Update field state.
@@ -234,10 +211,11 @@ impl Database {
                                 )
                                 .await?;
 
-                                events.push(NotificationMessage::FieldVerificationFailed {
+                                self.insert_event(NotificationMessage::FieldVerificationFailed {
                                     context: context.clone(),
                                     field: field_value,
-                                });
+                                })
+                                .await?;
                             }
                         }
                     }
@@ -252,18 +230,13 @@ impl Database {
             std::mem::drop(field_state);
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&id_state)
-                .await?
-                .map(|event| events.push(event));
+            self.process_fully_verified(&id_state).await?;
         }
 
-        Ok(events)
+        Ok(())
     }
     /// Check if all fields have been verified.
-    async fn process_fully_verified(
-        &self,
-        state: &JudgementState,
-    ) -> Result<Option<NotificationMessage>> {
+    async fn process_fully_verified(&self, state: &JudgementState) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         if state.check_full_verification() {
@@ -291,13 +264,14 @@ impl Database {
                 .await?;
 
             if res.modified_count > 0 {
-                return Ok(Some(NotificationMessage::IdentityFullyVerified {
+                self.insert_event(NotificationMessage::IdentityFullyVerified {
                     context: state.context.clone(),
-                }));
+                })
+                .await?;
             }
         }
 
-        Ok(None)
+        Ok(())
     }
     pub async fn verify_second_challenge(&mut self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
@@ -372,15 +346,7 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state)
-                .await?
-                .map(|event| events.push(event));
-        }
-
-        let coll = self.db.collection(EVENT_COLLECTION);
-        for event in events {
-            coll.insert_one(Event::new(event).to_document()?, None)
-                .await?;
+            self.process_fully_verified(&state).await?;
         }
 
         Ok(verified)
@@ -505,7 +471,6 @@ impl Database {
     }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
-        let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
         let res = coll
             .update_one(
@@ -524,14 +489,10 @@ impl Database {
 
         // Create event.
         if res.modified_count > 0 {
-            event_log
-                .insert_one(
-                    Event::new(NotificationMessage::JudgementProvided {
-                        context: context.clone(),
-                    }),
-                    None,
-                )
-                .await?;
+            self.insert_event(NotificationMessage::JudgementProvided {
+                context: context.clone(),
+            })
+            .await?;
         }
 
         Ok(())
@@ -593,13 +554,7 @@ impl Database {
         )
         .await?;
 
-        let events = self.process_fully_verified(&state).await?;
-
-        if let Some(event) = events {
-            let coll = self.db.collection(EVENT_COLLECTION);
-            coll.insert_one(Event::new(event).to_document()?, None)
-                .await?;
-        }
+        self.process_fully_verified(&state).await?;
 
         Ok(())
     }
@@ -625,6 +580,14 @@ impl Database {
             None,
         )
         .await?;
+
+        Ok(())
+    }
+    async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
+        let coll = self.db.collection(EVENT_COLLECTION);
+
+        let event: Event = event.into();
+        coll.insert_one(event.to_bson()?, None).await?;
 
         Ok(())
     }
