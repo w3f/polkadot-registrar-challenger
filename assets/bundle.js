@@ -254,11 +254,9 @@ class ContentManager {
                 </ul>
                 <p>The identity on-chain info contains fields that are not supported by the W3F registrar service in
                 an automated manner and <em>must</em> be removed. If you really want to have those fields
-                included, please contact the
-                appropriate authorities as described in the <em>"Need help?"</em> section below. Please prepare
-                the
-                appropriate information so the manual verification can be completed as quickly as possible. For
-                example, if you want to add a web address, please make sure that the website somehow references
+                included, contact the appropriate authorities as described in the <em>"Need help?"</em> section below. Please prepare
+                the necessary information so the manual verification can be completed as quickly as possible. For
+                example, if you want to add a web address, make sure that the website somehow references
                 your Kusama/Polkadot address.</p>
             </div>
         `;
