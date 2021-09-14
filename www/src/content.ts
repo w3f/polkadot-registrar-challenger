@@ -180,11 +180,8 @@ export class ContentManager {
         this.div_verification_overview.innerHTML = `
             <div class="col-10 table-responsive ">
                 <h2>Account verification</h2>
-                <p>The service expects a message <strong>from</strong> the specified account in the on-chain
-                    identity sent <strong>to</strong> the corresponding W3F account containing the
-                    <strong>challenge</strong>. Do note that each account type has its own, individual
-                    challenge.
-                </p>
+                <p>Send each provided challenge <strong>from</strong> your account <strong>to</strong> the corresponding W3F account.
+                    You can just copy and paste the challenge directly.</p>
                 <p><em>Note:</em> Twitter verification can take about 5 minutes.</p>
                 <table id="verification-overview" class="table table-striped table-dark">
                     <thead>
@@ -211,8 +208,8 @@ export class ContentManager {
         this.div_email_second_challenge.innerHTML = `
             <div class="col-10">
                 <h2>⚠️️ Additional Challenge</h2>
-                <p>A message sent from <strong>registrar@web3.foundation</strong> containing an additional challenge was sent to <strong>
-                    ${address}</strong> (make sure to check the spam folder). Please insert that challenge into the following field:
+                <p>A message was sent from <em>registrar@web3.foundation</em> to <strong>${address}</strong> containing an additional challenge
+                    (make sure to check the spam folder). Please insert that challenge into the following field:
                 </p>
                 <div class="input-group">
                 <input id="specify-second-challenge" type="text" class="form-control"
@@ -278,11 +275,9 @@ export class ContentManager {
                 </ul>
                 <p>The identity on-chain info contains fields that are not supported by the W3F registrar service in
                 an automated manner and <em>must</em> be removed. If you really want to have those fields
-                included, please contact the
-                appropriate authorities as described in the <em>"Need help?"</em> section below. Please prepare
-                the
-                appropriate information so the manual verification can be completed as quickly as possible. For
-                example, if you want to add a web address, please make sure that the website somehow references
+                included, contact the appropriate authorities as described in the <em>"Need help?"</em> section below. Please prepare
+                the necessary information so the manual verification can be completed as quickly as possible. For
+                example, if you want to add a web address, make sure that the website somehow references
                 your Kusama/Polkadot address.</p>
             </div>
         `;

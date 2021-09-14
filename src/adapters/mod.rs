@@ -122,7 +122,7 @@ impl AdapterListener {
                         for message in messages {
                             debug!("Processing message from: {:?}", message.origin);
                             let _ = db
-                                .process_message(&message)
+                                .verify_message(&message)
                                 .await
                                 .map_err(|err| error!("Error when verifying message: {:?}", err));
                         }
@@ -143,15 +143,13 @@ impl AdapterListener {
                     Ok((events, new_counter)) => {
                         for event in &events {
                             match event {
-                                NotificationMessage::AwaitingSecondChallenge {
-                                    context: _,
-                                    field,
-                                } => match field {
-                                    IdentityFieldValue::Email(to) => {
-                                        if adapter.name() == "email" {
-                                            debug!("Sending second challenge to {}", to);
-                                            if let Ok(challenge) = db
-                                                .fetch_second_challenge(field)
+                                NotificationMessage::AwaitingSecondChallenge { context, field } => {
+                                    match field {
+                                        IdentityFieldValue::Email(to) => {
+                                            if adapter.name() == "email" {
+                                                debug!("Sending second challenge to {}", to);
+                                                if let Ok(challenge) = db
+                                                .fetch_second_challenge(&context, field)
                                                 .await
                                                 .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
                                                     let _ = adapter
@@ -159,10 +157,11 @@ impl AdapterListener {
                                                         .await
                                                         .map_err(|err| error!("Failed to send second challenge to {} ({} adapter): {:?}", to, adapter.name(), err));
                                                     }
+                                            }
                                         }
+                                        _ => {}
                                     }
-                                    _ => {}
-                                },
+                                }
                                 _ => {}
                             }
                         }

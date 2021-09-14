@@ -44,7 +44,6 @@ impl Database {
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
-        let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
         // field gets updated during pending judgement process).
@@ -78,26 +77,21 @@ impl Database {
                 }
             }
 
-            // Check verification status.
-            current.is_fully_verified = if !to_add.is_empty() {
-                // (Re-)set validity if new fields are available.
-                false
-            } else {
-                current.is_fully_verified
-            };
+            // Reset verification status if fields have been modified.
+            if !to_add.is_empty() {
+                current.is_fully_verified = false;
+            }
 
             // Set new fields.
             current.fields = to_add;
 
             // Update the final value in database.
-            // TODO: Check modified count.
             coll.update_one(
                 doc! {
                     "context": request.context.to_bson()?
                 },
                 doc! {
                     "$set": {
-                        "is_fully_verified": current.is_fully_verified.to_bson()?,
                         "fields": current.fields.to_bson()?
                     }
                 },
@@ -106,46 +100,26 @@ impl Database {
             .await?;
 
             // Create event.
-            event_log
-                .insert_one(
-                    Event::new(NotificationMessage::IdentityUpdated {
-                        context: request.context.clone(),
-                    }),
-                    None,
-                )
-                .await?;
+            self.insert_event(NotificationMessage::IdentityUpdated {
+                context: request.context.clone(),
+            })
+            .await?;
+
+            // Check full verification status.
+            self.process_fully_verified(&current).await?;
         } else {
             coll.insert_one(request.to_document()?, None).await?;
 
             // Create event.
-            // TODO: Implement method fro creating events.
-            event_log
-                .insert_one(
-                    Event::new(NotificationMessage::IdentityInserted {
-                        context: request.context.clone(),
-                    }),
-                    None,
-                )
-                .await?;
+            self.insert_event(NotificationMessage::IdentityInserted {
+                context: request.context.clone(),
+            })
+            .await?;
         }
 
         Ok(())
     }
-    // TODO: Merge with 'verify_message'?
-    pub async fn process_message(&mut self, message: &ExternalMessage) -> Result<()> {
-        let events = self.verify_message(message).await?;
-
-        // Create event statement.
-        let coll = self.db.collection(EVENT_COLLECTION);
-        for event in events {
-            coll.insert_one(Event::new(event).to_document()?, None)
-                .await?;
-        }
-
-        Ok(())
-    }
-    async fn verify_message(&self, message: &ExternalMessage) -> Result<Vec<NotificationMessage>> {
-        // TODO: Specify type on `collection`.
+    pub async fn verify_message(&mut self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -158,8 +132,6 @@ impl Database {
             )
             .await?;
 
-        let mut events = vec![];
-
         // If a field was found, update it.
         while let Some(doc) = cursor.next().await {
             let mut id_state: JudgementState = from_document(doc?)?;
@@ -167,8 +139,7 @@ impl Database {
                 .fields
                 .iter_mut()
                 .find(|field| field.value.matches(&message))
-                // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .unwrap();
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
@@ -204,17 +175,20 @@ impl Database {
                                 )
                                 .await?;
 
-                                events.push(NotificationMessage::FieldVerified {
+                                self.insert_event(NotificationMessage::FieldVerified {
                                     context: context.clone(),
                                     field: field_value.clone(),
-                                });
+                                })
+                                .await?;
 
-                                // TODO: Document
                                 if second.is_some() {
-                                    events.push(NotificationMessage::AwaitingSecondChallenge {
-                                        context: context.clone(),
-                                        field: field_value,
-                                    });
+                                    self.insert_event(
+                                        NotificationMessage::AwaitingSecondChallenge {
+                                            context: context.clone(),
+                                            field: field_value,
+                                        },
+                                    )
+                                    .await?;
                                 }
                             } else {
                                 // Update field state.
@@ -232,10 +206,11 @@ impl Database {
                                 )
                                 .await?;
 
-                                events.push(NotificationMessage::FieldVerificationFailed {
+                                self.insert_event(NotificationMessage::FieldVerificationFailed {
                                     context: context.clone(),
                                     field: field_value,
-                                });
+                                })
+                                .await?;
                             }
                         }
                     }
@@ -247,26 +222,20 @@ impl Database {
                 }
             }
 
-            std::mem::drop(field_state);
-
             // Check if the identity is fully verified.
-            self.process_fully_verified(&id_state)
-                .await?
-                .map(|event| events.push(event));
+            self.process_fully_verified(&id_state).await?;
         }
 
-        Ok(events)
+        Ok(())
     }
     /// Check if all fields have been verified.
-    pub async fn process_fully_verified(
-        &self,
-        state: &JudgementState,
-    ) -> Result<Option<NotificationMessage>> {
+    async fn process_fully_verified(&self, state: &JudgementState) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         if state.check_full_verification() {
-            // Create a timed delay for issuing judgments. Between 30 seconds to 5 minutes.
-            // TODO: Explain reasoning.
+            // Create a timed delay for issuing judgments. Between 30 seconds to
+            // 5 minutes. This is used to prevent timing attacks where a user
+            // updates the identity right before the judgement is issued.
             let now = Timestamp::now();
             let offset = thread_rng().gen_range(30, 300);
             let issue_at = Timestamp::with_offset(offset);
@@ -289,41 +258,40 @@ impl Database {
                 .await?;
 
             if res.modified_count > 0 {
-                return Ok(Some(NotificationMessage::IdentityFullyVerified {
+                self.insert_event(NotificationMessage::IdentityFullyVerified {
                     context: state.context.clone(),
-                }));
+                })
+                .await?;
             }
         }
 
-        Ok(None)
+        Ok(())
     }
     pub async fn verify_second_challenge(&mut self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
-        let mut events = vec![];
 
         // Trim received challenge, just in case.
         request.challenge = request.challenge.trim().to_string();
 
         // Query database.
-        let try_state = coll
-            .find_one(
+        let mut cursor = coll
+            .find(
                 doc! {
                     "fields.value": request.entry.to_bson()?,
-                    "fields.challenge.content.second.value": request.challenge.to_bson()?,
                 },
                 None,
             )
             .await?;
 
-        if let Some(mut state) = try_state {
+        while let Some(state) = cursor.next().await {
+            let mut state = state?;
             let field_state = state
                 .fields
                 .iter_mut()
                 .find(|field| field.value == request.entry)
-                // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .unwrap();
 
             let context = state.context.clone();
             let field_value = field_state.value.clone();
@@ -333,7 +301,12 @@ impl Database {
                     expected: _,
                     second,
                 } => {
-                    // Unwrap is fine, since the query above ensures this is available.
+                    // This should never happens, but the provided field value
+                    // depends on user input, so...
+                    if second.is_none() {
+                        continue;
+                    }
+
                     let second = second.as_mut().unwrap();
                     if request.challenge.contains(&second.value) {
                         second.set_verified();
@@ -353,15 +326,17 @@ impl Database {
                         )
                         .await?;
 
-                        events.push(NotificationMessage::SecondFieldVerified {
+                        self.insert_event(NotificationMessage::SecondFieldVerified {
                             context: context.clone(),
                             field: field_value.clone(),
-                        });
+                        })
+                        .await?;
                     } else {
-                        events.push(NotificationMessage::SecondFieldVerificationFailed {
+                        self.insert_event(NotificationMessage::SecondFieldVerificationFailed {
                             context: context.clone(),
                             field: field_value.clone(),
-                        });
+                        })
+                        .await?;
                     }
                 }
                 _ => {
@@ -370,21 +345,14 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state)
-                .await?
-                .map(|event| events.push(event));
-        }
-
-        let coll = self.db.collection(EVENT_COLLECTION);
-        for event in events {
-            coll.insert_one(Event::new(event).to_document()?, None)
-                .await?;
+            self.process_fully_verified(&state).await?;
         }
 
         Ok(verified)
     }
     pub async fn fetch_second_challenge(
         &self,
+        context: &IdentityContext,
         field: &IdentityFieldValue,
     ) -> Result<ExpectedMessage> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
@@ -393,6 +361,7 @@ impl Database {
         let try_state = coll
             .find_one(
                 doc! {
+                    "context": context.to_bson()?,
                     "fields.value": field.to_bson()?,
                 },
                 None,
@@ -501,7 +470,6 @@ impl Database {
     }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
-        let event_log = self.db.collection::<Event>(EVENT_COLLECTION);
 
         let res = coll
             .update_one(
@@ -520,14 +488,10 @@ impl Database {
 
         // Create event.
         if res.modified_count > 0 {
-            event_log
-                .insert_one(
-                    Event::new(NotificationMessage::JudgementProvided {
-                        context: context.clone(),
-                    }),
-                    None,
-                )
-                .await?;
+            self.insert_event(NotificationMessage::JudgementProvided {
+                context: context.clone(),
+            })
+            .await?;
         }
 
         Ok(())
@@ -572,12 +536,12 @@ impl Database {
 
         Ok(names)
     }
-    pub async fn set_display_name_valid(&self, context: &IdentityContext) -> Result<()> {
+    pub async fn set_display_name_valid(&self, state: &JudgementState) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         coll.update_one(
             doc! {
-                "context": context.to_bson()?,
+                "context": state.context.to_bson()?,
                 "fields.value.type": "display_name",
             },
             doc! {
@@ -589,9 +553,10 @@ impl Database {
         )
         .await?;
 
+        self.process_fully_verified(&state).await?;
+
         Ok(())
     }
-    // TODO: Consider creating an event.
     pub async fn insert_display_name_violations(
         &self,
         context: &IdentityContext,
@@ -613,6 +578,14 @@ impl Database {
             None,
         )
         .await?;
+
+        Ok(())
+    }
+    async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
+        let coll = self.db.collection(EVENT_COLLECTION);
+
+        let event: Event = event.into();
+        coll.insert_one(event.to_bson()?, None).await?;
 
         Ok(())
     }
