@@ -109,7 +109,7 @@ workflows:
       - deploy:
           context: 
             - engineering-access-registrar
-            - registrar-test
+            - registrar-v2
           filters:
             branches:
               ignore: /.*/
