@@ -1,5 +1,6 @@
 environments:
   production:
+  ci:
 
 repositories:
 - name: w3f
