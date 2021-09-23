@@ -2,6 +2,15 @@ version: 2
 
 jobs:
 
+  helmLint:
+    docker:
+      - image: web3f/ci-commons:v2.4.4
+    steps:
+      - checkout
+      - run:
+          command: |
+            helm lint ./charts/polkadot-registrar-challenger
+
   buildImage:
     docker:
       - image: web3f/ci-commons:v2.4.4
@@ -60,12 +69,18 @@ jobs:
 workflows:
   version: 2
   test_and_deploy:
-    jobs:   
+    jobs:
+      - helmLint:
+          filters:
+            tags:
+              only: /.*/
       - buildImage:
           context: dockerhub-bot
           filters:
             tags:
               only: /.*/
+          requires:
+            - helmLint 
       - integrationTests:
           filters:
             tags:
