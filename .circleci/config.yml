@@ -63,7 +63,7 @@ workflows:
           requires:
             - buildImage
             - integrationTests
-      - publishImage:
+      - publishChart:
           context: dockerhub-bot
           filters:
             branches:
