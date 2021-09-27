@@ -1,5 +1,6 @@
 use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
+use crate::adapters::admin::FieldName;
 use crate::primitives::{
     ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
     IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
@@ -142,7 +143,24 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_message(&mut self, message: &ExternalMessage) -> Result<()> {
+    pub async fn verify_manually(&self, context: IdentityContext, field: FieldName) -> Result<()> {
+        /*
+        let coll = self.db.collection(IDENTITY_COLLECTION);
+
+        let mut cursor = coll
+            .update_one(doc! {
+                "context": context.to_bson()?,
+                "field.value"
+            },
+            doc! {
+
+            },
+            None)
+        */
+
+        unimplemented!()
+    }
+    pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.

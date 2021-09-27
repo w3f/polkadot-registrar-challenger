@@ -1,4 +1,6 @@
-use crate::primitives::ChainAddress;
+use crate::actors::connector::create_context;
+use crate::primitives::{ChainAddress, JudgementState, JudgementStateBlanked};
+use crate::Database;
 use std::str::FromStr;
 
 pub type Result<T> = std::result::Result<T, Response>;
@@ -42,9 +44,10 @@ impl FromStr for Command {
 }
 
 pub enum Response {
-    Status(ChainAddress),
+    Status(JudgementStateBlanked),
     Verified(ChainAddress, Vec<FieldName>),
     UnknownCommand,
+    IdentityNotFound,
     InvalidSyntax(Option<String>),
     InternalError,
     Help,
@@ -81,6 +84,31 @@ impl FromStr for FieldName {
     }
 }
 
-pub fn process_admin() -> Result<()> {
+pub async fn process_admin(db: Database, command: Command) -> Response {
+    let local = |db: Database, command: Command| async move {
+        match command {
+            Command::Status(addr) => {
+                let context = create_context(addr);
+                let state = db.fetch_judgement_state(&context).await?;
+
+				// Determine response based on database lookup.
+                match state {
+                    Some(state) => Ok(Response::Status(state.into())),
+                    None => Ok(Response::IdentityNotFound),
+                }
+            }
+            Command::Verify(addr, fields) => {
+                let context = create_context(addr);
+                unimplemented!()
+            }
+        }
+    };
+
+    let res: crate::Result<Response> = local(db, command).await;
+    match res {
+        Ok(_) => {}
+        Err(_) => {}
+    }
+
     unimplemented!()
 }

@@ -96,24 +96,26 @@ pub async fn run_connector(
     Ok(())
 }
 
+/// Convenience function for creating a full identity context when only the
+/// address itself is present. Only supports Kusama and Polkadot for now.
+pub fn create_context(address: ChainAddress) -> IdentityContext {
+    let chain = if address.as_str().starts_with("1") {
+        ChainName::Polkadot
+    } else {
+        ChainName::Kusama
+    };
+
+    IdentityContext {
+        address: address,
+        chain: chain,
+    }
+}
+
 async fn run_queue_processor(
     db: Database,
     mut recv: UnboundedReceiver<QueueMessage>,
     dn_config: DisplayNameConfig,
 ) {
-    fn create_context(address: ChainAddress) -> IdentityContext {
-        let chain = if address.as_str().starts_with("1") {
-            ChainName::Polkadot
-        } else {
-            ChainName::Kusama
-        };
-
-        IdentityContext {
-            address: address,
-            chain: chain,
-        }
-    }
-
     async fn process_request(
         db: &Database,
         address: ChainAddress,
