@@ -19,6 +19,12 @@ impl ChainAddress {
     }
 }
 
+impl From<String> for ChainAddress {
+    fn from(v: String) -> Self {
+        ChainAddress(v)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainName {

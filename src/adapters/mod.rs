@@ -5,6 +5,7 @@ use crate::primitives::{
 use crate::{AdapterConfig, Result};
 use tokio::time::{interval, Duration};
 
+pub mod admin;
 pub mod email;
 pub mod matrix;
 pub mod twitter;
