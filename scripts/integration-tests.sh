@@ -7,7 +7,7 @@ source /scripts/bootstrap-helm.sh
 run_tests() {
     echo Running tests...
 
-    wait_pod_ready registrar-challenger-session-notifier
+    wait_pod_ready registrar-challenger-session-notifier registrar-v2
 }
 
 

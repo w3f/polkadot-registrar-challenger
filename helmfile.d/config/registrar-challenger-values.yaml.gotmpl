@@ -4,6 +4,7 @@ config:
     uri: "mongodb://{{ env "MONGO_USERNAME" | default "username" }}:{{ env "MONGO_PASSWORD" | default "password123" }}@mongodb-0.mongodb-headless:27017,mongodb-1.mongodb-headless:27017/{{ env "MONGO_DB" | default "registrar" }}"
     name: {{ env "MONGO_DB" | default "registrar" }}
 
+{{- if eq .Environment.Name "production" }}
 resources:
   requests:
     cpu: "300m"
@@ -11,3 +12,4 @@ resources:
   limits:
     cpu: "500m"
     memory: "700Mi"
+{{- end }} 
