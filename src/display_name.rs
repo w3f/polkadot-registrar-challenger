@@ -1,6 +1,6 @@
 use crate::actors::connector::DisplayNameEntry;
 use crate::database::Database;
-use crate::primitives::{ChainName, JudgementState};
+use crate::primitives::{ChainName, IdentityContext, JudgementState};
 use crate::{DisplayNameConfig, Result};
 use strsim::jaro;
 
@@ -23,11 +23,21 @@ impl DisplayNameVerifier {
         &self,
         name: &str,
         chain: ChainName,
+        // Skip comparison for this account, usually for the issuer itself
+        // (required when re-requesting judgement).
+        skip: Option<&IdentityContext>,
     ) -> Result<Vec<DisplayNameEntry>> {
         let current = self.db.fetch_display_names(chain).await?;
 
         let mut violations = vec![];
         for existing in current {
+            if let Some(to_skip) = skip {
+                // Skip account if specified.
+                if &existing.context == to_skip {
+                    continue;
+                }
+            }
+
             if is_too_similar(&name, &existing.display_name, self.config.limit) {
                 // Only show up to `VIOLATIONS_CAP` violations.
                 if violations.len() == VIOLATIONS_CAP {
@@ -51,7 +61,9 @@ impl DisplayNameVerifier {
             return Ok(());
         };
 
-        let violations = self.check_similarities(name, state.context.chain).await?;
+        let violations = self
+            .check_similarities(name, state.context.chain, Some(&state.context))
+            .await?;
 
         if !violations.is_empty() {
             self.db

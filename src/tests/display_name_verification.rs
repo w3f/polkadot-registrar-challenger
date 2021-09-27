@@ -10,8 +10,8 @@ impl From<&str> for DisplayNameEntry {
     fn from(val: &str) -> Self {
         DisplayNameEntry {
             display_name: val.to_string(),
-            // Just a filler, this value is not relevant for the tests.
-            context: IdentityContext::alice(),
+            // Filler value.
+            context: IdentityContext::bob(),
         }
     }
 }

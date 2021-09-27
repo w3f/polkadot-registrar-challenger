@@ -41,7 +41,7 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
             async move {
                 trace!("Received a similarities check: {:?}", msg);
                 verifier
-                    .check_similarities(msg.check.as_str(), msg.chain)
+                    .check_similarities(msg.check.as_str(), msg.chain, None)
                     .await
                     .map(|violations| {
                         let outcome = if violations.is_empty() {
