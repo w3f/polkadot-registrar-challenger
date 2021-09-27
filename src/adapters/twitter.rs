@@ -364,7 +364,7 @@ impl TwitterHandler {
 
         Ok(user_objects
             .into_iter()
-            .map(|obj| (obj.id, format!("@{}", obj.screen_name)))
+            .map(|obj| (obj.id, format!("@{}", obj.screen_name.to_lowercase())))
             .collect())
     }
 }

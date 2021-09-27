@@ -502,7 +502,7 @@ impl From<(AccountType, String)> for IdentityFieldValue {
             AccountType::DisplayName => IdentityFieldValue::DisplayName(value),
             AccountType::Email => IdentityFieldValue::Email(value),
             AccountType::Web => IdentityFieldValue::Web(value),
-            AccountType::Twitter => IdentityFieldValue::Twitter(value),
+            AccountType::Twitter => IdentityFieldValue::Twitter(value.to_lowercase()),
             AccountType::Matrix => IdentityFieldValue::Matrix(value),
             AccountType::PGPFingerprint => IdentityFieldValue::PGPFingerprint(()),
             AccountType::Image => IdentityFieldValue::Image(()),
