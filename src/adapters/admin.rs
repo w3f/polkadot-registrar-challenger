@@ -24,7 +24,7 @@ impl FromStr for Command {
             Ok(Command::Status(ChainAddress::from(parts[0].to_string())))
         } else if s.starts_with("verify") {
             let parts: Vec<&str> = s.split(" ").skip(1).collect();
-            if parts.len() == 0 {
+            if parts.len() < 2 {
                 return Err(Response::InvalidSyntax(None));
             }
 
@@ -47,6 +47,7 @@ pub enum Response {
     UnknownCommand,
     InvalidSyntax(Option<String>),
     InternalError,
+	Help,
 }
 
 // Raw field name
