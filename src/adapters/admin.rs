@@ -63,6 +63,21 @@ pub enum FieldName {
     Matrix,
 }
 
+impl std::fmt::Display for FieldName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", {
+			match self {
+				FieldName::LegalName => "legal_name",
+				FieldName::DisplayName => "display_name",
+				FieldName::Email => "email",
+				FieldName::Web => "web",
+				FieldName::Twitter => "twitter",
+				FieldName::Matrix => "matrix",
+			}
+		})
+    }
+}
+
 impl FromStr for FieldName {
     type Err = Response;
 

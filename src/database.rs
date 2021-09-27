@@ -1,15 +1,13 @@
 use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::FieldName;
-use crate::primitives::{
-    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
-    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
-};
+use crate::primitives::{ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext, IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage, Timestamp};
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
+use rand::distributions::uniform::UniformSampler;
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 
@@ -144,21 +142,60 @@ impl Database {
         Ok(())
     }
     pub async fn verify_manually(&self, context: IdentityContext, field: FieldName) -> Result<()> {
-        /*
-        let coll = self.db.collection(IDENTITY_COLLECTION);
+        unimplemented!();
 
-        let mut cursor = coll
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Set the appropriate types for verification.
+        let update = match field {
+            // For "ChallengeType::ExpectedMessage".
+            FieldName::Twitter | FieldName::Matrix => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.expected.is_verified": true,
+                    }
+                }
+            }
+            // For "ChallengeType::ExpectedMessage" (with secondary verification).
+            FieldName::Email => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.expected.is_verified": true,
+                        "fields.$.challenge.content.second.is_verified": true,
+                    }
+                }
+            }
+            // For "ChallengeType::DisplayNameCheck".
+            FieldName::DisplayName => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.passed": true,
+                    }
+                }
+            }
+            // For "ChallengeType::Unsupported".
+            FieldName::LegalName | FieldName::Web => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.is_verified": true,
+                    }
+                }
+            }
+        };
+
+        let res = coll
             .update_one(doc! {
                 "context": context.to_bson()?,
-                "field.value"
+                "fields.value.type": field.to_string(),
             },
-            doc! {
+            update,
+            None).await?;
 
-            },
-            None)
-        */
+        if res.modified_count != 1 {
 
-        unimplemented!()
+        }
+
+        Ok(())
     }
     pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
