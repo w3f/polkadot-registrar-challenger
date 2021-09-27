@@ -47,7 +47,7 @@ pub enum Response {
     UnknownCommand,
     InvalidSyntax(Option<String>),
     InternalError,
-	Help,
+    Help,
 }
 
 // Raw field name

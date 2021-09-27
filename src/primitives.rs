@@ -48,11 +48,11 @@ impl IdentityField {
 
         let challenge = {
             match val {
-                LegalName(_) => ChallengeType::Unsupported,
-                Web(_) => ChallengeType::Unsupported,
-                PGPFingerprint(_) => ChallengeType::Unsupported,
-                Image(_) => ChallengeType::Unsupported,
-                Additional(_) => ChallengeType::Unsupported,
+                LegalName(_) => ChallengeType::Unsupported { verified: None },
+                Web(_) => ChallengeType::Unsupported { verified: None },
+                PGPFingerprint(_) => ChallengeType::Unsupported { verified: None },
+                Image(_) => ChallengeType::Unsupported { verified: None },
+                Additional(_) => ChallengeType::Unsupported { verified: None },
                 DisplayName(_) => ChallengeType::DisplayNameCheck {
                     passed: false,
                     violations: vec![],
@@ -91,7 +91,9 @@ pub enum ChallengeType {
         passed: bool,
         violations: Vec<DisplayNameEntry>,
     },
-    Unsupported,
+    Unsupported {
+        verified: Option<bool>,
+    },
 }
 
 impl ChallengeType {
@@ -108,7 +110,7 @@ impl ChallengeType {
                 passed,
                 violations: _,
             } => *passed,
-            ChallengeType::Unsupported => false,
+            ChallengeType::Unsupported { verified: _ } => false,
         }
     }
 }
@@ -254,7 +256,9 @@ impl From<JudgementState> for JudgementStateBlanked {
                                     violations: violations,
                                 }
                             }
-                            ChallengeType::Unsupported => ChallengeTypeBlanked::Unsupported,
+                            ChallengeType::Unsupported { verified: _ } => {
+                                ChallengeTypeBlanked::Unsupported
+                            }
                         }
                     },
                     failed_attempts: f.failed_attempts,
