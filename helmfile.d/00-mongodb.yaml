@@ -1,6 +1,6 @@
 environments:
   production:
-  ci:
+
 
 repositories:
 - name: bitnami

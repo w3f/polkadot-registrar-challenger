@@ -7,16 +7,25 @@ repositories:
   url: https://w3f.github.io/helm-charts/
 
 releases:
+
+{{- if or (eq .Environment.Name "ci") (eq .Environment.Name "local") }} 
+- name: registrar-challenger-session-notifier
+  chart: ../charts/polkadot-registrar-challenger
+  values:
+    - ./config/registrar-challenger-values.yaml.gotmpl
+    - ./config/session_notifier/registrar-challenger-values.yaml.gotmpl
+{{- end }}
+
 - name: registrar-challenger-adapter-listener
   namespace: registrar-v2
-  chart: ../charts/polkadot-registrar-challenger
+  chart: w3f/polkadot-registrar-challenger
   values:
     - ./config/registrar-challenger-values.yaml.gotmpl
     - ./config/adapter_listener/registrar-challenger-values.yaml.gotmpl
 
 - name: registrar-challenger-session-notifier
   namespace: registrar-v2
-  chart: ../charts/polkadot-registrar-challenger
+  chart: w3f/polkadot-registrar-challenger
   values:
     - ./config/registrar-challenger-values.yaml.gotmpl
     - ./config/session_notifier/registrar-challenger-values.yaml.gotmpl

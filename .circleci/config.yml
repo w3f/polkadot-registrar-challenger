@@ -4,7 +4,7 @@ jobs:
 
   helmLint:
     docker:
-      - image: web3f/ci-commons:v2.4.5
+      - image: web3f/ci-commons:v2.4.6
     steps:
       - checkout
       - run:
@@ -13,32 +13,32 @@ jobs:
 
   buildImage:
     docker:
-      - image: web3f/ci-commons:v2.4.5
+      - image: web3f/ci-commons:v2.4.6
     resource_class: xlarge  
     steps:
       - checkout
       - setup_remote_docker:
           docker_layer_caching: true
-          version: 19.03.13
+          version: 20.10.7
       - run:
           command: |
             /scripts/build-image.sh web3f/polkadot-registrar-challenger .
             
   integrationTests:
     docker:
-      - image: web3f/ci-commons:v2.4.5
+      - image: web3f/ci-commons:v2.4.6
     steps:
       - checkout
       - setup_remote_docker:
-          version: 19.03.13
+          version: 20.10.7
       - run:
           description: run integration tests
           command: |
-            /scripts/integration-tests.sh            
+            /scripts/integration-tests.sh kindest/node:v1.19.11         
 
   publishImage:
     docker:
-      - image: web3f/ci-commons:v2.4.5
+      - image: web3f/ci-commons:v2.4.6
     steps:
       - checkout
       - setup_remote_docker
@@ -48,7 +48,7 @@ jobs:
 
   publishChart:
     docker:
-      - image: web3f/ci-commons:v2.4.5
+      - image: web3f/ci-commons:v2.4.6
     steps:
       - checkout
       - run:
@@ -56,7 +56,7 @@ jobs:
             /scripts/publish-chart.sh
   deploy:
       docker:
-        - image: web3f/ci-commons:v2.4.5
+        - image: web3f/ci-commons:v2.4.6
       steps:
         - checkout
         - run:

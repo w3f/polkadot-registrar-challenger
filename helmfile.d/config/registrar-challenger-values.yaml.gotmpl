@@ -1,3 +1,14 @@
+environment: {{ .Environment.Name }}
+
+{{ if eq .Environment.Name "ci" }}
+image:
+  tag: {{ env "CIRCLE_SHA1" | default "kind" }}
+{{ else if eq .Environment.Name "local" }}
+image:
+  repo: localhost:5000/polkadot-registrar-challenger
+  tag: latest
+{{ end }}
+
 config:
   log_level: debug
   db:
