@@ -1,3 +1,4 @@
+# https://github.com/LukeMathWalker/cargo-chef
 # Leveraging the pre-built Docker images with 
 # cargo-chef and the Rust toolchain
 FROM lukemathwalker/cargo-chef:latest-rust-1.55.0 AS chef
@@ -16,6 +17,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
+# We do not need the Rust toolchain to run the binary!
 FROM debian:buster-slim AS runtime
 RUN apt-get update && apt-get install -y libssl-dev ca-certificates sqlite3
 RUN update-ca-certificates --fresh
