@@ -80,6 +80,10 @@ impl Database {
             // Reset verification status if fields have been modified.
             if !to_add.is_empty() {
                 current.is_fully_verified = false;
+                current.inserted_timestamp = Timestamp::now();
+                current.completion_timestamp = None;
+                current.judgement_submitted = false;
+                current.issue_judgement_at = None;
             }
 
             // Set new fields.

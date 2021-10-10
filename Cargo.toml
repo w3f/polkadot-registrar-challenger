@@ -1,6 +1,6 @@
 [package]
 name = "registrar"
-version = "0.2.13"
+version = "0.2.15"
 authors = ["lamafab <42901763+lamafab@users.noreply.github.com>"]
 edition = "2018"
 
