@@ -1,7 +1,10 @@
 use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::FieldName;
-use crate::primitives::{ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext, IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage, Timestamp};
+use crate::primitives::{
+    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
+    IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage, Timestamp,
+};
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
@@ -183,16 +186,33 @@ impl Database {
             }
         };
 
+        // Update field.
         let res = coll
-            .update_one(doc! {
-                "context": context.to_bson()?,
-                "fields.value.type": field.to_string(),
-            },
-            update,
-            None).await?;
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                    "fields.value.type": field.to_string(),
+                },
+                update,
+                None,
+            )
+            .await?;
 
-        if res.modified_count != 1 {
+        // Get the full state.
+        let doc = coll
+            .find_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                None,
+            )
+            .await?;
 
+        // Check the new state.
+        if let Some(state) = doc {
+            self.process_fully_verified(&state).await?;
+        } else {
+            return Err(anyhow!("The provided identity was not found."));
         }
 
         Ok(())

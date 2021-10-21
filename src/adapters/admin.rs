@@ -66,15 +66,15 @@ pub enum FieldName {
 impl std::fmt::Display for FieldName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", {
-			match self {
-				FieldName::LegalName => "legal_name",
-				FieldName::DisplayName => "display_name",
-				FieldName::Email => "email",
-				FieldName::Web => "web",
-				FieldName::Twitter => "twitter",
-				FieldName::Matrix => "matrix",
-			}
-		})
+            match self {
+                FieldName::LegalName => "legal_name",
+                FieldName::DisplayName => "display_name",
+                FieldName::Email => "email",
+                FieldName::Web => "web",
+                FieldName::Twitter => "twitter",
+                FieldName::Matrix => "matrix",
+            }
+        })
     }
 }
 
@@ -106,7 +106,7 @@ pub async fn process_admin(db: Database, command: Command) -> Response {
                 let context = create_context(addr);
                 let state = db.fetch_judgement_state(&context).await?;
 
-				// Determine response based on database lookup.
+                // Determine response based on database lookup.
                 match state {
                     Some(state) => Ok(Response::Status(state.into())),
                     None => Ok(Response::IdentityNotFound),
