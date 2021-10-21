@@ -53,6 +53,33 @@ pub enum Response {
     Help,
 }
 
+impl std::fmt::Display for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let msg = match self {
+            Response::Status(state) => {
+                format!("")
+            },
+            Response::Verified(_, fields) => {
+                format!("Verified the following fields: {}", {
+                    let mut all = String::new();
+                    for field in fields {
+                        all.push_str(&format!("{}, ", field.to_string()));
+                    }
+
+                    // Remove `, ` suffix.
+                    all.pop();
+                    all.pop();
+
+                    all
+                })
+            }
+            _ => panic!()
+        };
+
+        write!(f, "{}", msg)
+    }
+}
+
 // Raw field name
 pub enum FieldName {
     LegalName,
