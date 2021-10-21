@@ -113,8 +113,16 @@ pub async fn process_admin(db: Database, command: Command) -> Response {
                 }
             }
             Command::Verify(addr, fields) => {
-                let context = create_context(addr);
-                unimplemented!()
+                let context = create_context(addr.clone());
+
+                // Verify each passed on field.
+                for field in &fields {
+                    if db.verify_manually(&context, field).await?.is_none() {
+                        return Ok(Response::IdentityNotFound);
+                    }
+                }
+
+                Ok(Response::Verified(addr, fields))
             }
         }
     };

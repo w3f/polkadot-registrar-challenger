@@ -144,9 +144,11 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_manually(&self, context: IdentityContext, field: FieldName) -> Result<()> {
-        unimplemented!();
-
+    pub async fn verify_manually(
+        &self,
+        context: &IdentityContext,
+        field: &FieldName,
+    ) -> Result<Option<()>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Set the appropriate types for verification.
@@ -187,7 +189,7 @@ impl Database {
         };
 
         // Update field.
-        let res = coll
+        let _ = coll
             .update_one(
                 doc! {
                     "context": context.to_bson()?,
@@ -212,10 +214,10 @@ impl Database {
         if let Some(state) = doc {
             self.process_fully_verified(&state).await?;
         } else {
-            return Err(anyhow!("The provided identity was not found."));
+            return Ok(None);
         }
 
-        Ok(())
+        Ok(Some(()))
     }
     pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
