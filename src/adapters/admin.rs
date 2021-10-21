@@ -46,6 +46,7 @@ impl FromStr for Command {
 pub enum Response {
     Status(JudgementStateBlanked),
     Verified(ChainAddress, Vec<FieldName>),
+    // TODO: Remove this.
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
@@ -58,7 +59,7 @@ impl std::fmt::Display for Response {
         let msg = match self {
             Response::Status(state) => {
                 format!("")
-            },
+            }
             Response::Verified(_, fields) => {
                 format!("Verified the following fields: {}", {
                     let mut all = String::new();
@@ -73,7 +74,30 @@ impl std::fmt::Display for Response {
                     all
                 })
             }
-            _ => panic!()
+            Response::UnknownCommand => panic!(),
+            Response::IdentityNotFound => {
+                format!("There is no pending judgement request for the provided identity")
+            }
+            Response::InvalidSyntax(input) => {
+                format!(
+                    "Invalid input{}",
+                    match input {
+                        Some(input) => format!(" {}", input),
+                        None => format!(""),
+                    }
+                )
+            }
+            Response::InternalError => {
+                format!("Internal error occurred. Please contact admin")
+            }
+            Response::Help => {
+                format!(
+                    "\
+                status <ADDR>\tShow the current verification status of the specified address.\n\
+                verify <ADDR> <FIELD>...\tVerify one or multiple fields of the specified address.\n\
+                "
+                )
+            }
         };
 
         write!(f, "{}", msg)
