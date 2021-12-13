@@ -585,9 +585,9 @@ dependencies = [
 
 [[package]]
 name = "bson"
-version = "2.0.0-beta"
+version = "2.0.0-beta.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "441bd9b15699ed6fd29a3546ed614a943a9dbab851b799e2344f3f11b3230bdc"
+checksum = "6ae99d761c932e2c26fa783d8672d9d4ef601b04a7ecc621509cdb27ff6ce9e4"
 dependencies = [
  "ahash 0.7.2",
  "base64 0.13.0",
@@ -597,6 +597,7 @@ dependencies = [
  "lazy_static",
  "rand 0.7.3",
  "serde",
+ "serde_bytes",
  "serde_json",
  "uuid 0.8.2",
 ]
@@ -2853,7 +2854,7 @@ checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
 name = "registrar"
-version = "0.2.15"
+version = "0.2.18"
 dependencies = [
  "actix",
  "actix-broker",
