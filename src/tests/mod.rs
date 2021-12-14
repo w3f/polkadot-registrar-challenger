@@ -40,7 +40,7 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
 
 async fn new_env() -> (Database, TestServer, MessageInjector) {
     // Setup MongoDb database.
-    let random: u32 = thread_rng().gen_range(u32::MIN, u32::MAX);
+    let random: u32 = thread_rng().gen_range(u32::MIN..u32::MAX);
     let db = Database::new(
         "mongodb://localhost:27017/",
         &format!("registrar_test_{}", random),
