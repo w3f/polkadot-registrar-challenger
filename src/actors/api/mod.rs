@@ -60,7 +60,7 @@ pub async fn run_rest_api_server(
     })
     .bind(config.api_address.as_str())?;
 
-    server.run();
+    let _ = server.run();
     Ok(actor)
 }
 

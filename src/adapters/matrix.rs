@@ -17,7 +17,6 @@ const REJOIN_MAX_ATTEMPTS: usize = 5;
 
 #[derive(Clone)]
 pub struct MatrixClient {
-    client: Client,
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
@@ -64,13 +63,11 @@ impl MatrixClient {
                 .ok_or(anyhow!("Failed to acquire sync token"))?,
         );
 
-        let t_client = client.clone();
         actix::spawn(async move {
-            t_client.clone().sync(settings).await;
+            client.clone().sync(settings).await;
         });
 
         Ok(MatrixClient {
-            client: client,
             messages: messages,
         })
     }

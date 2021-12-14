@@ -55,12 +55,6 @@ impl TryFrom<String> for TwitterId {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct ApiErrorObject {
-    code: i64,
-    message: String,
-}
-
 pub struct TwitterBuilder {
     consumer_key: Option<String>,
     consumer_secret: Option<String>,

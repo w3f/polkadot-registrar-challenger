@@ -408,7 +408,7 @@ impl Database {
             .find(
                 doc! {
                     "timestamp": {
-                        "$gt": after,
+                        "$gt": after.to_bson()?,
                     }
                 },
                 None,
