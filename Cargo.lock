@@ -2881,7 +2881,7 @@ dependencies = [
  "matrix-sdk",
  "mongodb",
  "native-tls",
- "rand 0.7.3",
+ "rand 0.8.4",
  "reqwest",
  "ruma",
  "serde",
