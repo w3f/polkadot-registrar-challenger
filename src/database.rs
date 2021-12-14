@@ -241,7 +241,7 @@ impl Database {
             // 5 minutes. This is used to prevent timing attacks where a user
             // updates the identity right before the judgement is issued.
             let now = Timestamp::now();
-            let offset = thread_rng().gen_range(30, 300);
+            let offset = thread_rng().gen_range(30..300);
             let issue_at = Timestamp::with_offset(offset);
 
             let res = coll

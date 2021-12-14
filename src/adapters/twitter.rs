@@ -1,7 +1,7 @@
 use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, Timestamp};
 use crate::Result;
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
 use reqwest::{Client, Request};
@@ -246,7 +246,7 @@ impl TwitterHandler {
             encode(&self.token_secret)
         );
 
-        let mut mac: Hmac<Sha1> = Hmac::new_varkey(sign_key.as_bytes()).unwrap();
+        let mut mac: Hmac<Sha1> = Hmac::new_from_slice(sign_key.as_bytes()).unwrap();
         mac.update(base.as_bytes());
 
         // Create the resulting hash.
