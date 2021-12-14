@@ -104,7 +104,7 @@ dependencies = [
  "pin-project",
  "pin-project-lite",
  "rand 0.8.4",
- "sha-1",
+ "sha-1 0.9.8",
  "smallvec",
  "zstd",
 ]
@@ -2197,7 +2197,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_with",
- "sha-1",
+ "sha-1 0.9.8",
  "sha2 0.9.8",
  "socket2 0.4.2",
  "stringprep",
@@ -2906,7 +2906,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "sha-1",
+ "sha-1 0.10.0",
  "sha2 0.10.0",
  "strsim",
  "thiserror",
@@ -3485,6 +3485,17 @@ dependencies = [
  "cpufeatures",
  "digest 0.9.0",
  "opaque-debug",
+]
+
+[[package]]
+name = "sha-1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "028f48d513f9678cda28f6e4064755b3fbb2af6acd672f2c209b62323f7aea0f"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.1",
 ]
 
 [[package]]
