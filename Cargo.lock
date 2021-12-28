@@ -72,9 +72,9 @@ dependencies = [
 
 [[package]]
 name = "actix-http"
-version = "3.0.0-beta.15"
+version = "3.0.0-beta.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1ff7b149cc1b99967c22cb81c2c31f128ac88ed12bbf80c29c55a7511d46edb"
+checksum = "dac76407e2be239b5e544c9d83bdac4a0d68ae188031ac0424aa3e4868a669be"
 dependencies = [
  "actix-codec",
  "actix-rt",
@@ -90,21 +90,19 @@ dependencies = [
  "encoding_rs",
  "flate2",
  "futures-core",
- "futures-util",
  "h2",
  "http",
  "httparse",
  "httpdate",
- "itoa 0.4.8",
+ "itoa 1.0.1",
  "language-tags",
  "local-channel",
  "log",
  "mime",
  "percent-encoding",
- "pin-project",
  "pin-project-lite",
  "rand 0.8.4",
- "sha-1 0.9.8",
+ "sha-1 0.10.0",
  "smallvec",
  "zstd",
 ]
@@ -224,9 +222,9 @@ dependencies = [
 
 [[package]]
 name = "actix-tls"
-version = "3.0.0-rc.2"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcebfd4a6255a2a75b7b87c1a3a723c57f08293ca9a7fade692e94515585f7a6"
+checksum = "b5ef5760747cdfb108a1f35e6911a7a40939da893f95e035f9eee0c18b4b4025"
 dependencies = [
  "actix-codec",
  "actix-rt",
@@ -468,9 +466,9 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "awc"
-version = "3.0.0-beta.13"
+version = "3.0.0-beta.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26d6c84166873707ee2e689d14aebf5eacf1629c45f8f3f5c0fd3638038c3044"
+checksum = "039b3a6bbb351f9708df0e5db1e96dd0fce84ef8e410a12a77b886f683589737"
 dependencies = [
  "actix-codec",
  "actix-http",
@@ -488,7 +486,7 @@ dependencies = [
  "futures-util",
  "h2",
  "http",
- "itoa 0.4.8",
+ "itoa 1.0.1",
  "log",
  "mime",
  "percent-encoding",
