@@ -220,13 +220,20 @@ async fn run_mocker() -> Result<()> {
     use crate::tests::F;
     use rand::{thread_rng, Rng};
 
+    // Init logger
+    env_logger::builder()
+        .filter_module("system", LevelFilter::Debug)
+        .init();
+
+    let mut rng = thread_rng();
+
     let db_config = DatabaseConfig {
-        uri: "".to_string(),
-        name: "".to_string(),
+        uri: "mongodb://localhost:27017".to_string(),
+        name: format!("registrar_test_{}", rng.gen_range(u32::MIN..u32::MAX)),
     };
 
     let notifier_config = NotifierConfig {
-        api_address: "localhost:8000".to_string(),
+        api_address: "localhost:8888".to_string(),
         display_name: DisplayNameConfig {
             enabled: true,
             limit: 0.85,
@@ -248,20 +255,23 @@ async fn run_mocker() -> Result<()> {
     info!("Mocker setup completed");
 
     let mut alice = JudgementState::alice();
+    info!("INSERTING IDENTITY: Alice (1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP)");
     db.add_judgement_request(&alice).await.unwrap();
 
     // Create messages and (valid/invalid) messages randomly.
     let mut rng = thread_rng();
-    let ty_msg: u32 = rng.gen_range(0..2);
-    let ty_validity = rng.gen_range(0..1);
-    let reset = rng.gen_range(0..5);
-
     loop {
+        let ty_msg: u32 = rng.gen_range(0..2);
+        let ty_validity = rng.gen_range(0..1);
+        let reset = rng.gen_range(0..5);
+
         match reset {
             // Reset state.
             0 => {
+                warn!("Resetting Identity");
                 db.delete_judgement(&alice.context).await.unwrap();
                 alice = JudgementState::alice();
+                db.add_judgement_request(&alice).await.unwrap();
             }
             _ => {}
         }
@@ -322,6 +332,6 @@ async fn run_mocker() -> Result<()> {
             })
             .await;
 
-        sleep(Duration::from_secs(u64::MAX)).await;
+        sleep(Duration::from_secs(3)).await;
     }
 }
