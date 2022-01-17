@@ -1,5 +1,5 @@
 import { capitalizeFirstLetter } from "./content.js";
-import { Notification, NotificationFieldContext } from "./json";
+import { Notification, NotificationFieldContext, ManuallyVerified } from "./json";
 
 export class NotificationHandler {
     notify_idx: number
@@ -132,6 +132,13 @@ function notificationTypeResolver(notification: Notification): [string, string] 
             return [
                 `Judgement has been submitted!`,
                 "bg-success text-light"
+            ]
+        }
+        case "manually_verified": {
+            let data = notification.value as ManuallyVerified;
+            return [
+                `Manually verified ${capitalizeFirstLetter(data.field)}`,
+                "bg-info text-light"
             ]
         }
         default: {

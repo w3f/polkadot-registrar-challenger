@@ -189,7 +189,7 @@ impl Database {
         };
 
         // Update field.
-        let _ = coll
+        let res = coll
             .update_one(
                 doc! {
                     "context": context.to_bson()?,
@@ -200,6 +200,17 @@ impl Database {
             )
             .await?;
 
+        if res.modified_count != 1 {
+            return Ok(None);
+        }
+
+        // Create event.
+        self.insert_event(NotificationMessage::ManuallyVerified {
+            context: context.clone(),
+            field: field.clone(),
+        })
+        .await?;
+
         // Get the full state.
         let doc = coll
             .find_one(
@@ -209,13 +220,6 @@ impl Database {
                 None,
             )
             .await?;
-
-        // Create event.
-        self.insert_event(NotificationMessage::ManuallyVerified {
-            context: context.clone(),
-            field: field.clone(),
-        })
-        .await?;
 
         // Check the new state.
         if let Some(state) = doc {
