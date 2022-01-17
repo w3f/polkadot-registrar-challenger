@@ -60,7 +60,10 @@ pub async fn run_rest_api_server(
     })
     .bind(config.api_address.as_str())?;
 
-    let _ = server.run().await;
+    actix::spawn(async move {
+        let _ = server.run().await;
+    });
+
     Ok(actor)
 }
 

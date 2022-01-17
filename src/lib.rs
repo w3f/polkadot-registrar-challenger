@@ -197,11 +197,8 @@ pub async fn run() -> Result<()> {
             info!("Starting adapter listener and session notifier instances");
             let (adapter_config, notifier_config) = (config.adapter, config.notifier);
 
-            let t1_db_config = db_config.clone();
-            let t2_db_config = db_config;
-
-            config_adapter_listener(t1_db_config, adapter_config).await?;
-            config_session_notifier(t2_db_config, notifier_config).await?;
+            config_adapter_listener(db_config.clone(), adapter_config).await?;
+            config_session_notifier(db_config, notifier_config).await?;
         }
     }
 
@@ -209,5 +206,133 @@ pub async fn run() -> Result<()> {
 
     loop {
         sleep(Duration::from_secs(u64::MAX)).await;
+    }
+}
+
+#[actix::test]
+#[ignore]
+async fn run_mocker() -> Result<()> {
+    use crate::adapters::tests::MessageInjector;
+    use crate::adapters::AdapterListener;
+    use crate::database::Database;
+    use crate::primitives::{
+        ExpectedMessage, ExternalMessage, ExternalMessageType, JudgementState, MessageId, Timestamp,
+    };
+    use crate::tests::F;
+    use rand::{thread_rng, Rng};
+
+    // Init logger
+    env_logger::builder()
+        .filter_module("system", LevelFilter::Debug)
+        .init();
+
+    let mut rng = thread_rng();
+
+    let db_config = DatabaseConfig {
+        uri: "mongodb://localhost:27017".to_string(),
+        name: format!("registrar_test_{}", rng.gen_range(u32::MIN..u32::MAX)),
+    };
+
+    let notifier_config = NotifierConfig {
+        api_address: "localhost:8888".to_string(),
+        display_name: DisplayNameConfig {
+            enabled: true,
+            limit: 0.85,
+        },
+    };
+
+    info!("Starting mock adapter and session notifier instances");
+
+    config_session_notifier(db_config.clone(), notifier_config).await?;
+
+    // Setup database
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
+
+    // Setup message verifier and injector.
+    let injector = MessageInjector::new();
+    let listener = AdapterListener::new(db.clone()).await;
+    listener.start_message_adapter(injector.clone(), 1).await;
+
+    info!("Mocker setup completed");
+
+    let mut alice = JudgementState::alice();
+    info!("INSERTING IDENTITY: Alice (1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP)");
+    db.add_judgement_request(&alice).await.unwrap();
+
+    // Create messages and (valid/invalid) messages randomly.
+    let mut rng = thread_rng();
+    loop {
+        let ty_msg: u32 = rng.gen_range(0..2);
+        let ty_validity = rng.gen_range(0..1);
+        let reset = rng.gen_range(0..5);
+
+        match reset {
+            // Reset state.
+            0 => {
+                warn!("Resetting Identity");
+                db.delete_judgement(&alice.context).await.unwrap();
+                alice = JudgementState::alice();
+                db.add_judgement_request(&alice).await.unwrap();
+            }
+            _ => {}
+        }
+
+        let (origin, values) = match ty_msg {
+            0 => {
+                (ExternalMessageType::Email("alice@email.com".to_string()), {
+                    // Get either valid or invalid message
+                    match ty_validity {
+                        0 => alice
+                            .get_field(&F::ALICE_EMAIL())
+                            .expected_message()
+                            .to_message_parts(),
+                        1 => ExpectedMessage::random().to_message_parts(),
+                        _ => panic!(),
+                    }
+                })
+            }
+            1 => {
+                (ExternalMessageType::Twitter("@alice".to_string()), {
+                    // Get either valid or invalid message
+                    match ty_validity {
+                        0 => alice
+                            .get_field(&F::ALICE_TWITTER())
+                            .expected_message()
+                            .to_message_parts(),
+                        1 => ExpectedMessage::random().to_message_parts(),
+                        _ => panic!(),
+                    }
+                })
+            }
+            2 => {
+                (
+                    ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+                    {
+                        // Get either valid or invalid message
+                        match ty_validity {
+                            0 => alice
+                                .get_field(&F::ALICE_MATRIX())
+                                .expected_message()
+                                .to_message_parts(),
+                            1 => ExpectedMessage::random().to_message_parts(),
+                            _ => panic!(),
+                        }
+                    },
+                )
+            }
+            _ => panic!(),
+        };
+
+        // Inject message.
+        injector
+            .send(ExternalMessage {
+                origin: origin,
+                id: MessageId::from(0u32),
+                timestamp: Timestamp::now(),
+                values: values,
+            })
+            .await;
+
+        sleep(Duration::from_secs(3)).await;
     }
 }

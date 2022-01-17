@@ -123,6 +123,25 @@ impl Database {
 
         Ok(())
     }
+    #[cfg(test)]
+    pub async fn delete_judgement(&self, context: &IdentityContext) -> Result<()> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        let res = coll
+            .delete_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        if res.deleted_count != 1 {
+            panic!()
+        }
+
+        Ok(())
+    }
     pub async fn verify_message(&mut self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 

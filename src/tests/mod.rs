@@ -17,7 +17,7 @@ mod display_name_verification;
 mod explicit;
 
 // Convenience type
-type F = IdentityFieldValue;
+pub type F = IdentityFieldValue;
 
 trait ToWsMessage {
     fn to_ws(&self) -> Message;

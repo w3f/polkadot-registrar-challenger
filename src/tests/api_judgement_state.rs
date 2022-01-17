@@ -525,7 +525,6 @@ async fn verify_invalid_message_awaiting_second_challenge() {
         challenge: "INVALID".to_string(),
     };
 
-    println!("GOT HERE");
     // Send it to the API endpoint.
     let res = api
         .post("/api/verify_second_challenge")
@@ -533,7 +532,6 @@ async fn verify_invalid_message_awaiting_second_challenge() {
         .await
         .unwrap();
 
-    println!("DONE");
     assert_eq!(res.status(), StatusCode::OK);
 
     // Check for `SecondFieldVerified` notification.
@@ -547,7 +545,6 @@ async fn verify_invalid_message_awaiting_second_challenge() {
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
-    println!("ASD");
 
     // Other judgement state must be unaffected (Bob).
     stream.send(IdentityContext::bob().to_ws()).await.unwrap();
