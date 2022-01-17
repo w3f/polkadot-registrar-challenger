@@ -210,6 +210,7 @@ pub async fn run() -> Result<()> {
 }
 
 #[actix::test]
+#[ignore]
 async fn run_mocker() -> Result<()> {
     use crate::adapters::tests::MessageInjector;
     use crate::adapters::AdapterListener;
