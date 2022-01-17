@@ -7,7 +7,7 @@ pub type Result<T> = std::result::Result<T, Response>;
 
 pub enum Command {
     Status(ChainAddress),
-    Verify(ChainAddress, Vec<FieldName>),
+    Verify(ChainAddress, Vec<RawFieldName>),
 }
 
 impl FromStr for Command {
@@ -34,8 +34,8 @@ impl FromStr for Command {
                 ChainAddress::from(parts[0].to_string()),
                 parts[1..]
                     .into_iter()
-                    .map(|s| FieldName::from_str(s))
-                    .collect::<Result<Vec<FieldName>>>()?,
+                    .map(|s| RawFieldName::from_str(s))
+                    .collect::<Result<Vec<RawFieldName>>>()?,
             ))
         } else {
             Err(Response::UnknownCommand)
@@ -45,11 +45,12 @@ impl FromStr for Command {
 
 pub enum Response {
     Status(JudgementStateBlanked),
-    Verified(ChainAddress, Vec<FieldName>),
+    Verified(ChainAddress, Vec<RawFieldName>),
     // TODO: Remove this.
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
+    // TODO: Remove this.
     InternalError,
     Help,
 }
@@ -104,8 +105,8 @@ impl std::fmt::Display for Response {
     }
 }
 
-// Raw field name
-pub enum FieldName {
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub enum RawFieldName {
     LegalName,
     DisplayName,
     Email,
@@ -114,22 +115,22 @@ pub enum FieldName {
     Matrix,
 }
 
-impl std::fmt::Display for FieldName {
+impl std::fmt::Display for RawFieldName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", {
             match self {
-                FieldName::LegalName => "legal_name",
-                FieldName::DisplayName => "display_name",
-                FieldName::Email => "email",
-                FieldName::Web => "web",
-                FieldName::Twitter => "twitter",
-                FieldName::Matrix => "matrix",
+                RawFieldName::LegalName => "legal_name",
+                RawFieldName::DisplayName => "display_name",
+                RawFieldName::Email => "email",
+                RawFieldName::Web => "web",
+                RawFieldName::Twitter => "twitter",
+                RawFieldName::Matrix => "matrix",
             }
         })
     }
 }
 
-impl FromStr for FieldName {
+impl FromStr for RawFieldName {
     type Err = Response;
 
     fn from_str(s: &str) -> Result<Self> {
@@ -137,12 +138,12 @@ impl FromStr for FieldName {
         let s = s.trim().replace("-", "").replace("_", "").to_lowercase();
 
         let f = match s.as_str() {
-            "legalname" => FieldName::LegalName,
-            "displayname" => FieldName::DisplayName,
-            "email" => FieldName::Email,
-            "web" => FieldName::Web,
-            "twitter" => FieldName::Twitter,
-            "matrix" => FieldName::Matrix,
+            "legalname" => RawFieldName::LegalName,
+            "displayname" => RawFieldName::DisplayName,
+            "email" => RawFieldName::Email,
+            "web" => RawFieldName::Web,
+            "twitter" => RawFieldName::Twitter,
+            "matrix" => RawFieldName::Matrix,
             _ => return Err(Response::InvalidSyntax(Some(s.to_string()))),
         };
 

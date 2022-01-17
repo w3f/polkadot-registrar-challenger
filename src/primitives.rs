@@ -1,6 +1,7 @@
 use actix::Message;
 
 use crate::actors::connector::DisplayNameEntry;
+use crate::adapters::admin::RawFieldName;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -441,6 +442,10 @@ pub enum NotificationMessage {
     JudgementProvided {
         context: IdentityContext,
     },
+    ManuallyVerified {
+        context: IdentityContext,
+        field: RawFieldName,
+    },
     // TODO: Make use of this
     NotSupported {
         context: IdentityContext,
@@ -462,6 +467,7 @@ impl NotificationMessage {
             AwaitingSecondChallenge { context, field: _ } => context,
             IdentityFullyVerified { context } => context,
             JudgementProvided { context } => context,
+            ManuallyVerified { context, field: _ } => context,
             NotSupported { context, field: _ } => context,
         }
     }

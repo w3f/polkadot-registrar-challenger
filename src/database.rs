@@ -1,6 +1,6 @@
 use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
-use crate::adapters::admin::FieldName;
+use crate::adapters::admin::RawFieldName;
 use crate::primitives::{
     ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
     IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage, Timestamp,
@@ -147,14 +147,14 @@ impl Database {
     pub async fn verify_manually(
         &self,
         context: &IdentityContext,
-        field: &FieldName,
+        field: &RawFieldName,
     ) -> Result<Option<()>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Set the appropriate types for verification.
         let update = match field {
             // For "ChallengeType::ExpectedMessage".
-            FieldName::Twitter | FieldName::Matrix => {
+            RawFieldName::Twitter | RawFieldName::Matrix => {
                 doc! {
                     "$set": {
                         "fields.$.challenge.content.expected.is_verified": true,
@@ -162,7 +162,7 @@ impl Database {
                 }
             }
             // For "ChallengeType::ExpectedMessage" (with secondary verification).
-            FieldName::Email => {
+            RawFieldName::Email => {
                 doc! {
                     "$set": {
                         "fields.$.challenge.content.expected.is_verified": true,
@@ -171,7 +171,7 @@ impl Database {
                 }
             }
             // For "ChallengeType::DisplayNameCheck".
-            FieldName::DisplayName => {
+            RawFieldName::DisplayName => {
                 doc! {
                     "$set": {
                         "fields.$.challenge.content.passed": true,
@@ -179,7 +179,7 @@ impl Database {
                 }
             }
             // For "ChallengeType::Unsupported".
-            FieldName::LegalName | FieldName::Web => {
+            RawFieldName::LegalName | RawFieldName::Web => {
                 doc! {
                     "$set": {
                         "fields.$.challenge.content.is_verified": true,
@@ -209,6 +209,13 @@ impl Database {
                 None,
             )
             .await?;
+
+        // Create event.
+        self.insert_event(NotificationMessage::ManuallyVerified {
+            context: context.clone(),
+            field: field.clone(),
+        })
+        .await?;
 
         // Check the new state.
         if let Some(state) = doc {
