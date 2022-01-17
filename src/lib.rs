@@ -247,15 +247,25 @@ async fn run_mocker() -> Result<()> {
 
     info!("Mocker setup completed");
 
-    let alice = JudgementState::alice();
+    let mut alice = JudgementState::alice();
     db.add_judgement_request(&alice).await.unwrap();
 
     // Create messages and (valid/invalid) messages randomly.
     let mut rng = thread_rng();
     let ty_msg: u32 = rng.gen_range(0..2);
     let ty_validity = rng.gen_range(0..1);
+    let reset = rng.gen_range(0..5);
 
     loop {
+        match reset {
+            // Reset state.
+            0 => {
+                db.delete_judgement(&alice.context).await.unwrap();
+                alice = JudgementState::alice();
+            }
+            _ => {}
+        }
+
         let (origin, values) = match ty_msg {
             0 => {
                 (ExternalMessageType::Email("alice@email.com".to_string()), {
