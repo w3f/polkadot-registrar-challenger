@@ -211,8 +211,19 @@ pub async fn run() -> Result<()> {
 
 #[actix::test]
 async fn run_mocker() -> Result<()> {
-    let root = init_env()?;
-    let db_config = root.db;
+    use crate::adapters::tests::MessageInjector;
+    use crate::adapters::AdapterListener;
+    use crate::database::Database;
+    use crate::primitives::{
+        ExpectedMessage, ExternalMessage, ExternalMessageType, JudgementState, MessageId, Timestamp,
+    };
+    use crate::tests::F;
+    use rand::{thread_rng, Rng};
+
+    let db_config = DatabaseConfig {
+        uri: "".to_string(),
+        name: "".to_string(),
+    };
 
     let notifier_config = NotifierConfig {
         api_address: "localhost:8000".to_string(),
@@ -224,11 +235,83 @@ async fn run_mocker() -> Result<()> {
 
     info!("Starting mock adapter and session notifier instances");
 
-    config_session_notifier(db_config, notifier_config).await?;
+    config_session_notifier(db_config.clone(), notifier_config).await?;
+
+    // Setup database
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
+
+    // Setup message verifier and injector.
+    let injector = MessageInjector::new();
+    let listener = AdapterListener::new(db.clone()).await;
+    listener.start_message_adapter(injector.clone(), 1).await;
 
     info!("Mocker setup completed");
 
+    let alice = JudgementState::alice();
+    db.add_judgement_request(&alice).await.unwrap();
+
+    // Create messages and (valid/invalid) messages randomly.
+    let mut rng = thread_rng();
+    let ty_msg: u32 = rng.gen_range(0..2);
+    let ty_validity = rng.gen_range(0..1);
+
     loop {
+        let (origin, values) = match ty_msg {
+            0 => {
+                (ExternalMessageType::Email("alice@email.com".to_string()), {
+                    // Get either valid or invalid message
+                    match ty_validity {
+                        0 => alice
+                            .get_field(&F::ALICE_EMAIL())
+                            .expected_message()
+                            .to_message_parts(),
+                        1 => ExpectedMessage::random().to_message_parts(),
+                        _ => panic!(),
+                    }
+                })
+            }
+            1 => {
+                (ExternalMessageType::Twitter("@alice".to_string()), {
+                    // Get either valid or invalid message
+                    match ty_validity {
+                        0 => alice
+                            .get_field(&F::ALICE_TWITTER())
+                            .expected_message()
+                            .to_message_parts(),
+                        1 => ExpectedMessage::random().to_message_parts(),
+                        _ => panic!(),
+                    }
+                })
+            }
+            2 => {
+                (
+                    ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+                    {
+                        // Get either valid or invalid message
+                        match ty_validity {
+                            0 => alice
+                                .get_field(&F::ALICE_MATRIX())
+                                .expected_message()
+                                .to_message_parts(),
+                            1 => ExpectedMessage::random().to_message_parts(),
+                            _ => panic!(),
+                        }
+                    },
+                )
+            }
+            _ => panic!(),
+        };
+
+        // Inject message.
+        injector
+            .send(ExternalMessage {
+                origin: origin,
+                id: MessageId::from(0u32),
+                timestamp: Timestamp::now(),
+                values: values,
+            })
+            .await;
+
         sleep(Duration::from_secs(u64::MAX)).await;
     }
 }
