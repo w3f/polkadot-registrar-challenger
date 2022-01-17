@@ -197,15 +197,36 @@ pub async fn run() -> Result<()> {
             info!("Starting adapter listener and session notifier instances");
             let (adapter_config, notifier_config) = (config.adapter, config.notifier);
 
-            let t1_db_config = db_config.clone();
-            let t2_db_config = db_config;
-
-            config_adapter_listener(t1_db_config, adapter_config).await?;
-            config_session_notifier(t2_db_config, notifier_config).await?;
+            config_adapter_listener(db_config.clone(), adapter_config).await?;
+            config_session_notifier(db_config, notifier_config).await?;
         }
     }
 
     info!("Setup completed");
+
+    loop {
+        sleep(Duration::from_secs(u64::MAX)).await;
+    }
+}
+
+#[actix::test]
+async fn run_mocker() -> Result<()> {
+    let root = init_env()?;
+    let db_config = root.db;
+
+    let notifier_config = NotifierConfig {
+        api_address: "localhost:8000".to_string(),
+        display_name: DisplayNameConfig {
+            enabled: true,
+            limit: 0.85,
+        },
+    };
+
+    info!("Starting mock adapter and session notifier instances");
+
+    config_session_notifier(db_config, notifier_config).await?;
+
+    info!("Mocker setup completed");
 
     loop {
         sleep(Duration::from_secs(u64::MAX)).await;

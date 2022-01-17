@@ -67,9 +67,7 @@ impl MatrixClient {
             client.clone().sync(settings).await;
         });
 
-        Ok(MatrixClient {
-            messages: messages,
-        })
+        Ok(MatrixClient { messages: messages })
     }
 }
 
