@@ -46,12 +46,9 @@ impl FromStr for Command {
 pub enum Response {
     Status(JudgementStateBlanked),
     Verified(ChainAddress, Vec<RawFieldName>),
-    // TODO: Remove this.
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
-    // TODO: Remove this.
-    InternalError,
     Help,
 }
 
@@ -87,9 +84,6 @@ impl std::fmt::Display for Response {
                         None => format!(""),
                     }
                 )
-            }
-            Response::InternalError => {
-                format!("Internal error occurred. Please contact admin")
             }
             Response::Help => {
                 format!(

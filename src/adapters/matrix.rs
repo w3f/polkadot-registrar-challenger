@@ -1,6 +1,6 @@
 use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
-use crate::Result;
+use crate::{Result, Database};
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
 use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
@@ -27,6 +27,8 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
+        db: Database,
+        admins: Vec<MatrixHandle>,
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
@@ -51,6 +53,8 @@ impl MatrixClient {
             .set_event_handler(Box::new(Listener::new(
                 client.clone(),
                 Arc::clone(&messages),
+                db,
+                admins
             )))
             .await;
 
@@ -71,17 +75,24 @@ impl MatrixClient {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MatrixHandle(String);
+
 struct Listener {
     client: Client,
     // TODO: Should probably just be a mpsc channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
+    db: Database,
+    admins: Vec<MatrixHandle>,
 }
 
 impl Listener {
-    pub fn new(client: Client, messages: Arc<Mutex<Vec<ExternalMessage>>>) -> Self {
+    pub fn new(client: Client, messages: Arc<Mutex<Vec<ExternalMessage>>>, db: Database, admins: Vec<MatrixHandle>) -> Self {
         Self {
             client: client,
             messages: messages,
+            db: db,
+            admins: admins,
         }
     }
 }
@@ -136,6 +147,12 @@ impl EventHandler for Listener {
                 debug!("Received unacceptable message type from {}", event.sender);
                 return;
             };
+
+            // Check of admin message
+            let sender = event.sender.to_string();
+            if self.admins.contains(&MatrixHandle(sender)) {
+
+            }
 
             debug!("Received message from {}", event.sender);
 
