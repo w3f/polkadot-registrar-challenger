@@ -1,12 +1,14 @@
+use crate::adapters::admin::{process_admin, Command, Response};
 use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
-use crate::{Result, Database};
+use crate::{Database, Result};
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
-use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
+use matrix_sdk::events::{AnyMessageEventContent, StrippedStateEvent, SyncMessageEvent};
 use matrix_sdk::room::Room;
 use matrix_sdk::{Client, ClientConfig, EventHandler, SyncSettings};
 use ruma::events::room::message::{MessageType, TextMessageEventContent};
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
@@ -54,7 +56,7 @@ impl MatrixClient {
                 client.clone(),
                 Arc::clone(&messages),
                 db,
-                admins
+                admins,
             )))
             .await;
 
@@ -87,7 +89,12 @@ struct Listener {
 }
 
 impl Listener {
-    pub fn new(client: Client, messages: Arc<Mutex<Vec<ExternalMessage>>>, db: Database, admins: Vec<MatrixHandle>) -> Self {
+    pub fn new(
+        client: Client,
+        messages: Arc<Mutex<Vec<ExternalMessage>>>,
+        db: Database,
+        admins: Vec<MatrixHandle>,
+    ) -> Self {
         Self {
             client: client,
             messages: messages,
@@ -132,7 +139,7 @@ impl EventHandler for Listener {
         }
     }
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
-        if let Room::Joined(_) = room {
+        if let Room::Joined(room) = room {
             let msg_body = if let SyncMessageEvent {
                 content:
                     MessageEventContent {
@@ -148,10 +155,26 @@ impl EventHandler for Listener {
                 return;
             };
 
-            // Check of admin message
+            // Check for admin message
             let sender = event.sender.to_string();
             if self.admins.contains(&MatrixHandle(sender)) {
-
+                match Command::from_str(&msg_body) {
+                    // If a valid admin command was found, execute it and
+                    // respond with the result..
+                    Ok(cmd) => {
+                        let resp = process_admin(&self.db, cmd).await;
+                        room.send(
+                            AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(
+                                resp.to_string(),
+                            )),
+                            None,
+                        )
+                        .await
+                        .unwrap();
+                    }
+                    // Ignore, allow noise (error is always `UnknownCommand`).
+                    Err(_) => {},
+                }
             }
 
             debug!("Received message from {}", event.sender);

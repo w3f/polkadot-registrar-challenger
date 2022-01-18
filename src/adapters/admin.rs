@@ -20,14 +20,14 @@ impl FromStr for Command {
         if s.starts_with("status") {
             let parts: Vec<&str> = s.split(" ").skip(1).collect();
             if parts.len() != 1 {
-                return Err(Response::InvalidSyntax(None));
+                return Err(Response::UnknownCommand);
             }
 
             Ok(Command::Status(ChainAddress::from(parts[0].to_string())))
         } else if s.starts_with("verify") {
             let parts: Vec<&str> = s.split(" ").skip(1).collect();
             if parts.len() < 2 {
-                return Err(Response::InvalidSyntax(None));
+                return Err(Response::UnknownCommand);
             }
 
             Ok(Command::Verify(
@@ -145,8 +145,8 @@ impl FromStr for RawFieldName {
     }
 }
 
-pub async fn process_admin(db: Database, command: Command) -> Response {
-    let local = |db: Database, command: Command| async move {
+pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
+    let local = |db: &'a Database, command: Command| async move {
         match command {
             Command::Status(addr) => {
                 let context = create_context(addr);

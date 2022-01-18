@@ -27,7 +27,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
             &config.db_path,
             db,
             // TODO
-            vec![]
+            vec![],
         )
         .await?;
 
