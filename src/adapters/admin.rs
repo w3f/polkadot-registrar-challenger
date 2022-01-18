@@ -80,7 +80,7 @@ impl std::fmt::Display for Response {
                 format!(
                     "Invalid input{}",
                     match input {
-                        Some(input) => format!(" {}", input),
+                        Some(input) => format!(" '{}'", input),
                         None => format!(""),
                     }
                 )

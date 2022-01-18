@@ -158,22 +158,24 @@ impl EventHandler for Listener {
             // Check for admin message
             let sender = event.sender.to_string();
             if self.admins.contains(&MatrixHandle(sender)) {
-                match Command::from_str(&msg_body) {
-                    // If a valid admin command was found, execute it and
-                    // respond with the result..
-                    Ok(cmd) => {
-                        let resp = process_admin(&self.db, cmd).await;
-                        room.send(
-                            AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(
-                                resp.to_string(),
-                            )),
-                            None,
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    // Ignore, allow noise (error is always `UnknownCommand`).
-                    Err(_) => {},
+                let resp = match Command::from_str(&msg_body) {
+                    // If a valid admin command was found, execute it.
+                    Ok(cmd) => Some(process_admin(&self.db, cmd).await),
+                    Err(err @ Response::InvalidSyntax(_)) => Some(err),
+                    // Ignore, allow noise (catches `UnknownCommand`).
+                    Err(_) => None,
+                };
+
+                // If response should be sent, then do so.
+                if let Some(resp) = resp {
+                    room.send(
+                        AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(
+                            resp.to_string(),
+                        )),
+                        None,
+                    )
+                    .await
+                    .unwrap();
                 }
             }
 
