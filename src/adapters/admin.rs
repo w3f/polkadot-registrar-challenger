@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 pub type Result<T> = std::result::Result<T, Response>;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Command {
     Status(ChainAddress),
     Verify(ChainAddress, Vec<RawFieldName>),
@@ -43,6 +44,7 @@ impl FromStr for Command {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Response {
     Status(JudgementStateBlanked),
     Verified(ChainAddress, Vec<RawFieldName>),
@@ -180,4 +182,60 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
     }
 
     unimplemented!()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_status() {
+        let resp = Command::from_str("status Alice").unwrap();
+        assert_eq!(
+            resp,
+            Command::Status(ChainAddress::from("Alice".to_string()))
+        );
+
+        let resp = Command::from_str("status  Alice").unwrap();
+        assert_eq!(
+            resp,
+            Command::Status(ChainAddress::from("Alice".to_string()))
+        );
+
+        let resp = Command::from_str("status");
+        assert!(resp.is_err())
+    }
+
+    #[test]
+    fn command_verify() {
+        let resp = Command::from_str("verify Alice email").unwrap();
+        assert_eq!(
+            resp,
+            Command::Verify(
+                ChainAddress::from("Alice".to_string()),
+                vec![RawFieldName::Email]
+            )
+        );
+
+        let resp = Command::from_str("verify Alice email displayname").unwrap();
+        assert_eq!(
+            resp,
+            Command::Verify(
+                ChainAddress::from("Alice".to_string()),
+                vec![RawFieldName::Email, RawFieldName::DisplayName]
+            )
+        );
+
+        let resp = Command::from_str("verify Alice email display_name").unwrap();
+        assert_eq!(
+            resp,
+            Command::Verify(
+                ChainAddress::from("Alice".to_string()),
+                vec![RawFieldName::Email, RawFieldName::DisplayName]
+            )
+        );
+
+        let resp = Command::from_str("verify Alice");
+        assert!(resp.is_err());
+    }
 }
