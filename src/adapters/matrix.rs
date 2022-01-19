@@ -168,14 +168,17 @@ impl EventHandler for Listener {
 
                 // If response should be sent, then do so.
                 if let Some(resp) = resp {
-                    room.send(
-                        AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(
-                            resp.to_string(),
-                        )),
-                        None,
-                    )
-                    .await
-                    .unwrap();
+                    if let Err(err) = room
+                        .send(
+                            AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(
+                                resp.to_string(),
+                            )),
+                            None,
+                        )
+                        .await
+                    {
+                        error!("Failed to send message: {:?}", err);
+                    }
                 }
             }
 
