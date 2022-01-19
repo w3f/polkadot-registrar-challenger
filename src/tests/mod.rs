@@ -15,6 +15,7 @@ use serde::Serialize;
 mod api_judgement_state;
 mod display_name_verification;
 mod explicit;
+mod process_admin_cmds;
 
 // Convenience type
 pub type F = IdentityFieldValue;

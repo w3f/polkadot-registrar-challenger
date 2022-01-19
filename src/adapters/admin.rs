@@ -44,7 +44,7 @@ impl FromStr for Command {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Response {
     Status(JudgementStateBlanked),
     Verified(ChainAddress, Vec<RawFieldName>),
