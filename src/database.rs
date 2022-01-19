@@ -64,6 +64,7 @@ impl Database {
 
             // Determine which fields should be updated.
             let mut to_add = vec![];
+            let mut has_changed = false;
             for new_field in &request.fields {
                 // If the current field value is the same as the new one, insert
                 // the current field state back into storage. If the value is
@@ -75,12 +76,13 @@ impl Database {
                 {
                     to_add.push(current_field.clone());
                 } else {
+                    has_changed = true;
                     to_add.push(new_field.clone());
                 }
             }
 
             // Reset verification status if fields have been modified.
-            if !to_add.is_empty() {
+            if has_changed {
                 current.is_fully_verified = false;
                 current.inserted_timestamp = Timestamp::now();
                 current.completion_timestamp = None;
@@ -359,7 +361,7 @@ impl Database {
                     },
                     doc! {
                         "$set": {
-                            "is_fully_verified": true.to_bson()?,
+                            "is_fully_verified": true,
                             "completion_timestamp": now.to_bson()?,
                             "issue_judgement_at": issue_at.to_bson()?,
                         }
@@ -374,6 +376,22 @@ impl Database {
                 })
                 .await?;
             }
+        } else {
+            // Reset verification state if identity was changed.
+            let _ = coll
+                .update_one(
+                    doc! {
+                        "context": state.context.to_bson()?,
+                        "is_fully_verified": true,
+                    },
+                    doc! {
+                        "$set": {
+                            "is_fully_verified": false,
+                        }
+                    },
+                    None,
+                )
+                .await?;
         }
 
         Ok(())
