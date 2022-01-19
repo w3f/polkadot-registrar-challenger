@@ -64,7 +64,6 @@ impl Database {
 
             // Determine which fields should be updated.
             let mut to_add = vec![];
-            let mut has_changed = false;
             for new_field in &request.fields {
                 // If the current field value is the same as the new one, insert
                 // the current field state back into storage. If the value is
@@ -76,18 +75,8 @@ impl Database {
                 {
                     to_add.push(current_field.clone());
                 } else {
-                    has_changed = true;
                     to_add.push(new_field.clone());
                 }
-            }
-
-            // Reset verification status if fields have been modified.
-            if has_changed {
-                current.is_fully_verified = false;
-                current.inserted_timestamp = Timestamp::now();
-                current.completion_timestamp = None;
-                current.judgement_submitted = false;
-                current.issue_judgement_at = None;
             }
 
             // Set new fields.
@@ -387,6 +376,7 @@ impl Database {
                     doc! {
                         "$set": {
                             "is_fully_verified": false,
+                            "judgement_submitted": false,
                         }
                     },
                     None,
