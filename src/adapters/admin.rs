@@ -74,7 +74,9 @@ impl std::fmt::Display for Response {
                     all
                 })
             }
-            Response::UnknownCommand => panic!(),
+            Response::UnknownCommand => {
+                format!("The provided command is unknown"),
+            },
             Response::IdentityNotFound => {
                 format!("There is no pending judgement request for the provided identity")
             }
