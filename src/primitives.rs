@@ -93,6 +93,7 @@ pub enum ChallengeType {
         violations: Vec<DisplayNameEntry>,
     },
     Unsupported {
+        // For manual judgements via the admin interface.
         is_verified: Option<bool>,
     },
 }
@@ -218,7 +219,10 @@ pub enum ChallengeTypeBlanked {
         passed: bool,
         violations: Vec<DisplayNameEntry>,
     },
-    Unsupported,
+    Unsupported {
+        // For manual judgements via the admin interface.
+        is_verified: Option<bool>,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -257,8 +261,10 @@ impl From<JudgementState> for JudgementStateBlanked {
                                     violations: violations,
                                 }
                             }
-                            ChallengeType::Unsupported { is_verified: _ } => {
-                                ChallengeTypeBlanked::Unsupported
+                            ChallengeType::Unsupported { is_verified: is_verified } => {
+                                ChallengeTypeBlanked::Unsupported {
+                                    is_verified: is_verified,
+                                }
                             }
                         }
                     },
