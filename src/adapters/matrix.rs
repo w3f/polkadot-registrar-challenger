@@ -77,7 +77,7 @@ impl MatrixClient {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct MatrixHandle(String);
 
 struct Listener {
@@ -179,6 +179,8 @@ impl EventHandler for Listener {
                     {
                         error!("Failed to send message: {:?}", err);
                     }
+
+                    return;
                 }
             }
 

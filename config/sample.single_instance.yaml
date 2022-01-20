@@ -17,6 +17,9 @@ instance:
         username: username
         password: password
         db_path: db_path
+        admins:
+          '@admin1:matrix.org'
+          '@admin2:matrix.org'
       twitter:
         enabled: false
         api_key: key

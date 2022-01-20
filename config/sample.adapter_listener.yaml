@@ -16,6 +16,7 @@ instance:
       username: username
       password: password
       db_path: db_path
+      admins: null
     twitter:
       enabled: false
       api_key: key

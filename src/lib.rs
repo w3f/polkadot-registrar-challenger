@@ -8,6 +8,7 @@ extern crate serde;
 extern crate async_trait;
 
 use actix::clock::sleep;
+use adapters::matrix::MatrixHandle;
 use log::LevelFilter;
 use primitives::ChainName;
 use std::env;
@@ -98,6 +99,7 @@ pub struct MatrixConfig {
     pub username: String,
     pub password: String,
     pub db_path: String,
+    pub admins: Option<Vec<MatrixHandle>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

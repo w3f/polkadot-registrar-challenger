@@ -26,8 +26,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
             &config.password,
             &config.db_path,
             db,
-            // TODO
-            vec![],
+            config.admins.unwrap_or(vec![]),
         )
         .await?;
 
