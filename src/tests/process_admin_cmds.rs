@@ -1,13 +1,10 @@
 use super::*;
-use crate::actors::api::VerifyChallenge;
 use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::adapters::admin::{process_admin, Command, RawFieldName, Response};
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, IdentityField,
-    IdentityFieldValue, JudgementState, JudgementStateBlanked, MessageId, NotificationMessage,
-    Timestamp,
+    IdentityContext, IdentityField,
+    IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage,
 };
-use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]

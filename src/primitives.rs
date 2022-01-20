@@ -113,7 +113,7 @@ impl ChallengeType {
                 violations: _,
             } => *passed,
             ChallengeType::Unsupported {
-                is_verified: is_verified,
+                is_verified,
             } => is_verified.unwrap_or(false),
         }
     }
@@ -264,7 +264,7 @@ impl From<JudgementState> for JudgementStateBlanked {
                                 }
                             }
                             ChallengeType::Unsupported {
-                                is_verified: is_verified,
+                                is_verified,
                             } => ChallengeTypeBlanked::Unsupported {
                                 is_verified: is_verified,
                             },

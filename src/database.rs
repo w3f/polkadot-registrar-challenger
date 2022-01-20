@@ -3,14 +3,13 @@ use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
 use crate::primitives::{
     ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
-    IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage, Timestamp,
+    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
-use rand::distributions::uniform::UniformSampler;
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 

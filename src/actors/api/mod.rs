@@ -81,15 +81,6 @@ pub mod tests {
     use crate::DisplayNameConfig;
     use actix_test::{start, TestServer};
 
-    impl<T> JsonResult<T> {
-        pub fn unwrap_ref(&self) -> &T {
-            match self {
-                JsonResult::Ok(t) => t,
-                JsonResult::Err(_) => panic!(),
-            }
-        }
-    }
-
     impl Default for DisplayNameConfig {
         fn default() -> Self {
             DisplayNameConfig {

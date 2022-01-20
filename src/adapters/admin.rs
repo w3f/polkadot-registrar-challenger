@@ -1,5 +1,5 @@
 use crate::actors::connector::create_context;
-use crate::primitives::{ChainAddress, JudgementState, JudgementStateBlanked};
+use crate::primitives::{ChainAddress, JudgementStateBlanked};
 use crate::Database;
 use std::str::FromStr;
 
@@ -9,6 +9,7 @@ pub type Result<T> = std::result::Result<T, Response>;
 pub enum Command {
     Status(ChainAddress),
     Verify(ChainAddress, Vec<RawFieldName>),
+    Help,
 }
 
 impl FromStr for Command {
@@ -38,7 +39,16 @@ impl FromStr for Command {
                     .map(|s| RawFieldName::from_str(s))
                     .collect::<Result<Vec<RawFieldName>>>()?,
             ))
-        } else {
+        } else if s.starts_with("help") {
+            let parts: Vec<&str> = s.split(" ").collect();
+
+            if parts.len() > 1 {
+                return Err(Response::UnknownCommand);
+            }
+
+            Ok(Command::Help)
+        }
+        else {
             Err(Response::UnknownCommand)
         }
     }
@@ -58,7 +68,7 @@ pub enum Response {
 impl std::fmt::Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
-            Response::Status(state) => {
+            Response::Status(_state) => {
                 format!("")
             }
             Response::Verified(_, fields) => {
@@ -178,6 +188,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
                 Ok(Response::Verified(addr, fields))
             }
+            Command::Help => Ok(Response::Help)
         }
     };
 
@@ -243,6 +254,24 @@ mod tests {
         );
 
         let resp = Command::from_str("verify Alice");
+        assert!(resp.is_err());
+    }
+
+    #[test]
+    fn command_help() {
+        let resp = Command::from_str("help").unwrap();
+        assert_eq!(
+            resp,
+            Command::Help
+        );
+
+        let resp = Command::from_str(" help  ").unwrap();
+        assert_eq!(
+            resp,
+            Command::Help
+        );
+
+        let resp = Command::from_str("help stuff");
         assert!(resp.is_err());
     }
 }
