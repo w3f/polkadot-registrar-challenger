@@ -40,7 +40,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "a_type", content = "config")]
+#[serde(rename_all = "snake_case", tag = "role", content = "config")]
 pub enum InstanceType {
     AdapterListener(AdapterConfig),
     SessionNotifier(NotifierConfig),

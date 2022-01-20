@@ -1,9 +1,9 @@
 log_level: debug
 db:
   uri: mongodb://localhost:27017/
-  db_name: registrar_db
+  name: registrar_db
 instance:
-  type: adapter_listener
+  role: adapter_listener
   config:
     watcher:
       - network: kusama

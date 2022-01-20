@@ -1,9 +1,9 @@
 log_level: debug
 db:
   uri: mongodb://localhost:27017/
-  db_name: registrar_db
+  name: registrar_db
 instance:
-  type: single_instance
+  role: single_instance
   config:
     adapter:
       watcher:
@@ -18,8 +18,8 @@ instance:
         password: password
         db_path: db_path
         admins:
-          '@admin1:matrix.org'
-          '@admin2:matrix.org'
+          - '@admin1:matrix.org'
+          - '@admin2:matrix.org'
       twitter:
         enabled: false
         api_key: key

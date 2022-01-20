@@ -2,7 +2,7 @@ replicaCount: 1
 
 config:
   instance:
-    a_type: adapter_listener
+    role: adapter_listener
     config:
       watcher:
         - network: kusama
@@ -16,9 +16,9 @@ config:
         password: {{ env "MATRIX_PASSWORD" }}
         db_path: /tmp/matrix.db
         admins:
-          '@fabio:web3.foundation'
-          '@philipp:web3.foundation'
-          '@michalis:web3.foundation'
+          - '@fabio:web3.foundation'
+          - '@philipp:web3.foundation'
+          - '@michalis:web3.foundation'
       twitter:
         enabled: true
         api_key: {{ env "TWITTER_API_KEY" }}

@@ -103,7 +103,7 @@ impl std::fmt::Display for Response {
             Response::Help => {
                 format!(
                     "\
-                status <ADDR>\tShow the current verification status of the specified address.\n\
+                status <ADDR>\t\t\tShow the current verification status of the specified address.\n\
                 verify <ADDR> <FIELD>...\tVerify one or multiple fields of the specified address.\n\
                 "
                 )
@@ -271,6 +271,13 @@ mod tests {
     #[ignore]
     fn response_status_debug() {
         let resp = Response::Status(JudgementState::alice().into());
+        println!("{}", resp);
+    }
+
+    #[test]
+    #[ignore]
+    fn response_help_debug() {
+        let resp = Response::Help;
         println!("{}", resp);
     }
 }
