@@ -1,5 +1,6 @@
 use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
+use crate::adapters::admin::RawFieldName;
 use crate::primitives::{
     ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
     IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
@@ -77,15 +78,6 @@ impl Database {
                 }
             }
 
-            // Reset verification status if fields have been modified.
-            if !to_add.is_empty() {
-                current.is_fully_verified = false;
-                current.inserted_timestamp = Timestamp::now();
-                current.completion_timestamp = None;
-                current.judgement_submitted = false;
-                current.issue_judgement_at = None;
-            }
-
             // Set new fields.
             current.fields = to_add;
 
@@ -113,12 +105,6 @@ impl Database {
             self.process_fully_verified(&current).await?;
         } else {
             coll.insert_one(request.to_document()?, None).await?;
-
-            // Create event.
-            self.insert_event(NotificationMessage::IdentityInserted {
-                context: request.context.clone(),
-            })
-            .await?;
         }
 
         Ok(())
@@ -142,7 +128,93 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_message(&mut self, message: &ExternalMessage) -> Result<()> {
+    pub async fn verify_manually(
+        &self,
+        context: &IdentityContext,
+        field: &RawFieldName,
+    ) -> Result<Option<()>> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Set the appropriate types for verification.
+        let update = match field {
+            // For "ChallengeType::ExpectedMessage".
+            RawFieldName::Twitter | RawFieldName::Matrix => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.expected.is_verified": true,
+                    }
+                }
+            }
+            // For "ChallengeType::ExpectedMessage" (with secondary verification).
+            RawFieldName::Email => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.expected.is_verified": true,
+                        "fields.$.challenge.content.second.is_verified": true,
+                    }
+                }
+            }
+            // For "ChallengeType::DisplayNameCheck".
+            RawFieldName::DisplayName => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.passed": true,
+                    }
+                }
+            }
+            // For "ChallengeType::Unsupported".
+            RawFieldName::LegalName | RawFieldName::Web => {
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.is_verified": true,
+                    }
+                }
+            }
+        };
+
+        // Update field.
+        let res = coll
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                    "fields.value.type": field.to_string(),
+                },
+                update,
+                None,
+            )
+            .await?;
+
+        if res.modified_count != 1 {
+            return Ok(None);
+        }
+
+        // Create event.
+        self.insert_event(NotificationMessage::ManuallyVerified {
+            context: context.clone(),
+            field: field.clone(),
+        })
+        .await?;
+
+        // Get the full state.
+        let doc = coll
+            .find_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                None,
+            )
+            .await?;
+
+        // Check the new state.
+        if let Some(state) = doc {
+            self.process_fully_verified(&state).await?;
+        } else {
+            return Ok(None);
+        }
+
+        Ok(Some(()))
+    }
+    pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -271,7 +343,7 @@ impl Database {
                     },
                     doc! {
                         "$set": {
-                            "is_fully_verified": true.to_bson()?,
+                            "is_fully_verified": true,
                             "completion_timestamp": now.to_bson()?,
                             "issue_judgement_at": issue_at.to_bson()?,
                         }
@@ -286,6 +358,23 @@ impl Database {
                 })
                 .await?;
             }
+        } else {
+            // Reset verification state if identity was changed.
+            let _ = coll
+                .update_one(
+                    doc! {
+                        "context": state.context.to_bson()?,
+                        "is_fully_verified": true,
+                    },
+                    doc! {
+                        "$set": {
+                            "is_fully_verified": false,
+                            "judgement_submitted": false,
+                        }
+                    },
+                    None,
+                )
+                .await?;
         }
 
         Ok(())

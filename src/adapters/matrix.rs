@@ -1,12 +1,14 @@
+use crate::adapters::admin::{process_admin, Command, Response};
 use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, Timestamp};
-use crate::Result;
+use crate::{Database, Result};
 use matrix_sdk::events::room::member::MemberEventContent;
 use matrix_sdk::events::room::message::MessageEventContent;
-use matrix_sdk::events::{StrippedStateEvent, SyncMessageEvent};
+use matrix_sdk::events::{AnyMessageEventContent, StrippedStateEvent, SyncMessageEvent};
 use matrix_sdk::room::Room;
 use matrix_sdk::{Client, ClientConfig, EventHandler, SyncSettings};
 use ruma::events::room::message::{MessageType, TextMessageEventContent};
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
@@ -27,6 +29,8 @@ impl MatrixClient {
         username: &str,
         password: &str,
         db_path: &str,
+        db: Database,
+        admins: Vec<MatrixHandle>,
     ) -> Result<MatrixClient> {
         info!("Setting up Matrix client");
         // Setup client
@@ -51,6 +55,8 @@ impl MatrixClient {
             .set_event_handler(Box::new(Listener::new(
                 client.clone(),
                 Arc::clone(&messages),
+                db,
+                admins,
             )))
             .await;
 
@@ -71,17 +77,29 @@ impl MatrixClient {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct MatrixHandle(String);
+
 struct Listener {
     client: Client,
     // TODO: Should probably just be a mpsc channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
+    db: Database,
+    admins: Vec<MatrixHandle>,
 }
 
 impl Listener {
-    pub fn new(client: Client, messages: Arc<Mutex<Vec<ExternalMessage>>>) -> Self {
+    pub fn new(
+        client: Client,
+        messages: Arc<Mutex<Vec<ExternalMessage>>>,
+        db: Database,
+        admins: Vec<MatrixHandle>,
+    ) -> Self {
         Self {
             client: client,
             messages: messages,
+            db: db,
+            admins: admins,
         }
     }
 }
@@ -121,7 +139,7 @@ impl EventHandler for Listener {
         }
     }
     async fn on_room_message(&self, room: Room, event: &SyncMessageEvent<MessageEventContent>) {
-        if let Room::Joined(_) = room {
+        if let Room::Joined(room) = room {
             let msg_body = if let SyncMessageEvent {
                 content:
                     MessageEventContent {
@@ -136,6 +154,35 @@ impl EventHandler for Listener {
                 debug!("Received unacceptable message type from {}", event.sender);
                 return;
             };
+
+            // Check for admin message
+            let sender = event.sender.to_string();
+            if self.admins.contains(&MatrixHandle(sender)) {
+                let resp = match Command::from_str(&msg_body) {
+                    // If a valid admin command was found, execute it.
+                    Ok(cmd) => Some(process_admin(&self.db, cmd).await),
+                    Err(err @ Response::InvalidSyntax(_)) => Some(err),
+                    // Ignore, allow noise (catches `UnknownCommand`).
+                    Err(_) => None,
+                };
+
+                // If response should be sent, then do so.
+                if let Some(resp) = resp {
+                    if let Err(err) = room
+                        .send(
+                            AnyMessageEventContent::RoomMessage(MessageEventContent::text_plain(
+                                resp.to_string(),
+                            )),
+                            None,
+                        )
+                        .await
+                    {
+                        error!("Failed to send message: {:?}", err);
+                    }
+
+                    return;
+                }
+            }
 
             debug!("Received message from {}", event.sender);
 

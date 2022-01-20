@@ -5,12 +5,13 @@ use crate::primitives::{
 use crate::{AdapterConfig, Result};
 use tokio::time::{interval, Duration};
 
+pub mod admin;
 pub mod email;
 pub mod matrix;
 pub mod twitter;
 
 pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
-    let listener = AdapterListener::new(db).await;
+    let listener = AdapterListener::new(db.clone()).await;
     // Convenience flat for logging
     let mut started = false;
 
@@ -24,6 +25,8 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
             &config.username,
             &config.password,
             &config.db_path,
+            db,
+            config.admins.unwrap_or(vec![]),
         )
         .await?;
 

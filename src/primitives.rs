@@ -1,6 +1,7 @@
 use actix::Message;
 
 use crate::actors::connector::DisplayNameEntry;
+use crate::adapters::admin::RawFieldName;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -19,11 +20,26 @@ impl ChainAddress {
     }
 }
 
+impl From<String> for ChainAddress {
+    fn from(v: String) -> Self {
+        ChainAddress(v)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChainName {
     Polkadot,
     Kusama,
+}
+
+impl ChainName {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ChainName::Polkadot => "polkadot",
+            ChainName::Kusama => "kusama",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -42,11 +58,11 @@ impl IdentityField {
 
         let challenge = {
             match val {
-                LegalName(_) => ChallengeType::Unsupported,
-                Web(_) => ChallengeType::Unsupported,
-                PGPFingerprint(_) => ChallengeType::Unsupported,
-                Image(_) => ChallengeType::Unsupported,
-                Additional(_) => ChallengeType::Unsupported,
+                LegalName(_) => ChallengeType::Unsupported { is_verified: None },
+                Web(_) => ChallengeType::Unsupported { is_verified: None },
+                PGPFingerprint(_) => ChallengeType::Unsupported { is_verified: None },
+                Image(_) => ChallengeType::Unsupported { is_verified: None },
+                Additional(_) => ChallengeType::Unsupported { is_verified: None },
                 DisplayName(_) => ChallengeType::DisplayNameCheck {
                     passed: false,
                     violations: vec![],
@@ -85,7 +101,10 @@ pub enum ChallengeType {
         passed: bool,
         violations: Vec<DisplayNameEntry>,
     },
-    Unsupported,
+    Unsupported {
+        // For manual judgements via the admin interface.
+        is_verified: Option<bool>,
+    },
 }
 
 impl ChallengeType {
@@ -102,7 +121,7 @@ impl ChallengeType {
                 passed,
                 violations: _,
             } => *passed,
-            ChallengeType::Unsupported => false,
+            ChallengeType::Unsupported { is_verified } => is_verified.unwrap_or(false),
         }
     }
 }
@@ -192,8 +211,8 @@ pub struct JudgementStateBlanked {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityFieldBlanked {
-    value: IdentityFieldValue,
-    challenge: ChallengeTypeBlanked,
+    pub value: IdentityFieldValue,
+    pub challenge: ChallengeTypeBlanked,
     // TODO: Change this to usize.
     failed_attempts: isize,
 }
@@ -209,7 +228,10 @@ pub enum ChallengeTypeBlanked {
         passed: bool,
         violations: Vec<DisplayNameEntry>,
     },
-    Unsupported,
+    Unsupported {
+        // For manual judgements via the admin interface.
+        is_verified: Option<bool>,
+    },
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -248,7 +270,11 @@ impl From<JudgementState> for JudgementStateBlanked {
                                     violations: violations,
                                 }
                             }
-                            ChallengeType::Unsupported => ChallengeTypeBlanked::Unsupported,
+                            ChallengeType::Unsupported { is_verified } => {
+                                ChallengeTypeBlanked::Unsupported {
+                                    is_verified: is_verified,
+                                }
+                            }
                         }
                     },
                     failed_attempts: f.failed_attempts,
@@ -431,10 +457,9 @@ pub enum NotificationMessage {
     JudgementProvided {
         context: IdentityContext,
     },
-    // TODO: Make use of this
-    NotSupported {
+    ManuallyVerified {
         context: IdentityContext,
-        field: IdentityFieldValue,
+        field: RawFieldName,
     },
 }
 
@@ -452,7 +477,7 @@ impl NotificationMessage {
             AwaitingSecondChallenge { context, field: _ } => context,
             IdentityFullyVerified { context } => context,
             JudgementProvided { context } => context,
-            NotSupported { context, field: _ } => context,
+            ManuallyVerified { context, field: _ } => context,
         }
     }
 }
@@ -628,6 +653,12 @@ mod tests {
         ) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
             match &mut self.challenge {
                 ChallengeType::DisplayNameCheck { passed, violations } => (passed, violations),
+                _ => panic!(),
+            }
+        }
+        pub fn expected_unsupported_mut(&mut self) -> &mut Option<bool> {
+            match &mut self.challenge {
+                ChallengeType::Unsupported { is_verified } => is_verified,
                 _ => panic!(),
             }
         }

@@ -63,6 +63,11 @@ export interface NotificationFieldContext {
     field: FieldValue;
 }
 
+export interface ManuallyVerified {
+    context: Context;
+    field: string;
+}
+
 export interface CheckDisplayNameResult {
     type: string;
     value: any;
