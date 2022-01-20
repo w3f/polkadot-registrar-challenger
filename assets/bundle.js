@@ -601,6 +601,13 @@ function notificationTypeResolver(notification) {
                 "bg-success text-light"
             ];
         }
+        case "manually_verified": {
+            let data = notification.value;
+            return [
+                `Manually verified ${(0, content_js_1.capitalizeFirstLetter)(data.field)}`,
+                "bg-info text-light"
+            ];
+        }
         default: {
             // TODO
         }
