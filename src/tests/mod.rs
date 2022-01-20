@@ -11,6 +11,7 @@ use actix_web_actors::ws::Message;
 use rand::{thread_rng, Rng};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;
 mod display_name_verification;
@@ -61,6 +62,9 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
     actix::spawn(async move {
         SessionNotifier::new(t_db, actor).run_blocking().await;
     });
+
+    // Give some time to start up.
+    sleep(Duration::from_secs(2)).await;
 
     (db, server, injector)
 }

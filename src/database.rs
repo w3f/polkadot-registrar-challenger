@@ -517,7 +517,7 @@ impl Database {
             .find(
                 doc! {
                     "timestamp": {
-                        "$gte": after.to_bson()?,
+                        "$gt": after.to_bson()?,
                     }
                 },
                 None,
