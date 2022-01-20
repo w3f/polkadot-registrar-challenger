@@ -112,7 +112,9 @@ impl ChallengeType {
                 passed,
                 violations: _,
             } => *passed,
-            ChallengeType::Unsupported { is_verified: _ } => false,
+            ChallengeType::Unsupported {
+                is_verified: is_verified,
+            } => is_verified.unwrap_or(false),
         }
     }
 }
@@ -261,11 +263,11 @@ impl From<JudgementState> for JudgementStateBlanked {
                                     violations: violations,
                                 }
                             }
-                            ChallengeType::Unsupported { is_verified: is_verified } => {
-                                ChallengeTypeBlanked::Unsupported {
-                                    is_verified: is_verified,
-                                }
-                            }
+                            ChallengeType::Unsupported {
+                                is_verified: is_verified,
+                            } => ChallengeTypeBlanked::Unsupported {
+                                is_verified: is_verified,
+                            },
                         }
                     },
                     failed_attempts: f.failed_attempts,
@@ -452,11 +454,6 @@ pub enum NotificationMessage {
         context: IdentityContext,
         field: RawFieldName,
     },
-    // TODO: Make use of this
-    NotSupported {
-        context: IdentityContext,
-        field: IdentityFieldValue,
-    },
 }
 
 impl NotificationMessage {
@@ -474,7 +471,6 @@ impl NotificationMessage {
             IdentityFullyVerified { context } => context,
             JudgementProvided { context } => context,
             ManuallyVerified { context, field: _ } => context,
-            NotSupported { context, field: _ } => context,
         }
     }
 }

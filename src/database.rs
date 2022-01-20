@@ -106,12 +106,6 @@ impl Database {
             self.process_fully_verified(&current).await?;
         } else {
             coll.insert_one(request.to_document()?, None).await?;
-
-            // Create event.
-            self.insert_event(NotificationMessage::IdentityInserted {
-                context: request.context.clone(),
-            })
-            .await?;
         }
 
         Ok(())
@@ -523,7 +517,7 @@ impl Database {
             .find(
                 doc! {
                     "timestamp": {
-                        "$gt": after.to_bson()?,
+                        "$gte": after.to_bson()?,
                     }
                 },
                 None,

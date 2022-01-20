@@ -51,6 +51,7 @@ pub enum Response {
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
+    InternalError,
     Help,
 }
 
@@ -88,6 +89,9 @@ impl std::fmt::Display for Response {
                         None => format!(""),
                     }
                 )
+            }
+            Response::InternalError => {
+                format!("An internal error occured. Please contact the architects.")
             }
             Response::Help => {
                 format!(
@@ -179,11 +183,12 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
     let res: crate::Result<Response> = local(db, command).await;
     match res {
-        Ok(_) => {}
-        Err(_) => {}
+        Ok(resp) => resp,
+        Err(err) => {
+            error!("Admin tool: {:?}", err);
+            Response::InternalError
+        }
     }
-
-    unimplemented!()
 }
 
 #[cfg(test)]
