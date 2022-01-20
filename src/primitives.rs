@@ -649,5 +649,11 @@ mod tests {
                 _ => panic!(),
             }
         }
+        pub fn expected_unsupported_mut(&mut self) -> &mut Option<bool> {
+            match &mut self.challenge {
+                ChallengeType::Unsupported { is_verified } => is_verified,
+                _ => panic!(),
+            }
+        }
     }
 }
