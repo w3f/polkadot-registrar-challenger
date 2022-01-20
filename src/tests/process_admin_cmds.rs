@@ -2,8 +2,8 @@ use super::*;
 use crate::actors::api::{JsonResult, ResponseAccountState};
 use crate::adapters::admin::{process_admin, Command, RawFieldName, Response};
 use crate::primitives::{
-    IdentityContext, IdentityField,
-    IdentityFieldValue, JudgementState, JudgementStateBlanked, NotificationMessage,
+    IdentityContext, IdentityField, IdentityFieldValue, JudgementState, JudgementStateBlanked,
+    NotificationMessage,
 };
 use futures::{FutureExt, SinkExt, StreamExt};
 

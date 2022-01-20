@@ -33,6 +33,15 @@ pub enum ChainName {
     Kusama,
 }
 
+impl ChainName {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ChainName::Polkadot => "polkadot",
+            ChainName::Kusama => "kusama",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityField {
@@ -112,9 +121,7 @@ impl ChallengeType {
                 passed,
                 violations: _,
             } => *passed,
-            ChallengeType::Unsupported {
-                is_verified,
-            } => is_verified.unwrap_or(false),
+            ChallengeType::Unsupported { is_verified } => is_verified.unwrap_or(false),
         }
     }
 }
@@ -204,8 +211,8 @@ pub struct JudgementStateBlanked {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityFieldBlanked {
-    value: IdentityFieldValue,
-    challenge: ChallengeTypeBlanked,
+    pub value: IdentityFieldValue,
+    pub challenge: ChallengeTypeBlanked,
     // TODO: Change this to usize.
     failed_attempts: isize,
 }
@@ -263,11 +270,11 @@ impl From<JudgementState> for JudgementStateBlanked {
                                     violations: violations,
                                 }
                             }
-                            ChallengeType::Unsupported {
-                                is_verified,
-                            } => ChallengeTypeBlanked::Unsupported {
-                                is_verified: is_verified,
-                            },
+                            ChallengeType::Unsupported { is_verified } => {
+                                ChallengeTypeBlanked::Unsupported {
+                                    is_verified: is_verified,
+                                }
+                            }
                         }
                     },
                     failed_attempts: f.failed_attempts,

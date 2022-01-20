@@ -47,8 +47,7 @@ impl FromStr for Command {
             }
 
             Ok(Command::Help)
-        }
-        else {
+        } else {
             Err(Response::UnknownCommand)
         }
     }
@@ -68,9 +67,7 @@ pub enum Response {
 impl std::fmt::Display for Response {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = match self {
-            Response::Status(_state) => {
-                format!("")
-            }
+            Response::Status(state) => serde_json::to_string_pretty(state).unwrap(),
             Response::Verified(_, fields) => {
                 format!("Verified the following fields: {}", {
                     let mut all = String::new();
@@ -188,7 +185,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
                 Ok(Response::Verified(addr, fields))
             }
-            Command::Help => Ok(Response::Help)
+            Command::Help => Ok(Response::Help),
         }
     };
 
@@ -205,6 +202,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::JudgementState;
 
     #[test]
     fn command_status() {
@@ -260,18 +258,19 @@ mod tests {
     #[test]
     fn command_help() {
         let resp = Command::from_str("help").unwrap();
-        assert_eq!(
-            resp,
-            Command::Help
-        );
+        assert_eq!(resp, Command::Help);
 
         let resp = Command::from_str(" help  ").unwrap();
-        assert_eq!(
-            resp,
-            Command::Help
-        );
+        assert_eq!(resp, Command::Help);
 
         let resp = Command::from_str("help stuff");
         assert!(resp.is_err());
+    }
+
+    #[test]
+    #[ignore]
+    fn response_status_debug() {
+        let resp = Response::Status(JudgementState::alice().into());
+        println!("{}", resp);
     }
 }
