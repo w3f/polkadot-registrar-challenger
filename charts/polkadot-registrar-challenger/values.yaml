@@ -9,9 +9,9 @@ config:
   log_level: debug
   db:
     uri: mongodb://localhost:27017/
-    db_name: registrar
+    name: registrar
   instance:
-    type: single_instance
+    role: single_instance
     config:
       adapter:
         watcher:
