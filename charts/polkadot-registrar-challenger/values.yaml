@@ -2,7 +2,7 @@ environment: production
 
 image:
   repository: web3f/polkadot-registrar-challenger
-  tag: v0.2.26
+  #tag: latest
   pullPolicy: Always
 
 config:

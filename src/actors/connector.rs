@@ -204,7 +204,7 @@ async fn init_connector(
     queue: UnboundedSender<QueueMessage>,
 ) -> Result<Addr<Connector>> {
     let (_, framed) = Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(90))
         .finish()
         .ws(endpoint)
         .connect()
