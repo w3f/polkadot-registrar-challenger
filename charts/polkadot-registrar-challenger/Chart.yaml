@@ -1,4 +1,9 @@
 description: Polkadot Challenger
 name: polkadot-registrar-challenger
+<<<<<<< HEAD
 version: v0.2.30
+=======
+version: v0.2.29
+appVersion: v0.2.29
+>>>>>>> 9befb7a7b9c238f0b2759072754d30a3995fbb02
 apiVersion: v2

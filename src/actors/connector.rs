@@ -203,13 +203,19 @@ async fn init_connector(
     endpoint: &str,
     queue: UnboundedSender<QueueMessage>,
 ) -> Result<Addr<Connector>> {
-    let (_, framed) = Client::new().ws(endpoint).connect().await.map_err(|err| {
-        anyhow!(
-            "failed to initiate client connector to {}: {:?}",
-            endpoint,
-            err
-        )
-    })?;
+    let (_, framed) = Client::builder()
+        .timeout(Duration::from_secs(120))
+        .finish()
+        .ws(endpoint)
+        .connect()
+        .await
+        .map_err(|err| {
+            anyhow!(
+                "failed to initiate client connector to {}: {:?}",
+                endpoint,
+                err
+            )
+        })?;
 
     let (sink, stream) = framed.split();
     let actor = Connector::create(|ctx| {
