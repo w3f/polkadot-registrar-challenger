@@ -109,7 +109,7 @@ impl Handler<SubscribeAccountState> for LookupServer {
 
                 if let Some(state) = state {
                     if subscriber
-                        .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
+                        .try_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
                             state,
                         )))
                         .is_ok()
@@ -152,7 +152,7 @@ impl Handler<NotifyAccountState> for LookupServer {
                     // Notify each subscriber.
                     for subscriber in subscribers {
                         if subscriber
-                            .do_send(JsonResult::Ok(msg.clone().into()))
+                            .try_send(JsonResult::Ok(msg.clone().into()))
                             .is_ok()
                         {
                             to_reinsert.push(subscriber.clone());
