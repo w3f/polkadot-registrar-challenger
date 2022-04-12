@@ -205,6 +205,8 @@ async fn init_connector(
 ) -> Result<Addr<Connector>> {
     let (_, framed) = Client::builder()
         .timeout(Duration::from_secs(120))
+        .initial_window_size(1_000_000)
+        .initial_connection_window_size(1_000_000)
         .finish()
         .ws(endpoint)
         .connect()
