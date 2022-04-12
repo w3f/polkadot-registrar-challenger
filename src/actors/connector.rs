@@ -205,8 +205,6 @@ async fn init_connector(
 ) -> Result<Addr<Connector>> {
     let (_, framed) = Client::builder()
         .timeout(Duration::from_secs(120))
-        .initial_window_size(1_000_000)
-        .initial_connection_window_size(1_000_000)
         .finish()
         .ws(endpoint)
         .connect()
@@ -422,7 +420,8 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             let parsed: ResponseMessage<serde_json::Value> = match msg {
                 Ok(Frame::Text(txt)) => serde_json::from_slice(&txt)?,
                 Ok(Frame::Pong(_)) => return Ok(()),
-                _ => return Err(anyhow!("invalid message, expected text: {:?}", msg)),
+                //_ => return Err(anyhow!("invalid message, expected text: {:?}", msg)),
+                _ => return Ok(()),
             };
 
             match parsed.event {
