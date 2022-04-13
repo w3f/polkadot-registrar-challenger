@@ -342,13 +342,20 @@ struct Connector {
 }
 
 impl Connector {
-    // Send a heartbeat to the Watcher every 5 seconds.
-    fn heartbeat(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(5, 0), |act, _ctx| {
+    // Send a heartbeat to the Watcher every couple of seconds.
+    fn start_heartbeat_sync(&self, ctx: &mut Context<Self>) {
+        ctx.run_interval(Duration::new(30, 0), |act, _ctx| {
             let _ = act
                 .sink
                 .write(Message::Ping(String::from("").into()))
                 .map_err(|err| error!("Failed to send heartbeat to Watcher: {:?}", err));
+        });
+    }
+    // Request pending judgements every couple of seconds.
+    fn start_pending_judgements_sync(&self, ctx: &mut Context<Self>) {
+        ctx.run_interval(Duration::new(10, 0), |_act, ctx| {
+            ctx.address()
+                .do_send(ClientCommand::RequestPendingJudgements)
         });
     }
 }
@@ -400,7 +407,8 @@ impl Actor for Connector {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.heartbeat(ctx)
+        self.start_heartbeat_sync(ctx);
+        self.start_pending_judgements_sync(ctx);
     }
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
