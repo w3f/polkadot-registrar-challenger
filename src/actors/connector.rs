@@ -99,15 +99,15 @@ pub async fn run_connector(
 /// Convenience function for creating a full identity context when only the
 /// address itself is present. Only supports Kusama and Polkadot for now.
 pub fn create_context(address: ChainAddress) -> IdentityContext {
-    let chain = if address.as_str().starts_with("1") {
+    let chain = if address.as_str().starts_with('1') {
         ChainName::Polkadot
     } else {
         ChainName::Kusama
     };
 
     IdentityContext {
-        address: address,
-        chain: chain,
+        address,
+        chain,
     }
 }
 
@@ -152,7 +152,7 @@ async fn run_queue_processor(
                 QueueMessage::Ack(data) => {
                     // TODO: Check the "result"
                     if data.result == "judgement given" {
-                        let context = create_context(data.address.ok_or(anyhow!(
+                        let context = create_context(data.address.ok_or_else(|| anyhow!(
                             "no address specified in 'judgement given' response from Watcher"
                         ))?);
 
@@ -161,11 +161,11 @@ async fn run_queue_processor(
                     }
                 }
                 QueueMessage::NewJudgementRequest(data) => {
-                    process_request(&db, data.address, data.accounts, &dn_verifier).await?
+                    process_request(db, data.address, data.accounts, dn_verifier).await?
                 }
                 QueueMessage::PendingJudgementsRequests(data) => {
                     for r in data {
-                        process_request(&db, r.address, r.accounts, &dn_verifier).await?;
+                        process_request(db, r.address, r.accounts, dn_verifier).await?;
                     }
                 }
                 QueueMessage::ActiveDisplayNames(data) => {
@@ -174,7 +174,7 @@ async fn run_queue_processor(
 
                         let context = create_context(d.address);
                         let entry = DisplayNameEntry {
-                            context: context,
+                            context,
                             display_name: d.display_name,
                         };
 
@@ -222,7 +222,7 @@ async fn init_connector(
         Connector::add_stream(stream, ctx);
         Connector {
             sink: SinkWrite::new(sink, ctx),
-            queue: queue,
+            queue,
         }
     });
 
@@ -348,7 +348,7 @@ impl Handler<ClientCommand> for Connector {
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
                         data: JudgementResponse {
-                            address: id.address.clone(),
+                            address: id.address,
                             judgement: Judgement::Reasonable,
                         },
                     })
