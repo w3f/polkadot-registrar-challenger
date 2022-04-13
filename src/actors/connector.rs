@@ -149,7 +149,7 @@ async fn run_queue_processor(
         while let Some(message) = recv.recv().await {
             match message {
                 WatcherMessage::Ack(data) => {
-                    if data.result == "judgement given" {
+                    if data.result.to_lowercase().contains("judgement given") {
                         let context = create_context(data.address.ok_or_else(|| {
                             anyhow!(
                                 "no address specified in 'judgement given' response from Watcher"
@@ -164,6 +164,13 @@ async fn run_queue_processor(
                     process_request(db, data.address, data.accounts, dn_verifier).await?
                 }
                 WatcherMessage::PendingJudgementsRequests(data) => {
+                    // Process any tangling submissions, meaning any verified
+                    // requests that were submitted to the Watcher but the
+                    // issued extrinsic was not direclty confirmed back. This
+                    // usually should not happen, but can.
+                    let addresses: Vec<&ChainAddress> = data.iter().map(|state| &state.address).collect();
+                    db.process_tangling_submissions(&addresses).await?;
+
                     for r in data {
                         process_request(db, r.address, r.accounts, dn_verifier).await?;
                     }
