@@ -84,7 +84,7 @@ impl IdentityField {
 
         IdentityField {
             value: val,
-            challenge: challenge,
+            challenge,
             failed_attempts: 0,
         }
     }
@@ -258,22 +258,17 @@ impl From<JudgementState> for JudgementStateBlanked {
                         match f.challenge {
                             ChallengeType::ExpectedMessage { expected, second } => {
                                 ChallengeTypeBlanked::ExpectedMessage {
-                                    expected: expected,
+                                    expected,
                                     second: second.map(|s| ExpectedMessageBlanked {
                                         is_verified: s.is_verified,
                                     }),
                                 }
                             }
                             ChallengeType::DisplayNameCheck { passed, violations } => {
-                                ChallengeTypeBlanked::DisplayNameCheck {
-                                    passed: passed,
-                                    violations: violations,
-                                }
+                                ChallengeTypeBlanked::DisplayNameCheck { passed, violations }
                             }
                             ChallengeType::Unsupported { is_verified } => {
-                                ChallengeTypeBlanked::Unsupported {
-                                    is_verified: is_verified,
-                                }
+                                ChallengeTypeBlanked::Unsupported { is_verified }
                             }
                         }
                     },
@@ -299,16 +294,13 @@ pub struct JudgementState {
 impl JudgementState {
     pub fn new(context: IdentityContext, fields: Vec<IdentityFieldValue>) -> Self {
         JudgementState {
-            context: context,
+            context,
             is_fully_verified: false,
             inserted_timestamp: Timestamp::now(),
             completion_timestamp: None,
             judgement_submitted: false,
             issue_judgement_at: None,
-            fields: fields
-                .into_iter()
-                .map(|val| IdentityField::new(val))
-                .collect(),
+            fields: fields.into_iter().map(IdentityField::new).collect(),
         }
     }
     pub fn check_full_verification(&self) -> bool {
@@ -319,10 +311,7 @@ impl JudgementState {
     pub fn display_name(&self) -> Option<&str> {
         self.fields
             .iter()
-            .find(|field| match field.value {
-                IdentityFieldValue::DisplayName(_) => true,
-                _ => false,
-            })
+            .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
             .map(|field| match &field.value {
                 IdentityFieldValue::DisplayName(name) => name.as_str(),
                 _ => panic!("Failed to get display name. This is a bug."),
@@ -410,7 +399,7 @@ impl Event {
     pub fn new(event: NotificationMessage) -> Self {
         Event {
             timestamp: Timestamp::now(),
-            event: event,
+            event,
         }
     }
 }

@@ -13,9 +13,9 @@ use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 
-const IDENTITY_COLLECTION: &'static str = "identities";
-const EVENT_COLLECTION: &'static str = "event_log";
-const DISPLAY_NAMES: &'static str = "display_names";
+const IDENTITY_COLLECTION: &str = "identities";
+const EVENT_COLLECTION: &str = "event_log";
+const DISPLAY_NAMES: &str = "display_names";
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -233,7 +233,7 @@ impl Database {
             let field_state = id_state
                 .fields
                 .iter_mut()
-                .find(|field| field.value.matches(&message))
+                .find(|field| field.value.matches(message))
                 .unwrap();
 
             // If the message contains the challenge, set it as valid (or
@@ -251,7 +251,7 @@ impl Database {
                     } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
-                            if expected.verify_message(&message) {
+                            if expected.verify_message(message) {
                                 // Update field state. Be more specific with the query in order
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
@@ -487,7 +487,7 @@ impl Database {
                 .iter()
                 .find(|f| &f.value == field)
                 // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .ok_or_else(|| anyhow!("Failed to select field when verifying message"))?;
 
             match &field_state.challenge {
                 ChallengeType::ExpectedMessage {
@@ -665,7 +665,7 @@ impl Database {
         )
         .await?;
 
-        self.process_fully_verified(&state).await?;
+        self.process_fully_verified(state).await?;
 
         Ok(())
     }
