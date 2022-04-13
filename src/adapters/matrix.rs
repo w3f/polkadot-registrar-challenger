@@ -66,14 +66,14 @@ impl MatrixClient {
             client
                 .sync_token()
                 .await
-                .ok_or(anyhow!("Failed to acquire sync token"))?,
+                .ok_or_else(|| anyhow!("Failed to acquire sync token"))?,
         );
 
         actix::spawn(async move {
             client.clone().sync(settings).await;
         });
 
-        Ok(MatrixClient { messages: messages })
+        Ok(MatrixClient { messages })
     }
 }
 
@@ -96,10 +96,10 @@ impl Listener {
         admins: Vec<MatrixHandle>,
     ) -> Self {
         Self {
-            client: client,
-            messages: messages,
-            db: db,
-            admins: admins,
+            client,
+            messages,
+            db,
+            admins,
         }
     }
 }
@@ -158,7 +158,7 @@ impl EventHandler for Listener {
             // Check for admin message
             let sender = event.sender.to_string();
             if self.admins.contains(&MatrixHandle(sender)) {
-                let resp = match Command::from_str(&msg_body) {
+                let resp = match Command::from_str(msg_body) {
                     // If a valid admin command was found, execute it.
                     Ok(cmd) => Some(process_admin(&self.db, cmd).await),
                     Err(err @ Response::InvalidSyntax(_)) => Some(err),
