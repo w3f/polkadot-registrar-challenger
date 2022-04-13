@@ -92,14 +92,14 @@ impl TwitterBuilder {
             client: Client::new(),
             consumer_key: self
                 .consumer_key
-                .ok_or(anyhow!("consumer key name not specified"))?,
+                .ok_or_else(|| anyhow!("consumer key name not specified"))?,
             consumer_secret: self
                 .consumer_secret
-                .ok_or(anyhow!("consumer secret name not specified"))?,
-            token: self.token.ok_or(anyhow!("token not specified"))?,
+                .ok_or_else(|| anyhow!("consumer secret name not specified"))?,
+            token: self.token.ok_or_else(|| anyhow!("token not specified"))?,
             token_secret: self
                 .token_secret
-                .ok_or(anyhow!("token secret not specified"))?,
+                .ok_or_else(|| anyhow!("token secret not specified"))?,
             twitter_ids: HashMap::new(),
             cache: HashSet::new(),
         })
@@ -182,14 +182,14 @@ impl TwitterHandler {
             let sender = self
                 .twitter_ids
                 .get(&message.sender)
-                .ok_or(anyhow!("Failed to find Twitter handle based on Id"))?
+                .ok_or_else(|| anyhow!("Failed to find Twitter handle based on Id"))?
                 .clone();
 
             let id = message.id.into();
 
             parsed_messages.push(ExternalMessage {
                 origin: ExternalMessageType::Twitter(sender),
-                id: id,
+                id,
                 timestamp: Timestamp::now(),
                 values: vec![message.message.into()],
             });
@@ -326,7 +326,7 @@ impl TwitterHandler {
         let mut lookup = String::new();
         if let Some(accounts) = accounts {
             for account in accounts {
-                lookup.push_str(&account.as_str().replace("@", ""));
+                lookup.push_str(&account.as_str().replace('@', ""));
                 lookup.push(',');
             }
 
@@ -403,7 +403,7 @@ impl ApiMessageRequest {
                 sender: event
                     .message_create
                     .sender_id
-                    .ok_or(anyhow!("unrecognized data"))?
+                    .ok_or_else(|| anyhow!("unrecognized data"))?
                     .try_into()?,
                 message: event.message_create.message_data.text,
                 id: event.id.parse().map_err(|_| anyhow!("unrecognized data"))?,

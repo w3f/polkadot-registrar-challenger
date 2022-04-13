@@ -82,9 +82,7 @@ impl std::fmt::Display for Response {
                     all
                 })
             }
-            Response::UnknownCommand => {
-                "The provided command is unknown".to_string()
-            }
+            Response::UnknownCommand => "The provided command is unknown".to_string(),
             Response::IdentityNotFound => {
                 "There is no pending judgement request for the provided identity".to_string()
             }
@@ -100,12 +98,11 @@ impl std::fmt::Display for Response {
             Response::InternalError => {
                 "An internal error occured. Please contact the architects.".to_string()
             }
-            Response::Help => {
-                "\
+            Response::Help => "\
                 status <ADDR>\t\t\tShow the current verification status of the specified address.\n\
                 verify <ADDR> <FIELD>...\tVerify one or multiple fields of the specified address.\n\
-                ".to_string()
-            }
+                "
+            .to_string(),
         };
 
         write!(f, "{}", msg)
