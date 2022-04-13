@@ -105,10 +105,7 @@ pub fn create_context(address: ChainAddress) -> IdentityContext {
         ChainName::Kusama
     };
 
-    IdentityContext {
-        address,
-        chain,
-    }
+    IdentityContext { address, chain }
 }
 
 async fn run_queue_processor(
@@ -125,12 +122,12 @@ async fn run_queue_processor(
         let id = create_context(address);
 
         // Decode display name if appropriate.
-        accounts
+        if let Some((_, val)) = accounts
             .iter_mut()
             .find(|(ty, _)| *ty == &AccountType::DisplayName)
-            .map(|(_, val)| {
-                try_decode_hex(val);
-            });
+        {
+            try_decode_hex(val);
+        }
 
         let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
         db.add_judgement_request(&state).await?;
@@ -152,9 +149,11 @@ async fn run_queue_processor(
                 QueueMessage::Ack(data) => {
                     // TODO: Check the "result"
                     if data.result == "judgement given" {
-                        let context = create_context(data.address.ok_or_else(|| anyhow!(
-                            "no address specified in 'judgement given' response from Watcher"
-                        ))?);
+                        let context = create_context(data.address.ok_or_else(|| {
+                            anyhow!(
+                                "no address specified in 'judgement given' response from Watcher"
+                            )
+                        })?);
 
                         info!("Marking {:?} as judged", context);
                         db.set_judged(&context).await?;
