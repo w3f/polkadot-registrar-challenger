@@ -16,7 +16,7 @@ impl Default for SecondChallengeVerifier {
 
 impl SecondChallengeVerifier {
     pub fn new(db: Database) -> Self {
-        SecondChallengeVerifier { db: db }
+        SecondChallengeVerifier { db }
     }
 }
 
@@ -38,8 +38,8 @@ impl Handler<VerifyChallenge> for SecondChallengeVerifier {
                 debug!("Received second challenge: {:?}", msg);
                 db.verify_second_challenge(msg)
                     .await
-                    .map(|b| JsonResult::Ok(b))
-                    .unwrap_or(JsonResult::Err("Backend error, contact admin".to_string()))
+                    .map(JsonResult::Ok)
+                    .unwrap_or_else(|_| JsonResult::Err("Backend error, contact admin".to_string()))
             }
             .into_actor(self),
         )
