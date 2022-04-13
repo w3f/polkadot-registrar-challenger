@@ -468,7 +468,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     queue.send(QueueMessage::ActiveDisplayNames(data))?
                 }
                 EventType::JudgementUnrequested => {
-                    debug!("Judgement unrequested: {:?}", parsed);
+                    debug!("Judgement unrequested (NOT SUPPORTED): {:?}", parsed);
                 }
                 _ => {
                     warn!("Received unrecognized message from watcher: {:?}", parsed);
