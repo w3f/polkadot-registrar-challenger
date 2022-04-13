@@ -20,10 +20,10 @@ impl ExtractSender<String> for String {
     type Error = anyhow::Error;
 
     fn extract_sender(self) -> Result<String> {
-        if self.contains("<") {
-            let parts = self.split("<");
+        if self.contains('<') {
+            let parts = self.split('<');
             if let Some(email) = parts.into_iter().nth(1) {
-                Ok(email.replace(">", ""))
+                Ok(email.replace('>', ""))
             } else {
                 Err(anyhow!("unrecognized data"))
             }
@@ -71,6 +71,7 @@ impl SmtpImapClientBuilder {
         self.password = Some(password);
         self
     }
+    #[allow(clippy::or_fun_call)]
     pub fn build(self) -> Result<SmtpImapClient> {
         Ok(SmtpImapClient {
             smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
@@ -140,13 +141,13 @@ impl SmtpImapClient {
                     .headers
                     .iter()
                     .find(|header| header.get_key_ref() == "From")
-                    .ok_or(anyhow!("unrecognized data"))?
+                    .ok_or_else(|| anyhow!("unrecognized data"))?
                     .get_value()
                     .extract_sender()?;
 
                 let id = message
                     .uid
-                    .ok_or(anyhow!("missing UID for email message"))?
+                    .ok_or_else(|| anyhow!("missing UID for email message"))?
                     .into();
 
                 // Skip message if it was already processed.
@@ -161,7 +162,7 @@ impl SmtpImapClient {
                     origin: ExternalMessageType::Email(sender),
                     id: message
                         .uid
-                        .ok_or(anyhow!("missing UID for email message"))?
+                        .ok_or_else(|| anyhow!("missing UID for email message"))?
                         .into(),
                     timestamp: Timestamp::now(),
                     values: vec![],
@@ -230,6 +231,6 @@ impl Adapter for SmtpImapClient {
         self.request_messages()
     }
     async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
-        Self::send_message(&self, to, content.value.as_str()).await
+        Self::send_message(self, to, content.value.as_str()).await
     }
 }
