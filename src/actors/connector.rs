@@ -360,6 +360,19 @@ impl Connector {
     }
 }
 
+impl Actor for Connector {
+    type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        self.start_heartbeat_sync(ctx);
+        self.start_pending_judgements_sync(ctx);
+    }
+
+    fn stopped(&mut self, _ctx: &mut Context<Self>) {
+        error!("Connector disconnected");
+    }
+}
+
 // Handle messages that should be sent to the Watcher.
 impl Handler<ClientCommand> for Connector {
     type Result = ();
@@ -400,19 +413,6 @@ impl Handler<ClientCommand> for Connector {
                 ));
             }
         }
-    }
-}
-
-impl Actor for Connector {
-    type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        self.start_heartbeat_sync(ctx);
-        self.start_pending_judgements_sync(ctx);
-    }
-
-    fn stopped(&mut self, _ctx: &mut Context<Self>) {
-        error!("Connector disconnected");
     }
 }
 
