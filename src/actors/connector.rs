@@ -206,15 +206,12 @@ enum ClientCommand {
 /// Handles incoming and outgoing websocket messages to and from the Watcher.
 struct Connector {
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
-    queue: UnboundedSender<WatcherMessage>,
     db: Database,
     dn_verifier: DisplayNameVerifier,
 }
 
 impl Connector {
     async fn start(endpoint: &str, db: Database, dn_verifier: DisplayNameVerifier) -> Result<()> {
-        let (queue, recv) = unbounded_channel();
-
         let (_, framed) = Client::builder()
             .timeout(Duration::from_secs(120))
             .finish()
@@ -235,7 +232,6 @@ impl Connector {
             Connector::add_stream(stream, ctx);
             Connector {
                 sink: SinkWrite::new(sink, ctx),
-                queue,
                 db,
                 dn_verifier,
             }
@@ -244,7 +240,7 @@ impl Connector {
         Ok(())
     }
     // Send a heartbeat to the Watcher every couple of seconds.
-    fn start_heartbeat_sync(&self, ctx: &mut Context<Self>) {
+    fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
         ctx.run_interval(Duration::new(30, 0), |act, _ctx| {
             let _ = act
                 .sink
@@ -253,7 +249,7 @@ impl Connector {
         });
     }
     // Request pending judgements every couple of seconds.
-    fn start_pending_judgements_sync(&self, ctx: &mut Context<Self>) {
+    fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
         ctx.run_interval(Duration::new(10, 0), |_act, ctx| {
             ctx.address()
                 .do_send(ClientCommand::RequestPendingJudgements)
@@ -272,8 +268,9 @@ impl Actor for Connector {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.start_heartbeat_sync(ctx);
-        self.start_pending_judgements_sync(ctx);
+        self.start_heartbeat_task(ctx);
+        self.start_pending_judgements_task(ctx);
+        self.start_judgement_candidates_task(ctx);
     }
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
@@ -344,13 +341,13 @@ impl Handler<WatcherMessage> for Connector {
                         }
                     }
                     WatcherMessage::ActiveDisplayNames(data) => {
-                        for mut d in data {
-                            d.try_decode_hex();
+                        for mut name in data {
+                            name.try_decode_hex();
 
-                            let context = create_context(d.address);
+                            let context = create_context(name.address);
                             let entry = DisplayNameEntry {
                                 context,
-                                display_name: d.display_name,
+                                display_name: name.display_name,
                             };
 
                             db.insert_display_name(&entry).await?;
@@ -412,10 +409,10 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     fn handle(
         &mut self,
         msg: std::result::Result<Frame, WsProtocolError>,
-        _ctx: &mut Context<Self>,
+        ctx: &mut Context<Self>,
     ) {
         fn local(
-            queue: &mut UnboundedSender<WatcherMessage>,
+            conn: Addr<Connector>,
             msg: std::result::Result<Frame, WsProtocolError>,
         ) -> Result<()> {
             let parsed: ResponseMessage<serde_json::Value> = match msg {
@@ -434,7 +431,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: AckResponse = serde_json::from_value(parsed.data)?;
                     debug!("Received acknowledgement from Watcher: {:?}", data);
 
-                    queue.send(WatcherMessage::Ack(data))?;
+                    conn.do_send(WatcherMessage::Ack(data));
                 }
                 EventType::Error => {
                     error!("Received error from Watcher: {:?}", parsed.data);
@@ -443,19 +440,19 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: JudgementRequest = serde_json::from_value(parsed.data)?;
                     debug!("Received new judgement request from Watcher: {:?}", data);
 
-                    queue.send(WatcherMessage::NewJudgementRequest(data))?
+                    conn.do_send(WatcherMessage::NewJudgementRequest(data));
                 }
                 EventType::PendingJudgementsResponse => {
                     let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
                     debug!("Received pending judgments from Watcher: {:?}", data);
 
-                    queue.send(WatcherMessage::PendingJudgementsRequests(data))?
+                    conn.do_send(WatcherMessage::PendingJudgementsRequests(data));
                 }
                 EventType::DisplayNamesResponse => {
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     debug!("Received Display Names");
 
-                    queue.send(WatcherMessage::ActiveDisplayNames(data))?
+                    conn.do_send(WatcherMessage::ActiveDisplayNames(data));
                 }
                 EventType::JudgementUnrequested => {
                     debug!("Judgement unrequested (NOT SUPPORTED): {:?}", parsed);
@@ -468,7 +465,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             Ok(())
         }
 
-        if let Err(err) = local(&mut self.queue, msg) {
+        if let Err(err) = local(ctx.address(), msg) {
             error!("Failed to process message in websocket stream: {:?}", err);
         }
     }
@@ -479,18 +476,22 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
     /// If connection dropped, try to reconnect.
     fn finished(&mut self, ctx: &mut Context<Self>) {
+        ctx.stop();
+
         warn!("Watcher disconnected");
 
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
         actix::spawn(async move {
             loop {
-                // TODO: Handle
-                let n = Connector::start("TODO", db.clone(), dn_verifier.clone()).await;
+                if Connector::start("TODO", db.clone(), dn_verifier.clone()).await.is_err() {
+                    warn!("Reconnection failed, retrying...");
+                    sleep(Duration::from_secs(10)).await;
+                }
+
+                info!("Reconnected to Watcher!");
             }
         });
-
-        ctx.stop()
     }
 }
 
