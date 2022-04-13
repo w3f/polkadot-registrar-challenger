@@ -2,8 +2,8 @@ use crate::actors::api::VerifyChallenge;
 use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
 use crate::primitives::{
-    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
-    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
+    ChainAddress, ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage,
+    IdentityContext, IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -698,6 +698,29 @@ impl Database {
 
         let event: Event = event.into();
         coll.insert_one(event.to_bson()?, None).await?;
+
+        Ok(())
+    }
+    // TODO: Test this.
+    async fn process_tangling_submissions(&self, addresses: &[ChainAddress]) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        let addr_str: Vec<&str> = addresses.iter().map(|s| s.as_str()).collect();
+
+        let _ = coll
+            .update_many(
+                doc! {
+                    "judgement_submitted": false,
+                    "context": {
+                        "$nin": addr_str.to_bson()?,
+                    }
+                },
+                doc! {
+                    "judgement_submitted": true
+                },
+                None,
+            )
+            .await?;
 
         Ok(())
     }
