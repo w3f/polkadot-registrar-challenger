@@ -109,6 +109,8 @@ pub fn create_context(address: ChainAddress) -> IdentityContext {
     IdentityContext { address, chain }
 }
 
+/// Processes messages received from the websocket handler (which receives
+/// messages from the Watcher).
 async fn run_queue_processor(
     db: Database,
     mut recv: UnboundedReceiver<QueueMessage>,
@@ -148,7 +150,6 @@ async fn run_queue_processor(
         while let Some(message) = recv.recv().await {
             match message {
                 QueueMessage::Ack(data) => {
-                    // TODO: Check the "result"
                     if data.result == "judgement given" {
                         let context = create_context(data.address.ok_or_else(|| {
                             anyhow!(
@@ -199,6 +200,7 @@ async fn run_queue_processor(
     });
 }
 
+/// Sets up the websocket connection to the Watcher.
 async fn init_connector(
     endpoint: &str,
     queue: UnboundedSender<QueueMessage>,
@@ -217,6 +219,7 @@ async fn init_connector(
             )
         })?;
 
+    // Start the Connector actor.
     let (sink, stream) = framed.split();
     let actor = Connector::create(|ctx| {
         Connector::add_stream(stream, ctx);
@@ -325,11 +328,6 @@ enum QueueMessage {
     ActiveDisplayNames(Vec<DisplayNameEntryRaw>),
 }
 
-struct Connector {
-    sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
-    queue: UnboundedSender<QueueMessage>,
-}
-
 #[derive(Message)]
 #[rtype(result = "()")]
 enum ClientCommand {
@@ -338,6 +336,25 @@ enum ClientCommand {
     RequestDisplayNames,
 }
 
+/// Handles incoming and outgoing websocket messages to and from the Watcher.
+struct Connector {
+    sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
+    queue: UnboundedSender<QueueMessage>,
+}
+
+impl Connector {
+    // Send a heartbeat to the Watcher every 5 seconds.
+    fn heartbeat(&self, ctx: &mut Context<Self>) {
+        ctx.run_interval(Duration::new(5, 0), |act, _ctx| {
+            let _ = act
+                .sink
+                .write(Message::Ping(String::from("").into()))
+                .map_err(|err| error!("Failed to send heartbeat to Watcher: {:?}", err));
+        });
+    }
+}
+
+// Handle messages that should be sent to the Watcher.
 impl Handler<ClientCommand> for Connector {
     type Result = ();
 
@@ -392,21 +409,7 @@ impl Actor for Connector {
     }
 }
 
-impl Connector {
-    fn heartbeat(&self, ctx: &mut Context<Self>) {
-        ctx.run_later(Duration::new(5, 0), |act, ctx| {
-            let _ = act
-                .sink
-                .write(Message::Ping(String::from("").into()))
-                .map(|_| act.heartbeat(ctx))
-                .map_err(|err| error!("Failed to send heartbeat to Watcher: {:?}", err));
-
-            // TODO: Check timeouts
-        });
-    }
-}
-
-/// Handle server websocket messages
+/// Handle websocket messages received from the Watcher.
 impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     fn handle(
         &mut self,
