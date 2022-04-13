@@ -28,9 +28,6 @@ pub async fn run_connector(
         return Ok(());
     }
 
-    // Init processing queue.
-    let (tx, recv) = unbounded_channel();
-
     // Run processing queue for incoming connector messages.
     info!("Starting processing queue for incoming messages");
     run_queue_processor(db.clone(), recv, dn_config).await;
@@ -39,14 +36,15 @@ pub async fn run_connector(
         info!("Initializing connection to Watcher: {:?}", config);
 
         let db = db.clone();
-        let tx = tx.clone();
 
-        let mut connector = init_connector(config.endpoint.as_str(), tx.clone()).await?;
+        // TODO: Handle error
+        Connector::start("", db).await;
 
-        info!("Requesting pending judgments from Watcher");
-        connector.do_send(ClientCommand::RequestPendingJudgements);
+        //info!("Requesting pending judgments from Watcher");
+        //connector.do_send(ClientCommand::RequestPendingJudgements);
 
         info!("Starting judgments event loop");
+        /*
         actix::spawn(async move {
             async fn local(
                 connector: &mut Addr<Connector>,
@@ -54,12 +52,6 @@ pub async fn run_connector(
                 config: &WatcherConfig,
                 tx: UnboundedSender<WatcherMessage>,
             ) -> Result<()> {
-                // If connection dropped, try to reconnect
-                if !connector.connected() {
-                    warn!("Connection to Watcher dropped, trying to reconnect...");
-                    *connector = init_connector(config.endpoint.as_str(), tx).await?
-                }
-
                 // Provide judgments.
                 let completed = db.fetch_judgement_candidates().await?;
                 for state in completed {
@@ -91,6 +83,7 @@ pub async fn run_connector(
                 sleep(Duration::from_secs(10)).await;
             }
         });
+        */
     }
 
     Ok(())
@@ -168,7 +161,8 @@ async fn run_queue_processor(
                     // requests that were submitted to the Watcher but the
                     // issued extrinsic was not direclty confirmed back. This
                     // usually should not happen, but can.
-                    let addresses: Vec<&ChainAddress> = data.iter().map(|state| &state.address).collect();
+                    let addresses: Vec<&ChainAddress> =
+                        data.iter().map(|state| &state.address).collect();
                     db.process_tangling_submissions(&addresses).await?;
 
                     for r in data {
@@ -204,38 +198,6 @@ async fn run_queue_processor(
             sleep(Duration::from_secs(10)).await;
         }
     });
-}
-
-/// Sets up the websocket connection to the Watcher.
-async fn init_connector(
-    endpoint: &str,
-    queue: UnboundedSender<WatcherMessage>,
-) -> Result<Addr<Connector>> {
-    let (_, framed) = Client::builder()
-        .timeout(Duration::from_secs(120))
-        .finish()
-        .ws(endpoint)
-        .connect()
-        .await
-        .map_err(|err| {
-            anyhow!(
-                "failed to initiate client connector to {}: {:?}",
-                endpoint,
-                err
-            )
-        })?;
-
-    // Start the Connector actor.
-    let (sink, stream) = framed.split();
-    let actor = Connector::create(|ctx| {
-        Connector::add_stream(stream, ctx);
-        Connector {
-            sink: SinkWrite::new(sink, ctx),
-            queue,
-        }
-    });
-
-    Ok(actor)
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -346,9 +308,40 @@ enum ClientCommand {
 struct Connector {
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
     queue: UnboundedSender<WatcherMessage>,
+    db: Database,
 }
 
 impl Connector {
+    async fn start(endpoint: &str, db: Database) -> Result<()> {
+        let (queue, recv) = unbounded_channel();
+
+        let (_, framed) = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .finish()
+            .ws(endpoint)
+            .connect()
+            .await
+            .map_err(|err| {
+                anyhow!(
+                    "failed to initiate client connector to {}: {:?}",
+                    endpoint,
+                    err
+                )
+            })?;
+
+        // Start the Connector actor.
+        let (sink, stream) = framed.split();
+        let _ = Connector::create(|ctx| {
+            Connector::add_stream(stream, ctx);
+            Connector {
+                sink: SinkWrite::new(sink, ctx),
+                queue,
+                db,
+            }
+        });
+
+        Ok(())
+    }
     // Send a heartbeat to the Watcher every couple of seconds.
     fn start_heartbeat_sync(&self, ctx: &mut Context<Self>) {
         ctx.run_interval(Duration::new(30, 0), |act, _ctx| {
@@ -360,6 +353,13 @@ impl Connector {
     }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_sync(&self, ctx: &mut Context<Self>) {
+        ctx.run_interval(Duration::new(10, 0), |_act, ctx| {
+            ctx.address()
+                .do_send(ClientCommand::RequestPendingJudgements)
+        });
+    }
+    // Request pending judgements every couple of seconds.
+    fn start_judgement_candidates_task(&self, ctx: &mut Context<Self>) {
         ctx.run_interval(Duration::new(10, 0), |_act, ctx| {
             ctx.address()
                 .do_send(ClientCommand::RequestPendingJudgements)
@@ -486,11 +486,20 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     }
 
     fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Connector started");
+        info!("Started stream handler for connector");
     }
 
+    /// If connection dropped, try to reconnect.
     fn finished(&mut self, ctx: &mut Context<Self>) {
-        error!("Watcher disconnected");
+        warn!("Watcher disconnected");
+
+        let db = self.db.clone();
+        actix::spawn(async {
+            loop {
+                let n = Connector::start("TODO", db).await;
+            }
+        });
+
         ctx.stop()
     }
 }
