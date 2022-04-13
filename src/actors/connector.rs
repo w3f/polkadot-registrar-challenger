@@ -28,17 +28,13 @@ pub async fn run_connector(
         return Ok(());
     }
 
-    // Run processing queue for incoming connector messages.
-    info!("Starting processing queue for incoming messages");
-    run_queue_processor(db.clone(), recv, dn_config).await;
-
     for config in watchers {
         info!("Initializing connection to Watcher: {:?}", config);
 
         let db = db.clone();
 
         // TODO: Handle error
-        Connector::start("", db).await;
+        // Connector::start("", db).await;
 
         //info!("Requesting pending judgments from Watcher");
         //connector.do_send(ClientCommand::RequestPendingJudgements);
@@ -99,105 +95,6 @@ pub fn create_context(address: ChainAddress) -> IdentityContext {
     };
 
     IdentityContext { address, chain }
-}
-
-/// Processes messages received from the websocket handler (which receives
-/// messages from the Watcher).
-async fn run_queue_processor(
-    db: Database,
-    mut recv: UnboundedReceiver<WatcherMessage>,
-    dn_config: DisplayNameConfig,
-) {
-    async fn process_request(
-        db: &Database,
-        address: ChainAddress,
-        mut accounts: HashMap<AccountType, String>,
-        dn_verifier: &DisplayNameVerifier,
-    ) -> Result<()> {
-        let id = create_context(address);
-
-        // Decode display name if appropriate.
-        if let Some((_, val)) = accounts
-            .iter_mut()
-            .find(|(ty, _)| *ty == &AccountType::DisplayName)
-        {
-            try_decode_hex(val);
-        }
-
-        let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
-        db.add_judgement_request(&state).await?;
-        dn_verifier.verify_display_name(&state).await?;
-
-        Ok(())
-    }
-
-    let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config);
-
-    async fn local(
-        db: &Database,
-        recv: &mut UnboundedReceiver<WatcherMessage>,
-        dn_verifier: &DisplayNameVerifier,
-    ) -> Result<()> {
-        info!("Starting event loop for incoming messages");
-        while let Some(message) = recv.recv().await {
-            match message {
-                WatcherMessage::Ack(data) => {
-                    if data.result.to_lowercase().contains("judgement given") {
-                        let context = create_context(data.address.ok_or_else(|| {
-                            anyhow!(
-                                "no address specified in 'judgement given' response from Watcher"
-                            )
-                        })?);
-
-                        info!("Marking {:?} as judged", context);
-                        db.set_judged(&context).await?;
-                    }
-                }
-                WatcherMessage::NewJudgementRequest(data) => {
-                    process_request(db, data.address, data.accounts, dn_verifier).await?
-                }
-                WatcherMessage::PendingJudgementsRequests(data) => {
-                    // Process any tangling submissions, meaning any verified
-                    // requests that were submitted to the Watcher but the
-                    // issued extrinsic was not direclty confirmed back. This
-                    // usually should not happen, but can.
-                    let addresses: Vec<&ChainAddress> =
-                        data.iter().map(|state| &state.address).collect();
-                    db.process_tangling_submissions(&addresses).await?;
-
-                    for r in data {
-                        process_request(db, r.address, r.accounts, dn_verifier).await?;
-                    }
-                }
-                WatcherMessage::ActiveDisplayNames(data) => {
-                    for mut d in data {
-                        d.try_decode_hex();
-
-                        let context = create_context(d.address);
-                        let entry = DisplayNameEntry {
-                            context,
-                            display_name: d.display_name,
-                        };
-
-                        db.insert_display_name(&entry).await?;
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    actix::spawn(async move {
-        loop {
-            let _ = local(&db, &mut recv, &dn_verifier)
-                .await
-                .map_err(|err| error!("Error in connector messaging queue: {:?}", err));
-
-            // 10 second pause between errors.
-            sleep(Duration::from_secs(10)).await;
-        }
-    });
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -288,7 +185,8 @@ fn try_decode_hex(display_name: &mut String) {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Message)]
+#[rtype(result = "crate::Result<()>")]
 enum WatcherMessage {
     Ack(AckResponse),
     NewJudgementRequest(JudgementRequest),
@@ -309,10 +207,11 @@ struct Connector {
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
     queue: UnboundedSender<WatcherMessage>,
     db: Database,
+    dn_verifier: DisplayNameVerifier,
 }
 
 impl Connector {
-    async fn start(endpoint: &str, db: Database) -> Result<()> {
+    async fn start(endpoint: &str, db: Database, dn_verifier: DisplayNameVerifier) -> Result<()> {
         let (queue, recv) = unbounded_channel();
 
         let (_, framed) = Client::builder()
@@ -337,6 +236,7 @@ impl Connector {
                 sink: SinkWrite::new(sink, ctx),
                 queue,
                 db,
+                dn_verifier,
             }
         });
 
@@ -377,6 +277,89 @@ impl Actor for Connector {
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
         error!("Connector disconnected");
+    }
+}
+
+// Handle messages that should be sent to the Watcher.
+impl Handler<WatcherMessage> for Connector {
+    type Result = ResponseActFuture<Self, crate::Result<()>>;
+
+    fn handle(&mut self, msg: WatcherMessage, _ctx: &mut Context<Self>) -> Self::Result {
+        async fn process_request(
+            db: &Database,
+            address: ChainAddress,
+            mut accounts: HashMap<AccountType, String>,
+            dn_verifier: &DisplayNameVerifier,
+        ) -> Result<()> {
+            let id = create_context(address);
+
+            // Decode display name if appropriate.
+            if let Some((_, val)) = accounts
+                .iter_mut()
+                .find(|(ty, _)| *ty == &AccountType::DisplayName)
+            {
+                try_decode_hex(val);
+            }
+
+            let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
+            db.add_judgement_request(&state).await?;
+            dn_verifier.verify_display_name(&state).await?;
+
+            Ok(())
+        }
+
+        let db = self.db.clone();
+        let dn_verifier = self.dn_verifier.clone();
+
+        Box::pin(
+            async move {
+                match msg {
+                    WatcherMessage::Ack(data) => {
+                        if data.result.to_lowercase().contains("judgement given") {
+                            let context = create_context(data.address.ok_or_else(|| {
+                                anyhow!(
+                                    "no address specified in 'judgement given' response from Watcher"
+                                )
+                            })?);
+
+                            info!("Marking {:?} as judged", context);
+                            db.set_judged(&context).await?;
+                        }
+                    }
+                    WatcherMessage::NewJudgementRequest(data) => {
+                        process_request(&db, data.address, data.accounts, &dn_verifier).await?
+                    }
+                    WatcherMessage::PendingJudgementsRequests(data) => {
+                        // Process any tangling submissions, meaning any verified
+                        // requests that were submitted to the Watcher but the
+                        // issued extrinsic was not direclty confirmed back. This
+                        // usually should not happen, but can.
+                        let addresses: Vec<&ChainAddress> =
+                            data.iter().map(|state| &state.address).collect();
+                        db.process_tangling_submissions(&addresses).await?;
+
+                        for r in data {
+                            process_request(&db, r.address, r.accounts, &dn_verifier).await?;
+                        }
+                    }
+                    WatcherMessage::ActiveDisplayNames(data) => {
+                        for mut d in data {
+                            d.try_decode_hex();
+
+                            let context = create_context(d.address);
+                            let entry = DisplayNameEntry {
+                                context,
+                                display_name: d.display_name,
+                            };
+
+                            db.insert_display_name(&entry).await?;
+                        }
+                    }
+                }
+
+                Ok(())
+            }.into_actor(self)
+        )
     }
 }
 
@@ -494,9 +477,11 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         warn!("Watcher disconnected");
 
         let db = self.db.clone();
-        actix::spawn(async {
+        let dn_verifier = self.dn_verifier.clone();
+        actix::spawn(async move {
             loop {
-                let n = Connector::start("TODO", db).await;
+                // TODO: Handle
+                let n = Connector::start("TODO", db.clone(), dn_verifier.clone()).await;
             }
         });
 
