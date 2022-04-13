@@ -15,10 +15,7 @@ pub struct SessionNotifier {
 
 impl SessionNotifier {
     pub fn new(db: Database, server: Addr<LookupServer>) -> Self {
-        SessionNotifier {
-            db: db,
-            server: server,
-        }
+        SessionNotifier { db, server }
     }
     pub async fn run_blocking(mut self) {
         async fn local(
@@ -33,13 +30,15 @@ impl SessionNotifier {
                 let state = match cache.get(event.context()) {
                     Some(state) => state.clone(),
                     None => {
-                        let state =
-                            db.fetch_judgement_state(event.context())
-                                .await?
-                                .ok_or(anyhow!(
+                        let state = db
+                            .fetch_judgement_state(event.context())
+                            .await?
+                            .ok_or_else(|| {
+                                anyhow!(
                                     "No identity state found for context: {:?}",
                                     event.context()
-                                ))?;
+                                )
+                            })?;
 
                         cache.insert(event.context().clone(), state.clone());
 

@@ -1,3 +1,6 @@
+// Makes it easier to read.
+#![allow(clippy::bool_assert_comparison)]
+
 use super::*;
 use crate::primitives::JudgementState;
 

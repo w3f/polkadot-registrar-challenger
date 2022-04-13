@@ -144,7 +144,7 @@ pub fn init_env() -> Result<Config> {
     let config = open_config()?;
 
     // Env variables for log level overwrites config.
-    if let Ok(_) = env::var("RUST_LOG") {
+    if env::var("RUST_LOG").is_ok() {
         println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
         env_logger::init();
     } else {
@@ -268,15 +268,11 @@ async fn run_mocker() -> Result<()> {
         let ty_validity = rng.gen_range(0..1);
         let reset = rng.gen_range(0..5);
 
-        match reset {
-            // Reset state.
-            0 => {
-                warn!("Resetting Identity");
-                db.delete_judgement(&alice.context).await.unwrap();
-                alice = JudgementState::alice();
-                db.add_judgement_request(&alice).await.unwrap();
-            }
-            _ => {}
+        if reset == 0 {
+            warn!("Resetting Identity");
+            db.delete_judgement(&alice.context).await.unwrap();
+            alice = JudgementState::alice();
+            db.add_judgement_request(&alice).await.unwrap();
         }
 
         let (origin, values) = match ty_msg {
@@ -328,10 +324,10 @@ async fn run_mocker() -> Result<()> {
         // Inject message.
         injector
             .send(ExternalMessage {
-                origin: origin,
+                origin,
                 id: MessageId::from(0u32),
                 timestamp: Timestamp::now(),
-                values: values,
+                values,
             })
             .await;
 
