@@ -52,7 +52,7 @@ pub async fn run_connector(
                 connector: &mut Addr<Connector>,
                 db: &Database,
                 config: &WatcherConfig,
-                tx: UnboundedSender<QueueMessage>,
+                tx: UnboundedSender<WatcherMessage>,
             ) -> Result<()> {
                 // If connection dropped, try to reconnect
                 if !connector.connected() {
@@ -112,7 +112,7 @@ pub fn create_context(address: ChainAddress) -> IdentityContext {
 /// messages from the Watcher).
 async fn run_queue_processor(
     db: Database,
-    mut recv: UnboundedReceiver<QueueMessage>,
+    mut recv: UnboundedReceiver<WatcherMessage>,
     dn_config: DisplayNameConfig,
 ) {
     async fn process_request(
@@ -142,13 +142,13 @@ async fn run_queue_processor(
 
     async fn local(
         db: &Database,
-        recv: &mut UnboundedReceiver<QueueMessage>,
+        recv: &mut UnboundedReceiver<WatcherMessage>,
         dn_verifier: &DisplayNameVerifier,
     ) -> Result<()> {
         info!("Starting event loop for incoming messages");
         while let Some(message) = recv.recv().await {
             match message {
-                QueueMessage::Ack(data) => {
+                WatcherMessage::Ack(data) => {
                     if data.result == "judgement given" {
                         let context = create_context(data.address.ok_or_else(|| {
                             anyhow!(
@@ -160,15 +160,15 @@ async fn run_queue_processor(
                         db.set_judged(&context).await?;
                     }
                 }
-                QueueMessage::NewJudgementRequest(data) => {
+                WatcherMessage::NewJudgementRequest(data) => {
                     process_request(db, data.address, data.accounts, dn_verifier).await?
                 }
-                QueueMessage::PendingJudgementsRequests(data) => {
+                WatcherMessage::PendingJudgementsRequests(data) => {
                     for r in data {
                         process_request(db, r.address, r.accounts, dn_verifier).await?;
                     }
                 }
-                QueueMessage::ActiveDisplayNames(data) => {
+                WatcherMessage::ActiveDisplayNames(data) => {
                     for mut d in data {
                         d.try_decode_hex();
 
@@ -202,7 +202,7 @@ async fn run_queue_processor(
 /// Sets up the websocket connection to the Watcher.
 async fn init_connector(
     endpoint: &str,
-    queue: UnboundedSender<QueueMessage>,
+    queue: UnboundedSender<WatcherMessage>,
 ) -> Result<Addr<Connector>> {
     let (_, framed) = Client::builder()
         .timeout(Duration::from_secs(120))
@@ -320,7 +320,7 @@ fn try_decode_hex(display_name: &mut String) {
 }
 
 #[derive(Debug, Clone)]
-enum QueueMessage {
+enum WatcherMessage {
     Ack(AckResponse),
     NewJudgementRequest(JudgementRequest),
     PendingJudgementsRequests(Vec<JudgementRequest>),
@@ -338,7 +338,7 @@ enum ClientCommand {
 /// Handles incoming and outgoing websocket messages to and from the Watcher.
 struct Connector {
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
-    queue: UnboundedSender<QueueMessage>,
+    queue: UnboundedSender<WatcherMessage>,
 }
 
 impl Connector {
@@ -424,7 +424,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         _ctx: &mut Context<Self>,
     ) {
         fn local(
-            queue: &mut UnboundedSender<QueueMessage>,
+            queue: &mut UnboundedSender<WatcherMessage>,
             msg: std::result::Result<Frame, WsProtocolError>,
         ) -> Result<()> {
             let parsed: ResponseMessage<serde_json::Value> = match msg {
@@ -439,7 +439,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: AckResponse = serde_json::from_value(parsed.data)?;
                     debug!("Received acknowledgement from Watcher: {:?}", data);
 
-                    queue.send(QueueMessage::Ack(data))?;
+                    queue.send(WatcherMessage::Ack(data))?;
                 }
                 EventType::Error => {
                     error!("Received error from Watcher: {:?}", parsed.data);
@@ -448,19 +448,19 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: JudgementRequest = serde_json::from_value(parsed.data)?;
                     debug!("Received new judgement request from Watcher: {:?}", data);
 
-                    queue.send(QueueMessage::NewJudgementRequest(data))?
+                    queue.send(WatcherMessage::NewJudgementRequest(data))?
                 }
                 EventType::PendingJudgementsResponse => {
                     let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
                     debug!("Received pending judgments from Watcher: {:?}", data);
 
-                    queue.send(QueueMessage::PendingJudgementsRequests(data))?
+                    queue.send(WatcherMessage::PendingJudgementsRequests(data))?
                 }
                 EventType::DisplayNamesResponse => {
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     debug!("Received Display Names");
 
-                    queue.send(QueueMessage::ActiveDisplayNames(data))?
+                    queue.send(WatcherMessage::ActiveDisplayNames(data))?
                 }
                 EventType::JudgementUnrequested => {
                     debug!("Judgement unrequested (NOT SUPPORTED): {:?}", parsed);
