@@ -479,7 +479,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     fn finished(&mut self, ctx: &mut Context<Self>) {
         ctx.terminate();
 
-        warn!("Watcher disconnected");
+        warn!("Watcher disconnected, trying to reconnect...");
 
         let network = self.network;
         let db = self.db.clone();
