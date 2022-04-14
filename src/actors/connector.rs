@@ -34,11 +34,8 @@ pub async fn run_connector(
         let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
         let conn = Connector::start("", db.clone(), dn_verifier).await?;
 
-        //info!("Requesting pending judgments from Watcher");
-        //connector.do_send(ClientCommand::RequestPendingJudgements);
-        let x = conn.send(ClientCommand::RequestPendingJudgements)?;
-
-        info!("Starting judgments event loop");
+        info!("Sending pending judgements request to Watcher");
+        let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
     }
 
     Ok(())
@@ -228,7 +225,7 @@ impl Connector {
                 let completed = db.fetch_judgement_candidates().await.unwrap();
                 for state in completed {
                     if state.context.chain == network {
-                        debug!("Notifying Watcher about judgement: {:?}", state.context);
+                        info!("Notifying Watcher about judgement: {:?}", state.context);
                         addr.do_send(ClientCommand::ProvideJudgement(state.context));
                     } else {
                         debug!(
@@ -263,6 +260,7 @@ impl Handler<ClientCommand> for Connector {
     fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) -> Self::Result {
         match msg {
             ClientCommand::ProvideJudgement(id) => {
+                debug!("Providing judgement over websocket stream: {:?}", id);
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
@@ -276,6 +274,7 @@ impl Handler<ClientCommand> for Connector {
                 ));
             }
             ClientCommand::RequestPendingJudgements => {
+                debug!("Requesting pending judgements over websocket stream");
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::PendingJudgementsRequest,
@@ -286,6 +285,7 @@ impl Handler<ClientCommand> for Connector {
                 ));
             }
             ClientCommand::RequestDisplayNames => {
+                debug!("Requesting display names over websocket stream");
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::DisplayNamesRequest,
@@ -406,30 +406,30 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
             match parsed.event {
                 EventType::Ack => {
-                    let data: AckResponse = serde_json::from_value(parsed.data)?;
-                    debug!("Received acknowledgement from Watcher: {:?}", data);
+                    debug!("Received acknowledgement from Watcher: {:?}", parsed.data);
 
+                    let data: AckResponse = serde_json::from_value(parsed.data)?;
                     let _ = conn.send(WatcherMessage::Ack(data));
                 }
                 EventType::Error => {
                     error!("Received error from Watcher: {:?}", parsed.data);
                 }
                 EventType::NewJudgementRequest => {
-                    let data: JudgementRequest = serde_json::from_value(parsed.data)?;
-                    debug!("Received new judgement request from Watcher: {:?}", data);
+                    debug!("Received new judgement request from Watcher: {:?}", parsed.data);
 
+                    let data: JudgementRequest = serde_json::from_value(parsed.data)?;
                     let _ = conn.do_send(WatcherMessage::NewJudgementRequest(data));
                 }
                 EventType::PendingJudgementsResponse => {
-                    let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
-                    debug!("Received pending judgments from Watcher: {:?}", data);
+                    debug!("Received pending judgments from Watcher: {:?}", parsed.data);
 
+                    let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
                     let _ = conn.send(WatcherMessage::PendingJudgementsRequests(data));
                 }
                 EventType::DisplayNamesResponse => {
-                    let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     debug!("Received Display Names");
 
+                    let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     let _ = conn.send(WatcherMessage::ActiveDisplayNames(data));
                 }
                 EventType::JudgementUnrequested => {
