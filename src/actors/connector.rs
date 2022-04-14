@@ -229,16 +229,22 @@ impl Connector {
 
             actix::spawn(async move {
                 // Provide judgments.
-                let completed = db.fetch_judgement_candidates().await.unwrap();
-                for state in completed {
-                    if state.context.chain == network {
-                        info!("Notifying Watcher about judgement: {:?}", state.context);
-                        addr.do_send(ClientCommand::ProvideJudgement(state.context));
-                    } else {
-                        debug!(
-                            "Skipping judgement on connector assigned to {:?}: {:?}",
-                            network, state.context
-                        );
+                match db.fetch_judgement_candidates().await {
+                    Ok(completed) => {
+                        for state in completed {
+                            if state.context.chain == network {
+                                info!("Notifying Watcher about judgement: {:?}", state.context);
+                                addr.do_send(ClientCommand::ProvideJudgement(state.context));
+                            } else {
+                                debug!(
+                                    "Skipping judgement on connector assigned to {:?}: {:?}",
+                                    network, state.context
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        error!("Failed to fetch judgement candidates: {:?}", err);
                     }
                 }
             });
@@ -406,7 +412,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         msg: std::result::Result<Frame, WsProtocolError>,
         ctx: &mut Context<Self>,
     ) {
-        fn local(
+        async fn local(
             conn: Addr<Connector>,
             msg: std::result::Result<Frame, WsProtocolError>,
         ) -> Result<()> {
@@ -422,7 +428,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     debug!("Received acknowledgement from Watcher: {:?}", parsed.data);
 
                     let data: AckResponse = serde_json::from_value(parsed.data)?;
-                    let _ = conn.send(WatcherMessage::Ack(data));
+                    conn.send(WatcherMessage::Ack(data)).await??;
                 }
                 EventType::Error => {
                     error!("Received error from Watcher: {:?}", parsed.data);
@@ -434,19 +440,22 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     );
 
                     let data: JudgementRequest = serde_json::from_value(parsed.data)?;
-                    let _ = conn.do_send(WatcherMessage::NewJudgementRequest(data));
+                    conn.send(WatcherMessage::NewJudgementRequest(data))
+                        .await??;
                 }
                 EventType::PendingJudgementsResponse => {
                     debug!("Received pending judgments from Watcher: {:?}", parsed.data);
 
                     let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
-                    let _ = conn.send(WatcherMessage::PendingJudgementsRequests(data));
+                    conn.send(WatcherMessage::PendingJudgementsRequests(data))
+                        .await??;
                 }
                 EventType::DisplayNamesResponse => {
                     debug!("Received Display Names");
 
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
-                    let _ = conn.send(WatcherMessage::ActiveDisplayNames(data));
+                    conn.send(WatcherMessage::ActiveDisplayNames(data))
+                        .await??;
                 }
                 EventType::JudgementUnrequested => {
                     debug!("Judgement unrequested (NOT SUPPORTED): {:?}", parsed);
@@ -459,9 +468,12 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             Ok(())
         }
 
-        if let Err(err) = local(ctx.address(), msg) {
-            error!("Failed to process message in websocket stream: {:?}", err);
-        }
+        let addr = ctx.address();
+        actix::spawn(async move {
+            if let Err(err) = local(addr, msg).await {
+                error!("Failed to process message in websocket stream: {:?}", err);
+            }
+        });
     }
 
     fn started(&mut self, _ctx: &mut Context<Self>) {
