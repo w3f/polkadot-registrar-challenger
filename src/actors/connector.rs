@@ -77,8 +77,6 @@ pub enum EventType {
     DisplayNamesRequest,
     #[serde(rename = "displayNamesResponse")]
     DisplayNamesResponse,
-    #[serde(rename = "judgementUnrequested")]
-    JudgementUnrequested,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -451,17 +449,14 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                         .await??;
                 }
                 EventType::DisplayNamesResponse => {
-                    debug!("Received Display Names");
+                    debug!("Received display names from the Watcher");
 
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     conn.send(WatcherMessage::ActiveDisplayNames(data))
                         .await??;
                 }
-                EventType::JudgementUnrequested => {
-                    debug!("Judgement unrequested (NOT SUPPORTED): {:?}", parsed);
-                }
                 _ => {
-                    warn!("Received unrecognized message from watcher: {:?}", parsed);
+                    warn!("Received unrecognized message from Watcher: {:?}", parsed);
                 }
             }
 
