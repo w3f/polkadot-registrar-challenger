@@ -166,7 +166,11 @@ struct Connector {
 }
 
 impl Connector {
-    async fn start(endpoint: &str, db: Database, dn_verifier: DisplayNameVerifier) -> Result<Addr<Connector>> {
+    async fn start(
+        endpoint: &str,
+        db: Database,
+        dn_verifier: DisplayNameVerifier,
+    ) -> Result<Addr<Connector>> {
         let (_, framed) = Client::builder()
             .timeout(Duration::from_secs(120))
             .finish()
@@ -261,6 +265,7 @@ impl Handler<ClientCommand> for Connector {
         match msg {
             ClientCommand::ProvideJudgement(id) => {
                 debug!("Providing judgement over websocket stream: {:?}", id);
+
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
@@ -275,6 +280,7 @@ impl Handler<ClientCommand> for Connector {
             }
             ClientCommand::RequestPendingJudgements => {
                 debug!("Requesting pending judgements over websocket stream");
+
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::PendingJudgementsRequest,
@@ -286,6 +292,7 @@ impl Handler<ClientCommand> for Connector {
             }
             ClientCommand::RequestDisplayNames => {
                 debug!("Requesting display names over websocket stream");
+
                 let _ = self.sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::DisplayNamesRequest,
@@ -356,9 +363,12 @@ impl Handler<WatcherMessage> for Connector {
                         // requests that were submitted to the Watcher but the
                         // issued extrinsic was not direclty confirmed back. This
                         // usually should not happen, but can.
-                        let addresses: Vec<&ChainAddress> =
-                            data.iter().map(|state| &state.address).collect();
-                        db.process_tangling_submissions(&addresses).await?;
+                        {
+                            let addresses: Vec<&ChainAddress> =
+                                data.iter().map(|state| &state.address).collect();
+
+                            db.process_tangling_submissions(&addresses).await?;
+                        }
 
                         for r in data {
                             process_request(&db, r.address, r.accounts, &dn_verifier).await?;
@@ -415,7 +425,10 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     error!("Received error from Watcher: {:?}", parsed.data);
                 }
                 EventType::NewJudgementRequest => {
-                    debug!("Received new judgement request from Watcher: {:?}", parsed.data);
+                    debug!(
+                        "Received new judgement request from Watcher: {:?}",
+                        parsed.data
+                    );
 
                     let data: JudgementRequest = serde_json::from_value(parsed.data)?;
                     let _ = conn.do_send(WatcherMessage::NewJudgementRequest(data));
@@ -461,12 +474,19 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
         actix::spawn(async move {
+            let mut counter = 0;
             loop {
                 if Connector::start("TODO", db.clone(), dn_verifier.clone())
                     .await
                     .is_err()
                 {
                     warn!("Reconnection failed, retrying...");
+
+                    counter += 1;
+                    if counter == 10 {
+                        error!("Cannot reconnect to Watcher after {} attempts", counter);
+                    }
+
                     sleep(Duration::from_secs(10)).await;
                 }
 
