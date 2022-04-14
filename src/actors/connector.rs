@@ -154,11 +154,12 @@ enum ClientCommand {
     ProvideJudgement(IdentityContext),
     RequestPendingJudgements,
     RequestDisplayNames,
+    Ping,
 }
 
 /// Handles incoming and outgoing websocket messages to and from the Watcher.
 struct Connector {
-    sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
+    sink: Option<SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>>,
     db: Database,
     dn_verifier: DisplayNameVerifier,
     network: ChainName,
@@ -190,7 +191,7 @@ impl Connector {
         let actor = Connector::create(|ctx| {
             Connector::add_stream(stream, ctx);
             Connector {
-                sink: SinkWrite::new(sink, ctx),
+                sink: Some(SinkWrite::new(sink, ctx)),
                 db,
                 dn_verifier,
                 network,
@@ -201,11 +202,8 @@ impl Connector {
     }
     // Send a heartbeat to the Watcher every couple of seconds.
     fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(30, 0), |act, _ctx| {
-            let _ = act
-                .sink
-                .write(Message::Ping(String::from("").into()))
-                .map_err(|err| error!("Failed to send heartbeat to Watcher: {:?}", err));
+        ctx.run_interval(Duration::new(30, 0), |act, ctx| {
+            ctx.address().do_send(ClientCommand::Ping)
         });
     }
     // Request pending judgements every couple of seconds.
@@ -269,11 +267,14 @@ impl Handler<ClientCommand> for Connector {
     type Result = crate::Result<()>;
 
     fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) -> Self::Result {
+        // This will never panic, unless bug :)
+        let sink = self.sink.as_mut().unwrap();
+
         match msg {
             ClientCommand::ProvideJudgement(id) => {
                 debug!("Providing judgement over websocket stream: {:?}", id);
 
-                let _ = self.sink.write(Message::Text(
+                sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
                         data: JudgementResponse {
@@ -283,31 +284,40 @@ impl Handler<ClientCommand> for Connector {
                     })
                     .unwrap()
                     .into(),
-                ));
+                ))
+                .map_err(|err| anyhow!("failed to provide judgement: {:?}", err))?;
             }
             ClientCommand::RequestPendingJudgements => {
                 debug!("Requesting pending judgements over websocket stream");
 
-                let _ = self.sink.write(Message::Text(
+                sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::PendingJudgementsRequest,
                         data: (),
                     })
                     .unwrap()
                     .into(),
-                ));
+                ))
+                .map_err(|err| anyhow!("failed to request pending judgements: {:?}", err))?;
             }
             ClientCommand::RequestDisplayNames => {
                 debug!("Requesting display names over websocket stream");
 
-                let _ = self.sink.write(Message::Text(
+                sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::DisplayNamesRequest,
                         data: (),
                     })
                     .unwrap()
                     .into(),
-                ));
+                ))
+                .map_err(|err| anyhow!("failed to request display names: {:?}", err))?;
+            }
+            ClientCommand::Ping => {
+                debug!("Sending ping to Watcher over websocket stream");
+
+                sink.write(Message::Text("ping".to_string().into()))
+                    .map_err(|err| anyhow!("failed to send ping over websocket: {:?}", err))?;
             }
         }
 
@@ -548,4 +558,11 @@ impl From<(AccountType, String)> for IdentityFieldValue {
             AccountType::Additional => IdentityFieldValue::Additional(()),
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl Connector {}
 }
