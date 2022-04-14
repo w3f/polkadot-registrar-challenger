@@ -32,7 +32,7 @@ pub async fn run_connector(
 
         // Start Connector.
         let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
-        let conn = Connector::start("", db.clone(), dn_verifier).await?;
+        let conn = Connector::start("", config.network, db.clone(), dn_verifier).await?;
 
         info!("Sending pending judgements request to Watcher");
         let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
@@ -163,11 +163,13 @@ struct Connector {
     sink: SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>,
     db: Database,
     dn_verifier: DisplayNameVerifier,
+    network: ChainName,
 }
 
 impl Connector {
     async fn start(
         endpoint: &str,
+        network: ChainName,
         db: Database,
         dn_verifier: DisplayNameVerifier,
     ) -> Result<Addr<Connector>> {
@@ -193,6 +195,7 @@ impl Connector {
                 sink: SinkWrite::new(sink, ctx),
                 db,
                 dn_verifier,
+                network,
             }
         });
 
@@ -218,7 +221,7 @@ impl Connector {
     fn start_judgement_candidates_task(&self, ctx: &mut Context<Self>) {
         let db = self.db.clone();
         let addr = ctx.address();
-        let network = ChainName::Polkadot;
+        let network = self.network;
 
         ctx.run_interval(Duration::new(10, 0), move |_act, _ctx| {
             let db = db.clone();
@@ -471,12 +474,14 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
         warn!("Watcher disconnected");
 
+        let network = self.network;
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
+
         actix::spawn(async move {
             let mut counter = 0;
             loop {
-                if Connector::start("TODO", db.clone(), dn_verifier.clone())
+                if Connector::start("TODO", network, db.clone(), dn_verifier.clone())
                     .await
                     .is_err()
                 {
