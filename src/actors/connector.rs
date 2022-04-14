@@ -15,7 +15,6 @@ use awc::{
 use futures::stream::{SplitSink, StreamExt};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio::time::sleep;
 
 pub async fn run_connector(
@@ -226,7 +225,7 @@ impl Connector {
                 )
             })?;
 
-        // Start the Connector actor.
+        // Start the Connector actor with the attached websocket stream.
         let (sink, stream) = framed.split();
         let _ = Connector::create(|ctx| {
             Connector::add_stream(stream, ctx);
@@ -255,11 +254,31 @@ impl Connector {
                 .do_send(ClientCommand::RequestPendingJudgements)
         });
     }
-    // Request pending judgements every couple of seconds.
+    // Look for verified identities and submit those to the Watcher.
     fn start_judgement_candidates_task(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(10, 0), |_act, ctx| {
-            ctx.address()
-                .do_send(ClientCommand::RequestPendingJudgements)
+        let db = self.db.clone();
+        let addr = ctx.address();
+        let network = ChainName::Polkadot;
+
+        ctx.run_interval(Duration::new(10, 0), move |_act, _ctx| {
+            let db = db.clone();
+            let addr = addr.clone();
+
+            actix::spawn(async move {
+                // Provide judgments.
+                let completed = db.fetch_judgement_candidates().await.unwrap();
+                for state in completed {
+                    if state.context.chain == network {
+                        debug!("Notifying Watcher about judgement: {:?}", state.context);
+                        addr.do_send(ClientCommand::ProvideJudgement(state.context));
+                    } else {
+                        debug!(
+                            "Skipping judgement on connector assigned to {:?}: {:?}",
+                            network, state.context
+                        );
+                    }
+                }
+            });
         });
     }
 }
@@ -279,10 +298,54 @@ impl Actor for Connector {
 }
 
 // Handle messages that should be sent to the Watcher.
+impl Handler<ClientCommand> for Connector {
+    type Result = ();
+
+    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
+        match msg {
+            ClientCommand::ProvideJudgement(id) => {
+                let _ = self.sink.write(Message::Text(
+                    serde_json::to_string(&ResponseMessage {
+                        event: EventType::JudgementResult,
+                        data: JudgementResponse {
+                            address: id.address,
+                            judgement: Judgement::Reasonable,
+                        },
+                    })
+                    .unwrap()
+                    .into(),
+                ));
+            }
+            ClientCommand::RequestPendingJudgements => {
+                let _ = self.sink.write(Message::Text(
+                    serde_json::to_string(&ResponseMessage {
+                        event: EventType::PendingJudgementsRequest,
+                        data: (),
+                    })
+                    .unwrap()
+                    .into(),
+                ));
+            }
+            ClientCommand::RequestDisplayNames => {
+                let _ = self.sink.write(Message::Text(
+                    serde_json::to_string(&ResponseMessage {
+                        event: EventType::DisplayNamesRequest,
+                        data: (),
+                    })
+                    .unwrap()
+                    .into(),
+                ));
+            }
+        }
+    }
+}
+
+// Handle messages that were received from the Watcher.
 impl Handler<WatcherMessage> for Connector {
     type Result = ResponseActFuture<Self, crate::Result<()>>;
 
     fn handle(&mut self, msg: WatcherMessage, _ctx: &mut Context<Self>) -> Self::Result {
+        /// Handle a judgement request.
         async fn process_request(
             db: &Database,
             address: ChainAddress,
@@ -361,50 +424,8 @@ impl Handler<WatcherMessage> for Connector {
     }
 }
 
-// Handle messages that should be sent to the Watcher.
-impl Handler<ClientCommand> for Connector {
-    type Result = ();
-
-    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
-        match msg {
-            ClientCommand::ProvideJudgement(id) => {
-                let _ = self.sink.write(Message::Text(
-                    serde_json::to_string(&ResponseMessage {
-                        event: EventType::JudgementResult,
-                        data: JudgementResponse {
-                            address: id.address,
-                            judgement: Judgement::Reasonable,
-                        },
-                    })
-                    .unwrap()
-                    .into(),
-                ));
-            }
-            ClientCommand::RequestPendingJudgements => {
-                let _ = self.sink.write(Message::Text(
-                    serde_json::to_string(&ResponseMessage {
-                        event: EventType::PendingJudgementsRequest,
-                        data: (),
-                    })
-                    .unwrap()
-                    .into(),
-                ));
-            }
-            ClientCommand::RequestDisplayNames => {
-                let _ = self.sink.write(Message::Text(
-                    serde_json::to_string(&ResponseMessage {
-                        event: EventType::DisplayNamesRequest,
-                        data: (),
-                    })
-                    .unwrap()
-                    .into(),
-                ));
-            }
-        }
-    }
-}
-
-/// Handle websocket messages received from the Watcher.
+/// Handle websocket messages received from the Watcher. Those messages will be
+/// forwarded to the `Handler<WatcherMessage>` implementation.
 impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     fn handle(
         &mut self,
@@ -416,13 +437,6 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             msg: std::result::Result<Frame, WsProtocolError>,
         ) -> Result<()> {
             let parsed: ResponseMessage<serde_json::Value> = match msg {
-<<<<<<< HEAD
-                Ok(Frame::Text(bytes)) | Ok(Frame::Binary(bytes)) => serde_json::from_slice(&bytes)?,
-=======
-                Ok(Frame::Text(txt)) => serde_json::from_slice(&txt)?,
-                Ok(Frame::Pong(_)) => return Ok(()),
-                //_ => return Err(anyhow!("invalid message, expected text: {:?}", msg)),
->>>>>>> 0a3fcce (skip log on invalid message)
                 _ => return Ok(()),
             };
 
@@ -431,7 +445,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: AckResponse = serde_json::from_value(parsed.data)?;
                     debug!("Received acknowledgement from Watcher: {:?}", data);
 
-                    conn.do_send(WatcherMessage::Ack(data));
+                    let _ = conn.send(WatcherMessage::Ack(data));
                 }
                 EventType::Error => {
                     error!("Received error from Watcher: {:?}", parsed.data);
@@ -440,19 +454,19 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     let data: JudgementRequest = serde_json::from_value(parsed.data)?;
                     debug!("Received new judgement request from Watcher: {:?}", data);
 
-                    conn.do_send(WatcherMessage::NewJudgementRequest(data));
+                    let _ = conn.do_send(WatcherMessage::NewJudgementRequest(data));
                 }
                 EventType::PendingJudgementsResponse => {
                     let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
                     debug!("Received pending judgments from Watcher: {:?}", data);
 
-                    conn.do_send(WatcherMessage::PendingJudgementsRequests(data));
+                    let _ = conn.send(WatcherMessage::PendingJudgementsRequests(data));
                 }
                 EventType::DisplayNamesResponse => {
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
                     debug!("Received Display Names");
 
-                    conn.do_send(WatcherMessage::ActiveDisplayNames(data));
+                    let _ = conn.send(WatcherMessage::ActiveDisplayNames(data));
                 }
                 EventType::JudgementUnrequested => {
                     debug!("Judgement unrequested (NOT SUPPORTED): {:?}", parsed);
@@ -476,7 +490,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
     /// If connection dropped, try to reconnect.
     fn finished(&mut self, ctx: &mut Context<Self>) {
-        ctx.stop();
+        ctx.terminate();
 
         warn!("Watcher disconnected");
 
@@ -484,7 +498,10 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         let dn_verifier = self.dn_verifier.clone();
         actix::spawn(async move {
             loop {
-                if Connector::start("TODO", db.clone(), dn_verifier.clone()).await.is_err() {
+                if Connector::start("TODO", db.clone(), dn_verifier.clone())
+                    .await
+                    .is_err()
+                {
                     warn!("Reconnection failed, retrying...");
                     sleep(Duration::from_secs(10)).await;
                 }
