@@ -30,55 +30,15 @@ pub async fn run_connector(
     for config in watchers {
         info!("Initializing connection to Watcher: {:?}", config);
 
-        let db = db.clone();
-
-        // TODO: Handle error
-        // Connector::start("", db).await;
+        // Start Connector.
+        let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
+        let conn = Connector::start("", db.clone(), dn_verifier).await?;
 
         //info!("Requesting pending judgments from Watcher");
         //connector.do_send(ClientCommand::RequestPendingJudgements);
+        let x = conn.send(ClientCommand::RequestPendingJudgements)?;
 
         info!("Starting judgments event loop");
-        /*
-        actix::spawn(async move {
-            async fn local(
-                connector: &mut Addr<Connector>,
-                db: &Database,
-                config: &WatcherConfig,
-                tx: UnboundedSender<WatcherMessage>,
-            ) -> Result<()> {
-                // Provide judgments.
-                let completed = db.fetch_judgement_candidates().await?;
-                for state in completed {
-                    if state.context.chain == config.network {
-                        debug!("Notifying Watcher about judgement: {:?}", state.context);
-                        connector.do_send(ClientCommand::ProvideJudgement(state.context));
-                    } else {
-                        debug!(
-                            "Skipping judgement on connector assigned to {:?}: {:?}",
-                            config.network, state.context
-                        );
-                    }
-                }
-
-                // Request current/active display names.
-                connector.do_send(ClientCommand::RequestDisplayNames);
-
-                Ok(())
-            }
-
-            loop {
-                match local(&mut connector, &db, &config, tx.clone()).await {
-                    Ok(_) => {}
-                    Err(err) => {
-                        error!("Connector error: {:?}", err);
-                    }
-                }
-
-                sleep(Duration::from_secs(10)).await;
-            }
-        });
-        */
     }
 
     Ok(())
@@ -194,7 +154,7 @@ enum WatcherMessage {
 }
 
 #[derive(Message)]
-#[rtype(result = "()")]
+#[rtype(result = "crate::Result<()>")]
 enum ClientCommand {
     ProvideJudgement(IdentityContext),
     RequestPendingJudgements,
@@ -209,7 +169,7 @@ struct Connector {
 }
 
 impl Connector {
-    async fn start(endpoint: &str, db: Database, dn_verifier: DisplayNameVerifier) -> Result<()> {
+    async fn start(endpoint: &str, db: Database, dn_verifier: DisplayNameVerifier) -> Result<Addr<Connector>> {
         let (_, framed) = Client::builder()
             .timeout(Duration::from_secs(120))
             .finish()
@@ -226,7 +186,7 @@ impl Connector {
 
         // Start the Connector actor with the attached websocket stream.
         let (sink, stream) = framed.split();
-        let _ = Connector::create(|ctx| {
+        let actor = Connector::create(|ctx| {
             Connector::add_stream(stream, ctx);
             Connector {
                 sink: SinkWrite::new(sink, ctx),
@@ -235,7 +195,7 @@ impl Connector {
             }
         });
 
-        Ok(())
+        Ok(actor)
     }
     // Send a heartbeat to the Watcher every couple of seconds.
     fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
@@ -298,9 +258,9 @@ impl Actor for Connector {
 
 // Handle messages that should be sent to the Watcher.
 impl Handler<ClientCommand> for Connector {
-    type Result = ();
+    type Result = crate::Result<()>;
 
-    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) {
+    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) -> Self::Result {
         match msg {
             ClientCommand::ProvideJudgement(id) => {
                 let _ = self.sink.write(Message::Text(
@@ -336,6 +296,8 @@ impl Handler<ClientCommand> for Connector {
                 ));
             }
         }
+
+        Ok(())
     }
 }
 
