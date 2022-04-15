@@ -24,7 +24,7 @@ bson = "2.0.0-beta"
 reqwest = "0.11.9"
 urlencoding = "1.3.3"
 serde_yaml = "0.8.15"
-async-trait = "0.1.40"
+async-trait = "0.1.53"
 actix = { version = "0.12.0", features = ["macros"]}
 actix-web = "4.0.0-beta.6"
 actix-broker = "0.4.1"
