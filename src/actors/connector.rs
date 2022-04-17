@@ -419,7 +419,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             msg: std::result::Result<Frame, WsProtocolError>,
         ) -> Result<()> {
             let parsed: ResponseMessage<serde_json::Value> = match msg {
-                Ok(Frame::Text(txt)) => serde_json::from_slice(&txt)?,
+                Ok(Frame::Text(bytes)) | Ok(Frame::Binary(bytes)) => serde_json::from_slice(&bytes)?,
                 _ => return Ok(()),
             };
 
