@@ -43,9 +43,6 @@ pub async fn run_connector(
 
         let mut connector = init_connector(config.endpoint.as_str(), tx.clone()).await?;
 
-        info!("Requesting pending judgments from Watcher");
-        connector.do_send(ClientCommand::RequestPendingJudgements);
-
         info!("Starting judgments event loop");
         actix::spawn(async move {
             async fn local(
@@ -75,7 +72,11 @@ pub async fn run_connector(
                 }
 
                 // Request current/active display names.
+                debug!("Requesting pending display names from Watcher");
                 connector.do_send(ClientCommand::RequestDisplayNames);
+
+                debug!("Requesting pending judgments from Watcher");
+                connector.do_send(ClientCommand::RequestPendingJudgements);
 
                 Ok(())
             }
