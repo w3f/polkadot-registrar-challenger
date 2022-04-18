@@ -89,73 +89,47 @@ impl ChainName {
 pub enum IdentityField {
     LegalName {
         value: String,
-        challenge: ChallengeManual,
+        manually_verified: bool,
     },
     DisplayName {
         value: String,
-        challenge: ChallengeDisplayNameCheck,
+        passed_check: bool,
     },
     Email {
         value: String,
-        challenge: ChallengeExpectedMessageAndSecond,
+        first_challenge: Challenge,
+        second_challenge: Challenge,
     },
     Web {
         value: String,
-        challenge: ChallengeManual,
+        manually_verified: bool,
     },
     Twitter {
         value: String,
-        challenge: ChallengeExpectedMessage,
+        challenge: Challenge,
     },
     Matrix {
         value: String,
-        challenge: ChallengeExpectedMessage,
+        challenge: Challenge,
     },
-    PGPFingerprint(()),
-    Image(()),
-    Additional(()),
-}
-
-// TODO: Describe types in JSON output.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ChallengeExpectedMessage {
-    expected: ExpectedMessage,
-    is_verified: bool,
+    PGPFingerprint,
+    Image,
+    Additional,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ChallengeExpectedMessageAndSecond {
-    first: ExpectedMessage,
-    second: ExpectedMessage,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ChallengeDisplayNameCheck {
-    is_verified: bool,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ChallengeManual {
-    is_verified: bool,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub struct ExpectedMessage {
+pub struct Challenge {
     pub value: String,
     pub is_verified: bool,
 }
 
-impl ExpectedMessage {
+impl Challenge {
     pub fn random() -> Self {
         use rand::{thread_rng, Rng};
 
         let random: [u8; 16] = thread_rng().gen();
-        ExpectedMessage {
+        Challenge {
             value: hex::encode(random),
             is_verified: false,
         }
