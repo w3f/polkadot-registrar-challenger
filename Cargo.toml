@@ -20,6 +20,7 @@ env_logger = "0.9.0"
 tokio = { version = "1.15.0", features = ["macros", "time", "process", "rt-multi-thread" ] }
 futures = "0.3.19"
 mongodb = { version = "2.0.0-beta", features = ["bson-u2i"] }
+sqlx = { version = "0.5.10", features = ["runtime-tokio-native-tls", "postgres", "offline"] }
 bson = "2.0.0-beta"
 reqwest = "0.11.9"
 urlencoding = "1.3.3"
