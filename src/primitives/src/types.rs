@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub type Result<T> = std::result::Result<T, anyhow::Error>;
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayNameEntry {
     pub context: IdentityContext,
@@ -86,23 +88,23 @@ impl IdentityState {
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
-    pub address: ChainAddress,
+    pub address: IdentityAddress,
     pub chain: Network,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct ChainAddress(String);
+pub struct IdentityAddress(String);
 
-impl ChainAddress {
+impl IdentityAddress {
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
 }
 
-impl From<String> for ChainAddress {
+impl From<String> for IdentityAddress {
     fn from(v: String) -> Self {
-        ChainAddress(v)
+        IdentityAddress(v)
     }
 }
 
