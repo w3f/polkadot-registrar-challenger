@@ -10,3 +10,4 @@ edition = "2018"
 serde = { version = "1.0.133", features = ["derive"] }
 rand = "0.8.4"
 hex = "0.4.2"
+sqlx = { version = "0.5.10", features = ["runtime-tokio-native-tls", "postgres", "offline"] }

@@ -2606,6 +2606,7 @@ dependencies = [
  "hex",
  "rand 0.8.5",
  "serde",
+ "sqlx",
 ]
 
 [[package]]
@@ -2940,6 +2941,7 @@ dependencies = [
  "lettre_email",
  "log",
  "mailparse",
+ "primitives",
  "sqlx",
  "tokio",
 ]
