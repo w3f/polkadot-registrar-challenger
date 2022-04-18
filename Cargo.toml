@@ -6,4 +6,5 @@ members = [
     "src/adapter/twitter",
     "src/listener",
     "src/session_notifier",
+    "src/primitives",
 ]
