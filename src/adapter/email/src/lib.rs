@@ -1,24 +1,20 @@
+#[macro_use]
+extern crate anyhow;
+
+type Result<T> = std::result::Result<T, anyhow::Error>;
+
 use std::collections::HashSet;
 
-use crate::adapters::Adapter;
-use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, Timestamp,
-};
-use crate::Result;
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::SmtpClient;
 use lettre::Transport;
 use lettre_email::EmailBuilder;
 
 trait ExtractSender<T> {
-    type Error;
-
-    fn extract_sender(self) -> std::result::Result<T, Self::Error>;
+    fn extract_sender(self) -> Result<T>;
 }
 
 impl ExtractSender<String> for String {
-    type Error = anyhow::Error;
-
     fn extract_sender(self) -> Result<String> {
         if self.contains('<') {
             let parts = self.split('<');
@@ -83,7 +79,7 @@ impl SmtpImapClientBuilder {
             password: self
                 .password
                 .ok_or(anyhow!("password server not specified"))?,
-            cache: HashSet::new(),
+            //cache: HashSet::new(),
         })
     }
 }
@@ -96,11 +92,12 @@ pub struct SmtpImapClient {
     user: String,
     password: String,
     // Keep track of messages.
-    cache: HashSet<MessageId>,
+    //cache: HashSet<MessageId>,
 }
 
 impl SmtpImapClient {
-    fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
+    fn request_messages(&mut self) -> Result<Vec<()>> {
+        /*
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
 
@@ -193,6 +190,8 @@ impl SmtpImapClient {
         }
 
         Ok(parsed_messages)
+        */
+        unimplemented!()
     }
     async fn send_message(&self, to: &str, message: &str) -> Result<()> {
         // SMTP transport
@@ -217,20 +216,5 @@ impl SmtpImapClient {
         let _ = smtp.send(email.into())?;
 
         Ok(())
-    }
-}
-
-#[async_trait]
-impl Adapter for SmtpImapClient {
-    type MessageType = ExpectedMessage;
-
-    fn name(&self) -> &'static str {
-        "email"
-    }
-    async fn fetch_messages(&mut self) -> Result<Vec<ExternalMessage>> {
-        self.request_messages()
-    }
-    async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
-        Self::send_message(self, to, content.value.as_str()).await
     }
 }
