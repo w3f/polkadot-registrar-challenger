@@ -17,6 +17,44 @@ pub enum RawFieldName {
 }
 // ***
 
+impl From<IdentityState> for IdentityStateBlanked {
+    fn from(mut state: IdentityState) -> Self {
+        state
+            .fields
+            .iter_mut()
+            .find(|field| {
+                matches!(
+                    field,
+                    IdentityField::Email {
+                        value: _,
+                        first_challenge: _,
+                        second_challenge: _
+                    }
+                )
+            })
+            .map(|field| match field {
+                IdentityField::Email {
+                    value: _,
+                    first_challenge: _,
+                    second_challenge,
+                } => {
+                    *second_challenge = None;
+                }
+                _ => panic!(),
+            });
+
+        IdentityStateBlanked { inner: state }
+    }
+}
+
+// TODO: Doc
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct IdentityStateBlanked {
+    #[serde(flatten)]
+    inner: IdentityState,
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityState {
@@ -49,7 +87,7 @@ impl IdentityState {
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
     pub address: ChainAddress,
-    pub chain: ChainName,
+    pub chain: Network,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -68,19 +106,13 @@ impl From<String> for ChainAddress {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum ChainName {
-    Polkadot,
-    Kusama,
-}
+pub struct Network(String);
 
-impl ChainName {
+impl Network {
     pub fn as_str(&self) -> &str {
-        match self {
-            ChainName::Polkadot => "polkadot",
-            ChainName::Kusama => "kusama",
-        }
+        self.0.as_str()
     }
 }
 
@@ -98,7 +130,10 @@ pub enum IdentityField {
     Email {
         value: String,
         first_challenge: Challenge,
-        second_challenge: Challenge,
+        // IMPORTANT: Must be blanked before sending to user. See
+        // `IdentityFieldBlanked`, respectively the `impl From<IdentityField>
+        // for IdentityFieldBlanked` implementation.
+        second_challenge: Option<Challenge>,
     },
     Web {
         value: String,
