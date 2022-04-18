@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayNameEntry {
@@ -38,7 +38,9 @@ impl IdentityState {
             completion_timestamp: None,
             judgement_submitted: false,
             issue_judgement_at: None,
-            fields: fields.into_iter().map(IdentityField::new).collect(),
+            // TODO
+            //fields: fields.into_iter().map(IdentityField::new).collect(),
+            fields: vec![],
         }
     }
 }
@@ -84,66 +86,61 @@ impl ChainName {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct IdentityField {
-    pub value: RawFieldValue,
-    pub challenge: ChallengeType,
-    // TODO: Change this to usize.
-    pub failed_attempts: isize,
+pub enum IdentityField {
+    LegalName {
+        value: String,
+        challenge: ChallengeManual,
+    },
+    DisplayName {
+        value: String,
+        challenge: ChallengeDisplayNameCheck,
+    },
+    Email {
+        value: String,
+        challenge: ChallengeExpectedMessageAndSecond,
+    },
+    Web {
+        value: String,
+        challenge: ChallengeManual,
+    },
+    Twitter {
+        value: String,
+        challenge: ChallengeExpectedMessage,
+    },
+    Matrix {
+        value: String,
+        challenge: ChallengeExpectedMessage,
+    },
+    PGPFingerprint(()),
+    Image(()),
+    Additional(()),
 }
 
-// TODO: Should be `From`?
-impl IdentityField {
-    pub fn new(val: RawFieldValue) -> Self {
-        use RawFieldValue::*;
-
-        let challenge = {
-            match val {
-                LegalName(_) => ChallengeType::Manual { is_verified: None },
-                Web(_) => ChallengeType::Manual { is_verified: None },
-                PGPFingerprint(_) => ChallengeType::Manual { is_verified: None },
-                Image(_) => ChallengeType::Manual { is_verified: None },
-                Additional(_) => ChallengeType::Manual { is_verified: None },
-                DisplayName(_) => ChallengeType::DisplayNameCheck {
-                    passed: false,
-                    violations: vec![],
-                },
-                Email(_) => ChallengeType::ExpectedMessage {
-                    expected: ExpectedMessage::random(),
-                    second: Some(ExpectedMessage::random()),
-                },
-                Twitter(_) => ChallengeType::ExpectedMessage {
-                    expected: ExpectedMessage::random(),
-                    second: None,
-                },
-                Matrix(_) => ChallengeType::ExpectedMessage {
-                    expected: ExpectedMessage::random(),
-                    second: None,
-                },
-            }
-        };
-
-        IdentityField {
-            value: val,
-            challenge,
-            failed_attempts: 0,
-        }
-    }
+// TODO: Describe types in JSON output.
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ChallengeExpectedMessage {
+    expected: ExpectedMessage,
+    is_verified: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "type", content = "content")]
-pub enum ChallengeType {
-    ExpectedMessage {
-        expected: ExpectedMessage,
-        second: Option<ExpectedMessage>,
-    },
-    DisplayNameCheck {
-        passed: bool,
-        violations: Vec<DisplayNameEntry>,
-    },
-    Manual {
-        is_verified: Option<bool>,
-    },
+#[serde(rename_all = "snake_case")]
+pub struct ChallengeExpectedMessageAndSecond {
+    first: ExpectedMessage,
+    second: ExpectedMessage,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ChallengeDisplayNameCheck {
+    is_verified: bool,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ChallengeManual {
+    is_verified: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -167,6 +164,7 @@ impl ExpectedMessage {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
+// TODO: Rename
 pub enum RawFieldValue {
     LegalName(String),
     DisplayName(String),
@@ -179,34 +177,18 @@ pub enum RawFieldValue {
     Additional(()),
 }
 
-impl RawFieldValue {
-    // TODO: Rename
-    pub fn matches(&self, message: &ExternalMessage) -> bool {
-        match self {
-            RawFieldValue::Email(n1) => match &message.origin {
-                ExternalMessageType::Email(n2) => n1 == n2,
-                _ => false,
-            },
-            RawFieldValue::Twitter(n1) => match &message.origin {
-                ExternalMessageType::Twitter(n2) => n1 == n2,
-                _ => false,
-            },
-            RawFieldValue::Matrix(n1) => match &message.origin {
-                ExternalMessageType::Matrix(n2) => n1 == n2,
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ExternalMessage {
     pub origin: ExternalMessageType,
+    pub id: ExternalMessageId,
     pub timestamp: Timestamp,
     pub values: Vec<ExternalMessagePart>,
 }
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ExternalMessageId(u64);
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
