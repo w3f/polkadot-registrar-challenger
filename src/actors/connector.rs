@@ -153,6 +153,7 @@ enum WatcherMessage {
     ActiveDisplayNames(Vec<DisplayNameEntryRaw>),
 }
 
+// TODO: Rename
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
 enum ClientCommand {
@@ -582,27 +583,67 @@ impl From<(AccountType, String)> for IdentityFieldValue {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
     use super::*;
+    use crate::{Database, DisplayNameConfig};
     use tokio::sync::mpsc::UnboundedReceiver;
 
+    struct ConnectorMocker {
+        // Queue for outgoing messages to the Watcher (mocked).
+        queue: UnboundedReceiver<ClientCommand>,
+        addr: Addr<Connector>,
+    }
+
+    impl ConnectorMocker {
+        pub fn new(db: Database) -> Self {
+            let dn_config = DisplayNameConfig {
+                enabled: false,
+                limit: 0.85,
+            };
+
+            let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config);
+            let (addr, recv) = Connector::start_testing(ChainName::Polkadot, db, dn_verifier);
+
+            ConnectorMocker {
+                queue: recv,
+                addr: addr,
+            }
+        }
+        /// A message received from the Watcher (mocked).
+        pub fn inject(&self, msg: WatcherMessage) {
+            self.addr.do_send(msg);
+        }
+        /// A list of messages that were sent to the Watcher (mocked).
+        pub fn outgoing(&mut self) -> Vec<ClientCommand> {
+            let mut outgoing = vec![];
+
+            while let Ok(msg) = self.queue.try_recv() {
+                outgoing.push(msg);
+            }
+
+            outgoing
+        }
+    }
+
     impl Connector {
-        async fn start_testing(
+        fn start_testing(
             network: ChainName,
             db: Database,
             dn_verifier: DisplayNameVerifier,
-        ) -> (Self, UnboundedReceiver<ClientCommand>) {
+        ) -> (Addr<Connector>, UnboundedReceiver<ClientCommand>) {
             let (outgoing, recv) = mpsc::unbounded_channel();
 
-            (
-                Connector {
-                    sink: None,
-                    db,
-                    dn_verifier,
-                    network,
-                    outgoing,
-                },
-                recv,
-            )
+            // Start actor.
+            let addr = Connector {
+                sink: None,
+                db,
+                dn_verifier,
+                network,
+                outgoing,
+            }.start();
+
+            (addr, recv)
         }
     }
 }
