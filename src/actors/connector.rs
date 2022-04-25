@@ -224,7 +224,7 @@ impl Connector {
     }
     // Send a heartbeat to the Watcher every couple of seconds.
     fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(HEARTBEAT_INTERVAL, 0), |act, ctx| {
+        ctx.run_interval(Duration::new(HEARTBEAT_INTERVAL, 0), |_act, ctx| {
             ctx.address().do_send(ClientCommand::Ping)
         });
     }
@@ -384,6 +384,10 @@ impl Handler<WatcherMessage> for Connector {
 
             let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
 
+            // Add the judgement state that's about to get inserted into the
+            // local queue which is then fetched from the unit tests.
+            #[cfg(not(test))]
+            let _ = inserted_states;
             #[cfg(test)]
             {
                 let mut l = inserted_states.write().await;
@@ -603,8 +607,6 @@ impl From<(AccountType, String)> for IdentityFieldValue {
 
 #[cfg(test)]
 pub mod tests {
-    use std::convert::TryInto;
-
     use super::*;
     use crate::{Database, DisplayNameConfig};
     use tokio::sync::mpsc::UnboundedReceiver;

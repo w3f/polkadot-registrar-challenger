@@ -5,14 +5,13 @@ use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
 use crate::notifier::SessionNotifier;
-use crate::primitives::{IdentityFieldValue, JudgementState};
+use crate::primitives::IdentityFieldValue;
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
 use rand::{thread_rng, Rng};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;
