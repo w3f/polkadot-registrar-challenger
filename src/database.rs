@@ -59,6 +59,7 @@ impl Database {
 
         // If it does exist, only update specific fields.
         if let Some(doc) = doc {
+            println!("INSERTING UPDATED: {:?}", request);
             let mut current: JudgementState = from_document(doc)?;
 
             // Determine which fields should be updated.
@@ -112,6 +113,7 @@ impl Database {
             // Check full verification status.
             self.process_fully_verified(&current).await?;
         } else {
+            println!("INSERTING NEW: {:?}", request);
             coll.insert_one(request.to_document()?, None).await?;
         }
 

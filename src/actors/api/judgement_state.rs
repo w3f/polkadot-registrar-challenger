@@ -97,6 +97,8 @@ impl Handler<SubscribeAccountState> for LookupServer {
             async move {
                 let (id, subscriber) = (msg.id_context, msg.subscriber);
 
+                println!("REQUESING>>> {:?}", id);
+
                 let state = if let Ok(state) = db
                     .fetch_judgement_state(&id)
                     .await

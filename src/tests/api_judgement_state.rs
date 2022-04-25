@@ -17,7 +17,7 @@ async fn current_judgement_state_single_identity() {
 
     // Insert judgement request.
     let alice = JudgementState::alice();
-    connector.inject(alice_judgement_request());
+    connector.inject(alice_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -41,8 +41,8 @@ async fn current_judgement_state_multiple_inserts() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     // Multiple inserts of the same request. Must not cause bad behavior.
-    connector.inject(alice_judgement_request());
-    connector.inject(alice_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(alice_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -66,8 +66,8 @@ async fn current_judgement_state_multiple_identities() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -100,8 +100,8 @@ async fn verify_invalid_message_bad_challenge() {
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -159,8 +159,8 @@ async fn verify_invalid_message_bad_origin() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -209,8 +209,8 @@ async fn verify_valid_message() {
     // Insert judgement requests.
     let mut alice = JudgementState::alice();
     let bob = JudgementState::bob();
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -279,8 +279,8 @@ async fn verify_valid_message_duplicate_account_name() {
     // Bob also has the same Matrix account as Alice.
     bob.get_field_mut(&F::BOB_MATRIX()).value = F::ALICE_MATRIX();
 
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -348,8 +348,8 @@ async fn verify_valid_message_awaiting_second_challenge() {
     let mut alice = JudgementState::alice();
     let bob = JudgementState::bob();
 
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -464,8 +464,8 @@ async fn verify_invalid_message_awaiting_second_challenge() {
     let mut alice = JudgementState::alice();
     let bob = JudgementState::bob();
 
-    connector.inject(alice_judgement_request());
-    connector.inject(bob_judgement_request());
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();

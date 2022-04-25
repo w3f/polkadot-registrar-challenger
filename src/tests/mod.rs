@@ -1,11 +1,11 @@
 use crate::actors::api::JsonResult;
-use crate::actors::connector::{JudgementRequest, WatcherMessage};
+use crate::actors::connector::{JudgementRequest, WatcherMessage, AccountType};
 use crate::actors::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
 use crate::notifier::SessionNotifier;
-use crate::primitives::IdentityFieldValue;
+use crate::primitives::{IdentityFieldValue, JudgementState};
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
@@ -13,6 +13,7 @@ use rand::{thread_rng, Rng};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::time::{sleep, Duration};
+use std::collections::HashMap;
 
 mod api_judgement_state;
 mod display_name_verification;
@@ -41,13 +42,35 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
     }
 }
 
-pub fn alice_judgement_request() -> WatcherMessage {
-    WatcherMessage::new_judgement_request(JudgementRequest::alice())
+pub fn judgement_request_message(state: JudgementState) -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest {
+        address: state.context.address,
+        accounts: {
+            let mut accounts = HashMap::new();
+
+            for field in state.fields {
+                let (a, v) = match field.value {
+                    IdentityFieldValue::DisplayName(n) => (AccountType::DisplayName, n),
+                    IdentityFieldValue::Email(n) => (AccountType::Email, n),
+                    IdentityFieldValue::Twitter(n) => (AccountType::Twitter, n),
+                    IdentityFieldValue::Matrix(n) => (AccountType::Matrix, n),
+                    _ => panic!(""),
+                };
+
+                accounts.insert(a, v);
+            }
+
+            accounts
+        }
+    })
 }
 
-pub fn bob_judgement_request() -> WatcherMessage {
-    WatcherMessage::new_judgement_request(JudgementRequest::bob())
+/*
+pub struct JudgementRequest {
+    pub address: ChainAddress,
+    pub accounts: HashMap<AccountType, String>,
 }
+*/
 
 // async fn new_env() -> (TestServer, ConnectorMocker, MessageInjector) {
 async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {

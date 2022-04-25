@@ -653,10 +653,10 @@ pub mod tests {
             ConnectorMocker { queue, addr }
         }
         /// A message received from the Watcher (mocked).
-        pub fn inject(&self, msg: WatcherMessage) {
+        pub async fn inject(&self, msg: WatcherMessage) {
             self.addr.do_send(msg);
             // Give some time to process.
-            sleep(Duration::from_secs(3));
+            sleep(Duration::from_secs(3)).await;
         }
         /// A list of messages that were sent to the Watcher (mocked).
         pub fn outgoing(&mut self) -> (Vec<ClientCommand>, OutgoingCounter) {

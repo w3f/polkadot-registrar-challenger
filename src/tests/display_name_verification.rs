@@ -31,7 +31,7 @@ async fn valid_display_name() {
 
     // Insert judgement request.
     let mut alice = JudgementState::alice();
-    connector.inject(alice_judgement_request());
+    connector.inject(alice_judgement_request()).await;
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
@@ -73,7 +73,7 @@ async fn invalid_display_name() {
 
     // Insert judgement request.
     let mut alice = JudgementState::alice();
-    connector.inject(alice_judgement_request());
+    connector.inject(alice_judgement_request()).await;
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
