@@ -5,7 +5,7 @@ use crate::primitives::{
 use crate::{Database, DisplayNameConfig, Result, WatcherConfig};
 use actix::io::SinkWrite;
 use actix::io::WriteHandler;
-use actix::*;
+use actix::prelude::*;
 use actix_codec::Framed;
 use awc::{
     error::WsProtocolError,
@@ -15,6 +15,7 @@ use awc::{
 use futures::stream::{SplitSink, StreamExt};
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::sleep;
 
 // In seconds
@@ -152,7 +153,7 @@ enum WatcherMessage {
     ActiveDisplayNames(Vec<DisplayNameEntryRaw>),
 }
 
-#[derive(Message)]
+#[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
 enum ClientCommand {
     ProvideJudgement(IdentityContext),
@@ -167,6 +168,7 @@ struct Connector {
     db: Database,
     dn_verifier: DisplayNameVerifier,
     network: ChainName,
+    outgoing: UnboundedSender<ClientCommand>,
 }
 
 impl Connector {
@@ -190,6 +192,9 @@ impl Connector {
                 )
             })?;
 
+        // Create throw-away channels (`outgoing` in `Connector` is only used in tests.)
+        let (outgoing, _recv) = mpsc::unbounded_channel();
+
         // Start the Connector actor with the attached websocket stream.
         let (sink, stream) = framed.split();
         let actor = Connector::create(|ctx| {
@@ -199,6 +204,7 @@ impl Connector {
                 db,
                 dn_verifier,
                 network,
+                outgoing,
             }
         });
 
@@ -212,10 +218,13 @@ impl Connector {
     }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(PENDING_JUDGEMENTS_INTERVAL, 0), |_act, ctx| {
-            ctx.address()
-                .do_send(ClientCommand::RequestPendingJudgements)
-        });
+        ctx.run_interval(
+            Duration::new(PENDING_JUDGEMENTS_INTERVAL, 0),
+            |_act, ctx| {
+                ctx.address()
+                    .do_send(ClientCommand::RequestPendingJudgements)
+            },
+        );
     }
     // Look for verified identities and submit those to the Watcher.
     fn start_judgement_candidates_task(&self, ctx: &mut Context<Self>) {
@@ -266,12 +275,19 @@ impl Actor for Connector {
     }
 }
 
+impl WriteHandler<WsProtocolError> for Connector {}
+
 // Handle messages that should be sent to the Watcher.
 impl Handler<ClientCommand> for Connector {
     type Result = crate::Result<()>;
 
     fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) -> Self::Result {
-        // This will never panic, unless bug :)
+        if self.sink.is_none() {
+            warn!("Skipping message to Watcher, not configured (only occurs when testing)");
+            self.outgoing.send(msg).unwrap();
+            return Ok(());
+        }
+
         let sink = self.sink.as_mut().unwrap();
 
         match msg {
@@ -383,7 +399,7 @@ impl Handler<WatcherMessage> for Connector {
                         // Process any tangling submissions, meaning any verified
                         // requests that were submitted to the Watcher but the
                         // issued extrinsic was not direclty confirmed back. This
-                        // usually should not happen, but can.
+                        // usually does not happen, but can.
                         {
                             let addresses: Vec<&ChainAddress> =
                                 data.iter().map(|state| &state.address).collect();
@@ -522,8 +538,6 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
     }
 }
 
-impl WriteHandler<WsProtocolError> for Connector {}
-
 #[derive(Eq, PartialEq, Hash, Clone, Debug, Serialize, Deserialize)]
 pub enum AccountType {
     #[serde(rename = "legal_name")]
@@ -568,5 +582,21 @@ impl From<(AccountType, String)> for IdentityFieldValue {
 mod tests {
     use super::*;
 
-    impl Connector {}
+    impl Connector {
+        async fn start_testing(
+            network: ChainName,
+            db: Database,
+            dn_verifier: DisplayNameVerifier,
+        ) -> Self {
+            let (outgoing, _recv) = mpsc::unbounded_channel();
+
+            Connector {
+                sink: None,
+                db,
+                dn_verifier,
+                network,
+                outgoing,
+            }
+        }
+    }
 }

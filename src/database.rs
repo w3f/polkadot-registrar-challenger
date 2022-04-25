@@ -82,7 +82,7 @@ impl Database {
 
             // If nothing was modified, return.
             if !has_changed {
-                return Ok(())
+                return Ok(());
             }
 
             // Set new fields.
