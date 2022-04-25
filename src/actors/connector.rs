@@ -282,6 +282,8 @@ impl Handler<ClientCommand> for Connector {
     type Result = crate::Result<()>;
 
     fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) -> Self::Result {
+        // If the sink (outgoing WS stream) is not configured (i.e. when
+        // testing), send the client command to the channel.
         if self.sink.is_none() {
             warn!("Skipping message to Watcher, not configured (only occurs when testing)");
             self.outgoing.send(msg).unwrap();
@@ -581,22 +583,26 @@ impl From<(AccountType, String)> for IdentityFieldValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::mpsc::UnboundedReceiver;
 
     impl Connector {
         async fn start_testing(
             network: ChainName,
             db: Database,
             dn_verifier: DisplayNameVerifier,
-        ) -> Self {
-            let (outgoing, _recv) = mpsc::unbounded_channel();
+        ) -> (Self, UnboundedReceiver<ClientCommand>) {
+            let (outgoing, recv) = mpsc::unbounded_channel();
 
-            Connector {
-                sink: None,
-                db,
-                dn_verifier,
-                network,
-                outgoing,
-            }
+            (
+                Connector {
+                    sink: None,
+                    db,
+                    dn_verifier,
+                    network,
+                    outgoing,
+                },
+                recv,
+            )
         }
     }
 }
