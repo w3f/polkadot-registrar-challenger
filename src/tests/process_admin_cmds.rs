@@ -15,6 +15,8 @@ async fn command_status() {
     // Insert judgement request.
     let alice = JudgementState::alice();
     connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -40,8 +42,9 @@ async fn command_verify_multiple_challenge_types() {
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
     connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -159,6 +162,8 @@ async fn command_verify_unsupported_field() {
         )));
 
     connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();

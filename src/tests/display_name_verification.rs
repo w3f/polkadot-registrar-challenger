@@ -30,8 +30,9 @@ async fn valid_display_name() {
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
     connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
@@ -72,8 +73,9 @@ async fn invalid_display_name() {
     }
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
     connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.

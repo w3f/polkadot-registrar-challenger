@@ -638,7 +638,6 @@ pub mod tests {
         }
     }
 
-
     impl WatcherMessage {
         pub fn new_judgement_request(req: JudgementRequest) -> Self {
             WatcherMessage::NewJudgementRequest(req)
