@@ -1,18 +1,17 @@
 use super::*;
 use crate::actors::api::VerifyChallenge;
 use crate::actors::api::{JsonResult, ResponseAccountState};
-use crate::actors::connector::tests::{ConnectorMocker, OutgoingCounter};
 use crate::actors::connector::WatcherMessage;
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, JudgementState,
-    MessageId, NotificationMessage, Timestamp,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, MessageId,
+    NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
 async fn current_judgement_state_single_identity() {
-    let (db, connector, mut api, _inj) = new_env().await;
+    let (_db, connector, mut api, _inj) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
@@ -36,7 +35,7 @@ async fn current_judgement_state_single_identity() {
 
 #[actix::test]
 async fn current_judgement_state_multiple_inserts() {
-    let (db, connector, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
@@ -63,7 +62,7 @@ async fn current_judgement_state_multiple_inserts() {
 
 #[actix::test]
 async fn current_judgement_state_multiple_identities() {
-    let (db, connector, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
@@ -98,7 +97,7 @@ async fn current_judgement_state_multiple_identities() {
 
 #[actix::test]
 async fn verify_invalid_message_bad_challenge() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
@@ -106,7 +105,7 @@ async fn verify_invalid_message_bad_challenge() {
     connector.inject(bob_judgement_request()).await;
     let states = connector.inserted_states().await;
     let mut alice = states[0].clone();
-    let mut bob = states[1].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -158,7 +157,7 @@ async fn verify_invalid_message_bad_challenge() {
 
 #[actix::test]
 async fn verify_invalid_message_bad_origin() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
@@ -209,7 +208,7 @@ async fn verify_invalid_message_bad_origin() {
 
 #[actix::test]
 async fn verify_valid_message() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
@@ -276,7 +275,7 @@ async fn verify_valid_message() {
 
 #[actix::test]
 async fn verify_valid_message_duplicate_account_name() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
@@ -355,7 +354,7 @@ async fn verify_valid_message_duplicate_account_name() {
 
 #[actix::test]
 async fn verify_valid_message_awaiting_second_challenge() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
@@ -471,7 +470,7 @@ async fn verify_valid_message_awaiting_second_challenge() {
 
 #[actix::test]
 async fn verify_invalid_message_awaiting_second_challenge() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.

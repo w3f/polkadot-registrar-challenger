@@ -519,22 +519,6 @@ mod tests {
                 ],
             }
         }
-        pub fn bob() -> Self {
-            JudgementState {
-                context: IdentityContext::bob(),
-                is_fully_verified: false,
-                inserted_timestamp: Timestamp::now(),
-                completion_timestamp: None,
-                judgement_submitted: false,
-                issue_judgement_at: None,
-                fields: vec![
-                    IdentityField::new(IdentityFieldValue::BOB_DISPLAY_NAME()),
-                    IdentityField::new(IdentityFieldValue::BOB_EMAIL()),
-                    IdentityField::new(IdentityFieldValue::BOB_TWITTER()),
-                    IdentityField::new(IdentityFieldValue::BOB_MATRIX()),
-                ],
-            }
-        }
         pub fn get_field<'a>(&'a self, ty: &IdentityFieldValue) -> &'a IdentityField {
             self.fields.iter().find(|field| &field.value == ty).unwrap()
         }
@@ -572,22 +556,6 @@ mod tests {
         #[allow(non_snake_case)]
         pub fn ALICE_TWITTER() -> Self {
             IdentityFieldValue::Twitter("@alice".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_DISPLAY_NAME() -> Self {
-            IdentityFieldValue::DisplayName("Bob".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_EMAIL() -> Self {
-            IdentityFieldValue::Email("bob@email.com".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_MATRIX() -> Self {
-            IdentityFieldValue::Matrix("@bob:matrix.org".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_TWITTER() -> Self {
-            IdentityFieldValue::Twitter("@bob".to_string())
         }
     }
 
