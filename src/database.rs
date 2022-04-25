@@ -62,6 +62,7 @@ impl Database {
             let mut current: JudgementState = from_document(doc)?;
 
             // Determine which fields should be updated.
+            let mut has_changed = false;
             let mut to_add = vec![];
             for new_field in &request.fields {
                 // If the current field value is the same as the new one, insert
@@ -75,13 +76,20 @@ impl Database {
                     to_add.push(current_field.clone());
                 } else {
                     to_add.push(new_field.clone());
+                    has_changed = true;
                 }
+            }
+
+            // If nothing was modified, return.
+            if !has_changed {
+                return Ok(())
             }
 
             // Set new fields.
             current.fields = to_add;
 
-            // Update the final value in database.
+            // Update the final fields in the database. All deprecated fields
+            // are overwritten.
             coll.update_one(
                 doc! {
                     "context": request.context.to_bson()?
