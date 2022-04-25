@@ -2,6 +2,8 @@ use crate::actors::connector::create_context;
 use crate::primitives::{ChainAddress, JudgementStateBlanked};
 use crate::Database;
 use std::str::FromStr;
+#[cfg(test)]
+use tokio::time::{sleep, Duration};
 
 pub type Result<T> = std::result::Result<T, Response>;
 
@@ -187,7 +189,13 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
     let res: crate::Result<Response> = local(db, command).await;
     match res {
-        Ok(resp) => resp,
+        Ok(resp) => {
+            #[cfg(test)]
+            // Leave enough time for the websocket server to pickup the event.
+            sleep(Duration::from_secs(3)).await;
+
+            resp
+        }
         Err(err) => {
             error!("Admin tool: {:?}", err);
             Response::InternalError
