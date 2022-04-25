@@ -8,9 +8,11 @@ async fn background_outgoing_watcher_messages() {
     // Wait until enough messages have been sent to the Watcher (mocked).
     sleep(Duration::from_secs(10)).await;
 
-    let (out, counter) = connector.outgoing();
+    let (_out, counter) = connector.outgoing();
     assert!(counter.provide_judgement == 0);
     assert!(counter.request_pending_judgements > 5);
     assert!(counter.request_display_names > 5);
     assert!(counter.ping == 0);
 }
+
+// TODO: Test tangling judgements
