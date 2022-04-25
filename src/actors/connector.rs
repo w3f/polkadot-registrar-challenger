@@ -19,8 +19,15 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::sleep;
 
 // In seconds
+#[cfg(not(test))]
 const HEARTBEAT_INTERVAL: u64 = 30;
+#[cfg(not(test))]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
+
+#[cfg(test)]
+const HEARTBEAT_INTERVAL: u64 = 1;
+#[cfg(test)]
+const PENDING_JUDGEMENTS_INTERVAL: u64 = 1;
 
 pub async fn run_connector(
     db: Database,
@@ -603,27 +610,42 @@ mod tests {
             };
 
             let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config);
-            let (addr, recv) = Connector::start_testing(ChainName::Polkadot, db, dn_verifier);
+            let (addr, queue) = Connector::start_testing(ChainName::Polkadot, db, dn_verifier);
 
-            ConnectorMocker {
-                queue: recv,
-                addr: addr,
-            }
+            ConnectorMocker { queue, addr }
         }
         /// A message received from the Watcher (mocked).
         pub fn inject(&self, msg: WatcherMessage) {
             self.addr.do_send(msg);
         }
         /// A list of messages that were sent to the Watcher (mocked).
-        pub fn outgoing(&mut self) -> Vec<ClientCommand> {
+        pub fn outgoing(&mut self) -> (Vec<ClientCommand>, OutgoingCounter) {
             let mut outgoing = vec![];
+            let mut counter = OutgoingCounter::default();
 
             while let Ok(msg) = self.queue.try_recv() {
+                match msg {
+                    ClientCommand::ProvideJudgement(_) => counter.provide_judgement += 1,
+                    ClientCommand::RequestPendingJudgements => {
+                        counter.request_pending_judgements += 1
+                    }
+                    ClientCommand::RequestDisplayNames => counter.request_display_names += 1,
+                    ClientCommand::Ping => counter.ping += 1,
+                }
+
                 outgoing.push(msg);
             }
 
-            outgoing
+            (outgoing, counter)
         }
+    }
+
+    #[derive(Default)]
+    pub struct OutgoingCounter {
+        provide_judgement: usize,
+        request_pending_judgements: usize,
+        request_display_names: usize,
+        ping: usize,
     }
 
     impl Connector {
@@ -641,7 +663,8 @@ mod tests {
                 dn_verifier,
                 network,
                 outgoing,
-            }.start();
+            }
+            .start();
 
             (addr, recv)
         }
