@@ -14,8 +14,10 @@ use awc::{
 };
 use futures::stream::{SplitSink, StreamExt};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 // In seconds
@@ -177,6 +179,7 @@ struct Connector {
     dn_verifier: DisplayNameVerifier,
     network: ChainName,
     outgoing: UnboundedSender<ClientCommand>,
+    inserted_states: Arc<RwLock<Vec<JudgementState>>>,
 }
 
 impl Connector {
@@ -213,6 +216,7 @@ impl Connector {
                 dn_verifier,
                 network,
                 outgoing,
+                inserted_states: Default::default(),
             }
         });
 
@@ -366,6 +370,7 @@ impl Handler<WatcherMessage> for Connector {
             address: ChainAddress,
             mut accounts: HashMap<AccountType, String>,
             dn_verifier: &DisplayNameVerifier,
+            inserted_states: &Arc<RwLock<Vec<JudgementState>>>,
         ) -> Result<()> {
             let id = create_context(address);
 
@@ -378,6 +383,13 @@ impl Handler<WatcherMessage> for Connector {
             }
 
             let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
+
+            #[cfg(test)]
+            {
+                let mut l = inserted_states.write().await;
+                (*l).push(state.clone());
+            }
+
             db.add_judgement_request(&state).await?;
             dn_verifier.verify_display_name(&state).await?;
 
@@ -386,6 +398,7 @@ impl Handler<WatcherMessage> for Connector {
 
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
+        let inserted_states = Arc::clone(&self.inserted_states);
 
         Box::pin(
             async move {
@@ -403,7 +416,7 @@ impl Handler<WatcherMessage> for Connector {
                         }
                     }
                     WatcherMessage::NewJudgementRequest(data) => {
-                        process_request(&db, data.address, data.accounts, &dn_verifier).await?
+                        process_request(&db, data.address, data.accounts, &dn_verifier, &inserted_states).await?
                     }
                     WatcherMessage::PendingJudgementsRequests(data) => {
                         // Process any tangling submissions, meaning any verified
@@ -418,7 +431,7 @@ impl Handler<WatcherMessage> for Connector {
                         }
 
                         for r in data {
-                            process_request(&db, r.address, r.accounts, &dn_verifier).await?;
+                            process_request(&db, r.address, r.accounts, &dn_verifier, &inserted_states).await?;
                         }
                     }
                     WatcherMessage::ActiveDisplayNames(data) => {
@@ -596,15 +609,6 @@ pub mod tests {
     use crate::{Database, DisplayNameConfig};
     use tokio::sync::mpsc::UnboundedReceiver;
 
-    impl WatcherMessage {
-        pub fn new_judgement_request(req: JudgementRequest) -> Self {
-            WatcherMessage::NewJudgementRequest(req)
-        }
-        pub fn new_pending_requests(reqs: Vec<JudgementRequest>) -> Self {
-            WatcherMessage::PendingJudgementsRequests(reqs)
-        }
-    }
-
     impl JudgementRequest {
         pub fn alice() -> Self {
             JudgementRequest {
@@ -634,10 +638,21 @@ pub mod tests {
         }
     }
 
+
+    impl WatcherMessage {
+        pub fn new_judgement_request(req: JudgementRequest) -> Self {
+            WatcherMessage::NewJudgementRequest(req)
+        }
+        pub fn new_pending_requests(reqs: Vec<JudgementRequest>) -> Self {
+            WatcherMessage::PendingJudgementsRequests(reqs)
+        }
+    }
+
     pub struct ConnectorMocker {
         // Queue for outgoing messages to the Watcher (mocked).
         queue: UnboundedReceiver<ClientCommand>,
         addr: Addr<Connector>,
+        inserted_states: Arc<RwLock<Vec<JudgementState>>>,
     }
 
     impl ConnectorMocker {
@@ -648,15 +663,24 @@ pub mod tests {
             };
 
             let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config);
-            let (addr, queue) = Connector::start_testing(ChainName::Polkadot, db, dn_verifier);
+            let (addr, queue, inserted_states) =
+                Connector::start_testing(ChainName::Polkadot, db, dn_verifier);
 
-            ConnectorMocker { queue, addr }
+            ConnectorMocker {
+                queue,
+                addr,
+                inserted_states,
+            }
         }
         /// A message received from the Watcher (mocked).
         pub async fn inject(&self, msg: WatcherMessage) {
             self.addr.do_send(msg);
             // Give some time to process.
             sleep(Duration::from_secs(3)).await;
+        }
+        pub async fn inserted_states(&self) -> Vec<JudgementState> {
+            let mut states = self.inserted_states.write().await;
+            std::mem::take(&mut states)
         }
         /// A list of messages that were sent to the Watcher (mocked).
         pub fn outgoing(&mut self) -> (Vec<ClientCommand>, OutgoingCounter) {
@@ -693,8 +717,14 @@ pub mod tests {
             network: ChainName,
             db: Database,
             dn_verifier: DisplayNameVerifier,
-        ) -> (Addr<Connector>, UnboundedReceiver<ClientCommand>) {
+        ) -> (
+            Addr<Connector>,
+            UnboundedReceiver<ClientCommand>,
+            Arc<RwLock<Vec<JudgementState>>>,
+        ) {
             let (outgoing, recv) = mpsc::unbounded_channel();
+
+            let inserted_states = Default::default();
 
             // Start actor.
             let addr = Connector {
@@ -703,10 +733,11 @@ pub mod tests {
                 dn_verifier,
                 network,
                 outgoing,
+                inserted_states: Arc::clone(&inserted_states),
             }
             .start();
 
-            (addr, recv)
+            (addr, recv, inserted_states)
         }
     }
 }
