@@ -15,6 +15,7 @@ use serde::Serialize;
 use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;
+mod background_tasks;
 mod display_name_verification;
 mod explicit;
 mod process_admin_cmds;

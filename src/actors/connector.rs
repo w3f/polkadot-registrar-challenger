@@ -21,15 +21,16 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 
 // In seconds
-#[cfg(not(test))]
 const HEARTBEAT_INTERVAL: u64 = 30;
 #[cfg(not(test))]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
+#[cfg(not(test))]
+const DISPLAY_NAMES_INTERVAL: u64 = 10;
 
 #[cfg(test)]
-const HEARTBEAT_INTERVAL: u64 = 1;
-#[cfg(test)]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 1;
+#[cfg(test)]
+const DISPLAY_NAMES_INTERVAL: u64 = 1;
 
 pub async fn run_connector(
     db: Database,
@@ -238,6 +239,12 @@ impl Connector {
             },
         );
     }
+    // Request actively used display names every couple of seconds.
+    fn start_active_display_names_task(&self, ctx: &mut Context<Self>) {
+        ctx.run_interval(Duration::new(DISPLAY_NAMES_INTERVAL, 0), |_act, ctx| {
+            ctx.address().do_send(ClientCommand::RequestDisplayNames)
+        });
+    }
     // Look for verified identities and submit those to the Watcher.
     fn start_judgement_candidates_task(&self, ctx: &mut Context<Self>) {
         let db = self.db.clone();
@@ -279,6 +286,7 @@ impl Actor for Connector {
     fn started(&mut self, ctx: &mut Context<Self>) {
         self.start_heartbeat_task(ctx);
         self.start_pending_judgements_task(ctx);
+        self.start_active_display_names_task(ctx);
         self.start_judgement_candidates_task(ctx);
     }
 
