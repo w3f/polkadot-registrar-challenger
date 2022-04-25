@@ -1,5 +1,5 @@
-use crate::actors::api::tests::run_test_server;
 use crate::actors::api::JsonResult;
+use crate::actors::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
@@ -40,6 +40,7 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
     }
 }
 
+// async fn new_env() -> (TestServer, ConnectorMocker, MessageInjector) {
 async fn new_env() -> (Database, TestServer, MessageInjector) {
     // Setup MongoDb database.
     let random: u32 = thread_rng().gen_range(u32::MIN..u32::MAX);
@@ -63,8 +64,12 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
         SessionNotifier::new(t_db, actor).run_blocking().await;
     });
 
-    // Give some time to start up.
-    sleep(Duration::from_secs(2)).await;
+    // Setup connector mocker
+    let connector = ConnectorMocker::new(db.clone());
 
+    // Give some time to start up.
+    sleep(Duration::from_secs(3)).await;
+
+    //(server, connector, injector)
     (db, server, injector)
 }

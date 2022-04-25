@@ -1,6 +1,8 @@
 use super::*;
 use crate::actors::api::VerifyChallenge;
 use crate::actors::api::{JsonResult, ResponseAccountState};
+use crate::actors::connector::WatcherMessage;
+use crate::actors::connector::tests::{ConnectorMocker, OutgoingCounter};
 use crate::primitives::{
     ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, JudgementState,
     MessageId, NotificationMessage, Timestamp,
@@ -10,7 +12,7 @@ use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
 async fn current_judgement_state_single_identity() {
-    let (db, mut api, _) = new_env().await;
+    let (db, mut api, _inj) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.

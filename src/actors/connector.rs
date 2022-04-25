@@ -112,7 +112,7 @@ pub enum Judgement {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct JudgementRequest {
+pub struct JudgementRequest {
     pub address: ChainAddress,
     pub accounts: HashMap<AccountType, String>,
 }
@@ -153,7 +153,7 @@ fn try_decode_hex(display_name: &mut String) {
 
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
-enum WatcherMessage {
+pub enum WatcherMessage {
     Ack(AckResponse),
     NewJudgementRequest(JudgementRequest),
     PendingJudgementsRequests(Vec<JudgementRequest>),
@@ -163,7 +163,7 @@ enum WatcherMessage {
 // TODO: Rename
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
-enum ClientCommand {
+pub enum ClientCommand {
     ProvideJudgement(IdentityContext),
     RequestPendingJudgements,
     RequestDisplayNames,
@@ -589,14 +589,52 @@ impl From<(AccountType, String)> for IdentityFieldValue {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use std::convert::TryInto;
 
     use super::*;
     use crate::{Database, DisplayNameConfig};
     use tokio::sync::mpsc::UnboundedReceiver;
 
-    struct ConnectorMocker {
+    impl WatcherMessage {
+        pub fn new_judgement_request(req: JudgementRequest) -> Self {
+            WatcherMessage::NewJudgementRequest(req)
+        }
+        pub fn new_pending_requests(reqs: Vec<JudgementRequest>) -> Self {
+            WatcherMessage::PendingJudgementsRequests(reqs)
+        }
+    }
+
+    impl JudgementRequest {
+        pub fn alice() -> Self {
+            JudgementRequest {
+                address: "1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP"
+                    .to_string()
+                    .into(),
+                accounts: HashMap::from([
+                    (AccountType::DisplayName, "Alice".to_string()),
+                    (AccountType::Email, "alice@email.com".to_string()),
+                    (AccountType::Twitter, "@alice".to_string()),
+                    (AccountType::Matrix, "@alice:matrix.org".to_string()),
+                ]),
+            }
+        }
+        pub fn bob() -> Self {
+            JudgementRequest {
+                address: "1b3NhsSEqWSQwS6nPGKgCrSjv9Kp13CnhraLV5Coyd8ooXB"
+                    .to_string()
+                    .into(),
+                accounts: HashMap::from([
+                    (AccountType::DisplayName, "Bob".to_string()),
+                    (AccountType::Email, "bob@email.com".to_string()),
+                    (AccountType::Twitter, "@bob".to_string()),
+                    (AccountType::Matrix, "@bob:matrix.org".to_string()),
+                ]),
+            }
+        }
+    }
+
+    pub struct ConnectorMocker {
         // Queue for outgoing messages to the Watcher (mocked).
         queue: UnboundedReceiver<ClientCommand>,
         addr: Addr<Connector>,
@@ -642,10 +680,10 @@ mod tests {
 
     #[derive(Default)]
     pub struct OutgoingCounter {
-        provide_judgement: usize,
-        request_pending_judgements: usize,
-        request_display_names: usize,
-        ping: usize,
+        pub provide_judgement: usize,
+        pub request_pending_judgements: usize,
+        pub request_display_names: usize,
+        pub ping: usize,
     }
 
     impl Connector {
