@@ -25,13 +25,13 @@ fn config() -> DisplayNameConfig {
 
 #[actix::test]
 async fn valid_display_name() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let verifier = DisplayNameVerifier::new(db.clone(), config());
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let mut alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request());
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
@@ -56,7 +56,7 @@ async fn valid_display_name() {
 
 #[actix::test]
 async fn invalid_display_name() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let verifier = DisplayNameVerifier::new(db.clone(), config());
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
@@ -73,7 +73,7 @@ async fn invalid_display_name() {
 
     // Insert judgement request.
     let mut alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request());
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.

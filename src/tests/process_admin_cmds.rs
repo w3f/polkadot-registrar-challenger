@@ -9,12 +9,12 @@ use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
 async fn command_status() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request());
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -36,12 +36,12 @@ async fn command_status() {
 
 #[actix::test]
 async fn command_verify_multiple_challenge_types() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     let mut alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request());
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -147,7 +147,7 @@ async fn command_verify_multiple_challenge_types() {
 
 #[actix::test]
 async fn command_verify_unsupported_field() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
@@ -158,7 +158,7 @@ async fn command_verify_unsupported_field() {
             "alice.com".to_string(),
         )));
 
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request());
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();

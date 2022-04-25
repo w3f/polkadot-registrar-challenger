@@ -1,4 +1,5 @@
 use crate::actors::api::JsonResult;
+use crate::actors::connector::{JudgementRequest, WatcherMessage};
 use crate::actors::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
@@ -40,8 +41,16 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
     }
 }
 
+pub fn alice_judgement_request() -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest::alice())
+}
+
+pub fn bob_judgement_request() -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest::bob())
+}
+
 // async fn new_env() -> (TestServer, ConnectorMocker, MessageInjector) {
-async fn new_env() -> (Database, TestServer, MessageInjector) {
+async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
     // Setup MongoDb database.
     let random: u32 = thread_rng().gen_range(u32::MIN..u32::MAX);
     let db = Database::new(
@@ -71,5 +80,5 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
     sleep(Duration::from_secs(3)).await;
 
     //(server, connector, injector)
-    (db, server, injector)
+    (db, connector, server, injector)
 }

@@ -655,6 +655,8 @@ pub mod tests {
         /// A message received from the Watcher (mocked).
         pub fn inject(&self, msg: WatcherMessage) {
             self.addr.do_send(msg);
+            // Give some time to process.
+            sleep(Duration::from_secs(3));
         }
         /// A list of messages that were sent to the Watcher (mocked).
         pub fn outgoing(&mut self) -> (Vec<ClientCommand>, OutgoingCounter) {
