@@ -17,6 +17,10 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
 
+// In seconds
+const HEARTBEAT_INTERVAL: u64 = 30;
+const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
+
 pub async fn run_connector(
     db: Database,
     watchers: Vec<WatcherConfig>,
@@ -202,13 +206,13 @@ impl Connector {
     }
     // Send a heartbeat to the Watcher every couple of seconds.
     fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(30, 0), |act, ctx| {
+        ctx.run_interval(Duration::new(HEARTBEAT_INTERVAL, 0), |act, ctx| {
             ctx.address().do_send(ClientCommand::Ping)
         });
     }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
-        ctx.run_interval(Duration::new(10, 0), |_act, ctx| {
+        ctx.run_interval(Duration::new(PENDING_JUDGEMENTS_INTERVAL, 0), |_act, ctx| {
             ctx.address()
                 .do_send(ClientCommand::RequestPendingJudgements)
         });
