@@ -710,7 +710,7 @@ impl Database {
         Ok(())
     }
     // TODO: Test this.
-    pub async fn process_tangling_submissions(&self, addresses: &[&ChainAddress]) -> Result<()> {
+    pub async fn process_dangling_judgement_states(&self, addresses: &[&ChainAddress]) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         let addr_str: Vec<&str> = addresses.iter().map(|s| s.as_str()).collect();

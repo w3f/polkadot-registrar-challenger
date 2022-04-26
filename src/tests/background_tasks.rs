@@ -20,7 +20,7 @@ async fn background_outgoing_watcher_messages() {
 }
 
 #[actix::test]
-async fn process_tangling_identities() {
+async fn process_dangling_judgement_states() {
     let (db, connector, mut api, _inj) = new_env().await;
 
     // Insert judgement requests.

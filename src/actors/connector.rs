@@ -446,7 +446,7 @@ impl Handler<WatcherMessage> for Connector {
                             let addresses: Vec<&ChainAddress> =
                                 data.iter().map(|state| &state.address).collect();
 
-                            db.process_tangling_submissions(&addresses).await?;
+                            db.process_dangling_judgement_states(&addresses).await?;
                         }
 
                         for r in data {
