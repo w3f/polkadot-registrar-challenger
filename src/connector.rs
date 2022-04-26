@@ -254,6 +254,7 @@ impl Connector {
 
                 actix::spawn(async move {
                     // Provide judgments.
+                    // TODO: Should accept network parameter.
                     match db.fetch_judgement_candidates().await {
                         Ok(completed) => {
                             for state in completed {
