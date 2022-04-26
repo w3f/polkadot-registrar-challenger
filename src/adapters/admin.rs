@@ -1,4 +1,4 @@
-use crate::primitives::{ChainAddress, JudgementStateBlanked};
+use crate::primitives::{ChainAddress, JudgementStateBlanked, IdentityContext, ChainName};
 use crate::Database;
 use std::str::FromStr;
 #[cfg(test)]
