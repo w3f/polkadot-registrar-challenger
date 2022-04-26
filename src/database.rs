@@ -2,8 +2,8 @@ use crate::adapters::admin::RawFieldName;
 use crate::api::VerifyChallenge;
 use crate::connector::DisplayNameEntry;
 use crate::primitives::{
-    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage,
-    IdentityContext, IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
+    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
+    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
