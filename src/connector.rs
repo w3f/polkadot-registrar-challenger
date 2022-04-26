@@ -51,7 +51,7 @@ pub async fn run_connector(
 
         // Start Connector.
         let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
-        let conn = Connector::start("", config.network, db.clone(), dn_verifier).await?;
+        let conn = Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
 
         info!("Sending pending judgements request to Watcher");
         let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
@@ -167,9 +167,11 @@ pub enum ClientCommand {
 
 /// Handles incoming and outgoing websocket messages to and from the Watcher.
 struct Connector {
+    #[allow(clippy::type_complexity)]
     sink: Option<SinkWrite<Message, SplitSink<Framed<BoxedSocket, Codec>, Message>>>,
     db: Database,
     dn_verifier: DisplayNameVerifier,
+    endpoint: String,
     network: ChainName,
     outgoing: UnboundedSender<ClientCommand>,
     inserted_states: Arc<RwLock<Vec<JudgementState>>>,
@@ -177,7 +179,7 @@ struct Connector {
 
 impl Connector {
     async fn start(
-        endpoint: &str,
+        endpoint: String,
         network: ChainName,
         db: Database,
         dn_verifier: DisplayNameVerifier,
@@ -185,7 +187,7 @@ impl Connector {
         let (_, framed) = Client::builder()
             .timeout(Duration::from_secs(120))
             .finish()
-            .ws(endpoint)
+            .ws(&endpoint)
             .connect()
             .await
             .map_err(|err| {
@@ -207,6 +209,7 @@ impl Connector {
                 sink: Some(SinkWrite::new(sink, ctx)),
                 db,
                 dn_verifier,
+                endpoint,
                 network,
                 outgoing,
                 inserted_states: Default::default(),
@@ -553,6 +556,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
         warn!("Watcher disconnected, trying to reconnect...");
 
+        let endpoint = self.endpoint.clone();
         let network = self.network;
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
@@ -560,7 +564,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         actix::spawn(async move {
             let mut counter = 0;
             loop {
-                if Connector::start("TODO", network, db.clone(), dn_verifier.clone())
+                if Connector::start(endpoint.clone(), network, db.clone(), dn_verifier.clone())
                     .await
                     .is_err()
                 {
@@ -760,6 +764,7 @@ pub mod tests {
                 sink: None,
                 db,
                 dn_verifier,
+                endpoint: "".to_string(),
                 network,
                 outgoing,
                 inserted_states: Arc::clone(&inserted_states),

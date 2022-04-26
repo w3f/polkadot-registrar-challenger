@@ -2,7 +2,7 @@ use super::*;
 use crate::api::ResponseAccountState;
 use crate::connector::WatcherMessage;
 use crate::primitives::IdentityContext;
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use tokio::time::{sleep, Duration};
 
 #[actix::test]
