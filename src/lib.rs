@@ -212,6 +212,7 @@ pub async fn run() -> Result<()> {
     }
 }
 
+// TODO: Move to tests module.
 #[actix::test]
 #[ignore]
 async fn run_mocker() -> Result<()> {

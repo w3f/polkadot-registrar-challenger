@@ -51,7 +51,8 @@ pub async fn run_connector(
 
         // Start Connector.
         let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
-        let conn = Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
+        let conn =
+            Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
 
         info!("Sending pending judgements request to Watcher");
         let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
@@ -254,6 +255,7 @@ impl Connector {
 
                 actix::spawn(async move {
                     // Provide judgments.
+                    // TODO: Should accept network parameter.
                     match db.fetch_judgement_candidates().await {
                         Ok(completed) => {
                             for state in completed {
@@ -299,7 +301,7 @@ impl WriteHandler<WsProtocolError> for Connector {}
 impl Handler<ClientCommand> for Connector {
     type Result = crate::Result<()>;
 
-    fn handle(&mut self, msg: ClientCommand, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) -> Self::Result {
         // If the sink (outgoing WS stream) is not configured (i.e. when
         // testing), send the client command to the channel.
         if self.sink.is_none() {
@@ -309,6 +311,14 @@ impl Handler<ClientCommand> for Connector {
         }
 
         let sink = self.sink.as_mut().unwrap();
+
+        // Do a connection check if reconnect if necessary.
+        if sink.closed() {
+            <Self as StreamHandler<std::result::Result<Frame, WsProtocolError>>>::finished(
+                self, ctx,
+            );
+            return Ok(());
+        }
 
         match msg {
             ClientCommand::ProvideJudgement(id) => {
