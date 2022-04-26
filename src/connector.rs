@@ -291,7 +291,33 @@ impl Actor for Connector {
     }
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
-        error!("Connector disconnected");
+        warn!("Watcher disconnected, trying to reconnect...");
+
+        let endpoint = self.endpoint.clone();
+        let network = self.network;
+        let db = self.db.clone();
+        let dn_verifier = self.dn_verifier.clone();
+
+        actix::spawn(async move {
+            let mut counter = 0;
+            loop {
+                if Connector::start(endpoint.clone(), network, db.clone(), dn_verifier.clone())
+                    .await
+                    .is_err()
+                {
+                    warn!("Reconnection failed, retrying...");
+
+                    counter += 1;
+                    if counter == 10 {
+                        error!("Cannot reconnect to Watcher after {} attempts", counter);
+                    }
+
+                    sleep(Duration::from_secs(10)).await;
+                }
+
+                info!("Reconnected to Watcher!");
+            }
+        });
     }
 }
 
@@ -314,9 +340,7 @@ impl Handler<ClientCommand> for Connector {
 
         // Do a connection check if reconnect if necessary.
         if sink.closed() {
-            <Self as StreamHandler<std::result::Result<Frame, WsProtocolError>>>::finished(
-                self, ctx,
-            );
+            ctx.stop();
             return Ok(());
         }
 
@@ -562,35 +586,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
 
     /// If connection dropped, try to reconnect.
     fn finished(&mut self, ctx: &mut Context<Self>) {
-        ctx.terminate();
-
-        warn!("Watcher disconnected, trying to reconnect...");
-
-        let endpoint = self.endpoint.clone();
-        let network = self.network;
-        let db = self.db.clone();
-        let dn_verifier = self.dn_verifier.clone();
-
-        actix::spawn(async move {
-            let mut counter = 0;
-            loop {
-                if Connector::start(endpoint.clone(), network, db.clone(), dn_verifier.clone())
-                    .await
-                    .is_err()
-                {
-                    warn!("Reconnection failed, retrying...");
-
-                    counter += 1;
-                    if counter == 10 {
-                        error!("Cannot reconnect to Watcher after {} attempts", counter);
-                    }
-
-                    sleep(Duration::from_secs(10)).await;
-                }
-
-                info!("Reconnected to Watcher!");
-            }
-        });
+        ctx.stop();
     }
 }
 
