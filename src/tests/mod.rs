@@ -50,6 +50,10 @@ pub fn bob_judgement_request() -> WatcherMessage {
     WatcherMessage::new_judgement_request(JudgementRequest::bob())
 }
 
+pub fn eve_judgement_request() -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest::eve())
+}
+
 // async fn new_env() -> (TestServer, ConnectorMocker, MessageInjector) {
 async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
     // Setup MongoDb database.

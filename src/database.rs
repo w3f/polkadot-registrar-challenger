@@ -715,20 +715,50 @@ impl Database {
 
         let addr_str: Vec<&str> = addresses.iter().map(|s| s.as_str()).collect();
 
-        let _ = coll
+        let res = coll
             .update_many(
                 doc! {
+                    "is_fully_verified": true,
                     "judgement_submitted": false,
                     "context": {
                         "$nin": addr_str.to_bson()?,
                     }
                 },
                 doc! {
-                    "judgement_submitted": true
+                    "$set": {
+                        "judgement_submitted": true
+                    }
                 },
                 None,
             )
             .await?;
+
+        let count = res.modified_count;
+        if count > 0 {
+            debug!("Disabled {} tangling identities", count);
+        }
+
+        Ok(())
+    }
+    #[cfg(test)]
+    pub async fn set_fully_verified(&self, context: &IdentityContext) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        let res = coll
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                doc! {
+                    "$set": {
+                        "is_fully_verified": true
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        assert_eq!(res.modified_count, 1);
 
         Ok(())
     }

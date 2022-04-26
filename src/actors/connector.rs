@@ -26,11 +26,15 @@ const HEARTBEAT_INTERVAL: u64 = 30;
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
 #[cfg(not(test))]
 const DISPLAY_NAMES_INTERVAL: u64 = 10;
+#[cfg(not(test))]
+const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 10;
 
 #[cfg(test)]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 1;
 #[cfg(test)]
 const DISPLAY_NAMES_INTERVAL: u64 = 1;
+#[cfg(test)]
+const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 1;
 
 pub async fn run_connector(
     db: Database,
@@ -251,32 +255,35 @@ impl Connector {
         let addr = ctx.address();
         let network = self.network;
 
-        ctx.run_interval(Duration::new(10, 0), move |_act, _ctx| {
-            let db = db.clone();
-            let addr = addr.clone();
+        ctx.run_interval(
+            Duration::new(JUDGEMENT_CANDIDATES_INTERVAL, 0),
+            move |_act, _ctx| {
+                let db = db.clone();
+                let addr = addr.clone();
 
-            actix::spawn(async move {
-                // Provide judgments.
-                match db.fetch_judgement_candidates().await {
-                    Ok(completed) => {
-                        for state in completed {
-                            if state.context.chain == network {
-                                info!("Notifying Watcher about judgement: {:?}", state.context);
-                                addr.do_send(ClientCommand::ProvideJudgement(state.context));
-                            } else {
-                                debug!(
-                                    "Skipping judgement on connector assigned to {:?}: {:?}",
-                                    network, state.context
-                                );
+                actix::spawn(async move {
+                    // Provide judgments.
+                    match db.fetch_judgement_candidates().await {
+                        Ok(completed) => {
+                            for state in completed {
+                                if state.context.chain == network {
+                                    info!("Notifying Watcher about judgement: {:?}", state.context);
+                                    addr.do_send(ClientCommand::ProvideJudgement(state.context));
+                                } else {
+                                    debug!(
+                                        "Skipping judgement on connector assigned to {:?}: {:?}",
+                                        network, state.context
+                                    );
+                                }
                             }
                         }
+                        Err(err) => {
+                            error!("Failed to fetch judgement candidates: {:?}", err);
+                        }
                     }
-                    Err(err) => {
-                        error!("Failed to fetch judgement candidates: {:?}", err);
-                    }
-                }
-            });
-        });
+                });
+            },
+        );
     }
 }
 
@@ -646,6 +653,19 @@ pub mod tests {
                 ]),
             }
         }
+        pub fn eve() -> Self {
+            JudgementRequest {
+                address: "12y2nDXFzWRiTaQnmdaZazFT8iUnAg1N5p7WvyqLmNp4poPm"
+                    .to_string()
+                    .into(),
+                accounts: HashMap::from([
+                    (AccountType::DisplayName, "Eve".to_string()),
+                    (AccountType::Email, "eve@email.com".to_string()),
+                    (AccountType::Twitter, "@eve".to_string()),
+                    (AccountType::Matrix, "@eve:matrix.org".to_string()),
+                ]),
+            }
+        }
     }
 
     impl WatcherMessage {
@@ -683,7 +703,7 @@ pub mod tests {
         }
         /// A message received from the Watcher (mocked).
         pub async fn inject(&self, msg: WatcherMessage) {
-            self.addr.do_send(msg);
+            self.addr.send(msg).await.unwrap().unwrap();
             // Give some time to process.
             sleep(Duration::from_secs(3)).await;
         }
