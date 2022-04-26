@@ -93,8 +93,8 @@ async fn process_dangling_judgement_states() {
         .await;
 
     alice.judgement_submitted = true;
-    bob.judgement_submitted = true;
     eve.judgement_submitted = true;
+    assert!(!bob.judgement_submitted);
 
     // Check subscribed states.
     {

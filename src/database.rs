@@ -709,11 +709,10 @@ impl Database {
 
         Ok(())
     }
-    // TODO: Test this.
-    pub async fn process_dangling_judgement_states(&self, addresses: &[&ChainAddress]) -> Result<()> {
+    pub async fn process_dangling_judgement_states(&self, ids: &[IdentityContext]) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        let addr_str: Vec<&str> = addresses.iter().map(|s| s.as_str()).collect();
+        //let ids_str: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
 
         let res = coll
             .update_many(
@@ -721,7 +720,7 @@ impl Database {
                     "is_fully_verified": true,
                     "judgement_submitted": false,
                     "context": {
-                        "$nin": addr_str.to_bson()?,
+                        "$nin": ids.to_bson()?,
                     }
                 },
                 doc! {

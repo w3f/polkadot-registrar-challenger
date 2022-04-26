@@ -443,10 +443,16 @@ impl Handler<WatcherMessage> for Connector {
                         // issued extrinsic was not direclty confirmed back. This
                         // usually does not happen, but can.
                         {
-                            let addresses: Vec<&ChainAddress> =
-                                data.iter().map(|state| &state.address).collect();
+                            let addresses: Vec<ChainAddress> =
+                                data.iter().cloned().map(|state| state.address).collect();
 
-                            db.process_dangling_judgement_states(&addresses).await?;
+                            // TODO
+                            let tmp: Vec<IdentityContext> = addresses.iter().map(|addr| IdentityContext {
+                                address: addr.clone(),
+                                chain: ChainName::Polkadot,
+                            }).collect();
+
+                            db.process_dangling_judgement_states(&tmp).await?;
                         }
 
                         for r in data {
