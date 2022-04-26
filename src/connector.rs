@@ -1,6 +1,6 @@
 use crate::display_name::DisplayNameVerifier;
 use crate::primitives::{
-    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState,
+    ChainAddress, ChainName, IdentityContext, IdentityFieldValue, JudgementState, Timestamp,
 };
 use crate::{Database, DisplayNameConfig, Result, WatcherConfig};
 use actix::io::SinkWrite;
@@ -176,6 +176,9 @@ struct Connector {
     network: ChainName,
     outgoing: UnboundedSender<ClientCommand>,
     inserted_states: Arc<RwLock<Vec<JudgementState>>>,
+    // Tracks the last message received from the Watcher. If a certain treshold
+    // was exceeded, the Connector attempts to reconnect.
+    last_watcher_msg: Timestamp,
 }
 
 impl Connector {
@@ -214,6 +217,7 @@ impl Connector {
                 network,
                 outgoing,
                 inserted_states: Default::default(),
+                last_watcher_msg: Timestamp::now(),
             }
         });
 
@@ -339,8 +343,15 @@ impl Handler<ClientCommand> for Connector {
 
         let sink = self.sink.as_mut().unwrap();
 
-        // Do a connection check if reconnect if necessary.
+        // Do a connection check and reconnect if necessary.
         if sink.closed() {
+            ctx.stop();
+            return Ok(());
+        }
+
+        // Do a timestamp check and reconnect if necessary.
+        if Timestamp::now().raw() - self.last_watcher_msg.raw() > (HEARTBEAT_INTERVAL * 2) {
+            warn!("Last received message from the Watcher was a while ago, resetting connection");
             ctx.stop();
             return Ok(());
         }
@@ -438,6 +449,9 @@ impl Handler<WatcherMessage> for Connector {
 
             Ok(())
         }
+
+        // Update timestamp
+        self.last_watcher_msg = Timestamp::now();
 
         let network = self.network;
         let db = self.db.clone();
@@ -775,6 +789,7 @@ pub mod tests {
                 network,
                 outgoing,
                 inserted_states: Arc::clone(&inserted_states),
+                last_watcher_msg: Timestamp::now(),
             }
             .start();
 
