@@ -709,7 +709,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn process_dangling_judgement_states(&self, ids: &[IdentityContext]) -> Result<()> {
+    pub async fn process_dangling_judgement_states(&self, ids: &[&IdentityContext]) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         //let ids_str: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();

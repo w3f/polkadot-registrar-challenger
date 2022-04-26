@@ -10,6 +10,15 @@ pub struct IdentityContext {
     pub chain: ChainName,
 }
 
+impl IdentityContext {
+    pub fn new(addr: ChainAddress, network: ChainName) -> Self {
+        IdentityContext {
+            address: addr,
+            chain: network,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ChainAddress(String);

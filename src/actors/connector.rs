@@ -382,13 +382,11 @@ impl Handler<WatcherMessage> for Connector {
         /// Handle a judgement request.
         async fn process_request(
             db: &Database,
-            address: ChainAddress,
+            id: IdentityContext,
             mut accounts: HashMap<AccountType, String>,
             dn_verifier: &DisplayNameVerifier,
             inserted_states: &Arc<RwLock<Vec<JudgementState>>>,
         ) -> Result<()> {
-            let id = create_context(address);
-
             // Decode display name if appropriate.
             if let Some((_, val)) = accounts
                 .iter_mut()
@@ -415,6 +413,7 @@ impl Handler<WatcherMessage> for Connector {
             Ok(())
         }
 
+        let network = self.network;
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
         let inserted_states = Arc::clone(&self.inserted_states);
@@ -424,46 +423,53 @@ impl Handler<WatcherMessage> for Connector {
                 match msg {
                     WatcherMessage::Ack(data) => {
                         if data.result.to_lowercase().contains("judgement given") {
-                            let context = create_context(data.address.ok_or_else(|| {
+                            // Create identity context.
+                            let address =
+                                data.address
+                                .ok_or_else(|| {
                                 anyhow!(
                                     "no address specified in 'judgement given' response from Watcher"
                                 )
-                            })?);
+                            })?;
+
+                            let context = IdentityContext::new(address, network);
 
                             info!("Marking {:?} as judged", context);
                             db.set_judged(&context).await?;
                         }
                     }
                     WatcherMessage::NewJudgementRequest(data) => {
-                        process_request(&db, data.address, data.accounts, &dn_verifier, &inserted_states).await?
+                        let id = IdentityContext::new(data.address, network);
+                        process_request(&db, id, data.accounts, &dn_verifier, &inserted_states).await?;
                     }
                     WatcherMessage::PendingJudgementsRequests(data) => {
+                        // Convert data.
+                        let data: Vec<(IdentityContext, HashMap<AccountType, String>)> = data
+                            .into_iter()
+                            .map(|req| (
+                                IdentityContext::new(req.address, network),
+                                req.accounts
+                            ))
+                            .collect();
+
                         // Process any tangling submissions, meaning any verified
                         // requests that were submitted to the Watcher but the
                         // issued extrinsic was not direclty confirmed back. This
                         // usually does not happen, but can.
                         {
-                            let addresses: Vec<ChainAddress> =
-                                data.iter().cloned().map(|state| state.address).collect();
-
-                            // TODO
-                            let tmp: Vec<IdentityContext> = addresses.iter().map(|addr| IdentityContext {
-                                address: addr.clone(),
-                                chain: ChainName::Polkadot,
-                            }).collect();
-
-                            db.process_dangling_judgement_states(&tmp).await?;
+                            let contexts: Vec<&IdentityContext> = data.iter().map(|(context, _)| context).collect();
+                            db.process_dangling_judgement_states(&contexts).await?;
                         }
 
-                        for r in data {
-                            process_request(&db, r.address, r.accounts, &dn_verifier, &inserted_states).await?;
+                        for (context, accounts) in data {
+                            process_request(&db, context, accounts, &dn_verifier, &inserted_states).await?;
                         }
                     }
                     WatcherMessage::ActiveDisplayNames(data) => {
                         for mut name in data {
                             name.try_decode_hex();
 
-                            let context = create_context(name.address);
+                            let context = IdentityContext::new(name.address, network);
                             let entry = DisplayNameEntry {
                                 context,
                                 display_name: name.display_name,
