@@ -60,18 +60,6 @@ pub async fn run_connector(
     Ok(())
 }
 
-/// Convenience function for creating a full identity context when only the
-/// address itself is present. Only supports Kusama and Polkadot for now.
-pub fn create_context(address: ChainAddress) -> IdentityContext {
-    let chain = if address.as_str().starts_with('1') {
-        ChainName::Polkadot
-    } else {
-        ChainName::Kusama
-    };
-
-    IdentityContext { address, chain }
-}
-
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResponseMessage<T> {
     pub event: EventType,

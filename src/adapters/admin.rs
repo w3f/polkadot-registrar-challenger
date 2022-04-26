@@ -1,4 +1,3 @@
-use crate::actors::connector::create_context;
 use crate::primitives::{ChainAddress, JudgementStateBlanked};
 use crate::Database;
 use std::str::FromStr;
@@ -201,6 +200,18 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
             Response::InternalError
         }
     }
+}
+
+/// Convenience function for creating a full identity context when only the
+/// address itself is present. Only supports Kusama and Polkadot for now.
+pub fn create_context(address: ChainAddress) -> IdentityContext {
+    let chain = if address.as_str().starts_with('1') {
+        ChainName::Polkadot
+    } else {
+        ChainName::Kusama
+    };
+
+    IdentityContext { address, chain }
 }
 
 #[cfg(test)]
