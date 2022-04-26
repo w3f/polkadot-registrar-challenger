@@ -308,14 +308,15 @@ impl Actor for Connector {
                     warn!("Reconnection failed, retrying...");
 
                     counter += 1;
-                    if counter == 10 {
+                    if counter >= 10 {
                         error!("Cannot reconnect to Watcher after {} attempts", counter);
                     }
 
                     sleep(Duration::from_secs(10)).await;
+                } else {
+                    info!("Reconnected to Watcher!");
+                    break;
                 }
-
-                info!("Reconnected to Watcher!");
             }
         });
     }
