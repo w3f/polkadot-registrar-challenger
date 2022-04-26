@@ -17,14 +17,15 @@ use std::time::Duration;
 
 pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
-use actors::api::run_rest_api_server;
-use actors::connector::run_connector;
 use adapters::run_adapters;
+use api::run_rest_api_server;
+use connector::run_connector;
 use database::Database;
 use notifier::SessionNotifier;
 
-mod actors;
 mod adapters;
+mod api;
+mod connector;
 mod database;
 mod display_name;
 mod notifier;

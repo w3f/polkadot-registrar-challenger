@@ -1,6 +1,6 @@
 use super::*;
-use crate::actors::api::ResponseAccountState;
-use crate::actors::connector::WatcherMessage;
+use crate::api::ResponseAccountState;
+use crate::connector::WatcherMessage;
 use crate::primitives::IdentityContext;
 use futures::{FutureExt, SinkExt, StreamExt};
 use tokio::time::{sleep, Duration};

@@ -1,4 +1,4 @@
-use crate::actors::api::{LookupServer, NotifyAccountState};
+use crate::api::{LookupServer, NotifyAccountState};
 use crate::database::Database;
 use crate::primitives::{IdentityContext, JudgementState, Timestamp};
 use crate::Result;

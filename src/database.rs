@@ -1,6 +1,6 @@
-use crate::actors::api::VerifyChallenge;
-use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
+use crate::api::VerifyChallenge;
+use crate::connector::DisplayNameEntry;
 use crate::primitives::{
     ChainAddress, ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage,
     IdentityContext, IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
@@ -711,8 +711,6 @@ impl Database {
     }
     pub async fn process_dangling_judgement_states(&self, ids: &[&IdentityContext]) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
-
-        //let ids_str: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
 
         let res = coll
             .update_many(

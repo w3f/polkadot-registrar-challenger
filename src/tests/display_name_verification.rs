@@ -1,6 +1,6 @@
 use super::*;
-use crate::actors::api::{JsonResult, ResponseAccountState};
-use crate::actors::connector::DisplayNameEntry;
+use crate::api::{JsonResult, ResponseAccountState};
+use crate::connector::DisplayNameEntry;
 use crate::display_name::DisplayNameVerifier;
 use crate::primitives::{IdentityContext, IdentityFieldValue};
 use crate::DisplayNameConfig;

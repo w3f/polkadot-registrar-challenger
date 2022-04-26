@@ -1,7 +1,7 @@
 use actix::Message;
 
-use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
+use crate::connector::DisplayNameEntry;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

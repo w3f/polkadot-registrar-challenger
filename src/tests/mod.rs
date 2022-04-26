@@ -1,11 +1,11 @@
-use crate::actors::api::JsonResult;
-use crate::actors::connector::{AccountType, JudgementRequest, WatcherMessage};
-use crate::actors::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
+use crate::api::JsonResult;
+use crate::connector::{AccountType, JudgementRequest, WatcherMessage};
 use crate::database::Database;
 use crate::notifier::SessionNotifier;
 use crate::primitives::IdentityFieldValue;
+use crate::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;

@@ -1,5 +1,5 @@
 use super::JsonResult;
-use crate::actors::connector::DisplayNameEntry;
+use crate::connector::DisplayNameEntry;
 use crate::database::Database;
 use crate::primitives::ChainName;
 use crate::{display_name::DisplayNameVerifier, DisplayNameConfig};
