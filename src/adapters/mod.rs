@@ -26,7 +26,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
             &config.password,
             &config.db_path,
             db,
-            config.admins.unwrap_or(vec![]),
+            config.admins.unwrap_or_default(),
         )
         .await?;
 
@@ -92,9 +92,7 @@ pub trait Adapter {
 
 // Filler for adapters that do not send messages.
 impl From<ExpectedMessage> for () {
-    fn from(_: ExpectedMessage) -> Self {
-        ()
-    }
+    fn from(_: ExpectedMessage) -> Self {}
 }
 
 pub struct AdapterListener {
@@ -103,7 +101,7 @@ pub struct AdapterListener {
 
 impl AdapterListener {
     pub async fn new(db: Database) -> Self {
-        AdapterListener { db: db }
+        AdapterListener { db }
     }
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
     where
@@ -145,27 +143,23 @@ impl AdapterListener {
                 match db.fetch_events(event_counter).await {
                     Ok((events, new_counter)) => {
                         for event in &events {
-                            match event {
-                                NotificationMessage::AwaitingSecondChallenge { context, field } => {
-                                    match field {
-                                        IdentityFieldValue::Email(to) => {
-                                            if adapter.name() == "email" {
-                                                debug!("Sending second challenge to {}", to);
-                                                if let Ok(challenge) = db
-                                                .fetch_second_challenge(&context, field)
-                                                .await
-                                                .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
-                                                    let _ = adapter
-                                                        .send_message(to.as_str(), challenge.into())
-                                                        .await
-                                                        .map_err(|err| error!("Failed to send second challenge to {} ({} adapter): {:?}", to, adapter.name(), err));
-                                                    }
-                                            }
-                                        }
-                                        _ => {}
+                            if let NotificationMessage::AwaitingSecondChallenge { context, field } =
+                                event
+                            {
+                                if let IdentityFieldValue::Email(to) = field {
+                                    if adapter.name() == "email" {
+                                        debug!("Sending second challenge to {}", to);
+                                        if let Ok(challenge) = db
+                                            .fetch_second_challenge(context, field)
+                                            .await
+                                            .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
+                                                let _ = adapter
+                                                    .send_message(to.as_str(), challenge.into())
+                                                    .await
+                                                    .map_err(|err| error!("Failed to send second challenge to {} ({} adapter): {:?}", to, adapter.name(), err));
+                                                }
                                     }
                                 }
-                                _ => {}
                             }
                         }
 

@@ -1,5 +1,5 @@
 use super::JsonResult;
-use crate::actors::connector::DisplayNameEntry;
+use crate::connector::DisplayNameEntry;
 use crate::database::Database;
 use crate::primitives::ChainName;
 use crate::{display_name::DisplayNameVerifier, DisplayNameConfig};
@@ -55,7 +55,7 @@ impl Handler<CheckDisplayName> for DisplayNameChecker {
                     .map_err(|err| {
                         error!("Failed to check for display name similarities: {:?}", err)
                     })
-                    .unwrap_or(JsonResult::Err("Backend error, contact admin".to_string()))
+                    .unwrap_or_else(|_| JsonResult::Err("Backend error, contact admin".to_string()))
             }
             .into_actor(self),
         )

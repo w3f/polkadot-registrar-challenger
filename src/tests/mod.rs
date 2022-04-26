@@ -1,10 +1,11 @@
-use crate::actors::api::tests::run_test_server;
-use crate::actors::api::JsonResult;
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
+use crate::api::JsonResult;
+use crate::connector::{AccountType, JudgementRequest, WatcherMessage};
 use crate::database::Database;
 use crate::notifier::SessionNotifier;
 use crate::primitives::IdentityFieldValue;
+use crate::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
@@ -14,6 +15,7 @@ use serde::Serialize;
 use tokio::time::{sleep, Duration};
 
 mod api_judgement_state;
+mod background_tasks;
 mod display_name_verification;
 mod explicit;
 mod process_admin_cmds;
@@ -40,7 +42,20 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
     }
 }
 
-async fn new_env() -> (Database, TestServer, MessageInjector) {
+pub fn alice_judgement_request() -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest::alice())
+}
+
+pub fn bob_judgement_request() -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest::bob())
+}
+
+pub fn eve_judgement_request() -> WatcherMessage {
+    WatcherMessage::new_judgement_request(JudgementRequest::eve())
+}
+
+// async fn new_env() -> (TestServer, ConnectorMocker, MessageInjector) {
+async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
     // Setup MongoDb database.
     let random: u32 = thread_rng().gen_range(u32::MIN..u32::MAX);
     let db = Database::new(
@@ -63,8 +78,12 @@ async fn new_env() -> (Database, TestServer, MessageInjector) {
         SessionNotifier::new(t_db, actor).run_blocking().await;
     });
 
-    // Give some time to start up.
-    sleep(Duration::from_secs(2)).await;
+    // Setup connector mocker
+    let connector = ConnectorMocker::new(db.clone());
 
-    (db, server, injector)
+    // Give some time to start up.
+    sleep(Duration::from_secs(3)).await;
+
+    //(server, connector, injector)
+    (db, connector, server, injector)
 }

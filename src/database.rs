@@ -1,9 +1,9 @@
-use crate::actors::api::VerifyChallenge;
-use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
+use crate::api::VerifyChallenge;
+use crate::connector::DisplayNameEntry;
 use crate::primitives::{
-    ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
-    IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
+    ChainAddress, ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage,
+    IdentityContext, IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
 };
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
@@ -13,9 +13,9 @@ use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 
-const IDENTITY_COLLECTION: &'static str = "identities";
-const EVENT_COLLECTION: &'static str = "event_log";
-const DISPLAY_NAMES: &'static str = "display_names";
+const IDENTITY_COLLECTION: &str = "identities";
+const EVENT_COLLECTION: &str = "event_log";
+const DISPLAY_NAMES: &str = "display_names";
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -62,6 +62,7 @@ impl Database {
             let mut current: JudgementState = from_document(doc)?;
 
             // Determine which fields should be updated.
+            let mut has_changed = false;
             let mut to_add = vec![];
             for new_field in &request.fields {
                 // If the current field value is the same as the new one, insert
@@ -75,13 +76,20 @@ impl Database {
                     to_add.push(current_field.clone());
                 } else {
                     to_add.push(new_field.clone());
+                    has_changed = true;
                 }
+            }
+
+            // If nothing was modified, return.
+            if !has_changed {
+                return Ok(());
             }
 
             // Set new fields.
             current.fields = to_add;
 
-            // Update the final value in database.
+            // Update the final fields in the database. All deprecated fields
+            // are overwritten.
             coll.update_one(
                 doc! {
                     "context": request.context.to_bson()?
@@ -184,7 +192,7 @@ impl Database {
             )
             .await?;
 
-        if res.modified_count != 1 {
+        if res.modified_count == 0 {
             return Ok(None);
         }
 
@@ -233,7 +241,7 @@ impl Database {
             let field_state = id_state
                 .fields
                 .iter_mut()
-                .find(|field| field.value.matches(&message))
+                .find(|field| field.value.matches(message))
                 .unwrap();
 
             // If the message contains the challenge, set it as valid (or
@@ -251,7 +259,7 @@ impl Database {
                     } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
-                            if expected.verify_message(&message) {
+                            if expected.verify_message(message) {
                                 // Update field state. Be more specific with the query in order
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
@@ -487,7 +495,7 @@ impl Database {
                 .iter()
                 .find(|f| &f.value == field)
                 // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .ok_or_else(|| anyhow!("Failed to select field when verifying message"))?;
 
             match &field_state.challenge {
                 ChallengeType::ExpectedMessage {
@@ -665,7 +673,7 @@ impl Database {
         )
         .await?;
 
-        self.process_fully_verified(&state).await?;
+        self.process_fully_verified(state).await?;
 
         Ok(())
     }
@@ -698,6 +706,56 @@ impl Database {
 
         let event: Event = event.into();
         coll.insert_one(event.to_bson()?, None).await?;
+
+        Ok(())
+    }
+    pub async fn process_dangling_judgement_states(&self, ids: &[&IdentityContext]) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        let res = coll
+            .update_many(
+                doc! {
+                    "is_fully_verified": true,
+                    "judgement_submitted": false,
+                    "context": {
+                        "$nin": ids.to_bson()?,
+                    }
+                },
+                doc! {
+                    "$set": {
+                        "judgement_submitted": true
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        let count = res.modified_count;
+        if count > 0 {
+            debug!("Disabled {} tangling identities", count);
+        }
+
+        Ok(())
+    }
+    #[cfg(test)]
+    pub async fn set_fully_verified(&self, context: &IdentityContext) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        let res = coll
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                doc! {
+                    "$set": {
+                        "is_fully_verified": true
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        assert_eq!(res.modified_count, 1);
 
         Ok(())
     }

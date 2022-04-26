@@ -1,8 +1,8 @@
 use super::*;
-use crate::actors::api::{JsonResult, ResponseAccountState};
-use crate::actors::connector::DisplayNameEntry;
+use crate::api::{JsonResult, ResponseAccountState};
+use crate::connector::DisplayNameEntry;
 use crate::display_name::DisplayNameVerifier;
-use crate::primitives::{IdentityContext, IdentityFieldValue, JudgementState};
+use crate::primitives::{IdentityContext, IdentityFieldValue};
 use crate::DisplayNameConfig;
 use futures::{SinkExt, StreamExt};
 
@@ -25,13 +25,14 @@ fn config() -> DisplayNameConfig {
 
 #[actix::test]
 async fn valid_display_name() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let verifier = DisplayNameVerifier::new(db.clone(), config());
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
@@ -56,7 +57,7 @@ async fn valid_display_name() {
 
 #[actix::test]
 async fn invalid_display_name() {
-    let (db, mut api, _) = new_env().await;
+    let (db, connector, mut api, _) = new_env().await;
     let verifier = DisplayNameVerifier::new(db.clone(), config());
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
@@ -72,8 +73,9 @@ async fn invalid_display_name() {
     }
 
     // Insert judgement request.
-    let mut alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.

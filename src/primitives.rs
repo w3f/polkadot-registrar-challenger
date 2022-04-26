@@ -1,13 +1,22 @@
 use actix::Message;
 
-use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
+use crate::connector::DisplayNameEntry;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct IdentityContext {
     pub address: ChainAddress,
     pub chain: ChainName,
+}
+
+impl IdentityContext {
+    pub fn new(addr: ChainAddress, network: ChainName) -> Self {
+        IdentityContext {
+            address: addr,
+            chain: network,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -84,7 +93,7 @@ impl IdentityField {
 
         IdentityField {
             value: val,
-            challenge: challenge,
+            challenge,
             failed_attempts: 0,
         }
     }
@@ -258,22 +267,17 @@ impl From<JudgementState> for JudgementStateBlanked {
                         match f.challenge {
                             ChallengeType::ExpectedMessage { expected, second } => {
                                 ChallengeTypeBlanked::ExpectedMessage {
-                                    expected: expected,
+                                    expected,
                                     second: second.map(|s| ExpectedMessageBlanked {
                                         is_verified: s.is_verified,
                                     }),
                                 }
                             }
                             ChallengeType::DisplayNameCheck { passed, violations } => {
-                                ChallengeTypeBlanked::DisplayNameCheck {
-                                    passed: passed,
-                                    violations: violations,
-                                }
+                                ChallengeTypeBlanked::DisplayNameCheck { passed, violations }
                             }
                             ChallengeType::Unsupported { is_verified } => {
-                                ChallengeTypeBlanked::Unsupported {
-                                    is_verified: is_verified,
-                                }
+                                ChallengeTypeBlanked::Unsupported { is_verified }
                             }
                         }
                     },
@@ -299,16 +303,13 @@ pub struct JudgementState {
 impl JudgementState {
     pub fn new(context: IdentityContext, fields: Vec<IdentityFieldValue>) -> Self {
         JudgementState {
-            context: context,
+            context,
             is_fully_verified: false,
             inserted_timestamp: Timestamp::now(),
             completion_timestamp: None,
             judgement_submitted: false,
             issue_judgement_at: None,
-            fields: fields
-                .into_iter()
-                .map(|val| IdentityField::new(val))
-                .collect(),
+            fields: fields.into_iter().map(IdentityField::new).collect(),
         }
     }
     pub fn check_full_verification(&self) -> bool {
@@ -319,10 +320,7 @@ impl JudgementState {
     pub fn display_name(&self) -> Option<&str> {
         self.fields
             .iter()
-            .find(|field| match field.value {
-                IdentityFieldValue::DisplayName(_) => true,
-                _ => false,
-            })
+            .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
             .map(|field| match &field.value {
                 IdentityFieldValue::DisplayName(name) => name.as_str(),
                 _ => panic!("Failed to get display name. This is a bug."),
@@ -410,7 +408,7 @@ impl Event {
     pub fn new(event: NotificationMessage) -> Self {
         Event {
             timestamp: Timestamp::now(),
-            event: event,
+            event,
         }
     }
 }
@@ -510,6 +508,14 @@ mod tests {
                 chain: ChainName::Polkadot,
             }
         }
+        pub fn eve() -> Self {
+            IdentityContext {
+                address: ChainAddress(
+                    "12y2nDXFzWRiTaQnmdaZazFT8iUnAg1N5p7WvyqLmNp4poPm".to_string(),
+                ),
+                chain: ChainName::Polkadot,
+            }
+        }
     }
 
     // TODO: Use JudgementState::new().
@@ -527,22 +533,6 @@ mod tests {
                     IdentityField::new(IdentityFieldValue::ALICE_EMAIL()),
                     IdentityField::new(IdentityFieldValue::ALICE_TWITTER()),
                     IdentityField::new(IdentityFieldValue::ALICE_MATRIX()),
-                ],
-            }
-        }
-        pub fn bob() -> Self {
-            JudgementState {
-                context: IdentityContext::bob(),
-                is_fully_verified: false,
-                inserted_timestamp: Timestamp::now(),
-                completion_timestamp: None,
-                judgement_submitted: false,
-                issue_judgement_at: None,
-                fields: vec![
-                    IdentityField::new(IdentityFieldValue::BOB_DISPLAY_NAME()),
-                    IdentityField::new(IdentityFieldValue::BOB_EMAIL()),
-                    IdentityField::new(IdentityFieldValue::BOB_TWITTER()),
-                    IdentityField::new(IdentityFieldValue::BOB_MATRIX()),
                 ],
             }
         }
@@ -583,22 +573,6 @@ mod tests {
         #[allow(non_snake_case)]
         pub fn ALICE_TWITTER() -> Self {
             IdentityFieldValue::Twitter("@alice".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_DISPLAY_NAME() -> Self {
-            IdentityFieldValue::DisplayName("Bob".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_EMAIL() -> Self {
-            IdentityFieldValue::Email("bob@email.com".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_MATRIX() -> Self {
-            IdentityFieldValue::Matrix("@bob:matrix.org".to_string())
-        }
-        #[allow(non_snake_case)]
-        pub fn BOB_TWITTER() -> Self {
-            IdentityFieldValue::Twitter("@bob".to_string())
         }
     }
 

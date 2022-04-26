@@ -1,21 +1,23 @@
 use super::*;
-use crate::actors::api::VerifyChallenge;
-use crate::actors::api::{JsonResult, ResponseAccountState};
+use crate::api::VerifyChallenge;
+use crate::api::{JsonResult, ResponseAccountState};
+use crate::connector::WatcherMessage;
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, JudgementState,
-    MessageId, NotificationMessage, Timestamp,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, MessageId,
+    NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
 async fn current_judgement_state_single_identity() {
-    let (db, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _inj) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -33,14 +35,16 @@ async fn current_judgement_state_single_identity() {
 
 #[actix::test]
 async fn current_judgement_state_multiple_inserts() {
-    let (db, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
     // Multiple inserts of the same request. Must not cause bad behavior.
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+
+    connector.inject(alice_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -58,14 +62,15 @@ async fn current_judgement_state_multiple_inserts() {
 
 #[actix::test]
 async fn current_judgement_state_multiple_identities() {
-    let (db, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -92,14 +97,15 @@ async fn current_judgement_state_multiple_identities() {
 
 #[actix::test]
 async fn verify_invalid_message_bad_challenge() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -151,14 +157,15 @@ async fn verify_invalid_message_bad_challenge() {
 
 #[actix::test]
 async fn verify_invalid_message_bad_origin() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -201,14 +208,15 @@ async fn verify_invalid_message_bad_origin() {
 
 #[actix::test]
 async fn verify_valid_message() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -267,18 +275,25 @@ async fn verify_valid_message() {
 
 #[actix::test]
 async fn verify_valid_message_duplicate_account_name() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let mut bob = JudgementState::bob();
+    connector.inject(alice_judgement_request()).await;
+    // Note: Bob specified the same Matrix handle as Alice.
+    connector
+        .inject(WatcherMessage::new_judgement_request({
+            let mut req = JudgementRequest::bob();
+            req.accounts
+                .entry(AccountType::Matrix)
+                .and_modify(|e| *e = "@alice:matrix.org".to_string());
+            req
+        }))
+        .await;
 
-    // Bob also has the same Matrix account as Alice.
-    bob.get_field_mut(&F::BOB_MATRIX()).value = F::ALICE_MATRIX();
-
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let mut bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -339,15 +354,15 @@ async fn verify_valid_message_duplicate_account_name() {
 
 #[actix::test]
 async fn verify_valid_message_awaiting_second_challenge() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -455,15 +470,15 @@ async fn verify_valid_message_awaiting_second_challenge() {
 
 #[actix::test]
 async fn verify_invalid_message_awaiting_second_challenge() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();

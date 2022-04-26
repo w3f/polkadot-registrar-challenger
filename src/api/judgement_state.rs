@@ -69,7 +69,7 @@ impl Default for LookupServer {
 impl LookupServer {
     pub fn new(db: Database) -> Self {
         LookupServer {
-            db: db,
+            db,
             sessions: Default::default(),
         }
     }
@@ -104,12 +104,12 @@ impl Handler<SubscribeAccountState> for LookupServer {
                 {
                     state
                 } else {
-                    return ();
+                    return;
                 };
 
                 if let Some(state) = state {
                     if subscriber
-                        .do_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
+                        .try_send(JsonResult::Ok(ResponseAccountState::with_no_notifications(
                             state,
                         )))
                         .is_ok()
@@ -121,7 +121,7 @@ impl Handler<SubscribeAccountState> for LookupServer {
                             .and_modify(|subscribers| {
                                 subscribers.push(subscriber.clone());
                             })
-                            .or_insert(vec![subscriber]);
+                            .or_insert_with(|| vec![subscriber]);
                     }
                 } else {
                     // TODO: Set registrar index via config.
@@ -152,7 +152,7 @@ impl Handler<NotifyAccountState> for LookupServer {
                     // Notify each subscriber.
                     for subscriber in subscribers {
                         if subscriber
-                            .do_send(JsonResult::Ok(msg.clone().into()))
+                            .try_send(JsonResult::Ok(msg.clone().into()))
                             .is_ok()
                         {
                             to_reinsert.push(subscriber.clone());
@@ -192,7 +192,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
             ws::Message::Text(msg) => {
                 if msg == "heartbeat" {
                     ctx.pong(b"pong");
-                    return ();
+                    return;
                 }
 
                 if let Ok(context) = serde_json::from_slice::<IdentityContext>(msg.as_bytes()) {
