@@ -192,7 +192,7 @@ impl Database {
             )
             .await?;
 
-        if res.modified_count != 1 {
+        if res.modified_count == 0 {
             return Ok(None);
         }
 
