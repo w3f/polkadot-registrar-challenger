@@ -301,7 +301,7 @@ impl Actor for Connector {
         span.record("endpoint", &self.endpoint.as_str());
 
         span.in_scope(|| {
-            self.start_heartbeat_task(ctx);
+            //self.start_heartbeat_task(ctx);
             self.start_pending_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
             self.start_judgement_candidates_task(ctx);
