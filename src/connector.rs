@@ -202,10 +202,9 @@ impl Connector {
         db: Database,
         dn_verifier: DisplayNameVerifier,
     ) -> Result<Addr<Connector>> {
-        let (_, framed) = Client::builder()
-            .timeout(Duration::from_secs(120))
-            .finish()
+        let (_, framed) = Client::new()
             .ws(&endpoint)
+            .max_frame_size(5_000_000)
             .connect()
             .await
             .map_err(|err| {
@@ -593,9 +592,11 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         ) -> Result<()> {
             let parsed: ResponseMessage<serde_json::Value> = match msg {
                 Ok(Frame::Text(txt)) => serde_json::from_slice(&txt)?,
-                Ok(Frame::Pong(_)) => return Ok(()),
-                // Just ingore what isn't recognized.
-                _ => return Ok(()),
+                Ok(other) => {
+                    debug!("Received unexpected message: {:?}", other);
+                    return Ok(());
+                }
+                Err(err) => return Err(anyhow!("error message: {:?}", err)),
             };
 
             match parsed.event {
@@ -646,22 +647,17 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                 network = self.network.as_str(),
                 endpoint = self.endpoint.as_str()
             );
-        });
 
-        if msg.is_err() {
-            error!("Error on websocket stream: {:?}", msg.unwrap_err());
-            return;
-        }
-
-        let addr = ctx.address();
-        actix::spawn(
-            async move {
-                if let Err(err) = local(addr, msg).await {
-                    error!("Failed to process message in websocket stream: {:?}", err);
+            let addr = ctx.address();
+            actix::spawn(
+                async move {
+                    if let Err(err) = local(addr, msg).await {
+                        error!("Failed to process message in websocket stream: {:?}", err);
+                    }
                 }
-            }
-            .instrument(span),
-        );
+                .in_current_span(),
+            );
+        });
     }
 }
 
