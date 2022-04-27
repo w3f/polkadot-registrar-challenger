@@ -19,6 +19,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
+use tracing::Instrument;
 
 // In seconds
 const HEARTBEAT_INTERVAL: u64 = 30;
@@ -47,15 +48,22 @@ pub async fn run_connector(
     }
 
     for config in watchers {
-        info!("Initializing connection to Watcher: {:?}", config);
+        let span = info_span!("Initializing connection to Watcher: {:?}");
 
-        // Start Connector.
-        let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
-        let conn =
-            Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
+        async {
+            // Start Connector.
+            let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
+            let conn =
+                Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
 
-        info!("Sending pending judgements request to Watcher");
-        let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
+            info!("Connection initiated");
+            info!("Sending pending judgements request to Watcher");
+            let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
+
+            Result::Ok(())
+        }
+        .instrument(span)
+        .await?;
     }
 
     Ok(())

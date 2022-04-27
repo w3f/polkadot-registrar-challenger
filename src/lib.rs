@@ -146,6 +146,7 @@ pub fn init_env() -> Result<Config> {
 
     // Env variables for log level overwrites config.
     // TODO: log
+    tracing_subscriber::fmt::init();
     if env::var("RUST_LOG").is_ok() {
         println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
         //env_logger::init();
