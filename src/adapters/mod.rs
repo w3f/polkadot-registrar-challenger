@@ -30,8 +30,10 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         let config = matrix_config;
 
         let span = info_span!("matrix_adapter");
-        span.record("homeserver", &config.homeserver.as_str());
-        span.record("username", &config.username.as_str());
+        info!(
+            homeserver = config.homeserver.as_str(),
+            username = config.username.as_str()
+        );
 
         async {
             info!("Configuring client");
@@ -60,7 +62,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         let config = twitter_config;
 
         let span = info_span!("twitter_adapter");
-        span.record("api_key", &config.api_key.as_str());
+        info!(api_key = config.api_key.as_str());
 
         async {
             info!("Configuring client");
@@ -89,10 +91,12 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         let config = email_config;
 
         let span = info_span!("email_adapter");
-        span.record("smtp_server", &config.smtp_server.as_str());
-        span.record("imap_server", &config.imap_server.as_str());
-        span.record("inbox", &config.inbox.as_str());
-        span.record("user", &config.user.as_str());
+        info!(
+            smtp_server = config.smtp_server.as_str(),
+            imap_server = config.imap_server.as_str(),
+            inbox = config.inbox.as_str(),
+            user = config.user.as_str(),
+        );
 
         async {
             // TODO: Rename struct
