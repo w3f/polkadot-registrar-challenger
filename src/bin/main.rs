@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate tracing;
-
 use system::{run, Result};
 use tracing::Level;
 
@@ -10,6 +7,8 @@ async fn main() -> Result<()> {
         .with_max_level(Level::DEBUG)
         //.with_env_filter("system")
         .init();
+
+    tracing::info!("Starting registrar service");
 
     run().await?;
     unreachable!()
