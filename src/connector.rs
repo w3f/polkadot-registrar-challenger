@@ -49,8 +49,9 @@ pub async fn run_connector(
 
     for config in watchers {
         let span = info_span!("connector_initialization");
-        span.record("network", &config.network.as_str());
-        span.record("endpoint", &config.endpoint.as_str());
+        span.in_scope(|| {
+            debug!(network = self.network.as_str(), endpoint = self.endpoint.as_str());
+        });
 
         async {
             // Start Connector.
@@ -307,10 +308,10 @@ impl Actor for Connector {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         let span = info_span!("connector_background_tasks");
-        span.record("network", &self.network.as_str());
-        span.record("endpoint", &self.endpoint.as_str());
 
         span.in_scope(|| {
+            debug!(network = self.network.as_str(), endpoint = self.endpoint.as_str());
+
             //self.start_heartbeat_task(ctx);
             self.start_pending_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
@@ -320,8 +321,9 @@ impl Actor for Connector {
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
         let span = warn_span!("watcher_connection_drop");
-        span.record("network", &self.network.as_str());
-        span.record("endpoint", &self.endpoint.as_str());
+        span.in_scope(|| {
+            debug!(network = self.network.as_str(), endpoint = self.endpoint.as_str());
+        });
 
         let endpoint = self.endpoint.clone();
         let network = self.network;
@@ -365,11 +367,10 @@ impl Handler<ClientCommand> for Connector {
 
     fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) -> Self::Result {
         let span = debug_span!("handling_client_message");
-        span.record("network", &self.network.as_str());
-        span.record("endpoint", &self.endpoint.as_str());
 
         // NOTE: make sure no async code comes after this.
-        let _ = span.enter();
+        let _guard = span.enter();
+        debug!(network = self.network.as_str(), endpoint = self.endpoint.as_str());
 
         // If the sink (outgoing WS stream) is not configured (i.e. when
         // testing), send the client command to the channel.
@@ -626,8 +627,9 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
         }
 
         let span = debug_span!("handling_websocket_message");
-        span.record("network", &self.network.as_str());
-        span.record("endpoint", &self.endpoint.as_str());
+        span.in_scope(|| {
+            debug!(network = self.network.as_str(), endpoint = self.endpoint.as_str());
+        });
 
         let addr = ctx.address();
         actix::spawn(
