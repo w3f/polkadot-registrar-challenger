@@ -29,11 +29,12 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     if matrix_config.enabled {
         let config = matrix_config;
 
-        let span = info_span!("Starting Matrix adapter...");
+        let span = info_span!("matrix_adapter");
         span.record("homeserver", &config.homeserver.as_str());
         span.record("username", &config.username.as_str());
 
         async {
+            info!("Configuring client");
             let matrix_client = matrix::MatrixClient::new(
                 &config.homeserver,
                 &config.username,
@@ -44,6 +45,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
             )
             .await?;
 
+            info!("Starting message adapter");
             listener.start_message_adapter(matrix_client, 1).await;
             Result::Ok(())
         }
@@ -57,10 +59,11 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     if twitter_config.enabled {
         let config = twitter_config;
 
-        let span = info_span!("Starting Twitter adapter...");
+        let span = info_span!("twitter_adapter");
         span.record("api_key", &config.api_key.as_str());
 
         async {
+            info!("Configuring client");
             let twitter_client = twitter::TwitterBuilder::new()
                 .consumer_key(config.api_key)
                 .consumer_secret(config.api_secret)
@@ -68,6 +71,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
                 .token_secret(config.token_secret)
                 .build()?;
 
+            info!("Starting message adapter");
             listener
                 .start_message_adapter(twitter_client, config.request_interval)
                 .await;
@@ -84,7 +88,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     if email_config.enabled {
         let config = email_config;
 
-        let span = info_span!("Starting Email adapter...");
+        let span = info_span!("email_adapter");
         span.record("smtp_server", &config.smtp_server.as_str());
         span.record("imap_server", &config.imap_server.as_str());
         span.record("inbox", &config.inbox.as_str());
@@ -92,6 +96,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
 
         async {
             // TODO: Rename struct
+            info!("Configuring client");
             let email_client = email::SmtpImapClientBuilder::new()
                 .smtp_server(config.smtp_server)
                 .imap_server(config.imap_server)
@@ -100,6 +105,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
                 .email_password(config.password)
                 .build()?;
 
+            info!("Starting message adapter");
             listener
                 .start_message_adapter(email_client, config.request_interval)
                 .await;

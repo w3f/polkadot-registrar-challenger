@@ -48,7 +48,9 @@ pub async fn run_connector(
     }
 
     for config in watchers {
-        let span = info_span!("Initializing connection to Watcher: {:?}");
+        let span = info_span!("connector_initialization");
+        span.record("network", &config.network.as_str());
+        span.record("endpoint", &config.endpoint.as_str());
 
         async {
             // Start Connector.
@@ -233,12 +235,16 @@ impl Connector {
     }
     // Send a heartbeat to the Watcher every couple of seconds.
     fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
+        info!("Starting heartbeat background task");
+
         ctx.run_interval(Duration::new(HEARTBEAT_INTERVAL, 0), |_act, ctx| {
             ctx.address().do_send(ClientCommand::Ping)
         });
     }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
+        info!("Starting pending judgement requester background task");
+
         ctx.run_interval(
             Duration::new(PENDING_JUDGEMENTS_INTERVAL, 0),
             |_act, ctx| {
@@ -249,12 +255,16 @@ impl Connector {
     }
     // Request actively used display names every couple of seconds.
     fn start_active_display_names_task(&self, ctx: &mut Context<Self>) {
+        info!("Starting display name requester background task");
+
         ctx.run_interval(Duration::new(DISPLAY_NAMES_INTERVAL, 0), |_act, ctx| {
             ctx.address().do_send(ClientCommand::RequestDisplayNames)
         });
     }
     // Look for verified identities and submit those to the Watcher.
     fn start_judgement_candidates_task(&self, ctx: &mut Context<Self>) {
+        info!("Starting judgement candidate submitter background task");
+
         let db = self.db.clone();
         let addr = ctx.address();
         let network = self.network;
@@ -296,7 +306,7 @@ impl Actor for Connector {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let span = info_span!("Starting background tasks");
+        let span = info_span!("connector_background_tasks");
         span.record("network", &self.network.as_str());
         span.record("endpoint", &self.endpoint.as_str());
 
@@ -307,7 +317,7 @@ impl Actor for Connector {
             self.start_judgement_candidates_task(ctx);
         });
     }
-
+t
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
         let span = warn_span!("watcher_connection_drop");
         span.record("network", &self.network.as_str());
