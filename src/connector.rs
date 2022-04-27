@@ -50,7 +50,7 @@ pub async fn run_connector(
     for config in watchers {
         let span = info_span!("connector_initialization");
         span.in_scope(|| {
-            debug!(network = self.network.as_str(), endpoint = self.endpoint.as_str());
+            debug!(network = config.network.as_str(), endpoint = config.endpoint.as_str());
         });
 
         async {
