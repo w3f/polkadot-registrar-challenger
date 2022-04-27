@@ -16,14 +16,6 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     // Convenience flat for logging
     let mut started = false;
 
-    /*
-    pub watcher: Vec<WatcherConfig>,
-    pub matrix: MatrixConfig,
-    pub twitter: TwitterConfig,
-    pub email: EmailConfig,
-    pub display_name: DisplayNameConfig,
-     */
-
     // Deconstruct struct to get around borrowing violations.
     let AdapterConfig {
         watcher: _,
@@ -35,11 +27,13 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
 
     // Matrix client configuration and execution.
     if matrix_config.enabled {
+        let config = matrix_config;
+
         let span = info_span!("Starting Matrix adapter...");
+        span.record("homeserver", &config.homeserver.as_str());
+        span.record("username", &config.username.as_str());
 
         async {
-            let config = matrix_config;
-
             let matrix_client = matrix::MatrixClient::new(
                 &config.homeserver,
                 &config.username,
@@ -61,8 +55,10 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
 
     // Twitter client configuration and execution.
     if twitter_config.enabled {
-        let span = info_span!("Starting Twitter adapter...");
         let config = twitter_config;
+
+        let span = info_span!("Starting Twitter adapter...");
+        span.record("api_key", &config.api_key.as_str());
 
         async {
             let twitter_client = twitter::TwitterBuilder::new()
@@ -86,8 +82,13 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
 
     // Email client configuration and execution.
     if email_config.enabled {
-        let span = info_span!("Starting Email adapter...");
         let config = email_config;
+
+        let span = info_span!("Starting Email adapter...");
+        span.record("smtp_server", &config.smtp_server.as_str());
+        span.record("imap_server", &config.imap_server.as_str());
+        span.record("inbox", &config.inbox.as_str());
+        span.record("user", &config.user.as_str());
 
         async {
             // TODO: Rename struct

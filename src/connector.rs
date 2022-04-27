@@ -296,10 +296,16 @@ impl Actor for Connector {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.start_heartbeat_task(ctx);
-        self.start_pending_judgements_task(ctx);
-        self.start_active_display_names_task(ctx);
-        self.start_judgement_candidates_task(ctx);
+        let span = info_span!("Starting background tasks");
+        span.record("network", &self.network.as_str());
+        span.record("endpoint", &self.endpoint.as_str());
+
+        span.in_scope(|| {
+            self.start_heartbeat_task(ctx);
+            self.start_pending_judgements_task(ctx);
+            self.start_active_display_names_task(ctx);
+            self.start_judgement_candidates_task(ctx);
+        });
     }
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
