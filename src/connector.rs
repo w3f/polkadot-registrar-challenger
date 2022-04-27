@@ -317,7 +317,7 @@ impl Actor for Connector {
             self.start_judgement_candidates_task(ctx);
         });
     }
-t
+
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
         let span = warn_span!("watcher_connection_drop");
         span.record("network", &self.network.as_str());
