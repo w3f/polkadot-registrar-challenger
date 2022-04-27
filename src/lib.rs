@@ -1,5 +1,5 @@
 #[macro_use]
-extern crate log;
+extern crate tracing;
 #[macro_use]
 extern crate anyhow;
 #[macro_use]
@@ -9,9 +9,7 @@ extern crate async_trait;
 
 use actix::clock::sleep;
 use adapters::matrix::MatrixHandle;
-use log::LevelFilter;
 use primitives::ChainName;
-use std::env;
 use std::fs;
 use std::time::Duration;
 
@@ -35,7 +33,8 @@ mod tests;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub log_level: LevelFilter,
+    // TODO: log
+    pub log_level: String,
     pub db: DatabaseConfig,
     pub instance: InstanceType,
 }
@@ -141,25 +140,6 @@ fn open_config() -> Result<Config> {
     Ok(config)
 }
 
-pub fn init_env() -> Result<Config> {
-    let config = open_config()?;
-
-    // Env variables for log level overwrites config.
-    if env::var("RUST_LOG").is_ok() {
-        println!("Env variable 'RUST_LOG' found, overwriting logging level from config.");
-        env_logger::init();
-    } else {
-        println!("Setting log level to '{}' from config.", config.log_level);
-        env_logger::builder()
-            .filter_module("system", config.log_level)
-            .init();
-    }
-
-    println!("Logger initiated");
-
-    Ok(config)
-}
-
 async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
     let db = Database::new(&db_config.uri, &db_config.name).await?;
 
@@ -184,7 +164,7 @@ async fn config_session_notifier(
 
 // TODO: Check for database connectivity.
 pub async fn run() -> Result<()> {
-    let root = init_env()?;
+    let root = open_config()?;
     let (db_config, instance) = (root.db, root.instance);
 
     match instance {
@@ -226,9 +206,12 @@ async fn run_mocker() -> Result<()> {
     use rand::{thread_rng, Rng};
 
     // Init logger
+    // TODO: log
+    /*
     env_logger::builder()
         .filter_module("system", LevelFilter::Debug)
         .init();
+    */
 
     let mut rng = thread_rng();
 

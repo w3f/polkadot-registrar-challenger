@@ -4,6 +4,7 @@ use crate::primitives::{
 };
 use crate::{AdapterConfig, Result};
 use tokio::time::{interval, Duration};
+use tracing::Instrument;
 
 pub mod admin;
 pub mod email;
@@ -15,61 +16,98 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     // Convenience flat for logging
     let mut started = false;
 
-    // Matrix client configuration and execution.
-    if config.matrix.enabled {
-        info!("Starting Matrix adapter...");
-        let config = config.matrix;
+    // Deconstruct struct to get around borrowing violations.
+    let AdapterConfig {
+        watcher: _,
+        matrix: matrix_config,
+        twitter: twitter_config,
+        email: email_config,
+        display_name: _,
+    } = config;
 
-        let matrix_client = matrix::MatrixClient::new(
-            &config.homeserver,
-            &config.username,
-            &config.password,
-            &config.db_path,
-            db,
-            config.admins.unwrap_or_default(),
-        )
+    // Matrix client configuration and execution.
+    if matrix_config.enabled {
+        let config = matrix_config;
+
+        let span = info_span!("Starting Matrix adapter...");
+        span.record("homeserver", &config.homeserver.as_str());
+        span.record("username", &config.username.as_str());
+
+        async {
+            let matrix_client = matrix::MatrixClient::new(
+                &config.homeserver,
+                &config.username,
+                &config.password,
+                &config.db_path,
+                db,
+                config.admins.unwrap_or_default(),
+            )
+            .await?;
+
+            listener.start_message_adapter(matrix_client, 1).await;
+            Result::Ok(())
+        }
+        .instrument(span)
         .await?;
 
-        listener.start_message_adapter(matrix_client, 1).await;
         started = true;
     }
 
     // Twitter client configuration and execution.
-    if config.twitter.enabled {
-        info!("Starting Twitter adapter...");
-        let config = config.twitter;
+    if twitter_config.enabled {
+        let config = twitter_config;
 
-        let twitter_client = twitter::TwitterBuilder::new()
-            .consumer_key(config.api_key)
-            .consumer_secret(config.api_secret)
-            .token(config.token)
-            .token_secret(config.token_secret)
-            .build()?;
+        let span = info_span!("Starting Twitter adapter...");
+        span.record("api_key", &config.api_key.as_str());
 
-        listener
-            .start_message_adapter(twitter_client, config.request_interval)
-            .await;
+        async {
+            let twitter_client = twitter::TwitterBuilder::new()
+                .consumer_key(config.api_key)
+                .consumer_secret(config.api_secret)
+                .token(config.token)
+                .token_secret(config.token_secret)
+                .build()?;
+
+            listener
+                .start_message_adapter(twitter_client, config.request_interval)
+                .await;
+
+            Result::Ok(())
+        }
+        .instrument(span)
+        .await?;
 
         started = true;
     }
 
     // Email client configuration and execution.
-    if config.email.enabled {
-        info!("Starting email adapter...");
-        let config = config.email;
+    if email_config.enabled {
+        let config = email_config;
 
-        // TODO: Rename struct
-        let email_client = email::SmtpImapClientBuilder::new()
-            .smtp_server(config.smtp_server)
-            .imap_server(config.imap_server)
-            .email_inbox(config.inbox)
-            .email_user(config.user)
-            .email_password(config.password)
-            .build()?;
+        let span = info_span!("Starting Email adapter...");
+        span.record("smtp_server", &config.smtp_server.as_str());
+        span.record("imap_server", &config.imap_server.as_str());
+        span.record("inbox", &config.inbox.as_str());
+        span.record("user", &config.user.as_str());
 
-        listener
-            .start_message_adapter(email_client, config.request_interval)
-            .await;
+        async {
+            // TODO: Rename struct
+            let email_client = email::SmtpImapClientBuilder::new()
+                .smtp_server(config.smtp_server)
+                .imap_server(config.imap_server)
+                .email_inbox(config.inbox)
+                .email_user(config.user)
+                .email_password(config.password)
+                .build()?;
+
+            listener
+                .start_message_adapter(email_client, config.request_interval)
+                .await;
+
+            Result::Ok(())
+        }
+        .instrument(span)
+        .await?;
 
         started = true;
     }

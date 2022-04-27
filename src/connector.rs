@@ -19,6 +19,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::sync::RwLock;
 use tokio::time::sleep;
+use tracing::Instrument;
 
 // In seconds
 const HEARTBEAT_INTERVAL: u64 = 30;
@@ -47,15 +48,22 @@ pub async fn run_connector(
     }
 
     for config in watchers {
-        info!("Initializing connection to Watcher: {:?}", config);
+        let span = info_span!("Initializing connection to Watcher: {:?}");
 
-        // Start Connector.
-        let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
-        let conn =
-            Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
+        async {
+            // Start Connector.
+            let dn_verifier = DisplayNameVerifier::new(db.clone(), dn_config.clone());
+            let conn =
+                Connector::start(config.endpoint, config.network, db.clone(), dn_verifier).await?;
 
-        info!("Sending pending judgements request to Watcher");
-        let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
+            info!("Connection initiated");
+            info!("Sending pending judgements request to Watcher");
+            let _ = conn.send(ClientCommand::RequestPendingJudgements).await?;
+
+            Result::Ok(())
+        }
+        .instrument(span)
+        .await?;
     }
 
     Ok(())
@@ -288,41 +296,54 @@ impl Actor for Connector {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        self.start_heartbeat_task(ctx);
-        self.start_pending_judgements_task(ctx);
-        self.start_active_display_names_task(ctx);
-        self.start_judgement_candidates_task(ctx);
+        let span = info_span!("Starting background tasks");
+        span.record("network", &self.network.as_str());
+        span.record("endpoint", &self.endpoint.as_str());
+
+        span.in_scope(|| {
+            //self.start_heartbeat_task(ctx);
+            self.start_pending_judgements_task(ctx);
+            self.start_active_display_names_task(ctx);
+            self.start_judgement_candidates_task(ctx);
+        });
     }
 
     fn stopped(&mut self, _ctx: &mut Context<Self>) {
-        warn!("Watcher disconnected, trying to reconnect...");
+        let span = warn_span!("watcher_connection_drop");
+        span.record("network", &self.network.as_str());
+        span.record("endpoint", &self.endpoint.as_str());
 
         let endpoint = self.endpoint.clone();
         let network = self.network;
         let db = self.db.clone();
         let dn_verifier = self.dn_verifier.clone();
 
-        actix::spawn(async move {
-            let mut counter = 0;
-            loop {
-                if Connector::start(endpoint.clone(), network, db.clone(), dn_verifier.clone())
-                    .await
-                    .is_err()
-                {
-                    warn!("Reconnection failed, retrying...");
+        actix::spawn(
+            async move {
+                warn!("Watcher disconnected, trying to reconnect...");
 
-                    counter += 1;
-                    if counter >= 10 {
-                        error!("Cannot reconnect to Watcher after {} attempts", counter);
+                let mut counter = 0;
+                loop {
+                    if Connector::start(endpoint.clone(), network, db.clone(), dn_verifier.clone())
+                        .await
+                        .is_err()
+                    {
+                        warn!("Reconnection failed, retrying...");
+
+                        counter += 1;
+                        if counter >= 10 {
+                            error!("Cannot reconnect to Watcher after {} attempts", counter);
+                        }
+
+                        sleep(Duration::from_secs(10)).await;
+                    } else {
+                        info!("Reconnected to Watcher!");
+                        break;
                     }
-
-                    sleep(Duration::from_secs(10)).await;
-                } else {
-                    info!("Reconnected to Watcher!");
-                    break;
                 }
             }
-        });
+            .instrument(span),
+        );
     }
 }
 
@@ -333,6 +354,13 @@ impl Handler<ClientCommand> for Connector {
     type Result = crate::Result<()>;
 
     fn handle(&mut self, msg: ClientCommand, ctx: &mut Context<Self>) -> Self::Result {
+        let span = debug_span!("handling_client_message");
+        span.record("network", &self.network.as_str());
+        span.record("endpoint", &self.endpoint.as_str());
+
+        // NOTE: make sure no async code comes after this.
+        let _ = span.enter();
+
         // If the sink (outgoing WS stream) is not configured (i.e. when
         // testing), send the client command to the channel.
         if self.sink.is_none() {
@@ -587,21 +615,19 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             Ok(())
         }
 
+        let span = debug_span!("handling_websocket_message");
+        span.record("network", &self.network.as_str());
+        span.record("endpoint", &self.endpoint.as_str());
+
         let addr = ctx.address();
-        actix::spawn(async move {
-            if let Err(err) = local(addr, msg).await {
-                error!("Failed to process message in websocket stream: {:?}", err);
+        actix::spawn(
+            async move {
+                if let Err(err) = local(addr, msg).await {
+                    error!("Failed to process message in websocket stream: {:?}", err);
+                }
             }
-        });
-    }
-
-    fn started(&mut self, _ctx: &mut Context<Self>) {
-        info!("Started stream handler for connector");
-    }
-
-    /// If connection dropped, try to reconnect.
-    fn finished(&mut self, ctx: &mut Context<Self>) {
-        ctx.stop();
+            .instrument(span),
+        );
     }
 }
 
