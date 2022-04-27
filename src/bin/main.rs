@@ -5,7 +5,8 @@ use system::{run, Result};
 
 #[actix::main]
 async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
     run().await?;
     error!("Service exited unexpectedly");
-    panic!();
+    panic!("Service exited unexpectedly");
 }
