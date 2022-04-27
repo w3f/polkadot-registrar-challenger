@@ -648,6 +648,11 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
             );
         });
 
+        if msg.is_err() {
+            error!("Error on websocket stream: {:?}", msg.unwrap_err());
+            return;
+        }
+
         let addr = ctx.address();
         actix::spawn(
             async move {
