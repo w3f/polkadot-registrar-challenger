@@ -746,26 +746,4 @@ impl Database {
 
         Ok(())
     }
-    #[cfg(test)]
-    pub async fn set_fully_verified(&self, context: &IdentityContext) -> Result<()> {
-        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
-
-        let res = coll
-            .update_one(
-                doc! {
-                    "context": context.to_bson()?,
-                },
-                doc! {
-                    "$set": {
-                        "is_fully_verified": true
-                    }
-                },
-                None,
-            )
-            .await?;
-
-        assert_eq!(res.modified_count, 1);
-
-        Ok(())
-    }
 }

@@ -509,14 +509,6 @@ mod tests {
                 chain: ChainName::Polkadot,
             }
         }
-        pub fn eve() -> Self {
-            IdentityContext {
-                address: ChainAddress(
-                    "12y2nDXFzWRiTaQnmdaZazFT8iUnAg1N5p7WvyqLmNp4poPm".to_string(),
-                ),
-                chain: ChainName::Polkadot,
-            }
-        }
     }
 
     // TODO: Use JudgementState::new().

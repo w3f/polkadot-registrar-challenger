@@ -742,27 +742,11 @@ pub mod tests {
                 ]),
             }
         }
-        pub fn eve() -> Self {
-            JudgementRequest {
-                address: "12y2nDXFzWRiTaQnmdaZazFT8iUnAg1N5p7WvyqLmNp4poPm"
-                    .to_string()
-                    .into(),
-                accounts: HashMap::from([
-                    (AccountType::DisplayName, "Eve".to_string()),
-                    (AccountType::Email, "eve@email.com".to_string()),
-                    (AccountType::Twitter, "@eve".to_string()),
-                    (AccountType::Matrix, "@eve:matrix.org".to_string()),
-                ]),
-            }
-        }
     }
 
     impl WatcherMessage {
         pub fn new_judgement_request(req: JudgementRequest) -> Self {
             WatcherMessage::NewJudgementRequest(req)
-        }
-        pub fn new_pending_requests(reqs: Vec<JudgementRequest>) -> Self {
-            WatcherMessage::PendingJudgementsRequests(reqs)
         }
     }
 
