@@ -62,6 +62,7 @@ pub enum Response {
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
+    FullyVerified(ChainAddress),
     InternalError,
     Help,
 }
@@ -105,6 +106,9 @@ impl std::fmt::Display for Response {
                 verify <ADDR> <FIELD>...\tVerify one or multiple fields of the specified address.\n\
                 "
             .to_string(),
+            Response::FullyVerified(_) => {
+                "Identity has been fully verified. The extrisnic will be submitted in a couple of minutes".to_string()
+            },
         };
 
         write!(f, "{}", msg)
@@ -187,9 +191,13 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
             Command::IssueJudgement(addr) => {
                 let context = create_context(addr.clone());
 
-                let res = db.reset_issuance_state(&context).await?;
+                let updated = db.full_manual_verification(&context).await?;
 
-                unimplemented!()
+                if updated {
+                    Ok(Response::FullyVerified(addr))
+                } else {
+                    Ok(Response::IdentityNotFound)
+                }
             }
         }
     };

@@ -590,18 +590,29 @@ impl Database {
 
         Ok(completed)
     }
-    pub async fn reset_issuance_state(&self, context: &IdentityContext) -> Result<bool> {
+    // (Warning) This fully verifies the identity without having to verify
+    // individual fields.
+    pub async fn full_manual_verification(&self, context: &IdentityContext) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Create a timed delay for issuing judgments. Between 30 seconds to
+        // 5 minutes. This is used to prevent timing attacks where a user
+        // updates the identity right before the judgement is issued.
+        let now = Timestamp::now();
+        let offset = thread_rng().gen_range(30..300);
+        let issue_at = Timestamp::with_offset(offset);
 
         let res = coll
             .update_one(
                 doc! {
                     "context": context.to_bson()?,
-                    "is_fully_verified": true,
                 },
                 doc! {
                     "$set": {
+                        "is_fully_verified": true,
                         "judgement_submitted": false,
+                        "completion_timestamp": now.to_bson()?,
+                        "issue_judgement_at": issue_at.to_bson()?,
                     }
                 },
                 None,
@@ -610,7 +621,7 @@ impl Database {
 
         // Create event.
         if res.modified_count == 1 {
-            self.insert_event(NotificationMessage::ResetIssuanceState {
+            self.insert_event(NotificationMessage::FullManualVerification {
                 context: context.clone(),
             })
             .await?;

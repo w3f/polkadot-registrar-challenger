@@ -461,7 +461,7 @@ pub enum NotificationMessage {
         context: IdentityContext,
         field: RawFieldName,
     },
-    ResetIssuanceState {
+    FullManualVerification {
         context: IdentityContext,
     },
 }
@@ -481,7 +481,7 @@ impl NotificationMessage {
             IdentityFullyVerified { context } => context,
             JudgementProvided { context } => context,
             ManuallyVerified { context, field: _ } => context,
-            ResetIssuanceState { context } => context,
+            FullManualVerification { context } => context,
         }
     }
 }
