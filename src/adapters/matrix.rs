@@ -19,6 +19,7 @@ const REJOIN_MAX_ATTEMPTS: usize = 5;
 
 #[derive(Clone)]
 pub struct MatrixClient {
+    // TODO: This should just be a channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 

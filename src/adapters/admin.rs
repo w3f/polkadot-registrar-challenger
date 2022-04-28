@@ -10,7 +10,6 @@ pub type Result<T> = std::result::Result<T, Response>;
 pub enum Command {
     Status(ChainAddress),
     Verify(ChainAddress, Vec<RawFieldName>),
-    IssueJudgement(ChainAddress),
     Help,
 }
 
@@ -123,6 +122,8 @@ pub enum RawFieldName {
     Web,
     Twitter,
     Matrix,
+    // Represents the full identity
+    All,
 }
 
 impl std::fmt::Display for RawFieldName {
@@ -135,6 +136,7 @@ impl std::fmt::Display for RawFieldName {
                 RawFieldName::Web => "web",
                 RawFieldName::Twitter => "twitter",
                 RawFieldName::Matrix => "matrix",
+                RawFieldName::All => "all",
             }
         })
     }
@@ -178,6 +180,16 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
             Command::Verify(addr, fields) => {
                 let context = create_context(addr.clone());
 
+                // Check if _all_ should be verified (respectively the full identity)
+                if fields
+                    .iter()
+                    .find(|f| matches!(f, RawFieldName::All))
+                    .is_some()
+                    && db.full_manual_verification(&context).await?
+                {
+                    return Ok(Response::FullyVerified(addr));
+                }
+
                 // Verify each passed on field.
                 for field in &fields {
                     if db.verify_manually(&context, field).await?.is_none() {
@@ -188,17 +200,6 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
                 Ok(Response::Verified(addr, fields))
             }
             Command::Help => Ok(Response::Help),
-            Command::IssueJudgement(addr) => {
-                let context = create_context(addr.clone());
-
-                let updated = db.full_manual_verification(&context).await?;
-
-                if updated {
-                    Ok(Response::FullyVerified(addr))
-                } else {
-                    Ok(Response::IdentityNotFound)
-                }
-            }
         }
     };
 

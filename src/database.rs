@@ -180,6 +180,11 @@ impl Database {
                     }
                 }
             }
+            RawFieldName::All => {
+                return Err(anyhow!(
+                    "field name 'all' is abstract and cannot be verified individually"
+                ))
+            }
         };
 
         // Update field.
