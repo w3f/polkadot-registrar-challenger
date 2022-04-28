@@ -711,6 +711,13 @@ impl Database {
 
         Ok(())
     }
+    /// It's possible that the Challenger has not received a notification from
+    /// the Watcher on whether an identity has been judged on-chain, causing the
+    /// Challenger to constantly resubmit the command for judgement to the
+    /// Watcher.
+    /// 
+    /// This method disables any resubmission for any identities not specified
+    /// in `ids`, which are all pending judgements as reported by the Watcher.
     pub async fn process_dangling_judgement_states(&self, ids: &[&IdentityContext]) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
