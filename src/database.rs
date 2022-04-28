@@ -387,7 +387,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_second_challenge(&mut self, mut request: VerifyChallenge) -> Result<bool> {
+    pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;

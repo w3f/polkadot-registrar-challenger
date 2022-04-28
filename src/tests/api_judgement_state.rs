@@ -628,6 +628,76 @@ async fn verify_full_identity() {
         JsonResult::Ok(exp_resp)
     );
 
+    // Verify Email (first challenge).
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Email("alice@email.com".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_EMAIL())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice.get_field_mut(&F::ALICE_EMAIL()).expected_message_mut().verify_message(&msg);
+    assert!(changed);
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(exp_resp)
+    );
+
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::AwaitingSecondChallenge {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(exp_resp)
+    );
+
+    // Second challenge
+    alice.get_field_mut(&F::ALICE_EMAIL()).expected_second_mut().set_verified();
+    db.verify_second_challenge(VerifyChallenge {
+        entry: F::ALICE_EMAIL(),
+        challenge: alice
+            .get_field(&F::ALICE_EMAIL())
+            .expected_second()
+            .value
+            .to_string(),
+    }).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::SecondFieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(exp_resp)
+    );
+
     // Bob remains unchanged.
     /*
     let resp: JsonResult<ResponseAccountState> = stream_bob.next().await.into();
