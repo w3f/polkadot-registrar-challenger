@@ -730,12 +730,16 @@ async fn verify_full_identity() {
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.
+    // Identity is fully verified now.
+
     let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    // The completion timestamp is not that important, as long as it's `Some`.
     let completion_timestamp = match &resp {
         JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
         _ => panic!(),
     };
 
+    assert!(completion_timestamp.is_some());
     alice.is_fully_verified = true;
     alice.completion_timestamp = completion_timestamp;
 
