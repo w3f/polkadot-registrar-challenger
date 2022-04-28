@@ -573,3 +573,67 @@ async fn verify_invalid_message_awaiting_second_challenge() {
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
+
+#[actix::test]
+async fn verify_full_identity() {
+    let (db, connector, mut api, injector) = new_env().await;
+    let mut stream_alice = api.ws_at("/api/account_status").await.unwrap();
+    let mut stream_bob = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement requests.
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
+
+    // Subscribe to endpoint.
+    stream_alice.send(IdentityContext::alice().to_ws()).await.unwrap();
+    stream_bob.send(IdentityContext::bob().to_ws()).await.unwrap();
+
+    // Check initial state
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Verify Twitter.
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Twitter("@alice".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_TWITTER())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice.get_field_mut(&F::ALICE_TWITTER()).expected_message_mut().verify_message(&msg);
+    assert!(changed);
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_TWITTER(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(exp_resp)
+    );
+
+    // Bob remains unchanged.
+    /*
+    let resp: JsonResult<ResponseAccountState> = stream_bob.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
+    );
+    */
+}

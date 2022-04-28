@@ -162,6 +162,7 @@ impl ExpectedMessage {
 
         false
     }
+    // TODO: Private?
     pub fn set_verified(&mut self) {
         self.is_verified = true;
     }
