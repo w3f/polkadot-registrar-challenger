@@ -576,7 +576,7 @@ async fn verify_invalid_message_awaiting_second_challenge() {
 
 #[actix::test]
 async fn verify_full_identity() {
-    let (db, connector, mut api, injector) = new_env().await;
+    let (db, connector, mut api, _injector) = new_env().await;
     let mut stream_alice = api.ws_at("/api/account_status").await.unwrap();
     let mut stream_bob = api.ws_at("/api/account_status").await.unwrap();
 

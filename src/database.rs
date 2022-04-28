@@ -17,6 +17,8 @@ const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
 const DISPLAY_NAMES: &str = "display_names";
 
+const DANGLING_THRESHOLD: u64 = 3600; // one hour
+
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
     fn to_bson(&self) -> Result<Bson>;
@@ -711,23 +713,21 @@ impl Database {
 
         Ok(())
     }
-    /// It's possible that the Challenger has not received a notification from
-    /// the Watcher on whether an identity has been judged on-chain, causing the
-    /// Challenger to constantly resubmit the command for judgement to the
-    /// Watcher.
-    /// 
-    /// This method disables any resubmission for any identities not specified
-    /// in `ids`, which are all pending judgements as reported by the Watcher.
-    pub async fn process_dangling_judgement_states(&self, ids: &[&IdentityContext]) -> Result<()> {
+    /// Removes all dangling judgements after the `DANGLING_THRESHOLD` threshold
+    /// has been reached. See `crate::connector::start_dangling_judgements_task`
+    /// for more information.
+    pub async fn process_dangling_judgement_states(&self) -> Result<()> {
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        let threshold = (Timestamp::now().raw() - DANGLING_THRESHOLD).to_bson()?;
 
         let res = coll
             .update_many(
                 doc! {
                     "is_fully_verified": true,
                     "judgement_submitted": false,
-                    "context": {
-                        "$nin": ids.to_bson()?,
+                    "completion_timestamp": {
+                        "$lt": threshold,
                     }
                 },
                 doc! {
