@@ -598,6 +598,11 @@ async fn verify_full_identity() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
     );
 
+    // Verify Display name (does not create notification).
+    db.set_display_name_valid(&alice).await.unwrap();
+    let passed = alice.get_field_mut(&F::ALICE_DISPLAY_NAME()).expected_display_name_check_mut().0;
+    *passed = true;
+
     // Verify Twitter.
     let msg = ExternalMessage {
         origin: ExternalMessageType::Twitter("@alice".to_string()),
@@ -698,6 +703,44 @@ async fn verify_full_identity() {
         JsonResult::Ok(exp_resp)
     );
 
+    // Verify Matrix.
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_MATRIX())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice.get_field_mut(&F::ALICE_MATRIX()).expected_message_mut().verify_message(&msg);
+    assert!(changed);
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    let completion_timestamp = match &resp {
+        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        _ => panic!(),
+    };
+
+    alice.is_fully_verified = true;
+    alice.completion_timestamp = completion_timestamp;
+
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_MATRIX(),
+        }],
+    };
+
+    assert_eq!(
+        resp,
+        JsonResult::Ok(exp_resp)
+    );
+
     // Bob remains unchanged.
     /*
     let resp: JsonResult<ResponseAccountState> = stream_bob.next().await.into();
@@ -706,4 +749,7 @@ async fn verify_full_identity() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
     */
+
+    // Empty stream.
+    assert!(stream_alice.next().now_or_never().is_none());
 }

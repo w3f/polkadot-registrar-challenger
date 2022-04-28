@@ -673,6 +673,8 @@ impl Database {
         )
         .await?;
 
+        // TODO: Create event
+
         self.process_fully_verified(state).await?;
 
         Ok(())

@@ -623,6 +623,7 @@ mod tests {
         pub fn failed_attempts_mut(&mut self) -> &mut isize {
             &mut self.failed_attempts
         }
+        // rename, without "expected"
         pub fn expected_display_name_check_mut(
             &mut self,
         ) -> (&mut bool, &mut Vec<DisplayNameEntry>) {
