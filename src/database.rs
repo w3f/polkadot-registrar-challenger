@@ -590,6 +590,36 @@ impl Database {
 
         Ok(completed)
     }
+    pub async fn reset_issuance_state(&self, context: &IdentityContext) -> Result<bool> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        let res = coll
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                    "is_fully_verified": true,
+                },
+                doc! {
+                    "$set": {
+                        "judgement_submitted": false,
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        // Create event.
+        if res.modified_count == 1 {
+            self.insert_event(NotificationMessage::ResetIssuanceState {
+                context: context.clone(),
+            })
+            .await?;
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
@@ -609,7 +639,7 @@ impl Database {
             .await?;
 
         // Create event.
-        if res.modified_count > 0 {
+        if res.modified_count == 1 {
             self.insert_event(NotificationMessage::JudgementProvided {
                 context: context.clone(),
             })

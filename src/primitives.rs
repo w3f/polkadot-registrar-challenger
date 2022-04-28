@@ -420,6 +420,7 @@ impl From<NotificationMessage> for Event {
     }
 }
 
+// TODO: Check if this is fully handled on the TS side of things.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, Message)]
 #[serde(rename_all = "snake_case", tag = "type", content = "value")]
 #[rtype(result = "()")]
@@ -460,6 +461,9 @@ pub enum NotificationMessage {
         context: IdentityContext,
         field: RawFieldName,
     },
+    ResetIssuanceState {
+        context: IdentityContext,
+    },
 }
 
 impl NotificationMessage {
@@ -477,6 +481,7 @@ impl NotificationMessage {
             IdentityFullyVerified { context } => context,
             JudgementProvided { context } => context,
             ManuallyVerified { context, field: _ } => context,
+            ResetIssuanceState { context } => context,
         }
     }
 }

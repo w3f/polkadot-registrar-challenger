@@ -10,6 +10,7 @@ pub type Result<T> = std::result::Result<T, Response>;
 pub enum Command {
     Status(ChainAddress),
     Verify(ChainAddress, Vec<RawFieldName>),
+    IssueJudgement(ChainAddress),
     Help,
 }
 
@@ -183,6 +184,13 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
                 Ok(Response::Verified(addr, fields))
             }
             Command::Help => Ok(Response::Help),
+            Command::IssueJudgement(addr) => {
+                let context = create_context(addr.clone());
+
+                let res = db.reset_issuance_state(&context).await?;
+
+                unimplemented!()
+            }
         }
     };
 
