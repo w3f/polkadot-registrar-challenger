@@ -612,6 +612,18 @@ async fn verify_full_identity() {
         .0;
     *passed = true;
 
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_DISPLAY_NAME(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
     // Verify Twitter.
     let msg = ExternalMessage {
         origin: ExternalMessageType::Twitter("@alice".to_string()),

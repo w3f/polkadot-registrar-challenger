@@ -722,7 +722,17 @@ impl Database {
         )
         .await?;
 
-        // TODO: Create event
+        // Create event
+        self.insert_event(NotificationMessage::FieldVerified {
+            context: state.context.clone(),
+            field: state
+                .fields
+                .iter()
+                .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
+                .map(|field| field.value.clone())
+                .expect("Failed to retrieve display name. This is a bug")
+        })
+        .await?;
 
         self.process_fully_verified(state).await?;
 

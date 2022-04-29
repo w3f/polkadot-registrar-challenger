@@ -295,8 +295,7 @@ impl Connector {
                 let addr = addr.clone();
 
                 actix::spawn(async move {
-                    // Provide judgments.
-                    // TODO: Should accept network parameter.
+                    // Provide judgments for the specific network.
                     match db.fetch_judgement_candidates(network).await {
                         Ok(completed) => {
                             for state in completed {
