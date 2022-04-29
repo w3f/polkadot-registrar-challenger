@@ -99,7 +99,6 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         );
 
         async {
-            // TODO: Rename struct
             info!("Configuring client");
             let email_client = email::EmailClientBuilder::new()
                 .smtp_server(config.smtp_server)
@@ -186,8 +185,6 @@ impl AdapterListener {
                 }
 
                 // Check if a second challenge must be sent to the user directly.
-                // TODO: One might consider putting this logic into a separate task
-                // with a lower event loop timeout.
                 match db.fetch_events(event_counter).await {
                     Ok((events, new_counter)) => {
                         for event in &events {
@@ -213,7 +210,6 @@ impl AdapterListener {
 
                         event_counter = new_counter;
                     }
-                    // TODO: Unify error handling.
                     Err(err) => {
                         error!(
                             "Error fetching messages in {} adapter: {:?}",

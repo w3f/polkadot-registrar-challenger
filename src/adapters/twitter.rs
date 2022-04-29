@@ -120,7 +120,6 @@ fn gen_timestamp() -> u64 {
 }
 
 #[derive(Clone)]
-// TODO: Rename
 pub struct TwitterClient {
     client: Client,
     consumer_key: String,
