@@ -124,9 +124,8 @@ impl Handler<SubscribeAccountState> for LookupServer {
                             .or_insert_with(|| vec![subscriber]);
                     }
                 } else {
-                    // TODO: Set registrar index via config.
                     let _ = subscriber.do_send(JsonResult::Err(
-                        "There is no judgement request from that account for registrar #0"
+                        "There is no judgement request from that account for this registrar"
                             .to_string(),
                     ));
                 }
