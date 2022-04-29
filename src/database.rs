@@ -572,12 +572,13 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn fetch_judgement_candidates(&self) -> Result<Vec<JudgementState>> {
+    pub async fn fetch_judgement_candidates(&self, network: ChainName) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut cursor = coll
             .find(
                 doc! {
+                    "context.chain": network.as_str().to_bson()?,
                     "is_fully_verified": true,
                     "judgement_submitted": false,
                     "issue_judgement_at": {

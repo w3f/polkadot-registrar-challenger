@@ -14,3 +14,5 @@ async fn background_outgoing_watcher_messages() {
     assert!(counter.request_display_names > 5);
     assert!(counter.ping == 0);
 }
+
+// TODO: Test others, including judgement candidates

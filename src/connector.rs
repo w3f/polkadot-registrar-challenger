@@ -128,7 +128,6 @@ pub struct JudgementRequest {
     pub accounts: HashMap<AccountType, String>,
 }
 
-// TODO: Move to primitives.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayNameEntry {
     pub context: IdentityContext,
@@ -171,7 +170,6 @@ pub enum WatcherMessage {
     ActiveDisplayNames(Vec<DisplayNameEntryRaw>),
 }
 
-// TODO: Rename
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
 pub enum ClientCommand {
@@ -299,18 +297,11 @@ impl Connector {
                 actix::spawn(async move {
                     // Provide judgments.
                     // TODO: Should accept network parameter.
-                    match db.fetch_judgement_candidates().await {
+                    match db.fetch_judgement_candidates(network).await {
                         Ok(completed) => {
                             for state in completed {
-                                if state.context.chain == network {
-                                    info!("Notifying Watcher about judgement: {:?}", state.context);
-                                    addr.do_send(ClientCommand::ProvideJudgement(state.context));
-                                } else {
-                                    debug!(
-                                        "Skipping judgement on connector assigned to {:?}: {:?}",
-                                        network, state.context
-                                    );
-                                }
+                                info!("Notifying Watcher about judgement: {:?}", state.context);
+                                addr.do_send(ClientCommand::ProvideJudgement(state.context));
                             }
                         }
                         Err(err) => {
