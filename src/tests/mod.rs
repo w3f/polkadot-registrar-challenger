@@ -3,7 +3,7 @@ use crate::adapters::AdapterListener;
 use crate::api::JsonResult;
 use crate::connector::{AccountType, JudgementRequest, WatcherMessage};
 use crate::database::Database;
-use crate::notifier::SessionNotifier;
+use crate::notifier::run_session_notifier;
 use crate::primitives::IdentityFieldValue;
 use crate::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use actix_http::ws::{Frame, ProtocolError};
@@ -78,7 +78,7 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
 
     let t_db = db.clone();
     actix::spawn(async move {
-        SessionNotifier::new(t_db, actor).run_blocking().await;
+        run_session_notifier(t_db, actor).await;
     });
 
     // Setup connector mocker

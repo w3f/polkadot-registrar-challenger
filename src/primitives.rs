@@ -56,11 +56,9 @@ impl ChainName {
 pub struct IdentityField {
     pub value: IdentityFieldValue,
     pub challenge: ChallengeType,
-    // TODO: Change this to usize.
-    pub failed_attempts: isize,
+    pub failed_attempts: usize,
 }
 
-// TODO: Should be `From`?
 impl IdentityField {
     pub fn new(val: IdentityFieldValue) -> Self {
         use IdentityFieldValue::*;
@@ -223,8 +221,7 @@ pub struct JudgementStateBlanked {
 pub struct IdentityFieldBlanked {
     pub value: IdentityFieldValue,
     pub challenge: ChallengeTypeBlanked,
-    // TODO: Change this to usize.
-    failed_attempts: isize,
+    failed_attempts: usize,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -617,7 +614,7 @@ mod tests {
                 _ => panic!(),
             }
         }
-        pub fn failed_attempts_mut(&mut self) -> &mut isize {
+        pub fn failed_attempts_mut(&mut self) -> &mut usize {
             &mut self.failed_attempts
         }
         // rename, without "expected"

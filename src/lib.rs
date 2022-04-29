@@ -19,7 +19,7 @@ use adapters::run_adapters;
 use api::run_rest_api_server;
 use connector::run_connector;
 use database::Database;
-use notifier::SessionNotifier;
+use notifier::run_session_notifier;
 
 mod adapters;
 mod api;
@@ -155,7 +155,7 @@ async fn config_session_notifier(
     let db = Database::new(&db_config.uri, &db_config.name).await?;
     let lookup = run_rest_api_server(not_config, db.clone()).await?;
 
-    actix::spawn(async move { SessionNotifier::new(db, lookup).run_blocking().await });
+    actix::spawn(async move { run_session_notifier(db, lookup).await });
 
     Ok(())
 }
