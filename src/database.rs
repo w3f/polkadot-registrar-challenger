@@ -248,7 +248,7 @@ impl Database {
             let field_state = id_state
                 .fields
                 .iter_mut()
-                .find(|field| field.value.matches(message))
+                .find(|field| field.value.matches_origin(message))
                 .unwrap();
 
             // If the message contains the challenge, set it as valid (or

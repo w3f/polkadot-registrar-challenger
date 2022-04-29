@@ -160,7 +160,6 @@ impl ExpectedMessage {
 
         false
     }
-    // TODO: Private?
     pub fn set_verified(&mut self) {
         self.is_verified = true;
     }
@@ -186,7 +185,7 @@ pub enum IdentityFieldValue {
 
 impl IdentityFieldValue {
     // TODO: Rename
-    pub fn matches(&self, message: &ExternalMessage) -> bool {
+    pub fn matches_origin(&self, message: &ExternalMessage) -> bool {
         match self {
             IdentityFieldValue::Email(n1) => match &message.origin {
                 ExternalMessageType::Email(n2) => n1 == n2,
