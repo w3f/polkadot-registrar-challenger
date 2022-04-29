@@ -101,7 +101,7 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
         async {
             // TODO: Rename struct
             info!("Configuring client");
-            let email_client = email::SmtpImapClientBuilder::new()
+            let email_client = email::EmailClientBuilder::new()
                 .smtp_server(config.smtp_server)
                 .imap_server(config.imap_server)
                 .email_inbox(config.inbox)

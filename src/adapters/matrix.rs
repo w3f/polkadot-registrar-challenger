@@ -23,7 +23,6 @@ pub struct MatrixClient {
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
-// TODO: Change workflow to chain methods.
 impl MatrixClient {
     pub async fn new(
         homeserver: &str,

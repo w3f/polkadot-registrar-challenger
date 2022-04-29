@@ -87,8 +87,8 @@ impl TwitterBuilder {
         self.token_secret = Some(secret);
         self
     }
-    pub fn build(self) -> Result<TwitterHandler> {
-        Ok(TwitterHandler {
+    pub fn build(self) -> Result<TwitterClient> {
+        Ok(TwitterClient {
             client: Client::new(),
             consumer_key: self
                 .consumer_key
@@ -121,7 +121,7 @@ fn gen_timestamp() -> u64 {
 
 #[derive(Clone)]
 // TODO: Rename
-pub struct TwitterHandler {
+pub struct TwitterClient {
     client: Client,
     consumer_key: String,
     consumer_secret: String,
@@ -132,7 +132,7 @@ pub struct TwitterHandler {
     cache: HashSet<MessageId>,
 }
 
-impl TwitterHandler {
+impl TwitterClient {
     async fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         debug!("Requesting Twitter messages");
         // Request message on parse those into a simpler type.
@@ -417,7 +417,7 @@ impl ApiMessageRequest {
 }
 
 #[async_trait]
-impl Adapter for TwitterHandler {
+impl Adapter for TwitterClient {
     type MessageType = ();
 
     fn name(&self) -> &'static str {

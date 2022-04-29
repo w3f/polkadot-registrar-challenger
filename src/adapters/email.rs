@@ -33,7 +33,7 @@ impl ExtractSender<String> for String {
     }
 }
 
-pub struct SmtpImapClientBuilder {
+pub struct EmailClientBuilder {
     server: Option<String>,
     imap_server: Option<String>,
     inbox: Option<String>,
@@ -41,9 +41,9 @@ pub struct SmtpImapClientBuilder {
     password: Option<String>,
 }
 
-impl SmtpImapClientBuilder {
+impl EmailClientBuilder {
     pub fn new() -> Self {
-        SmtpImapClientBuilder {
+        EmailClientBuilder {
             server: None,
             imap_server: None,
             inbox: None,
@@ -72,8 +72,8 @@ impl SmtpImapClientBuilder {
         self
     }
     #[allow(clippy::or_fun_call)]
-    pub fn build(self) -> Result<SmtpImapClient> {
-        Ok(SmtpImapClient {
+    pub fn build(self) -> Result<EmailClient> {
+        Ok(EmailClient {
             smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
             imap_server: self
                 .imap_server
@@ -89,7 +89,7 @@ impl SmtpImapClientBuilder {
 }
 
 #[derive(Clone)]
-pub struct SmtpImapClient {
+pub struct EmailClient {
     smtp_server: String,
     imap_server: String,
     inbox: String,
@@ -99,7 +99,7 @@ pub struct SmtpImapClient {
     cache: HashSet<MessageId>,
 }
 
-impl SmtpImapClient {
+impl EmailClient {
     fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
@@ -221,7 +221,7 @@ impl SmtpImapClient {
 }
 
 #[async_trait]
-impl Adapter for SmtpImapClient {
+impl Adapter for EmailClient {
     type MessageType = ExpectedMessage;
 
     fn name(&self) -> &'static str {

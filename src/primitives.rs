@@ -184,7 +184,6 @@ pub enum IdentityFieldValue {
 }
 
 impl IdentityFieldValue {
-    // TODO: Rename
     pub fn matches_origin(&self, message: &ExternalMessage) -> bool {
         match self {
             IdentityFieldValue::Email(n1) => match &message.origin {
@@ -512,7 +511,6 @@ mod tests {
         }
     }
 
-    // TODO: Use JudgementState::new().
     impl JudgementState {
         pub fn alice() -> Self {
             JudgementState {
