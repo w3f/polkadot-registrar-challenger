@@ -280,6 +280,15 @@ mod tests {
             )
         );
 
+        let resp = Command::from_str("verify Alice all").unwrap();
+        assert_eq!(
+            resp,
+            Command::Verify(
+                ChainAddress::from("Alice".to_string()),
+                vec![RawFieldName::All]
+            )
+        );
+
         let resp = Command::from_str("verify Alice");
         assert!(resp.is_err());
     }

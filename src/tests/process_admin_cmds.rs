@@ -228,14 +228,13 @@ async fn command_verify_all() {
     // Expected event on stream.
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
 
+    // The completion timestamp is not that important, as long as it's `Some`.
     let completion_timestamp = match &resp {
         JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
         _ => panic!(),
     };
 
-    // The completion timestamp is not that important, as long as it's `Some`.
     assert!(completion_timestamp.is_some());
-
     alice.is_fully_verified = true;
     alice.judgement_submitted = false;
     alice.completion_timestamp = completion_timestamp;
