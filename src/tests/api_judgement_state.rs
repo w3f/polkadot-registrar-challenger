@@ -628,6 +628,7 @@ async fn verify_full_identity() {
         .expected_message_mut()
         .verify_message(&msg);
     assert!(changed);
+
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.
@@ -658,6 +659,7 @@ async fn verify_full_identity() {
         .expected_message_mut()
         .verify_message(&msg);
     assert!(changed);
+
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.
@@ -688,6 +690,7 @@ async fn verify_full_identity() {
         .get_field_mut(&F::ALICE_EMAIL())
         .expected_second_mut()
         .set_verified();
+
     db.verify_second_challenge(VerifyChallenge {
         entry: F::ALICE_EMAIL(),
         challenge: alice
@@ -727,6 +730,7 @@ async fn verify_full_identity() {
         .expected_message_mut()
         .verify_message(&msg);
     assert!(changed);
+
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.

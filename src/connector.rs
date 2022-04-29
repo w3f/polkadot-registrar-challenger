@@ -29,6 +29,7 @@ const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
 const DISPLAY_NAMES_INTERVAL: u64 = 10;
 #[cfg(not(test))]
 const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 10;
+const RECONNECTION_TIMEOUT: u64 = 10;
 
 #[cfg(test)]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 1;
@@ -374,7 +375,7 @@ impl Actor for Connector {
                             error!("Cannot reconnect to Watcher after {} attempts", counter);
                         }
 
-                        sleep(Duration::from_secs(10)).await;
+                        sleep(Duration::from_secs(RECONNECTION_TIMEOUT)).await;
                     } else {
                         info!("Reconnected to Watcher!");
                         break;
@@ -778,7 +779,7 @@ pub mod tests {
         pub async fn inject(&self, msg: WatcherMessage) {
             self.addr.send(msg).await.unwrap().unwrap();
             // Give some time to process.
-            sleep(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(5)).await;
         }
         pub async fn inserted_states(&self) -> Vec<JudgementState> {
             let mut states = self.inserted_states.write().await;

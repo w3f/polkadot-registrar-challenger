@@ -14,7 +14,7 @@ use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
 use url::Url;
 
-const REJOIN_DELAY: u64 = 3;
+const REJOIN_DELAY: u64 = 10;
 const REJOIN_MAX_ATTEMPTS: usize = 5;
 
 #[derive(Clone)]
@@ -114,7 +114,6 @@ impl EventHandler for Listener {
         _: Option<MemberEventContent>,
     ) {
         if let Room::Invited(room) = room {
-            let mut delay = REJOIN_DELAY;
             let mut rejoin_attempts = 0;
 
             while let Err(err) = self.client.join_room_by_id(room.room_id()).await {
@@ -122,17 +121,16 @@ impl EventHandler for Listener {
                     "Failed to join room {} ({:?}), retrying in {}s",
                     room.room_id(),
                     err,
-                    delay,
+                    REJOIN_DELAY,
                 );
 
-                time::sleep(Duration::from_secs(delay)).await;
+                time::sleep(Duration::from_secs(REJOIN_DELAY)).await;
 
                 if rejoin_attempts == REJOIN_MAX_ATTEMPTS {
-                    error!("Can't join room {} ({:?})", room.room_id(), err);
+                    error!("Can't join room {}, exiting ({:?})", room.room_id(), err);
                     return;
                 }
 
-                delay *= 2;
                 rejoin_attempts += 1;
             }
 

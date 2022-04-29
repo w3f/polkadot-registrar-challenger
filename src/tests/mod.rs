@@ -78,7 +78,7 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
     let connector = ConnectorMocker::new(db.clone());
 
     // Give some time to start up.
-    sleep(Duration::from_secs(3)).await;
+    sleep(Duration::from_secs(5)).await;
 
     //(server, connector, injector)
     (db, connector, server, injector)
