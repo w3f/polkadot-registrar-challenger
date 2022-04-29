@@ -779,7 +779,7 @@ pub mod tests {
         pub async fn inject(&self, msg: WatcherMessage) {
             self.addr.send(msg).await.unwrap().unwrap();
             // Give some time to process.
-            sleep(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
         }
         pub async fn inserted_states(&self) -> Vec<JudgementState> {
             let mut states = self.inserted_states.write().await;

@@ -253,7 +253,7 @@ pub mod tests {
             }
 
             // Give the adapter enough time to fetch and process messages.
-            sleep(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
         }
     }
 

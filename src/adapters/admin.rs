@@ -206,7 +206,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
         Ok(resp) => {
             #[cfg(test)]
             // Leave enough time for the websocket server to pickup the event.
-            sleep(Duration::from_secs(5)).await;
+            sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
 
             resp
         }
