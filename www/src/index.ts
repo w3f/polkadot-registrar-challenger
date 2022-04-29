@@ -2,6 +2,13 @@ import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Viol
 import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
 
+interface Config {
+    http_url: string;
+    ws_url: string;
+}
+
+const config: Config = require("../config.json");
+
 class ActionListerner {
     specify_network: HTMLInputElement;
     specify_action: HTMLInputElement;
@@ -11,6 +18,7 @@ class ActionListerner {
     notifications: NotificationHandler;
 
     constructor() {
+
         // Register relevant elements.
         this.btn_execute_action =
             document
@@ -126,7 +134,7 @@ class ActionListerner {
             `;
 
         if (action == "Check Judgement") {
-            const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+            const socket = new WebSocket(config.ws_url);
 
             window.setInterval(() => {
                 socket.send("heartbeat");
@@ -149,7 +157,7 @@ class ActionListerner {
                     chain: network,
                 });
 
-                let response = await fetch("https://registrar-backend.web3.foundation/api/check_display_name",
+                let response = await fetch(config.http_url,
                     {
                         method: "POST",
                         headers: {

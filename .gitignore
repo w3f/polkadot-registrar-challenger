@@ -3,5 +3,6 @@ www/dist
 www/build
 config*
 !helmfile.d/config
+!www/config.json
 scripts/load-env.sh
 node_modules
