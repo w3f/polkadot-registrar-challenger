@@ -156,6 +156,7 @@ impl FromStr for RawFieldName {
             "web" => RawFieldName::Web,
             "twitter" => RawFieldName::Twitter,
             "matrix" => RawFieldName::Matrix,
+            "all" => RawFieldName::All,
             _ => return Err(Response::InvalidSyntax(Some(s.to_string()))),
         };
 
