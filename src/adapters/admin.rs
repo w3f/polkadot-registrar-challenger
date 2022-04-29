@@ -181,10 +181,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
                 let context = create_context(addr.clone());
 
                 // Check if _all_ should be verified (respectively the full identity)
-                if fields
-                    .iter()
-                    .find(|f| matches!(f, RawFieldName::All))
-                    .is_some()
+                if fields.iter().any(|f| matches!(f, RawFieldName::All))
                     && db.full_manual_verification(&context).await?
                 {
                     return Ok(Response::FullyVerified(addr));
