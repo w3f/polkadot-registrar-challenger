@@ -206,12 +206,10 @@ async fn run_mocker() -> Result<()> {
     use rand::{thread_rng, Rng};
 
     // Init logger
-    // TODO: log
-    /*
-    env_logger::builder()
-        .filter_module("system", LevelFilter::Debug)
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter("system")
         .init();
-    */
 
     let mut rng = thread_rng();
 
@@ -243,6 +241,12 @@ async fn run_mocker() -> Result<()> {
     info!("Mocker setup completed");
 
     let mut alice = JudgementState::alice();
+    // Set display name to valid.
+    *alice
+        .get_field_mut(&F::ALICE_DISPLAY_NAME())
+        .expected_display_name_check_mut()
+        .0 = true;
+
     info!("INSERTING IDENTITY: Alice (1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP)");
     db.add_judgement_request(&alice).await.unwrap();
 
@@ -256,7 +260,14 @@ async fn run_mocker() -> Result<()> {
         if reset == 0 {
             warn!("Resetting Identity");
             db.delete_judgement(&alice.context).await.unwrap();
+
             alice = JudgementState::alice();
+            // Set display name to valid.
+            *alice
+                .get_field_mut(&F::ALICE_DISPLAY_NAME())
+                .expected_display_name_check_mut()
+                .0 = true;
+
             db.add_judgement_request(&alice).await.unwrap();
         }
 
@@ -316,6 +327,6 @@ async fn run_mocker() -> Result<()> {
             })
             .await;
 
-        sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
+        sleep(Duration::from_secs(2)).await;
     }
 }
