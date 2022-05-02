@@ -45,8 +45,7 @@ class ActionListerner {
             .addEventListener("click", (e: Event) => {
                 this.specify_network
                     .innerText = (e.target as HTMLAnchorElement).innerText;
-                this.btn_execute_action.innerHTML = `Go!`;
-                this.btn_execute_action.disabled = false;
+                this.manager.resetButton();
             });
 
         // Handler for choosing action, e.g. "Check Judgement".
@@ -79,8 +78,7 @@ class ActionListerner {
 
         this.search_bar
             .addEventListener("input", (_: Event) => {
-                this.btn_execute_action.innerHTML = `Go!`;
-                this.btn_execute_action.disabled = false;
+                this.manager.resetButton();
 
                 if (this.search_bar.value.startsWith("1")) {
                     this.specify_network.innerHTML = "Polkadot";
@@ -193,9 +191,7 @@ class ActionListerner {
             this.notifications.unexpectedError("pdnc#3")
         }
 
-        this.btn_execute_action.innerHTML = `Go!`;
-        this.btn_execute_action.disabled = false;
-
+        this.manager.resetButton();
         this.manager.wipeLiveUpdateInfo();
         this.manager.wipeVerificationOverviewContent();
         this.manager.wipeEmailSecondChallengeContent();
@@ -224,9 +220,8 @@ class ActionListerner {
             let message: string = parsed.message;
             this.notifications.displayError(message);
 
+            this.manager.resetButton();
             this.manager.wipeLiveUpdateInfo();
-            this.btn_execute_action.innerHTML = `Go!`;
-            this.btn_execute_action.disabled = false;
         } else {
             // Should never occur.
             this.notifications.unexpectedError("pas#1")

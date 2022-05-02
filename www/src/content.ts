@@ -76,6 +76,10 @@ export class ContentManager {
             </div>
         `;
     }
+    resetButton() {
+        this.btn_execute_action.innerHTML = `Go!`;
+        this.btn_execute_action.disabled = false;
+    }
     wipeIntroduction() {
         document.getElementById("introduction")!.innerHTML = "";
     }
