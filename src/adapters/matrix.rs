@@ -82,7 +82,6 @@ pub struct MatrixHandle(String);
 
 struct Listener {
     client: Client,
-    // TODO: Should probably just be a mpsc channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
     db: Database,
     admins: Vec<MatrixHandle>,
