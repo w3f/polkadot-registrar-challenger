@@ -45,6 +45,7 @@ impl Database {
             db: Client::with_uri_str(uri).await?.database(db),
         })
     }
+    /// Simply checks if a connection could be established to the database.
     pub async fn connectivity_check(&self) -> Result<()> {
         self.db
             .list_collection_names(None)
