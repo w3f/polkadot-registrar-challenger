@@ -139,9 +139,7 @@ fn open_config() -> Result<Config> {
     Ok(config)
 }
 
-async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfig) -> Result<()> {
-    let db = Database::new(&db_config.uri, &db_config.name).await?;
-
+async fn config_adapter_listener(db: Database, config: AdapterConfig) -> Result<()> {
     let watchers = config.watcher.clone();
     let dn_config = config.display_name.clone();
     run_adapters(config.clone(), db.clone()).await?;
@@ -149,10 +147,9 @@ async fn config_adapter_listener(db_config: DatabaseConfig, config: AdapterConfi
 }
 
 async fn config_session_notifier(
-    db_config: DatabaseConfig,
+    db: Database,
     not_config: NotifierConfig,
 ) -> Result<()> {
-    let db = Database::new(&db_config.uri, &db_config.name).await?;
     let lookup = run_rest_api_server(not_config, db.clone()).await?;
 
     actix::spawn(async move { run_session_notifier(db, lookup).await });
@@ -164,22 +161,23 @@ async fn config_session_notifier(
 pub async fn run() -> Result<()> {
     let root = open_config()?;
     let (db_config, instance) = (root.db, root.instance);
+    let db = Database::new(&db_config.uri, &db_config.name).await?;
 
     match instance {
         InstanceType::AdapterListener(config) => {
             info!("Starting adapter listener instance");
-            config_adapter_listener(db_config, config).await?;
+            config_adapter_listener(db, config).await?;
         }
         InstanceType::SessionNotifier(config) => {
             info!("Starting session notifier instance");
-            config_session_notifier(db_config, config).await?;
+            config_session_notifier(db, config).await?;
         }
         InstanceType::SingleInstance(config) => {
             info!("Starting adapter listener and session notifier instances");
             let (adapter_config, notifier_config) = (config.adapter, config.notifier);
 
-            config_adapter_listener(db_config.clone(), adapter_config).await?;
-            config_session_notifier(db_config, notifier_config).await?;
+            config_adapter_listener(db.clone(), adapter_config).await?;
+            config_session_notifier(db, notifier_config).await?;
         }
     }
 
