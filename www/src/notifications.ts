@@ -148,7 +148,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         }
         case "full_manual_verification": {
             return [
-                `Manually verified the entire identity`,
+                `Manually verified the identity. Judgement will be issued in a couple of minutes.`,
                 "bg-info text-light"
             ]
         }
