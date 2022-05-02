@@ -60,8 +60,6 @@ export class ContentManager {
     }
 
     processVerificationOverviewTable(state: State) {
-        // TODO: Check if 'fields` is empty.
-
         let table = "";
 
         let counter = 1;
