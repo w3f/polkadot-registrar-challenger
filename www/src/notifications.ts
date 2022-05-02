@@ -15,15 +15,18 @@ export class NotificationHandler {
 
     processNotifications(notifications: Notification[]) {
         for (let notify of notifications) {
-            let [message, color] = notificationTypeResolver(notify);
-
-            this.displayNotification(message, color, false);
+            try {
+                const [message, color] = notificationTypeResolver(notify);
+                this.displayNotification(message, color, false);
+            } catch (error) {
+                this.unexpectedError("pnntr#1");
+            }
         }
     }
     displayNotification(message: string, color: string, show_final: boolean) {
-            this.div_notifications.insertAdjacentHTML(
-                "beforeend",
-                `<div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
+        this.div_notifications.insertAdjacentHTML(
+            "beforeend",
+            `<div id="toast-${this.notify_idx}" class="toast show align-items-center ${color} border-0" role="alert" aria-live="assertive"
                     aria-atomic="true">
                     <div class="d-flex">
                         <div class="toast-body">
@@ -34,44 +37,44 @@ export class NotificationHandler {
                     </div>
                 </div>
             `
-            );
+        );
 
-            // Add handler for close button.
-            let idx = this.notify_idx;
-            document
-                .getElementById(`toast-${idx}-close-btn`)!
-                .addEventListener("click", (e: Event) => {
-                    let toast: HTMLElement = document
-                        .getElementById(`toast-${idx}`)!;
+        // Add handler for close button.
+        let idx = this.notify_idx;
+        document
+            .getElementById(`toast-${idx}-close-btn`)!
+            .addEventListener("click", (e: Event) => {
+                let toast: HTMLElement = document
+                    .getElementById(`toast-${idx}`)!;
 
-                    toast.classList.remove("show");
-                    toast.classList.add("hide");
-                });
+                toast.classList.remove("show");
+                toast.classList.add("hide");
+            });
 
-            // Cleanup old toast, limit to eight max.
-            let max = 8;
-            if (show_final) {
-                max = 1;
+        // Cleanup old toast, limit to eight max.
+        let max = 8;
+        if (show_final) {
+            max = 1;
+        }
+
+        let old = this.notify_idx - max;
+        if (old >= 0) {
+            let toast: HTMLElement | null = document
+                .getElementById(`toast-${old}`);
+
+            if (toast) {
+                toast.classList.remove("show");
+                toast.classList.add("hide");
             }
+        }
 
-            let old = this.notify_idx - max;
-            if (old >= 0) {
-                let toast: HTMLElement | null = document
-                    .getElementById(`toast-${old}`);
-
-                if (toast) {
-                    toast.classList.remove("show");
-                    toast.classList.add("hide");
-                }
-            }
-
-            this.notify_idx += 1;
+        this.notify_idx += 1;
     }
     displayError(message: string) {
         this.displayNotification(message, "bg-danger text-light", false);
     }
     unexpectedError(id: string) {
-        this.displayError(`Unexpected internal error, please contact admin. Id: ${id}`);
+        this.displayError(`Unexpected internal error, please contact admin. Code: ${id}`);
     }
 }
 
@@ -80,7 +83,6 @@ function notificationTypeResolver(notification: Notification): [string, string] 
         case "identity_inserted": {
             return [
                 `The judgement request has been discovered by the registrar service.`,
-                // TODO: Specify those as constants.
                 "bg-info text-dark"
             ]
         }
@@ -145,9 +147,7 @@ function notificationTypeResolver(notification: Notification): [string, string] 
             ]
         }
         default: {
-            // TODO
+            throw new Error("unrecognized notification");
         }
     }
-
-    return ["TODO", "TODO"]
 }
