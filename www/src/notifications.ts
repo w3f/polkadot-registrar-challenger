@@ -70,6 +70,9 @@ export class NotificationHandler {
     displayError(message: string) {
         this.displayNotification(message, "bg-danger text-light", false);
     }
+    unexpectedError(id: string) {
+        this.displayError(`Unexpected internal error, please contact admin. Id: ${id}`);
+    }
 }
 
 function notificationTypeResolver(notification: Notification): [string, string] {

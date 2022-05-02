@@ -122,7 +122,6 @@ class ActionListerner {
         this.btn_execute_action.disabled = true;
 
         const action = document.getElementById("specify-action")!.innerHTML;
-        // TODO: Rename this, can be both address or display name.
         const user_input = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
 
@@ -181,12 +180,15 @@ class ActionListerner {
                 let violations: Violation[] = check.value;
                 this.manager.setDisplayNameViolation(display_name, violations, false);
             } else {
-                // TODO
+                // Should never occur.
+                this.notifications.unexpectedError("pdnc#1")
             }
         } else if (data.type == "err") {
-            // TODO
+            // Should never occur.
+            this.notifications.unexpectedError("pdnc#2")
         } else {
-            // TODO
+            // Should never occur.
+            this.notifications.unexpectedError("pdnc#3")
         }
 
         this.btn_execute_action.innerHTML = `Go!`;
@@ -225,7 +227,8 @@ class ActionListerner {
             this.btn_execute_action.innerHTML = `Go!`;
             this.btn_execute_action.disabled = false;
         } else {
-            // TODO: Print unexpected error...
+            // Should never occur.
+            this.notifications.unexpectedError("pas#1")
         }
     }
 }
