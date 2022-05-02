@@ -201,8 +201,6 @@ class ActionListerner {
     handleJudgementState(msg: MessageEvent) {
         const parsed: GenericMessage = JSON.parse(msg.data);
         if (parsed.type == "ok") {
-            this.manager.wipeIntroduction();
-
             let message: StateNotification = parsed.message;
             this.manager.wipeIntroduction();
             this.manager.setButtonLiveAnimation();
