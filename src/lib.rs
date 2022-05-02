@@ -159,7 +159,10 @@ async fn config_session_notifier(
 pub async fn run() -> Result<()> {
     let root = open_config()?;
     let (db_config, instance) = (root.db, root.instance);
+
+    info!("Initializing connection to database");
     let db = Database::new(&db_config.uri, &db_config.name).await?;
+    db.connectivity_check().await?;
 
     match instance {
         InstanceType::AdapterListener(config) => {

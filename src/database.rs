@@ -45,6 +45,12 @@ impl Database {
             db: Client::with_uri_str(uri).await?.database(db),
         })
     }
+    pub async fn connectivity_check(&self) -> Result<()> {
+        self.db.list_collection_names(None)
+            .await
+            .map_err(|err| anyhow!("Failed to connect to database: {:?}", err))
+            .map(|_| ())
+    }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
