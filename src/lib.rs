@@ -152,7 +152,6 @@ async fn config_session_notifier(db: Database, not_config: NotifierConfig) -> Re
     Ok(())
 }
 
-// TODO: Check for database connectivity.
 pub async fn run() -> Result<()> {
     let root = open_config()?;
     let (db_config, instance) = (root.db, root.instance);
