@@ -146,6 +146,12 @@ function notificationTypeResolver(notification: Notification): [string, string] 
                 "bg-info text-light"
             ]
         }
+        case "full_manual_verification": {
+            return [
+                `Manually verified the entire identity`,
+                "bg-info text-light"
+            ]
+        }
         default: {
             throw new Error("unrecognized notification");
         }
