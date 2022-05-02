@@ -123,7 +123,7 @@ class ActionListerner {
 
         const action = document.getElementById("specify-action")!.innerHTML;
         // TODO: Rename this, can be both address or display name.
-        const address = this.search_bar.value;
+        const user_input = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
 
         this.btn_execute_action
@@ -140,7 +140,7 @@ class ActionListerner {
             }, 30000);
 
             socket.onopen = () => {
-                let msg = JSON.stringify({ address: address, chain: network });
+                let msg = JSON.stringify({ address: user_input, chain: network });
                 socket.send(msg);
             };
 
@@ -149,7 +149,8 @@ class ActionListerner {
                 this.parseAccountStatus(msg);
             };
         } else if (action == "Validate Display Name") {
-            let display_name = address;
+            let display_name = user_input;
+
             (async () => {
                 let body = JSON.stringify({
                     check: display_name,
