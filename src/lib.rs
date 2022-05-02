@@ -33,8 +33,6 @@ mod tests;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    // TODO: log
-    pub log_level: String,
     pub db: DatabaseConfig,
     pub instance: InstanceType,
 }
