@@ -274,8 +274,6 @@ export class ContentManager {
                     challenge: second_challenge.value,
                 });
 
-                console.log(body);
-
                 let _resp = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
                     {
                         method: "POST",
