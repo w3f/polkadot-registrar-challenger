@@ -66,12 +66,12 @@ class ActionListerner {
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => {
-                let action = document.getElementById("specify-action")!.innerHTML;
+                let action = this.specify_action.innerHTML;
                 if (action == "Check Judgement") {
                     window.location.href = "?network="
-                        + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
+                        + this.specify_network.innerHTML.toLowerCase()
                         + "&address="
-                        + (document.getElementById("search-bar")! as HTMLInputElement).value;
+                        + this.search_bar.value;
                 } else if (action == "Validate Display Name") {
                     this.executeAction();
                 }
@@ -113,23 +113,18 @@ class ActionListerner {
         let address = params.get("address");
 
         if (network != null && address != null) {
-            (document.getElementById("specify-network")! as HTMLInputElement).innerHTML = capitalizeFirstLetter(network);
-            (document.getElementById("search-bar")! as HTMLInputElement).value = address;
+            this.specify_network.innerHTML = capitalizeFirstLetter(network);
+            this.search_bar.value = address;
             this.executeAction();
         }
     }
     executeAction() {
-        this.btn_execute_action.disabled = true;
+        this.manager.setButtonLoadingSpinner();
 
-        const action = document.getElementById("specify-action")!.innerHTML;
+        const action = this.specify_action.innerHTML;
         const user_input = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
 
-        this.btn_execute_action
-            .innerHTML = `
-                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                <span class="visually-hidden"></span>
-            `;
 
         if (action == "Check Judgement") {
             const socket = new WebSocket(config.ws_url);
@@ -171,7 +166,8 @@ class ActionListerner {
         }
     }
     parseDisplayNameCheck(data: GenericMessage, display_name: string) {
-        document.getElementById("introduction")!.innerHTML = "";
+        this.manager.wipeIntroduction();
+
         if (data.type == "ok") {
             let check: CheckDisplayNameResult = data.message;
             if (check.type == "ok") {
@@ -202,17 +198,15 @@ class ActionListerner {
     parseAccountStatus(msg: MessageEvent) {
         const parsed: GenericMessage = JSON.parse(msg.data);
         if (parsed.type == "ok") {
-            document.getElementById("introduction")!.innerHTML = "";
-            this.btn_execute_action.innerHTML = `
-                <div class="spinner-grow spinner-grow-sm" role="status">
-                    <span class="visually-hidden"></span>
-                </div>
-            `;
+            this.manager.wipeIntroduction();
 
             let message: StateNotification = parsed.message;
+            this.manager.wipeIntroduction();
+            this.manager.setButtonLiveAnimation();
             this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(message.state);
             this.manager.processUnsupportedOverview(message.state);
+
             this.notifications.processNotifications(message.notifications);
 
             // This notification should only be displayed if no other notifications are available.

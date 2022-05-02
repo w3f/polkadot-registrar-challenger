@@ -26,6 +26,7 @@ const BadgeInvalid = `
 `;
 
 export class ContentManager {
+    btn_execute_action: HTMLButtonElement;
     div_live_updates_info: HTMLElement;
     div_display_name_overview: HTMLElement;
     div_fully_verified_info: HTMLElement;
@@ -34,6 +35,11 @@ export class ContentManager {
     div_unsupported_overview: HTMLElement;
 
     constructor() {
+        // Register relevant elements.
+        this.btn_execute_action =
+            document
+                .getElementById("execute-action")! as HTMLButtonElement;
+
         this.div_live_updates_info =
             document
                 .getElementById("div-live-updates-info")!;
@@ -59,6 +65,24 @@ export class ContentManager {
                 .getElementById("div-unsupported-overview")!;
     }
 
+    setButtonLoadingSpinner() {
+        this.btn_execute_action.disabled = true;
+        this.btn_execute_action
+            .innerHTML = `
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span class="visually-hidden"></span>
+            `;
+    }
+    setButtonLiveAnimation() {
+        this.btn_execute_action.innerHTML = `
+            <div class="spinner-grow spinner-grow-sm" role="status">
+                <span class="visually-hidden"></span>
+            </div>
+        `;
+    }
+    wipeIntroduction() {
+        document.getElementById("introduction")!.innerHTML = "";
+    }
     processVerificationOverviewTable(state: State) {
         let table = "";
 
@@ -249,13 +273,13 @@ export class ContentManager {
                 console.log(body);
 
                 let response = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: body,
-                });
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: body,
+                    });
 
                 // TODO:
                 //let x = response.json();
