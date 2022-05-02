@@ -1,10 +1,5 @@
 import { DisplayNameChallenge, State, Violation } from './json';
 
-export function capitalizeFirstLetter(word: string) {
-    return (word.charAt(0).toUpperCase() + word.slice(1))
-        .replace("_", " ");
-}
-
 const BadgeVerified = `
     <span class="badge bg-success">verified</span>
 `;
@@ -25,6 +20,7 @@ const BadgeInvalid = `
     <span class="badge bg-danger">invalid</span>
 `;
 
+// Manages the content in the UI. Mostly called within the `ActionListener`.
 export class ContentManager {
     btn_execute_action: HTMLButtonElement;
     div_live_updates_info: HTMLElement;
@@ -308,4 +304,9 @@ export class ContentManager {
     wipeUnsupportedContent() {
         this.div_unsupported_overview.innerHTML = "";
     }
+}
+
+export function capitalizeFirstLetter(word: string) {
+    return (word.charAt(0).toUpperCase() + word.slice(1))
+        .replace("_", " ");
 }

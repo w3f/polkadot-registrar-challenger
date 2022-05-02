@@ -9,6 +9,7 @@ interface Config {
 
 const config: Config = require("../config.json");
 
+// The primary manager of all actions/events, for both UI and server messages.
 class ActionListerner {
     specify_network: HTMLInputElement;
     specify_action: HTMLInputElement;
@@ -18,7 +19,6 @@ class ActionListerner {
     notifications: NotificationHandler;
 
     constructor() {
-
         // Register relevant elements.
         this.btn_execute_action =
             document
@@ -100,6 +100,7 @@ class ActionListerner {
                 }
             });
 
+        // Add a listener for every notification. Required for closing.
         Array.from(document
             .getElementsByClassName("toast")!)
             .forEach(element => {
@@ -108,6 +109,8 @@ class ActionListerner {
                     });
             });
 
+        // Get params from the webbrowser search bar, load data from server if
+        // specified.
         let params = new URLSearchParams(window.location.search);
         let network = params.get("network");
         let address = params.get("address");
@@ -118,13 +121,13 @@ class ActionListerner {
             this.executeAction();
         }
     }
+    // Executes the main logic, either the judgement state or display name check.
     executeAction() {
         this.manager.setButtonLoadingSpinner();
 
         const action = this.specify_action.innerHTML;
         const user_input = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
-
 
         if (action == "Check Judgement") {
             const socket = new WebSocket(config.ws_url);
@@ -133,14 +136,16 @@ class ActionListerner {
                 socket.send("heartbeat");
             }, 30000);
 
+            // Send request to the server
             socket.onopen = () => {
                 let msg = JSON.stringify({ address: user_input, chain: network });
                 socket.send(msg);
             };
 
+            // Parse received judgement state.
             socket.onmessage = (event: Event) => {
                 let msg = (event as MessageEvent);
-                this.parseAccountStatus(msg);
+                this.handleJudgementState(msg);
             };
         } else if (action == "Validate Display Name") {
             let display_name = user_input;
@@ -161,11 +166,12 @@ class ActionListerner {
                     });
 
                 let result: GenericMessage = JSON.parse(await response.text());
-                this.parseDisplayNameCheck(result, display_name);
+                this.handleDisplayNameCheck(result, display_name);
             })();
         }
     }
-    parseDisplayNameCheck(data: GenericMessage, display_name: string) {
+    // Handles the display name result received from the server.
+    handleDisplayNameCheck(data: GenericMessage, display_name: string) {
         this.manager.wipeIntroduction();
 
         if (data.type == "ok") {
@@ -195,7 +201,8 @@ class ActionListerner {
         this.manager.wipeEmailSecondChallengeContent();
         this.manager.wipeUnsupportedContent();
     }
-    parseAccountStatus(msg: MessageEvent) {
+    // Handles the judgement state received from the server.
+    handleJudgementState(msg: MessageEvent) {
         const parsed: GenericMessage = JSON.parse(msg.data);
         if (parsed.type == "ok") {
             this.manager.wipeIntroduction();
