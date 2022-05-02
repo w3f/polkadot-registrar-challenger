@@ -12,7 +12,7 @@ const config: Config = require("../config.json");
 class ActionListerner {
     specify_network: HTMLInputElement;
     specify_action: HTMLInputElement;
-    specify_address: HTMLInputElement;
+    search_bar: HTMLInputElement;
     btn_execute_action: HTMLButtonElement;
     manager: ContentManager;
     notifications: NotificationHandler;
@@ -32,10 +32,9 @@ class ActionListerner {
             document
                 .getElementById("specify-network")! as HTMLInputElement;
 
-        // TODO: Rename this element.
-        this.specify_address =
+        this.search_bar =
             document
-                .getElementById("specify-address")! as HTMLInputElement;
+                .getElementById("search-bar")! as HTMLInputElement;
 
         this.manager = new ContentManager;
         this.notifications = new NotificationHandler;
@@ -56,10 +55,10 @@ class ActionListerner {
             .addEventListener("click", (e: Event) => {
                 let target = (e.target as HTMLAnchorElement).innerText;
                 if (target == "Check Judgement") {
-                    this.specify_address.placeholder = "Account address..."
+                    this.search_bar.placeholder = "Account address..."
                     this.specify_action.innerText = target;
                 } else if (target == "Validate Display Name") {
-                    this.specify_address.placeholder = "Display Name..."
+                    this.search_bar.placeholder = "Display Name..."
                     this.specify_action.innerText = target;
                 }
             });
@@ -72,18 +71,18 @@ class ActionListerner {
                     window.location.href = "?network="
                         + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
                         + "&address="
-                        + (document.getElementById("specify-address")! as HTMLInputElement).value;
+                        + (document.getElementById("search-bar")! as HTMLInputElement).value;
                 } else if (action == "Validate Display Name") {
                     this.executeAction();
                 }
             });
 
-        this.specify_address
+        this.search_bar
             .addEventListener("input", (_: Event) => {
                 this.btn_execute_action.innerHTML = `Go!`;
                 this.btn_execute_action.disabled = false;
 
-                if (this.specify_address.value.startsWith("1")) {
+                if (this.search_bar.value.startsWith("1")) {
                     this.specify_network.innerHTML = "Polkadot";
                 } else {
                     this.specify_network.innerHTML = "Kusama";
@@ -91,7 +90,7 @@ class ActionListerner {
             });
 
         // Bind 'Enter' key to action button.
-        this.specify_address
+        this.search_bar
             .addEventListener("keyup", (event: Event) => {
                 // Number 13 is the "Enter" key on the keyboard
                 if ((event as KeyboardEvent).keyCode === 13) {
@@ -115,7 +114,7 @@ class ActionListerner {
 
         if (network != null && address != null) {
             (document.getElementById("specify-network")! as HTMLInputElement).innerHTML = capitalizeFirstLetter(network);
-            (document.getElementById("specify-address")! as HTMLInputElement).value = address;
+            (document.getElementById("search-bar")! as HTMLInputElement).value = address;
             this.executeAction();
         }
     }
@@ -124,7 +123,7 @@ class ActionListerner {
 
         const action = document.getElementById("specify-action")!.innerHTML;
         // TODO: Rename this, can be both address or display name.
-        const address = this.specify_address.value;
+        const address = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
 
         this.btn_execute_action
