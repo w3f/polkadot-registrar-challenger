@@ -18,8 +18,8 @@ mod api_judgement_state;
 mod background_tasks;
 mod display_name_verification;
 mod explicit;
-mod process_admin_cmds;
 mod live_mocker;
+mod process_admin_cmds;
 
 // Convenience type
 pub type F = IdentityFieldValue;

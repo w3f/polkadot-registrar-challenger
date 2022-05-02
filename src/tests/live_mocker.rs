@@ -1,11 +1,11 @@
-use crate::{Result, DatabaseConfig, NotifierConfig, DisplayNameConfig, config_session_notifier};
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
 use crate::database::Database;
 use crate::primitives::{
-	ExpectedMessage, ExternalMessage, ExternalMessageType, JudgementState, MessageId, Timestamp,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, JudgementState, MessageId, Timestamp,
 };
 use crate::tests::F;
+use crate::{config_session_notifier, DatabaseConfig, DisplayNameConfig, NotifierConfig, Result};
 use rand::{thread_rng, Rng};
 use tokio::time::{sleep, Duration};
 
@@ -35,10 +35,10 @@ async fn run_mocker() -> Result<()> {
 
     info!("Starting mock adapter and session notifier instances");
 
-    config_session_notifier(db_config.clone(), notifier_config).await?;
-
     // Setup database
     let db = Database::new(&db_config.uri, &db_config.name).await?;
+
+    config_session_notifier(db.clone(), notifier_config).await?;
 
     // Setup message verifier and injector.
     let injector = MessageInjector::new();

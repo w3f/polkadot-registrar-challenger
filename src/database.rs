@@ -46,7 +46,8 @@ impl Database {
         })
     }
     pub async fn connectivity_check(&self) -> Result<()> {
-        self.db.list_collection_names(None)
+        self.db
+            .list_collection_names(None)
             .await
             .map_err(|err| anyhow!("Failed to connect to database: {:?}", err))
             .map(|_| ())
@@ -578,7 +579,10 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn fetch_judgement_candidates(&self, network: ChainName) -> Result<Vec<JudgementState>> {
+    pub async fn fetch_judgement_candidates(
+        &self,
+        network: ChainName,
+    ) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut cursor = coll
@@ -736,7 +740,7 @@ impl Database {
                 .iter()
                 .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
                 .map(|field| field.value.clone())
-                .expect("Failed to retrieve display name. This is a bug")
+                .expect("Failed to retrieve display name. This is a bug"),
         })
         .await?;
 

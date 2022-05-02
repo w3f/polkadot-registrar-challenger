@@ -23,10 +23,7 @@ pub async fn run_session_notifier(mut db: Database, server: Addr<LookupServer>) 
                         .fetch_judgement_state(event.context())
                         .await?
                         .ok_or_else(|| {
-                            anyhow!(
-                                "No identity state found for context: {:?}",
-                                event.context()
-                            )
+                            anyhow!("No identity state found for context: {:?}", event.context())
                         })?;
 
                     cache.insert(event.context().clone(), state.clone());

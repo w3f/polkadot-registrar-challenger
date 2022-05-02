@@ -144,10 +144,7 @@ async fn config_adapter_listener(db: Database, config: AdapterConfig) -> Result<
     run_connector(db, watchers, dn_config).await
 }
 
-async fn config_session_notifier(
-    db: Database,
-    not_config: NotifierConfig,
-) -> Result<()> {
+async fn config_session_notifier(db: Database, not_config: NotifierConfig) -> Result<()> {
     let lookup = run_rest_api_server(not_config, db.clone()).await?;
 
     actix::spawn(async move { run_session_notifier(db, lookup).await });
