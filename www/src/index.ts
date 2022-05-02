@@ -36,8 +36,9 @@ class ActionListerner {
             document
                 .getElementById("search-bar")! as HTMLInputElement;
 
-        this.manager = new ContentManager;
-        this.notifications = new NotificationHandler;
+        const handler = new NotificationHandler;
+        this.manager = new ContentManager(handler);
+        this.notifications = handler;
 
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document

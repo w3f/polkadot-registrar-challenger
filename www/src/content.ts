@@ -1,4 +1,5 @@
-import { DisplayNameChallenge, State, Violation } from './json';
+import { CheckDisplayNameResult, DisplayNameChallenge, GenericMessage, State, Violation } from './json';
+import { NotificationHandler } from './notifications.js';
 
 const BadgeVerified = `
     <span class="badge bg-success">verified</span>
@@ -29,8 +30,9 @@ export class ContentManager {
     div_verification_overview: HTMLElement;
     div_email_second_challenge: HTMLElement;
     div_unsupported_overview: HTMLElement;
+    notifications: NotificationHandler;
 
-    constructor() {
+    constructor(handler: NotificationHandler) {
         // Register relevant elements.
         this.btn_execute_action =
             document
@@ -59,6 +61,8 @@ export class ContentManager {
         this.div_unsupported_overview =
             document
                 .getElementById("div-unsupported-overview")!;
+
+        this.notifications = handler;
     }
 
     setButtonLoadingSpinner() {
@@ -272,7 +276,7 @@ export class ContentManager {
 
                 console.log(body);
 
-                let response = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
+                let _resp = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
                     {
                         method: "POST",
                         headers: {
@@ -281,8 +285,14 @@ export class ContentManager {
                         body: body,
                     });
 
-                // TODO:
-                //let x = response.json();
+                // No need to check the result, since an appropriate event is
+                // generated in the backend and submitted over the websocket
+                // stream.
+
+                // Reset elements.
+                button.disabled = false;
+                button.innerHTML = "Verify";
+                second_challenge.placeholder = "Challenge...";
             });
     }
     wipeEmailSecondChallengeContent() {
