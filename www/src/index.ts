@@ -1,4 +1,4 @@
-import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
+import { StateNotification, GenericMessage, Notification, CheckDisplayNameResult, Violation } from "./json";
 import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
 
@@ -165,12 +165,12 @@ class ActionListerner {
                         body: body,
                     });
 
-                let result: AccountStatus = JSON.parse(await response.text());
+                let result: GenericMessage = JSON.parse(await response.text());
                 this.parseDisplayNameCheck(result, display_name);
             })();
         }
     }
-    parseDisplayNameCheck(data: AccountStatus, display_name: string) {
+    parseDisplayNameCheck(data: GenericMessage, display_name: string) {
         document.getElementById("introduction")!.innerHTML = "";
         if (data.type == "ok") {
             let check: CheckDisplayNameResult = data.message;
@@ -200,7 +200,7 @@ class ActionListerner {
         this.manager.wipeUnsupportedContent();
     }
     parseAccountStatus(msg: MessageEvent) {
-        const parsed: AccountStatus = JSON.parse(msg.data);
+        const parsed: GenericMessage = JSON.parse(msg.data);
         if (parsed.type == "ok") {
             document.getElementById("introduction")!.innerHTML = "";
             this.btn_execute_action.innerHTML = `
@@ -209,7 +209,7 @@ class ActionListerner {
                 </div>
             `;
 
-            let message: ValidMessage = parsed.message;
+            let message: StateNotification = parsed.message;
             this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(message.state);
             this.manager.processUnsupportedOverview(message.state);
