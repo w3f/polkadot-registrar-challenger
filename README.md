@@ -31,7 +31,7 @@ includes:
 
 On judgement request, the challenger generates challenges for each specified
 account (email, etc.) of the identity and expects those challenges to be sent to
-the registrar service by the userfor verification. Display names are verified by
+the registrar service by the user for verification. Display names are verified by
 matching those with the display names of already verified identities and
 deciding on a judgement based on a [similarity
 ranking](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance).
