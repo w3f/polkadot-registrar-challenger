@@ -53,7 +53,7 @@ impl Database {
             .map_err(|err| anyhow!("Failed to connect to database: {:?}", err))
             .map(|_| ())
     }
-    pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
+    pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<bool> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
@@ -92,7 +92,7 @@ impl Database {
 
             // If nothing was modified, return.
             if !has_changed {
-                return Ok(());
+                return Ok(false);
             }
 
             // Set new fields.
@@ -121,11 +121,12 @@ impl Database {
 
             // Check full verification status.
             self.process_fully_verified(&current).await?;
+
+            Ok(true)
         } else {
             coll.insert_one(request.to_document()?, None).await?;
+            Ok(false)
         }
-
-        Ok(())
     }
     #[cfg(test)]
     pub async fn delete_judgement(&self, context: &IdentityContext) -> Result<()> {
