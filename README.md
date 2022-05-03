@@ -1,6 +1,6 @@
 [![CircleCI](https://circleci.com/gh/w3f/polkadot-registrar-challenger.svg?style=svg)](https://circleci.com/gh/w3f/polkadot-registrar-challenger)
 
-# Polkadot Registrar Bot (beta)
+# Polkadot Registrar Service (beta)
 
 An automated registrar service for [Polkadot on-chain identities](https://wiki.polkadot.network/docs/learn-identity).
 
