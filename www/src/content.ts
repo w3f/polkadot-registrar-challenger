@@ -1,9 +1,5 @@
-import { DisplayNameChallenge, State, Violation } from './json';
-
-export function capitalizeFirstLetter(word: string) {
-    return (word.charAt(0).toUpperCase() + word.slice(1))
-        .replace("_", " ");
-}
+import { CheckDisplayNameResult, DisplayNameChallenge, GenericMessage, State, Violation } from './json';
+import { NotificationHandler } from './notifications.js';
 
 const BadgeVerified = `
     <span class="badge bg-success">verified</span>
@@ -25,15 +21,23 @@ const BadgeInvalid = `
     <span class="badge bg-danger">invalid</span>
 `;
 
+// Manages the content in the UI. Mostly called within the `ActionListener`.
 export class ContentManager {
+    btn_execute_action: HTMLButtonElement;
     div_live_updates_info: HTMLElement;
     div_display_name_overview: HTMLElement;
     div_fully_verified_info: HTMLElement;
     div_verification_overview: HTMLElement;
     div_email_second_challenge: HTMLElement;
     div_unsupported_overview: HTMLElement;
+    notifications: NotificationHandler;
 
-    constructor() {
+    constructor(handler: NotificationHandler) {
+        // Register relevant elements.
+        this.btn_execute_action =
+            document
+                .getElementById("execute-action")! as HTMLButtonElement;
+
         this.div_live_updates_info =
             document
                 .getElementById("div-live-updates-info")!;
@@ -57,11 +61,33 @@ export class ContentManager {
         this.div_unsupported_overview =
             document
                 .getElementById("div-unsupported-overview")!;
+
+        this.notifications = handler;
     }
 
+    setButtonLoadingSpinner() {
+        this.btn_execute_action.disabled = true;
+        this.btn_execute_action
+            .innerHTML = `
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span class="visually-hidden"></span>
+            `;
+    }
+    setButtonLiveAnimation() {
+        this.btn_execute_action.innerHTML = `
+            <div class="spinner-grow spinner-grow-sm" role="status">
+                <span class="visually-hidden"></span>
+            </div>
+        `;
+    }
+    resetButton() {
+        this.btn_execute_action.innerHTML = `Go!`;
+        this.btn_execute_action.disabled = false;
+    }
+    wipeIntroduction() {
+        document.getElementById("introduction")!.innerHTML = "";
+    }
     processVerificationOverviewTable(state: State) {
-        // TODO: Check if 'fields` is empty.
-
         let table = "";
 
         let counter = 1;
@@ -248,19 +274,23 @@ export class ContentManager {
                     challenge: second_challenge.value,
                 });
 
-                console.log(body);
+                let _resp = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: body,
+                    });
 
-                let response = await fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: body,
-                });
+                // No need to check the result, since an appropriate event is
+                // generated in the backend and submitted over the websocket
+                // stream.
 
-                // TODO:
-                //let x = response.json();
+                // Reset elements.
+                button.disabled = false;
+                button.innerHTML = "Verify";
+                second_challenge.value = "Challenge...";
             });
     }
     wipeEmailSecondChallengeContent() {
@@ -286,4 +316,9 @@ export class ContentManager {
     wipeUnsupportedContent() {
         this.div_unsupported_overview.innerHTML = "";
     }
+}
+
+export function capitalizeFirstLetter(word: string) {
+    return (word.charAt(0).toUpperCase() + word.slice(1))
+        .replace("_", " ");
 }

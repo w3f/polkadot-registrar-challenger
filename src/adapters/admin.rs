@@ -61,6 +61,7 @@ pub enum Response {
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
+    FullyVerified(ChainAddress),
     InternalError,
     Help,
 }
@@ -104,6 +105,9 @@ impl std::fmt::Display for Response {
                 verify <ADDR> <FIELD>...\tVerify one or multiple fields of the specified address.\n\
                 "
             .to_string(),
+            Response::FullyVerified(_) => {
+                "Identity has been fully verified. The extrisnic will be submitted in a couple of minutes".to_string()
+            },
         };
 
         write!(f, "{}", msg)
@@ -118,6 +122,8 @@ pub enum RawFieldName {
     Web,
     Twitter,
     Matrix,
+    // Represents the full identity
+    All,
 }
 
 impl std::fmt::Display for RawFieldName {
@@ -130,6 +136,7 @@ impl std::fmt::Display for RawFieldName {
                 RawFieldName::Web => "web",
                 RawFieldName::Twitter => "twitter",
                 RawFieldName::Matrix => "matrix",
+                RawFieldName::All => "all",
             }
         })
     }
@@ -149,6 +156,7 @@ impl FromStr for RawFieldName {
             "web" => RawFieldName::Web,
             "twitter" => RawFieldName::Twitter,
             "matrix" => RawFieldName::Matrix,
+            "all" => RawFieldName::All,
             _ => return Err(Response::InvalidSyntax(Some(s.to_string()))),
         };
 
@@ -173,6 +181,13 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
             Command::Verify(addr, fields) => {
                 let context = create_context(addr.clone());
 
+                // Check if _all_ should be verified (respectively the full identity)
+                if fields.iter().any(|f| matches!(f, RawFieldName::All))
+                    && db.full_manual_verification(&context).await?
+                {
+                    return Ok(Response::FullyVerified(addr));
+                }
+
                 // Verify each passed on field.
                 for field in &fields {
                     if db.verify_manually(&context, field).await?.is_none() {
@@ -188,13 +203,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
     let res: crate::Result<Response> = local(db, command).await;
     match res {
-        Ok(resp) => {
-            #[cfg(test)]
-            // Leave enough time for the websocket server to pickup the event.
-            sleep(Duration::from_secs(3)).await;
-
-            resp
-        }
+        Ok(resp) => resp,
         Err(err) => {
             error!("Admin tool: {:?}", err);
             Response::InternalError
@@ -263,6 +272,15 @@ mod tests {
             Command::Verify(
                 ChainAddress::from("Alice".to_string()),
                 vec![RawFieldName::Email, RawFieldName::DisplayName]
+            )
+        );
+
+        let resp = Command::from_str("verify Alice all").unwrap();
+        assert_eq!(
+            resp,
+            Command::Verify(
+                ChainAddress::from("Alice".to_string()),
+                vec![RawFieldName::All]
             )
         );
 

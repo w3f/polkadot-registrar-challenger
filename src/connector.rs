@@ -29,6 +29,7 @@ const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
 const DISPLAY_NAMES_INTERVAL: u64 = 10;
 #[cfg(not(test))]
 const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 10;
+const RECONNECTION_TIMEOUT: u64 = 10;
 
 #[cfg(test)]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 1;
@@ -127,7 +128,6 @@ pub struct JudgementRequest {
     pub accounts: HashMap<AccountType, String>,
 }
 
-// TODO: Move to primitives.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct DisplayNameEntry {
     pub context: IdentityContext,
@@ -170,7 +170,6 @@ pub enum WatcherMessage {
     ActiveDisplayNames(Vec<DisplayNameEntryRaw>),
 }
 
-// TODO: Rename
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
 pub enum ClientCommand {
@@ -245,6 +244,22 @@ impl Connector {
             ctx.address().do_send(ClientCommand::Ping)
         });
     }
+    // Process any tangling submissions, meaning any verified requests that were
+    // submitted to the Watcher but the issued extrinsic was not direclty
+    // confirmed back. This usually does not happen, but can.
+    fn start_dangling_judgements_task(&self, ctx: &mut Context<Self>) {
+        info!("Starting dangling judgement pruning task");
+
+        ctx.run_interval(Duration::new(60, 0), |act, _ctx| {
+            let db = act.db.clone();
+
+            actix::spawn(async move {
+                if let Err(err) = db.process_dangling_judgement_states().await {
+                    error!("Error when pruning dangling judgements: {:?}", err);
+                }
+            });
+        });
+    }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
         info!("Starting pending judgement requester background task");
@@ -280,20 +295,12 @@ impl Connector {
                 let addr = addr.clone();
 
                 actix::spawn(async move {
-                    // Provide judgments.
-                    // TODO: Should accept network parameter.
-                    match db.fetch_judgement_candidates().await {
+                    // Provide judgments for the specific network.
+                    match db.fetch_judgement_candidates(network).await {
                         Ok(completed) => {
                             for state in completed {
-                                if state.context.chain == network {
-                                    info!("Notifying Watcher about judgement: {:?}", state.context);
-                                    addr.do_send(ClientCommand::ProvideJudgement(state.context));
-                                } else {
-                                    debug!(
-                                        "Skipping judgement on connector assigned to {:?}: {:?}",
-                                        network, state.context
-                                    );
-                                }
+                                info!("Notifying Watcher about judgement: {:?}", state.context);
+                                addr.do_send(ClientCommand::ProvideJudgement(state.context));
                             }
                         }
                         Err(err) => {
@@ -321,6 +328,7 @@ impl Actor for Connector {
             // Note: heartbeat task remains disabled.
             //self.start_heartbeat_task(ctx);
             self.start_pending_judgements_task(ctx);
+            self.start_dangling_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
             self.start_judgement_candidates_task(ctx);
         });
@@ -357,7 +365,7 @@ impl Actor for Connector {
                             error!("Cannot reconnect to Watcher after {} attempts", counter);
                         }
 
-                        sleep(Duration::from_secs(10)).await;
+                        sleep(Duration::from_secs(RECONNECTION_TIMEOUT)).await;
                     } else {
                         info!("Reconnected to Watcher!");
                         break;
@@ -496,8 +504,17 @@ impl Handler<WatcherMessage> for Connector {
                 (*l).push(state.clone());
             }
 
-            db.add_judgement_request(&state).await?;
-            dn_verifier.verify_display_name(&state).await?;
+            // Insert identity into the database.
+            let was_updated = db.add_judgement_request(&state).await?;
+            // Only verify display name if there have been changes to the state.
+            if was_updated {
+                // Get the latest state.
+                let state = db.fetch_judgement_state(&state.context).await?.expect(
+                    "failed to fetch judgement state for display name verification. This is a bug.",
+                );
+
+                dn_verifier.verify_display_name(&state).await?;
+            }
 
             Ok(())
         }
@@ -543,15 +560,6 @@ impl Handler<WatcherMessage> for Connector {
                                 req.accounts
                             ))
                             .collect();
-
-                        // Process any tangling submissions, meaning any verified
-                        // requests that were submitted to the Watcher but the
-                        // issued extrinsic was not direclty confirmed back. This
-                        // usually does not happen, but can.
-                        {
-                            let contexts: Vec<&IdentityContext> = data.iter().map(|(context, _)| context).collect();
-                            db.process_dangling_judgement_states(&contexts).await?;
-                        }
 
                         for (context, accounts) in data {
                             process_request(&db, context, accounts, &dn_verifier, &inserted_states).await?;
@@ -734,27 +742,11 @@ pub mod tests {
                 ]),
             }
         }
-        pub fn eve() -> Self {
-            JudgementRequest {
-                address: "12y2nDXFzWRiTaQnmdaZazFT8iUnAg1N5p7WvyqLmNp4poPm"
-                    .to_string()
-                    .into(),
-                accounts: HashMap::from([
-                    (AccountType::DisplayName, "Eve".to_string()),
-                    (AccountType::Email, "eve@email.com".to_string()),
-                    (AccountType::Twitter, "@eve".to_string()),
-                    (AccountType::Matrix, "@eve:matrix.org".to_string()),
-                ]),
-            }
-        }
     }
 
     impl WatcherMessage {
         pub fn new_judgement_request(req: JudgementRequest) -> Self {
             WatcherMessage::NewJudgementRequest(req)
-        }
-        pub fn new_pending_requests(reqs: Vec<JudgementRequest>) -> Self {
-            WatcherMessage::PendingJudgementsRequests(reqs)
         }
     }
 
@@ -786,7 +778,7 @@ pub mod tests {
         pub async fn inject(&self, msg: WatcherMessage) {
             self.addr.send(msg).await.unwrap().unwrap();
             // Give some time to process.
-            sleep(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
         }
         pub async fn inserted_states(&self) -> Vec<JudgementState> {
             let mut states = self.inserted_states.write().await;

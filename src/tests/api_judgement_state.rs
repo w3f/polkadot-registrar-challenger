@@ -573,3 +573,219 @@ async fn verify_invalid_message_awaiting_second_challenge() {
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
 }
+
+#[actix::test]
+async fn verify_full_identity() {
+    let (db, connector, mut api, _injector) = new_env().await;
+    let mut stream_alice = api.ws_at("/api/account_status").await.unwrap();
+    let mut stream_bob = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement requests.
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
+
+    // Subscribe to endpoint.
+    stream_alice
+        .send(IdentityContext::alice().to_ws())
+        .await
+        .unwrap();
+    stream_bob
+        .send(IdentityContext::bob().to_ws())
+        .await
+        .unwrap();
+
+    // Check initial state
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Verify Display name (does not create notification).
+    db.set_display_name_valid(&alice).await.unwrap();
+    let passed = alice
+        .get_field_mut(&F::ALICE_DISPLAY_NAME())
+        .expected_display_name_check_mut()
+        .0;
+    *passed = true;
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_DISPLAY_NAME(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Verify Twitter.
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Twitter("@alice".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_TWITTER())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice
+        .get_field_mut(&F::ALICE_TWITTER())
+        .expected_message_mut()
+        .verify_message(&msg);
+    assert!(changed);
+
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_TWITTER(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Verify Email (first challenge).
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Email("alice@email.com".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_EMAIL())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_message_mut()
+        .verify_message(&msg);
+    assert!(changed);
+
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::AwaitingSecondChallenge {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Second challenge
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_second_mut()
+        .set_verified();
+
+    db.verify_second_challenge(VerifyChallenge {
+        entry: F::ALICE_EMAIL(),
+        challenge: alice
+            .get_field(&F::ALICE_EMAIL())
+            .expected_second()
+            .value
+            .to_string(),
+    })
+    .await
+    .unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::SecondFieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Verify Matrix.
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_MATRIX())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice
+        .get_field_mut(&F::ALICE_MATRIX())
+        .expected_message_mut()
+        .verify_message(&msg);
+    assert!(changed);
+
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    // Identity is fully verified now.
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    // The completion timestamp is not that important, as long as it's `Some`.
+    let completion_timestamp = match &resp {
+        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        _ => panic!(),
+    };
+
+    assert!(completion_timestamp.is_some());
+    alice.is_fully_verified = true;
+    alice.completion_timestamp = completion_timestamp;
+
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_MATRIX(),
+        }],
+    };
+
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::IdentityFullyVerified {
+            context: alice.context.clone(),
+        }],
+    };
+
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Bob remains unchanged.
+    let resp: JsonResult<ResponseAccountState> = stream_bob.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
+    );
+
+    // Empty stream.
+    assert!(stream_alice.next().now_or_never().is_none());
+}

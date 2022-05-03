@@ -3,7 +3,7 @@ use crate::adapters::AdapterListener;
 use crate::api::JsonResult;
 use crate::connector::{AccountType, JudgementRequest, WatcherMessage};
 use crate::database::Database;
-use crate::notifier::SessionNotifier;
+use crate::notifier::run_session_notifier;
 use crate::primitives::IdentityFieldValue;
 use crate::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use actix_http::ws::{Frame, ProtocolError};
@@ -18,10 +18,17 @@ mod api_judgement_state;
 mod background_tasks;
 mod display_name_verification;
 mod explicit;
+mod live_mocker;
 mod process_admin_cmds;
 
 // Convenience type
 pub type F = IdentityFieldValue;
+
+// Given that many concurrent process are in play (async, websockets, channels,
+// etc) and not everything happens at the same time, we use a very conservative
+// timeout for certain operations when running tests, like when injecting
+// messages or waiting for events to happen.
+pub const TEST_TIMEOUT: u64 = 5;
 
 trait ToWsMessage {
     fn to_ws(&self) -> Message;
@@ -50,10 +57,6 @@ pub fn bob_judgement_request() -> WatcherMessage {
     WatcherMessage::new_judgement_request(JudgementRequest::bob())
 }
 
-pub fn eve_judgement_request() -> WatcherMessage {
-    WatcherMessage::new_judgement_request(JudgementRequest::eve())
-}
-
 // async fn new_env() -> (TestServer, ConnectorMocker, MessageInjector) {
 async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
     // Setup MongoDb database.
@@ -75,14 +78,14 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
 
     let t_db = db.clone();
     actix::spawn(async move {
-        SessionNotifier::new(t_db, actor).run_blocking().await;
+        run_session_notifier(t_db, actor).await;
     });
 
     // Setup connector mocker
     let connector = ConnectorMocker::new(db.clone());
 
     // Give some time to start up.
-    sleep(Duration::from_secs(3)).await;
+    sleep(Duration::from_secs(TEST_TIMEOUT)).await;
 
     //(server, connector, injector)
     (db, connector, server, injector)

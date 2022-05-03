@@ -124,9 +124,8 @@ impl Handler<SubscribeAccountState> for LookupServer {
                             .or_insert_with(|| vec![subscriber]);
                     }
                 } else {
-                    // TODO: Set registrar index via config.
                     let _ = subscriber.do_send(JsonResult::Err(
-                        "There is no judgement request from that account for registrar #0"
+                        "There is no judgement request from that account for this registrar"
                             .to_string(),
                     ));
                 }
@@ -197,7 +196,6 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsAccountStatusSe
 
                 if let Ok(context) = serde_json::from_slice::<IdentityContext>(msg.as_bytes()) {
                     // Subscribe the the specified identity context.
-                    // TODO: Return value directly?
                     LookupServer::from_registry()
                         .send(SubscribeAccountState {
                             subscriber: ctx.address().recipient(),

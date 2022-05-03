@@ -8,30 +8,16 @@ use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
 async fn command_status() {
-    let (db, connector, mut api, _) = new_env().await;
-    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+    let (db, connector, _api, _) = new_env().await;
 
     // Insert judgement request.
     connector.inject(alice_judgement_request()).await;
     let states = connector.inserted_states().await;
     let alice = states[0].clone();
 
-    // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
-
-    // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
-    assert_eq!(
-        resp,
-        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
-    );
-
     // Request status.
-    let resp = process_admin(&db, Command::Status(alice.context.address.clone())).await;
-    assert_eq!(resp, Response::Status(JudgementStateBlanked::from(alice)));
-
-    // Empty stream.
-    assert!(stream.next().now_or_never().is_none());
+    let res = process_admin(&db, Command::Status(alice.context.address.clone())).await;
+    assert_eq!(res, Response::Status(JudgementStateBlanked::from(alice)));
 }
 
 #[actix::test]
@@ -201,6 +187,65 @@ async fn command_verify_unsupported_field() {
     };
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
+async fn command_verify_all() {
+    let (db, connector, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement request.
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Manually verify.
+    let resp = process_admin(
+        &db,
+        Command::Verify(alice.context.address.clone(), vec![RawFieldName::All]),
+    )
+    .await;
+
+    assert_eq!(
+        resp,
+        Response::FullyVerified(alice.context.address.clone(),)
+    );
+
+    // Expected event on stream.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+
+    // The completion timestamp is not that important, as long as it's `Some`.
+    let completion_timestamp = match &resp {
+        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        _ => panic!(),
+    };
+
+    assert!(completion_timestamp.is_some());
+    alice.is_fully_verified = true;
+    alice.judgement_submitted = false;
+    alice.completion_timestamp = completion_timestamp;
+
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FullManualVerification {
+            context: alice.context.clone(),
+        }],
+    };
+
     assert_eq!(resp, JsonResult::Ok(expected));
 
     // Empty stream.

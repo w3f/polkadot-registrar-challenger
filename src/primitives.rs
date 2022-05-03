@@ -56,11 +56,9 @@ impl ChainName {
 pub struct IdentityField {
     pub value: IdentityFieldValue,
     pub challenge: ChallengeType,
-    // TODO: Change this to usize.
-    pub failed_attempts: isize,
+    pub failed_attempts: usize,
 }
 
-// TODO: Should be `From`?
 impl IdentityField {
     pub fn new(val: IdentityFieldValue) -> Self {
         use IdentityFieldValue::*;
@@ -186,8 +184,7 @@ pub enum IdentityFieldValue {
 }
 
 impl IdentityFieldValue {
-    // TODO: Rename
-    pub fn matches(&self, message: &ExternalMessage) -> bool {
+    pub fn matches_origin(&self, message: &ExternalMessage) -> bool {
         match self {
             IdentityFieldValue::Email(n1) => match &message.origin {
                 ExternalMessageType::Email(n2) => n1 == n2,
@@ -222,8 +219,7 @@ pub struct JudgementStateBlanked {
 pub struct IdentityFieldBlanked {
     pub value: IdentityFieldValue,
     pub challenge: ChallengeTypeBlanked,
-    // TODO: Change this to usize.
-    failed_attempts: isize,
+    failed_attempts: usize,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -459,6 +455,9 @@ pub enum NotificationMessage {
         context: IdentityContext,
         field: RawFieldName,
     },
+    FullManualVerification {
+        context: IdentityContext,
+    },
 }
 
 impl NotificationMessage {
@@ -476,6 +475,7 @@ impl NotificationMessage {
             IdentityFullyVerified { context } => context,
             JudgementProvided { context } => context,
             ManuallyVerified { context, field: _ } => context,
+            FullManualVerification { context } => context,
         }
     }
 }
@@ -508,17 +508,8 @@ mod tests {
                 chain: ChainName::Polkadot,
             }
         }
-        pub fn eve() -> Self {
-            IdentityContext {
-                address: ChainAddress(
-                    "12y2nDXFzWRiTaQnmdaZazFT8iUnAg1N5p7WvyqLmNp4poPm".to_string(),
-                ),
-                chain: ChainName::Polkadot,
-            }
-        }
     }
 
-    // TODO: Use JudgementState::new().
     impl JudgementState {
         pub fn alice() -> Self {
             JudgementState {
@@ -619,9 +610,10 @@ mod tests {
                 _ => panic!(),
             }
         }
-        pub fn failed_attempts_mut(&mut self) -> &mut isize {
+        pub fn failed_attempts_mut(&mut self) -> &mut usize {
             &mut self.failed_attempts
         }
+        // rename, without "expected"
         pub fn expected_display_name_check_mut(
             &mut self,
         ) -> (&mut bool, &mut Vec<DisplayNameEntry>) {

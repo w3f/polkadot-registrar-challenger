@@ -46,7 +46,8 @@ async fn valid_display_name() {
 
     let expected = ResponseAccountState {
         state: alice.into(),
-        // TODO: Should probably have some.
+        // The UI already shows invalid display names in a specific way,
+        // notification is not required.
         notifications: vec![],
     };
 
@@ -89,7 +90,8 @@ async fn invalid_display_name() {
 
     let expected = ResponseAccountState {
         state: alice.into(),
-        // TODO: Should probably have some.
+        // The UI already shows invalid display names in a specific way,
+        // notification is not required.
         notifications: vec![],
     };
 

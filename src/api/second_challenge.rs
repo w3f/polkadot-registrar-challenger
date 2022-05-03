@@ -31,7 +31,7 @@ impl Handler<VerifyChallenge> for SecondChallengeVerifier {
     type Result = ResponseActFuture<Self, JsonResult<bool>>;
 
     fn handle(&mut self, msg: VerifyChallenge, _ctx: &mut Self::Context) -> Self::Result {
-        let mut db = self.db.clone();
+        let db = self.db.clone();
 
         Box::pin(
             async move {

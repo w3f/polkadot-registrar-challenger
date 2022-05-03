@@ -1,11 +1,9 @@
-// TODO: Rename
-export interface AccountStatus {
+export interface GenericMessage {
     type: string;
     message: any;
 }
 
-// TODO: Rename
-export interface ValidMessage {
+export interface StateNotification {
     state: State;
     notifications: Notification[];
 }

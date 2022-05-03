@@ -9,9 +9,10 @@
     "typescript": "^4.6.3"
   },
   "scripts": {
-    "build": "tsc --outDir build/ && mkdir -p dist/assets && cp -R assets dist/ && node-sass src/ -o dist/assets && browserify build/index.js -o dist/assets/bundle.js && cp favicon.ico dist/ && cp *.html dist/"
+    "build": "sh build.sh"
   },
   "devDependencies": {
+    "@types/node": "^17.0.30",
     "node-sass": "^6.0.0"
   }
 }
