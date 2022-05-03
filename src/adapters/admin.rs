@@ -203,9 +203,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
     let res: crate::Result<Response> = local(db, command).await;
     match res {
-        Ok(resp) => {
-            resp
-        }
+        Ok(resp) => resp,
         Err(err) => {
             error!("Admin tool: {:?}", err);
             Response::InternalError

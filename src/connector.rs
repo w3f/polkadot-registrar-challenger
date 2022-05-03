@@ -504,10 +504,15 @@ impl Handler<WatcherMessage> for Connector {
                 (*l).push(state.clone());
             }
 
-            // Insertidentity into the database.
+            // Insert identity into the database.
             let was_updated = db.add_judgement_request(&state).await?;
             // Only verify display name if there have been changes to the state.
             if was_updated {
+                // Get the latest state.
+                let state = db.fetch_judgement_state(&state.context).await?.expect(
+                    "failed to fetch judgement state for display name verification. This is a bug.",
+                );
+
                 dn_verifier.verify_display_name(&state).await?;
             }
 
