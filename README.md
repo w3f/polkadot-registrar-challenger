@@ -136,7 +136,9 @@ instance:
       user: user
       password: password
       request_interval: 5
-
+    display_name:
+      enabled: true
+      limit: 0.85
 ```
 
 #### Session Notifier
