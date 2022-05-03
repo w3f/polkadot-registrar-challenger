@@ -26,6 +26,8 @@ includes:
   * Request pending judgement.
   * Request active display names of other identities.
   * Send judgement to the watcher to issue a judgement extrinsic.
+* [Manual judgements](#manual-judgements)
+  * The registrar supports manual judgements via a Matrix bot.
 
 On judgement request, the challenger generates challenges for each specified
 account (email, etc.) of the identity and expects those challenges to be sent to
@@ -46,12 +48,48 @@ for any blockchain interaction.
 The UI can be found in the [`www/`](./www) directory, which is automatically
 built and deployed via [Github Actions](./.github/workflows/gh-pages.yml).
 
-## Config
+## Manual Judgements
+
+In order to submit manual judgements, join a room with the Matrix account
+specified in [the config](#adapter-listener). The bot supports three types of
+messages.
+
+### Identity Status
+
+* `status <ADDR>` - Gets the (verbose) verification state.
+
+E.g.
+
+```
+status 1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP
+```
+
+### Account Verification
+
+* `verify <ADDR> [FIELD]...` - Manually verifies the provided field(s).
+  * Supported fields: `legalname`, `displayname`, `email`, `web`, `twitter`, `matrix`, `all`.
+
+E.g.
+
+```
+verify 1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP displayname email
+```
+
+**NOTE**: The `all` field, as the name implies, verifies the full identity and
+(re-)issues a judgement extrinsic.
+
+### Help
+
+* `help` - Displays a help message.
+
+## Setup
+
+### Config
 
 Both types of configuration, respectively the _adapter listener_ and _session
 notifier_ can be seen in the [`config/`](./config) directory.
 
-### Adapter Listener
+#### Adapter Listener
 
 ```yaml
 db:
@@ -90,7 +128,7 @@ instance:
 
 ```
 
-### Session Notifier
+#### Session Notifier
 
 ```yaml
 db:
@@ -106,7 +144,7 @@ instance:
 
 ```
 
-## Building
+### Building
 
 To build the binary:
 
