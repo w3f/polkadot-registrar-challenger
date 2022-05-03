@@ -50,9 +50,20 @@ built and deployed via [Github Actions](./.github/workflows/gh-pages.yml).
 
 ## Manual Judgements
 
-In order to submit manual judgements, join a room with the Matrix account
-specified in [the config](#adapter-listener). The bot supports three types of
-messages.
+In order to submit manual judgements, admins can join a room with the Matrix
+account of the registrar service as specified in [the
+config](#adapter-listener). Admins are specified as:
+
+```yaml
+admins:
+  - '@admin1:matrix.org'
+  - '@admin2:matrix.org'
+  - '@admin3:matrix.org'
+```
+
+If there should not be any admins, then just set the value to `admins: null`.
+Those specified admins have the permission to send Matrix messages to the bot in
+order to perform an action.
 
 ### Identity Status
 
