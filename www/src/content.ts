@@ -290,7 +290,7 @@ export class ContentManager {
                 // Reset elements.
                 button.disabled = false;
                 button.innerHTML = "Verify";
-                second_challenge.placeholder = "Challenge...";
+                second_challenge.value = "Challenge...";
             });
     }
     wipeEmailSecondChallengeContent() {
