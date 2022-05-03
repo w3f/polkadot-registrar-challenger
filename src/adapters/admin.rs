@@ -1,8 +1,6 @@
 use crate::primitives::{ChainAddress, ChainName, IdentityContext, JudgementStateBlanked};
 use crate::Database;
 use std::str::FromStr;
-#[cfg(test)]
-use tokio::time::{sleep, Duration};
 
 pub type Result<T> = std::result::Result<T, Response>;
 
