@@ -10,12 +10,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ContentManager = exports.BadgeValid = exports.capitalizeFirstLetter = void 0;
-function capitalizeFirstLetter(word) {
-    return (word.charAt(0).toUpperCase() + word.slice(1))
-        .replace("_", " ");
-}
-exports.capitalizeFirstLetter = capitalizeFirstLetter;
+exports.capitalizeFirstLetter = exports.ContentManager = exports.BadgeValid = void 0;
 const BadgeVerified = `
     <span class="badge bg-success">verified</span>
 `;
@@ -31,8 +26,13 @@ exports.BadgeValid = `
 const BadgeInvalid = `
     <span class="badge bg-danger">invalid</span>
 `;
+// Manages the content in the UI. Mostly called within the `ActionListener`.
 class ContentManager {
-    constructor() {
+    constructor(handler) {
+        // Register relevant elements.
+        this.btn_execute_action =
+            document
+                .getElementById("execute-action");
         this.div_live_updates_info =
             document
                 .getElementById("div-live-updates-info");
@@ -51,9 +51,31 @@ class ContentManager {
         this.div_unsupported_overview =
             document
                 .getElementById("div-unsupported-overview");
+        this.notifications = handler;
+    }
+    setButtonLoadingSpinner() {
+        this.btn_execute_action.disabled = true;
+        this.btn_execute_action
+            .innerHTML = `
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span class="visually-hidden"></span>
+            `;
+    }
+    setButtonLiveAnimation() {
+        this.btn_execute_action.innerHTML = `
+            <div class="spinner-grow spinner-grow-sm" role="status">
+                <span class="visually-hidden"></span>
+            </div>
+        `;
+    }
+    resetButton() {
+        this.btn_execute_action.innerHTML = `Go!`;
+        this.btn_execute_action.disabled = false;
+    }
+    wipeIntroduction() {
+        document.getElementById("introduction").innerHTML = "";
     }
     processVerificationOverviewTable(state) {
-        // TODO: Check if 'fields` is empty.
         let table = "";
         let counter = 1;
         for (let field of state.fields) {
@@ -230,16 +252,20 @@ class ContentManager {
                 },
                 challenge: second_challenge.value,
             });
-            console.log(body);
-            let response = yield fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge", {
+            let _resp = yield fetch("https://registrar-backend.web3.foundation/api/verify_second_challenge", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: body,
             });
-            // TODO:
-            //let x = response.json();
+            // No need to check the result, since an appropriate event is
+            // generated in the backend and submitted over the websocket
+            // stream.
+            // Reset elements.
+            button.disabled = false;
+            button.innerHTML = "Verify";
+            second_challenge.value = "Challenge...";
         }));
     }
     wipeEmailSecondChallengeContent() {
@@ -266,6 +292,11 @@ class ContentManager {
     }
 }
 exports.ContentManager = ContentManager;
+function capitalizeFirstLetter(word) {
+    return (word.charAt(0).toUpperCase() + word.slice(1))
+        .replace("_", " ");
+}
+exports.capitalizeFirstLetter = capitalizeFirstLetter;
 
 },{}],2:[function(require,module,exports){
 "use strict";
@@ -281,6 +312,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const content_1 = require("./content");
 const notifications_1 = require("./notifications");
+const config = require("../config.json");
+// The primary manager of all actions/events, for both UI and server messages.
 class ActionListerner {
     constructor() {
         // Register relevant elements.
@@ -293,20 +326,19 @@ class ActionListerner {
         this.specify_network =
             document
                 .getElementById("specify-network");
-        // TODO: Rename this element.
-        this.specify_address =
+        this.search_bar =
             document
-                .getElementById("specify-address");
-        this.manager = new content_1.ContentManager;
-        this.notifications = new notifications_1.NotificationHandler;
+                .getElementById("search-bar");
+        const handler = new notifications_1.NotificationHandler;
+        this.manager = new content_1.ContentManager(handler);
+        this.notifications = handler;
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
             .getElementById("network-options")
             .addEventListener("click", (e) => {
             this.specify_network
                 .innerText = e.target.innerText;
-            this.btn_execute_action.innerHTML = `Go!`;
-            this.btn_execute_action.disabled = false;
+            this.manager.resetButton();
         });
         // Handler for choosing action, e.g. "Check Judgement".
         document
@@ -314,33 +346,32 @@ class ActionListerner {
             .addEventListener("click", (e) => {
             let target = e.target.innerText;
             if (target == "Check Judgement") {
-                this.specify_address.placeholder = "Account address...";
+                this.search_bar.placeholder = "Account address...";
                 this.specify_action.innerText = target;
             }
             else if (target == "Validate Display Name") {
-                this.specify_address.placeholder = "Display Name...";
+                this.search_bar.placeholder = "Display Name...";
                 this.specify_action.innerText = target;
             }
         });
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_) => {
-            let action = document.getElementById("specify-action").innerHTML;
+            let action = this.specify_action.innerHTML;
             if (action == "Check Judgement") {
                 window.location.href = "?network="
-                    + document.getElementById("specify-network").innerHTML.toLowerCase()
+                    + this.specify_network.innerHTML.toLowerCase()
                     + "&address="
-                    + document.getElementById("specify-address").value;
+                    + this.search_bar.value;
             }
             else if (action == "Validate Display Name") {
                 this.executeAction();
             }
         });
-        this.specify_address
+        this.search_bar
             .addEventListener("input", (_) => {
-            this.btn_execute_action.innerHTML = `Go!`;
-            this.btn_execute_action.disabled = false;
-            if (this.specify_address.value.startsWith("1")) {
+            this.manager.resetButton();
+            if (this.search_bar.value.startsWith("1")) {
                 this.specify_network.innerHTML = "Polkadot";
             }
             else {
@@ -348,7 +379,7 @@ class ActionListerner {
             }
         });
         // Bind 'Enter' key to action button.
-        this.specify_address
+        this.search_bar
             .addEventListener("keyup", (event) => {
             // Number 13 is the "Enter" key on the keyboard
             if (event.keyCode === 13) {
@@ -357,6 +388,7 @@ class ActionListerner {
                 this.btn_execute_action.click();
             }
         });
+        // Add a listener for every notification. Required for closing.
         Array.from(document
             .getElementsByClassName("toast"))
             .forEach(element => {
@@ -364,48 +396,47 @@ class ActionListerner {
                 .addEventListener("click", (_) => {
             });
         });
+        // Get params from the webbrowser search bar, load data from server if
+        // specified.
         let params = new URLSearchParams(window.location.search);
         let network = params.get("network");
         let address = params.get("address");
         if (network != null && address != null) {
-            document.getElementById("specify-network").innerHTML = (0, content_1.capitalizeFirstLetter)(network);
-            document.getElementById("specify-address").value = address;
+            this.specify_network.innerHTML = (0, content_1.capitalizeFirstLetter)(network);
+            this.search_bar.value = address;
             this.executeAction();
         }
     }
+    // Executes the main logic, either the judgement state or display name check.
     executeAction() {
-        this.btn_execute_action.disabled = true;
-        const action = document.getElementById("specify-action").innerHTML;
-        // TODO: Rename this, can be both address or display name.
-        const address = this.specify_address.value;
+        this.manager.setButtonLoadingSpinner();
+        const action = this.specify_action.innerHTML;
+        const user_input = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
-        this.btn_execute_action
-            .innerHTML = `
-                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                <span class="visually-hidden"></span>
-            `;
         if (action == "Check Judgement") {
-            const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+            const socket = new WebSocket(config.ws_url);
             window.setInterval(() => {
                 socket.send("heartbeat");
             }, 30000);
+            // Send request to the server
             socket.onopen = () => {
-                let msg = JSON.stringify({ address: address, chain: network });
+                let msg = JSON.stringify({ address: user_input, chain: network });
                 socket.send(msg);
             };
+            // Parse received judgement state.
             socket.onmessage = (event) => {
                 let msg = event;
-                this.parseAccountStatus(msg);
+                this.handleJudgementState(msg);
             };
         }
         else if (action == "Validate Display Name") {
-            let display_name = address;
+            let display_name = user_input;
             (() => __awaiter(this, void 0, void 0, function* () {
                 let body = JSON.stringify({
                     check: display_name,
                     chain: network,
                 });
-                let response = yield fetch("https://registrar-backend.web3.foundation/api/check_display_name", {
+                let response = yield fetch(config.http_url, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
@@ -413,12 +444,13 @@ class ActionListerner {
                     body: body,
                 });
                 let result = JSON.parse(yield response.text());
-                this.parseDisplayNameCheck(result, display_name);
+                this.handleDisplayNameCheck(result, display_name);
             }))();
         }
     }
-    parseDisplayNameCheck(data, display_name) {
-        document.getElementById("introduction").innerHTML = "";
+    // Handles the display name result received from the server.
+    handleDisplayNameCheck(data, display_name) {
+        this.manager.wipeIntroduction();
         if (data.type == "ok") {
             let check = data.message;
             if (check.type == "ok") {
@@ -429,32 +461,31 @@ class ActionListerner {
                 this.manager.setDisplayNameViolation(display_name, violations, false);
             }
             else {
-                // TODO
+                // Should never occur.
+                this.notifications.unexpectedError("pdnc#1");
             }
         }
         else if (data.type == "err") {
-            // TODO
+            // Should never occur.
+            this.notifications.unexpectedError("pdnc#2");
         }
         else {
-            // TODO
+            // Should never occur.
+            this.notifications.unexpectedError("pdnc#3");
         }
-        this.btn_execute_action.innerHTML = `Go!`;
-        this.btn_execute_action.disabled = false;
+        this.manager.resetButton();
         this.manager.wipeLiveUpdateInfo();
         this.manager.wipeVerificationOverviewContent();
         this.manager.wipeEmailSecondChallengeContent();
         this.manager.wipeUnsupportedContent();
     }
-    parseAccountStatus(msg) {
+    // Handles the judgement state received from the server.
+    handleJudgementState(msg) {
         const parsed = JSON.parse(msg.data);
         if (parsed.type == "ok") {
-            document.getElementById("introduction").innerHTML = "";
-            this.btn_execute_action.innerHTML = `
-                <div class="spinner-grow spinner-grow-sm" role="status">
-                    <span class="visually-hidden"></span>
-                </div>
-            `;
             let message = parsed.message;
+            this.manager.wipeIntroduction();
+            this.manager.setButtonLiveAnimation();
             this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(message.state);
             this.manager.processUnsupportedOverview(message.state);
@@ -467,18 +498,18 @@ class ActionListerner {
         else if (parsed.type == "err") {
             let message = parsed.message;
             this.notifications.displayError(message);
+            this.manager.resetButton();
             this.manager.wipeLiveUpdateInfo();
-            this.btn_execute_action.innerHTML = `Go!`;
-            this.btn_execute_action.disabled = false;
         }
         else {
-            // TODO: Print unexpected error...
+            // Should never occur.
+            this.notifications.unexpectedError("pas#1");
         }
     }
 }
 new ActionListerner();
 
-},{"./content":1,"./notifications":3}],3:[function(require,module,exports){
+},{"../config.json":4,"./content":1,"./notifications":3}],3:[function(require,module,exports){
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.NotificationHandler = void 0;
@@ -492,8 +523,13 @@ class NotificationHandler {
     }
     processNotifications(notifications) {
         for (let notify of notifications) {
-            let [message, color] = notificationTypeResolver(notify);
-            this.displayNotification(message, color, false);
+            try {
+                const [message, color] = notificationTypeResolver(notify);
+                this.displayNotification(message, color, false);
+            }
+            catch (error) {
+                this.unexpectedError("pnntr#1");
+            }
         }
     }
     displayNotification(message, color, show_final) {
@@ -537,6 +573,9 @@ class NotificationHandler {
     displayError(message) {
         this.displayNotification(message, "bg-danger text-light", false);
     }
+    unexpectedError(id) {
+        this.displayError(`Unexpected internal error, please contact admin. Code: ${id}`);
+    }
 }
 exports.NotificationHandler = NotificationHandler;
 function notificationTypeResolver(notification) {
@@ -544,7 +583,6 @@ function notificationTypeResolver(notification) {
         case "identity_inserted": {
             return [
                 `The judgement request has been discovered by the registrar service.`,
-                // TODO: Specify those as constants.
                 "bg-info text-dark"
             ];
         }
@@ -608,11 +646,21 @@ function notificationTypeResolver(notification) {
                 "bg-info text-light"
             ];
         }
+        case "full_manual_verification": {
+            return [
+                `Manually verified the identity. Judgement will be issued in a couple of minutes.`,
+                "bg-info text-light"
+            ];
+        }
         default: {
-            // TODO
+            throw new Error("unrecognized notification");
         }
     }
-    return ["TODO", "TODO"];
 }
 
-},{"./content.js":1}]},{},[2]);
+},{"./content.js":1}],4:[function(require,module,exports){
+module.exports={
+	"http_url": "https://registrar-backend.web3.foundation/api/check_display_name",
+	"ws_url": "wss://registrar-backend.web3.foundation/api/account_status"
+}
+},{}]},{},[2]);
