@@ -12,7 +12,6 @@ COPY --from=planner /app/recipe.json recipe.json
 # Build dependencies - this is the caching Docker layer!
 RUN apt-get update && apt-get install -y \
 	lld pkg-config openssl libssl-dev gcc g++ clang cmake
-RUN update-ca-certificates --fresh
 RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
@@ -22,5 +21,7 @@ RUN cargo build --release --bin registrar
 FROM debian:buster-slim AS runtime
 WORKDIR app
 COPY --from=builder /app/target/release/registrar /usr/local/bin
-RUN apt-get update && apt-get install -y openssl
+RUN apt-get update && apt-get install -y \
+	openssl ca-certificates
+RUN update-ca-certificates --fresh
 ENTRYPOINT ["/usr/local/bin/registrar"]
