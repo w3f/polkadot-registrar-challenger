@@ -22,4 +22,5 @@ RUN cargo build --release --bin registrar
 FROM debian:buster-slim AS runtime
 WORKDIR app
 COPY --from=builder /app/target/release/registrar /usr/local/bin
+RUN apt-get update && apt-get install -y openssl
 ENTRYPOINT ["/usr/local/bin/registrar"]
