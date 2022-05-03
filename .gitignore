@@ -1,7 +1,8 @@
 target
 www/dist
 www/build
-config*
+config*.*
+!config/sample.*
 !helmfile.d/config
 !www/config.json
 scripts/load-env.sh
