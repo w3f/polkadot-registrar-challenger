@@ -106,7 +106,7 @@ impl std::fmt::Display for Response {
                 "
             .to_string(),
             Response::FullyVerified(_) => {
-                "Identity has been fully verified. The extrisnic will be submitted in a couple of minutes".to_string()
+                "Identity has been fully verified. The extrinsic will be submitted in a couple of minutes".to_string()
             },
         };
 
