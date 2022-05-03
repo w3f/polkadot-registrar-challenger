@@ -121,12 +121,11 @@ impl Database {
 
             // Check full verification status.
             self.process_fully_verified(&current).await?;
-
-            Ok(true)
         } else {
             coll.insert_one(request.to_document()?, None).await?;
-            Ok(false)
         }
+
+        Ok(true)
     }
     #[cfg(test)]
     pub async fn delete_judgement(&self, context: &IdentityContext) -> Result<()> {
