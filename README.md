@@ -6,7 +6,7 @@ An automated registrar service for [Polkadot on-chain identities](https://wiki.p
 
 * UI: https://registrar.web3.foundation/
 
-![Registrar preview](./registrar_preview.png)
+![Registrar preview](https://raw.githubusercontent.com/w3f/polkadot-registrar-challenger/master/registrar_preview.png)
 
 ## About
 
