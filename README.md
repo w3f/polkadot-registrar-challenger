@@ -4,7 +4,7 @@
 
 An automated registrar service for [Polkadot on-chain identities](https://wiki.polkadot.network/docs/learn-identity).
 
-* UI: https://registrar.web3.foundation/
+* App: https://registrar.web3.foundation/
 
 ![Registrar preview](https://raw.githubusercontent.com/w3f/polkadot-registrar-challenger/master/registrar_preview.png)
 
