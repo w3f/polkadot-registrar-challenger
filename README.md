@@ -10,9 +10,7 @@ An automated registrar service for [Polkadot on-chain identities](https://wiki.p
 
 ## About
 
-This service ("the challenger") is responsible for veryifing accounts and
-providing a HTTP and websocket API to the UI. The full list of features
-includes:
+This service ("the challenger") is responsible for veryifing accounts and providing a HTTP and websocket API to the UI. The full list of features includes:
 
 * Verification
   * Display name
@@ -29,30 +27,19 @@ includes:
 * [Manual judgements](#manual-judgements)
   * The registrar supports manual judgements via a Matrix bot.
 
-On judgement request, the challenger generates challenges for each specified
-account (email, etc.) of the identity and expects those challenges to be sent to
-the registrar service by the user for verification. Display names are verified by
-matching those with the display names of already verified identities and
-deciding on a judgement based on a [similarity
-ranking](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance).
+On judgement request, the challenger generates challenges for each specified account (email, etc.) of the identity and expects those challenges to be sent to the registrar service by the user for verification. Display names are verified by matching those with the display names of already verified identities and deciding on a judgement based on a [similarity ranking](https://en.wikipedia.org/wiki/Jaro%E2%80%93Winkler_distance).
 
 ## Watcher Service
 
-This service only verifies identities, but does not interact with the
-Kusama/Polkadot blockchain directly. Rather, it communicates with [the
-watcher](https://github.com/w3f/polkadot-registrar-watcher) which is responsible
-for any blockchain interaction.
+This service only verifies identities, but does not interact with the Kusama/Polkadot blockchain directly. Rather, it communicates with [the watcher](https://github.com/w3f/polkadot-registrar-watcher) which is responsible for any blockchain interaction.
 
 ## Web App / UI
 
-The UI can be found in the [`www/`](./www) directory, which is automatically
-built and deployed via [Github Actions](./.github/workflows/gh-pages.yml).
+The UI can be found in the [`www/`](./www) directory, which is automatically built and deployed via [Github Actions](./.github/workflows/gh-pages.yml).
 
 ## Manual Judgements
 
-In order to submit manual judgements, admins can join a room with the Matrix
-account of the registrar service as specified in [the
-config](#adapter-listener). Admins are specified as:
+In order to submit manual judgements, admins can join a room with the Matrix account of the registrar service as specified in [the config](#adapter-listener). Admins are specified as:
 
 ```yaml
 admins:
@@ -61,9 +48,7 @@ admins:
   - '@admin3:matrix.org'
 ```
 
-If there should not be any admins, then just set the value to `admins: null`.
-Those specified admins have the permission to send Matrix messages to the bot in
-order to perform an action.
+If there should not be any admins, then just set the value to `admins: null`. Those specified admins have the permission to send Matrix messages to the bot in order to perform an action.
 
 ### Identity Status
 
@@ -86,8 +71,7 @@ E.g.
 verify 1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP displayname email
 ```
 
-**NOTE**: The `all` field, as the name implies, verifies the full identity and
-(re-)issues a judgement extrinsic.
+**NOTE**: The `all` field, as the name implies, verifies the full identity and (re-)issues a judgement extrinsic.
 
 ### Help
 
@@ -97,8 +81,7 @@ verify 1a2YiGNu1UUhJtihq8961c7FZtWGQuWDVMWTNBKJdmpGhZP displayname email
 
 ### Config
 
-Both types of configuration, respectively the _adapter listener_ and _session
-notifier_ can be seen in the [`config/`](./config) directory.
+Both types of configuration, respectively the _adapter listener_ and _session notifier_ can be seen in the [`config/`](./config) directory.
 
 #### Adapter Listener
 
