@@ -96,6 +96,57 @@ async fn current_judgement_state_multiple_identities() {
 }
 
 #[actix::test]
+async fn current_judgement_state_field_updated() {
+    let (db, connector, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement request.
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state (Alice).
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    assert_eq!(alice.fields.len(), 4);
+
+    // Modify email address.
+    alice.get_field_mut(&F::ALICE_EMAIL()).value = IdentityFieldValue::Email("alice_second@email.com".to_string());
+    // Remove a field.
+    let pos = alice.fields.iter().position(|field| matches!(field.value, IdentityFieldValue::Matrix(_))).unwrap();
+    alice.fields.remove(pos);
+
+    assert_eq!(alice.fields.len(), 3);
+
+    db.add_judgement_request(&alice).await.unwrap();
+
+    // The expected message (field verified successfully).
+    let expected = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::IdentityUpdated {
+            context: alice.context.clone(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(expected)
+    );
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
 async fn verify_invalid_message_bad_challenge() {
     let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
