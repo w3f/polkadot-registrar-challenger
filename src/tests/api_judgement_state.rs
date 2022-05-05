@@ -97,14 +97,14 @@ async fn current_judgement_state_multiple_identities() {
 
 #[actix::test]
 async fn current_judgement_state_field_updated() {
-    let (db, connector, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
     connector.inject(alice_judgement_request()).await;
     connector.inject(bob_judgement_request()).await;
     let states = connector.inserted_states().await;
-    let mut alice = states[0].clone();
+    let alice = states[0].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -116,34 +116,43 @@ async fn current_judgement_state_field_updated() {
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
     );
 
-    assert_eq!(alice.fields.len(), 4);
+    // New request with modified entries.
+    let mut request = JudgementRequest::alice();
+    request
+        .accounts
+        .entry(AccountType::Email)
+        .and_modify(|entry| *entry = "alice_second@email.com".to_string());
+    request.accounts.remove(&AccountType::Matrix);
 
-    // Modify email address.
-    alice.get_field_mut(&F::ALICE_EMAIL()).value =
-        IdentityFieldValue::Email("alice_second@email.com".to_string());
+    // Send request
+    connector
+        .inject(WatcherMessage::new_judgement_request(request))
+        .await;
 
-    // Remove a field.
-    let pos = alice
-        .fields
-        .iter()
-        .position(|field| matches!(field.value, IdentityFieldValue::Matrix(_)))
-        .unwrap();
-    alice.fields.remove(pos);
-
-    assert_eq!(alice.fields.len(), 3);
-
-    db.add_judgement_request(&alice).await.unwrap();
-
-    // The expected message (field verified successfully).
-    let expected = ResponseAccountState {
-        state: alice.clone().into(),
-        notifications: vec![NotificationMessage::IdentityUpdated {
-            context: alice.context.clone(),
-        }],
-    };
-
+    // The expected message (identity updated).
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
-    assert_eq!(resp, JsonResult::Ok(expected));
+
+    match resp {
+        JsonResult::Ok(resp) => {
+            assert!(resp.state.fields.iter().any(|field| {
+                field.value == IdentityFieldValue::Email("alice_second@email.com".to_string())
+            }));
+            assert!(!resp
+                .state
+                .fields
+                .iter()
+                .any(|field| { field.value == F::ALICE_MATRIX() }));
+
+            assert_eq!(resp.notifications.len(), 1);
+            assert_eq!(
+                resp.notifications[0],
+                NotificationMessage::IdentityUpdated {
+                    context: alice.context.clone()
+                }
+            );
+        }
+        _ => panic!(),
+    }
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
