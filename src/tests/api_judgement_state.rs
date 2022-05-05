@@ -119,9 +119,15 @@ async fn current_judgement_state_field_updated() {
     assert_eq!(alice.fields.len(), 4);
 
     // Modify email address.
-    alice.get_field_mut(&F::ALICE_EMAIL()).value = IdentityFieldValue::Email("alice_second@email.com".to_string());
+    alice.get_field_mut(&F::ALICE_EMAIL()).value =
+        IdentityFieldValue::Email("alice_second@email.com".to_string());
+
     // Remove a field.
-    let pos = alice.fields.iter().position(|field| matches!(field.value, IdentityFieldValue::Matrix(_))).unwrap();
+    let pos = alice
+        .fields
+        .iter()
+        .position(|field| matches!(field.value, IdentityFieldValue::Matrix(_)))
+        .unwrap();
     alice.fields.remove(pos);
 
     assert_eq!(alice.fields.len(), 3);
@@ -137,10 +143,7 @@ async fn current_judgement_state_field_updated() {
     };
 
     let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
-    assert_eq!(
-        resp,
-        JsonResult::Ok(expected)
-    );
+    assert_eq!(resp, JsonResult::Ok(expected));
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
