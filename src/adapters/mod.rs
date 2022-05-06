@@ -4,6 +4,7 @@ use crate::primitives::{
 };
 use crate::{AdapterConfig, Result};
 use tokio::time::{interval, Duration};
+use tracing::Instrument;
 
 pub mod admin;
 pub mod email;
@@ -15,61 +16,107 @@ pub async fn run_adapters(config: AdapterConfig, db: Database) -> Result<()> {
     // Convenience flat for logging
     let mut started = false;
 
-    // Matrix client configuration and execution.
-    if config.matrix.enabled {
-        info!("Starting Matrix adapter...");
-        let config = config.matrix;
+    // Deconstruct struct to get around borrowing violations.
+    let AdapterConfig {
+        watcher: _,
+        matrix: matrix_config,
+        twitter: twitter_config,
+        email: email_config,
+        display_name: _,
+    } = config;
 
-        let matrix_client = matrix::MatrixClient::new(
-            &config.homeserver,
-            &config.username,
-            &config.password,
-            &config.db_path,
-            db,
-            config.admins.unwrap_or(vec![]),
-        )
+    // Matrix client configuration and execution.
+    if matrix_config.enabled {
+        let config = matrix_config;
+
+        let span = info_span!("matrix_adapter");
+        info!(
+            homeserver = config.homeserver.as_str(),
+            username = config.username.as_str()
+        );
+
+        async {
+            info!("Configuring client");
+            let matrix_client = matrix::MatrixClient::new(
+                &config.homeserver,
+                &config.username,
+                &config.password,
+                &config.db_path,
+                db,
+                config.admins.unwrap_or_default(),
+            )
+            .await?;
+
+            info!("Starting message adapter");
+            listener.start_message_adapter(matrix_client, 1).await;
+            Result::Ok(())
+        }
+        .instrument(span)
         .await?;
 
-        listener.start_message_adapter(matrix_client, 1).await;
         started = true;
     }
 
     // Twitter client configuration and execution.
-    if config.twitter.enabled {
-        info!("Starting Twitter adapter...");
-        let config = config.twitter;
+    if twitter_config.enabled {
+        let config = twitter_config;
 
-        let twitter_client = twitter::TwitterBuilder::new()
-            .consumer_key(config.api_key)
-            .consumer_secret(config.api_secret)
-            .token(config.token)
-            .token_secret(config.token_secret)
-            .build()?;
+        let span = info_span!("twitter_adapter");
+        info!(api_key = config.api_key.as_str());
 
-        listener
-            .start_message_adapter(twitter_client, config.request_interval)
-            .await;
+        async {
+            info!("Configuring client");
+            let twitter_client = twitter::TwitterBuilder::new()
+                .consumer_key(config.api_key)
+                .consumer_secret(config.api_secret)
+                .token(config.token)
+                .token_secret(config.token_secret)
+                .build()?;
+
+            info!("Starting message adapter");
+            listener
+                .start_message_adapter(twitter_client, config.request_interval)
+                .await;
+
+            Result::Ok(())
+        }
+        .instrument(span)
+        .await?;
 
         started = true;
     }
 
     // Email client configuration and execution.
-    if config.email.enabled {
-        info!("Starting email adapter...");
-        let config = config.email;
+    if email_config.enabled {
+        let config = email_config;
 
-        // TODO: Rename struct
-        let email_client = email::SmtpImapClientBuilder::new()
-            .smtp_server(config.smtp_server)
-            .imap_server(config.imap_server)
-            .email_inbox(config.inbox)
-            .email_user(config.user)
-            .email_password(config.password)
-            .build()?;
+        let span = info_span!("email_adapter");
+        info!(
+            smtp_server = config.smtp_server.as_str(),
+            imap_server = config.imap_server.as_str(),
+            inbox = config.inbox.as_str(),
+            user = config.user.as_str(),
+        );
 
-        listener
-            .start_message_adapter(email_client, config.request_interval)
-            .await;
+        async {
+            info!("Configuring client");
+            let email_client = email::EmailClientBuilder::new()
+                .smtp_server(config.smtp_server)
+                .imap_server(config.imap_server)
+                .email_inbox(config.inbox)
+                .email_user(config.user)
+                .email_password(config.password)
+                .build()?;
+
+            info!("Starting message adapter");
+            listener
+                .start_message_adapter(email_client, config.request_interval)
+                .await;
+
+            Result::Ok(())
+        }
+        .instrument(span)
+        .await?;
 
         started = true;
     }
@@ -92,9 +139,7 @@ pub trait Adapter {
 
 // Filler for adapters that do not send messages.
 impl From<ExpectedMessage> for () {
-    fn from(_: ExpectedMessage) -> Self {
-        ()
-    }
+    fn from(_: ExpectedMessage) -> Self {}
 }
 
 pub struct AdapterListener {
@@ -103,7 +148,7 @@ pub struct AdapterListener {
 
 impl AdapterListener {
     pub async fn new(db: Database) -> Self {
-        AdapterListener { db: db }
+        AdapterListener { db }
     }
     pub async fn start_message_adapter<T>(&self, mut adapter: T, timeout: u64)
     where
@@ -140,38 +185,31 @@ impl AdapterListener {
                 }
 
                 // Check if a second challenge must be sent to the user directly.
-                // TODO: One might consider putting this logic into a separate task
-                // with a lower event loop timeout.
                 match db.fetch_events(event_counter).await {
                     Ok((events, new_counter)) => {
                         for event in &events {
-                            match event {
-                                NotificationMessage::AwaitingSecondChallenge { context, field } => {
-                                    match field {
-                                        IdentityFieldValue::Email(to) => {
-                                            if adapter.name() == "email" {
-                                                debug!("Sending second challenge to {}", to);
-                                                if let Ok(challenge) = db
-                                                .fetch_second_challenge(&context, field)
-                                                .await
-                                                .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
-                                                    let _ = adapter
-                                                        .send_message(to.as_str(), challenge.into())
-                                                        .await
-                                                        .map_err(|err| error!("Failed to send second challenge to {} ({} adapter): {:?}", to, adapter.name(), err));
-                                                    }
-                                            }
-                                        }
-                                        _ => {}
+                            if let NotificationMessage::AwaitingSecondChallenge { context, field } =
+                                event
+                            {
+                                if let IdentityFieldValue::Email(to) = field {
+                                    if adapter.name() == "email" {
+                                        debug!("Sending second challenge to {}", to);
+                                        if let Ok(challenge) = db
+                                            .fetch_second_challenge(context, field)
+                                            .await
+                                            .map_err(|err| error!("Failed to fetch second challenge from database: {:?}", err)) {
+                                                let _ = adapter
+                                                    .send_message(to.as_str(), challenge.into())
+                                                    .await
+                                                    .map_err(|err| error!("Failed to send second challenge to {} ({} adapter): {:?}", to, adapter.name(), err));
+                                                }
                                     }
                                 }
-                                _ => {}
                             }
                         }
 
                         event_counter = new_counter;
                     }
-                    // TODO: Unify error handling.
                     Err(err) => {
                         error!(
                             "Error fetching messages in {} adapter: {:?}",
@@ -211,7 +249,7 @@ pub mod tests {
             }
 
             // Give the adapter enough time to fetch and process messages.
-            sleep(Duration::from_secs(3)).await;
+            sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
         }
     }
 

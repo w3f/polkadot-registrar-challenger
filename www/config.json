@@ -1,0 +1,4 @@
+{
+	"http_url": "https://registrar-backend.web3.foundation/api/check_display_name",
+	"ws_url": "wss://registrar-backend.web3.foundation/api/account_status"
+}

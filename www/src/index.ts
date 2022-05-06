@@ -1,11 +1,19 @@
-import { ValidMessage, AccountStatus, Notification, CheckDisplayNameResult, Violation } from "./json";
+import { StateNotification, GenericMessage, Notification, CheckDisplayNameResult, Violation } from "./json";
 import { ContentManager, capitalizeFirstLetter, BadgeValid } from './content';
 import { NotificationHandler } from "./notifications";
 
+interface Config {
+    http_url: string;
+    ws_url: string;
+}
+
+const config: Config = require("../config.json");
+
+// The primary manager of all actions/events, for both UI and server messages.
 class ActionListerner {
     specify_network: HTMLInputElement;
     specify_action: HTMLInputElement;
-    specify_address: HTMLInputElement;
+    search_bar: HTMLInputElement;
     btn_execute_action: HTMLButtonElement;
     manager: ContentManager;
     notifications: NotificationHandler;
@@ -24,13 +32,13 @@ class ActionListerner {
             document
                 .getElementById("specify-network")! as HTMLInputElement;
 
-        // TODO: Rename this element.
-        this.specify_address =
+        this.search_bar =
             document
-                .getElementById("specify-address")! as HTMLInputElement;
+                .getElementById("search-bar")! as HTMLInputElement;
 
-        this.manager = new ContentManager;
-        this.notifications = new NotificationHandler;
+        const handler = new NotificationHandler;
+        this.manager = new ContentManager(handler);
+        this.notifications = handler;
 
         // Handler for choosing network, e.g. "Kusama" or "Polkadot".
         document
@@ -38,8 +46,7 @@ class ActionListerner {
             .addEventListener("click", (e: Event) => {
                 this.specify_network
                     .innerText = (e.target as HTMLAnchorElement).innerText;
-                this.btn_execute_action.innerHTML = `Go!`;
-                this.btn_execute_action.disabled = false;
+                this.manager.resetButton();
             });
 
         // Handler for choosing action, e.g. "Check Judgement".
@@ -48,10 +55,10 @@ class ActionListerner {
             .addEventListener("click", (e: Event) => {
                 let target = (e.target as HTMLAnchorElement).innerText;
                 if (target == "Check Judgement") {
-                    this.specify_address.placeholder = "Account address..."
+                    this.search_bar.placeholder = "Account address..."
                     this.specify_action.innerText = target;
                 } else if (target == "Validate Display Name") {
-                    this.specify_address.placeholder = "Display Name..."
+                    this.search_bar.placeholder = "Display Name..."
                     this.specify_action.innerText = target;
                 }
             });
@@ -59,23 +66,22 @@ class ActionListerner {
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => {
-                let action = document.getElementById("specify-action")!.innerHTML;
+                let action = this.specify_action.innerHTML;
                 if (action == "Check Judgement") {
                     window.location.href = "?network="
-                        + (document.getElementById("specify-network")! as HTMLInputElement).innerHTML.toLowerCase()
+                        + this.specify_network.innerHTML.toLowerCase()
                         + "&address="
-                        + (document.getElementById("specify-address")! as HTMLInputElement).value;
+                        + this.search_bar.value;
                 } else if (action == "Validate Display Name") {
                     this.executeAction();
                 }
             });
 
-        this.specify_address
+        this.search_bar
             .addEventListener("input", (_: Event) => {
-                this.btn_execute_action.innerHTML = `Go!`;
-                this.btn_execute_action.disabled = false;
+                this.manager.resetButton();
 
-                if (this.specify_address.value.startsWith("1")) {
+                if (this.search_bar.value.startsWith("1")) {
                     this.specify_network.innerHTML = "Polkadot";
                 } else {
                     this.specify_network.innerHTML = "Kusama";
@@ -83,7 +89,7 @@ class ActionListerner {
             });
 
         // Bind 'Enter' key to action button.
-        this.specify_address
+        this.search_bar
             .addEventListener("keyup", (event: Event) => {
                 // Number 13 is the "Enter" key on the keyboard
                 if ((event as KeyboardEvent).keyCode === 13) {
@@ -93,6 +99,7 @@ class ActionListerner {
                 }
             });
 
+        // Add a listener for every notification. Required for closing.
         Array.from(document
             .getElementsByClassName("toast")!)
             .forEach(element => {
@@ -101,55 +108,54 @@ class ActionListerner {
                     });
             });
 
+        // Get params from the webbrowser search bar, load data from server if
+        // specified.
         let params = new URLSearchParams(window.location.search);
         let network = params.get("network");
         let address = params.get("address");
 
         if (network != null && address != null) {
-            (document.getElementById("specify-network")! as HTMLInputElement).innerHTML = capitalizeFirstLetter(network);
-            (document.getElementById("specify-address")! as HTMLInputElement).value = address;
+            this.specify_network.innerHTML = capitalizeFirstLetter(network);
+            this.search_bar.value = address;
             this.executeAction();
         }
     }
+    // Executes the main logic, either the judgement state or display name check.
     executeAction() {
-        this.btn_execute_action.disabled = true;
+        this.manager.setButtonLoadingSpinner();
 
-        const action = document.getElementById("specify-action")!.innerHTML;
-        // TODO: Rename this, can be both address or display name.
-        const address = this.specify_address.value;
+        const action = this.specify_action.innerHTML;
+        const user_input = this.search_bar.value;
         const network = this.specify_network.innerHTML.toLowerCase();
 
-        this.btn_execute_action
-            .innerHTML = `
-                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                <span class="visually-hidden"></span>
-            `;
-
         if (action == "Check Judgement") {
-            const socket = new WebSocket('wss://registrar-backend.web3.foundation/api/account_status');
+            const socket = new WebSocket(config.ws_url);
 
             window.setInterval(() => {
                 socket.send("heartbeat");
             }, 30000);
 
+            // Send request to the server
             socket.onopen = () => {
-                let msg = JSON.stringify({ address: address, chain: network });
+                let msg = JSON.stringify({ address: user_input, chain: network });
                 socket.send(msg);
             };
 
+            // Parse received judgement state.
             socket.onmessage = (event: Event) => {
                 let msg = (event as MessageEvent);
-                this.parseAccountStatus(msg);
+                this.handleJudgementState(msg);
             };
         } else if (action == "Validate Display Name") {
-            let display_name = address;
+            let display_name = user_input;
+
             (async () => {
                 let body = JSON.stringify({
                     check: display_name,
                     chain: network,
                 });
 
-                let response = await fetch("https://registrar-backend.web3.foundation/api/check_display_name",
+                let response = await fetch(config.http_url,
                     {
                         method: "POST",
                         headers: {
@@ -158,13 +164,15 @@ class ActionListerner {
                         body: body,
                     });
 
-                let result: AccountStatus = JSON.parse(await response.text());
-                this.parseDisplayNameCheck(result, display_name);
+                let result: GenericMessage = JSON.parse(await response.text());
+                this.handleDisplayNameCheck(result, display_name);
             })();
         }
     }
-    parseDisplayNameCheck(data: AccountStatus, display_name: string) {
-        document.getElementById("introduction")!.innerHTML = "";
+    // Handles the display name result received from the server.
+    handleDisplayNameCheck(data: GenericMessage, display_name: string) {
+        this.manager.wipeIntroduction();
+
         if (data.type == "ok") {
             let check: CheckDisplayNameResult = data.message;
             if (check.type == "ok") {
@@ -173,36 +181,34 @@ class ActionListerner {
                 let violations: Violation[] = check.value;
                 this.manager.setDisplayNameViolation(display_name, violations, false);
             } else {
-                // TODO
+                // Should never occur.
+                this.notifications.unexpectedError("pdnc#1")
             }
         } else if (data.type == "err") {
-            // TODO
+            // Should never occur.
+            this.notifications.unexpectedError("pdnc#2")
         } else {
-            // TODO
+            // Should never occur.
+            this.notifications.unexpectedError("pdnc#3")
         }
 
-        this.btn_execute_action.innerHTML = `Go!`;
-        this.btn_execute_action.disabled = false;
-
+        this.manager.resetButton();
         this.manager.wipeLiveUpdateInfo();
         this.manager.wipeVerificationOverviewContent();
         this.manager.wipeEmailSecondChallengeContent();
         this.manager.wipeUnsupportedContent();
     }
-    parseAccountStatus(msg: MessageEvent) {
-        const parsed: AccountStatus = JSON.parse(msg.data);
+    // Handles the judgement state received from the server.
+    handleJudgementState(msg: MessageEvent) {
+        const parsed: GenericMessage = JSON.parse(msg.data);
         if (parsed.type == "ok") {
-            document.getElementById("introduction")!.innerHTML = "";
-            this.btn_execute_action.innerHTML = `
-                <div class="spinner-grow spinner-grow-sm" role="status">
-                    <span class="visually-hidden"></span>
-                </div>
-            `;
-
-            let message: ValidMessage = parsed.message;
+            let message: StateNotification = parsed.message;
+            this.manager.wipeIntroduction();
+            this.manager.setButtonLiveAnimation();
             this.manager.setLiveUpdateInfo();
             this.manager.processVerificationOverviewTable(message.state);
             this.manager.processUnsupportedOverview(message.state);
+
             this.notifications.processNotifications(message.notifications);
 
             // This notification should only be displayed if no other notifications are available.
@@ -213,11 +219,11 @@ class ActionListerner {
             let message: string = parsed.message;
             this.notifications.displayError(message);
 
+            this.manager.resetButton();
             this.manager.wipeLiveUpdateInfo();
-            this.btn_execute_action.innerHTML = `Go!`;
-            this.btn_execute_action.disabled = false;
         } else {
-            // TODO: Print unexpected error...
+            // Should never occur.
+            this.notifications.unexpectedError("pas#1")
         }
     }
 }

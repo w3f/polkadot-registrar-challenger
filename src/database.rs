@@ -1,6 +1,6 @@
-use crate::actors::api::VerifyChallenge;
-use crate::actors::connector::DisplayNameEntry;
 use crate::adapters::admin::RawFieldName;
+use crate::api::VerifyChallenge;
+use crate::connector::DisplayNameEntry;
 use crate::primitives::{
     ChainName, ChallengeType, Event, ExpectedMessage, ExternalMessage, IdentityContext,
     IdentityFieldValue, JudgementState, NotificationMessage, Timestamp,
@@ -13,9 +13,11 @@ use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 
-const IDENTITY_COLLECTION: &'static str = "identities";
-const EVENT_COLLECTION: &'static str = "event_log";
-const DISPLAY_NAMES: &'static str = "display_names";
+const IDENTITY_COLLECTION: &str = "identities";
+const EVENT_COLLECTION: &str = "event_log";
+const DISPLAY_NAMES: &str = "display_names";
+
+const DANGLING_THRESHOLD: u64 = 3600; // one hour
 
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
@@ -43,7 +45,15 @@ impl Database {
             db: Client::with_uri_str(uri).await?.database(db),
         })
     }
-    pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<()> {
+    /// Simply checks if a connection could be established to the database.
+    pub async fn connectivity_check(&self) -> Result<()> {
+        self.db
+            .list_collection_names(None)
+            .await
+            .map_err(|err| anyhow!("Failed to connect to database: {:?}", err))
+            .map(|_| ())
+    }
+    pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<bool> {
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
@@ -62,6 +72,7 @@ impl Database {
             let mut current: JudgementState = from_document(doc)?;
 
             // Determine which fields should be updated.
+            let mut has_changed = false;
             let mut to_add = vec![];
             for new_field in &request.fields {
                 // If the current field value is the same as the new one, insert
@@ -75,13 +86,20 @@ impl Database {
                     to_add.push(current_field.clone());
                 } else {
                     to_add.push(new_field.clone());
+                    has_changed = true;
                 }
+            }
+
+            // If nothing was modified, return.
+            if !has_changed {
+                return Ok(false);
             }
 
             // Set new fields.
             current.fields = to_add;
 
-            // Update the final value in database.
+            // Update the final fields in the database. All deprecated fields
+            // are overwritten.
             coll.update_one(
                 doc! {
                     "context": request.context.to_bson()?
@@ -107,7 +125,7 @@ impl Database {
             coll.insert_one(request.to_document()?, None).await?;
         }
 
-        Ok(())
+        Ok(true)
     }
     #[cfg(test)]
     pub async fn delete_judgement(&self, context: &IdentityContext) -> Result<()> {
@@ -170,6 +188,11 @@ impl Database {
                     }
                 }
             }
+            RawFieldName::All => {
+                return Err(anyhow!(
+                    "field name 'all' is abstract and cannot be verified individually"
+                ))
+            }
         };
 
         // Update field.
@@ -184,7 +207,7 @@ impl Database {
             )
             .await?;
 
-        if res.modified_count != 1 {
+        if res.modified_count == 0 {
             return Ok(None);
         }
 
@@ -233,7 +256,7 @@ impl Database {
             let field_state = id_state
                 .fields
                 .iter_mut()
-                .find(|field| field.value.matches(&message))
+                .find(|field| field.value.matches_origin(message))
                 .unwrap();
 
             // If the message contains the challenge, set it as valid (or
@@ -251,7 +274,7 @@ impl Database {
                     } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
-                            if expected.verify_message(&message) {
+                            if expected.verify_message(message) {
                                 // Update field state. Be more specific with the query in order
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
@@ -379,7 +402,7 @@ impl Database {
 
         Ok(())
     }
-    pub async fn verify_second_challenge(&mut self, mut request: VerifyChallenge) -> Result<bool> {
+    pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
@@ -487,7 +510,7 @@ impl Database {
                 .iter()
                 .find(|f| &f.value == field)
                 // Technically, this should never return an error...
-                .ok_or(anyhow!("Failed to select field when verifying message"))?;
+                .ok_or_else(|| anyhow!("Failed to select field when verifying message"))?;
 
             match &field_state.challenge {
                 ChallengeType::ExpectedMessage {
@@ -557,12 +580,16 @@ impl Database {
             Ok(None)
         }
     }
-    pub async fn fetch_judgement_candidates(&self) -> Result<Vec<JudgementState>> {
+    pub async fn fetch_judgement_candidates(
+        &self,
+        network: ChainName,
+    ) -> Result<Vec<JudgementState>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut cursor = coll
             .find(
                 doc! {
+                    "context.chain": network.as_str().to_bson()?,
                     "is_fully_verified": true,
                     "judgement_submitted": false,
                     "issue_judgement_at": {
@@ -579,6 +606,47 @@ impl Database {
         }
 
         Ok(completed)
+    }
+    // (Warning) This fully verifies the identity without having to verify
+    // individual fields.
+    pub async fn full_manual_verification(&self, context: &IdentityContext) -> Result<bool> {
+        let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Create a timed delay for issuing judgments. Between 30 seconds to
+        // 5 minutes. This is used to prevent timing attacks where a user
+        // updates the identity right before the judgement is issued.
+        let now = Timestamp::now();
+        let offset = thread_rng().gen_range(30..300);
+        let issue_at = Timestamp::with_offset(offset);
+
+        let res = coll
+            .update_one(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                doc! {
+                    "$set": {
+                        "is_fully_verified": true,
+                        "judgement_submitted": false,
+                        "completion_timestamp": now.to_bson()?,
+                        "issue_judgement_at": issue_at.to_bson()?,
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        // Create event.
+        if res.modified_count == 1 {
+            self.insert_event(NotificationMessage::FullManualVerification {
+                context: context.clone(),
+            })
+            .await?;
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
@@ -599,7 +667,7 @@ impl Database {
             .await?;
 
         // Create event.
-        if res.modified_count > 0 {
+        if res.modified_count == 1 {
             self.insert_event(NotificationMessage::JudgementProvided {
                 context: context.clone(),
             })
@@ -665,7 +733,19 @@ impl Database {
         )
         .await?;
 
-        self.process_fully_verified(&state).await?;
+        // Create event
+        self.insert_event(NotificationMessage::FieldVerified {
+            context: state.context.clone(),
+            field: state
+                .fields
+                .iter()
+                .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
+                .map(|field| field.value.clone())
+                .expect("Failed to retrieve display name. This is a bug"),
+        })
+        .await?;
+
+        self.process_fully_verified(state).await?;
 
         Ok(())
     }
@@ -698,6 +778,39 @@ impl Database {
 
         let event: Event = event.into();
         coll.insert_one(event.to_bson()?, None).await?;
+
+        Ok(())
+    }
+    /// Removes all dangling judgements after the `DANGLING_THRESHOLD` threshold
+    /// has been reached. See `crate::connector::start_dangling_judgements_task`
+    /// for more information.
+    pub async fn process_dangling_judgement_states(&self) -> Result<()> {
+        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
+
+        let threshold = (Timestamp::now().raw() - DANGLING_THRESHOLD).to_bson()?;
+
+        let res = coll
+            .update_many(
+                doc! {
+                    "is_fully_verified": true,
+                    "judgement_submitted": false,
+                    "completion_timestamp": {
+                        "$lt": threshold,
+                    }
+                },
+                doc! {
+                    "$set": {
+                        "judgement_submitted": true
+                    }
+                },
+                None,
+            )
+            .await?;
+
+        let count = res.modified_count;
+        if count > 0 {
+            debug!("Disabled {} tangling identities", count);
+        }
 
         Ok(())
     }

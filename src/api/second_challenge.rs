@@ -16,7 +16,7 @@ impl Default for SecondChallengeVerifier {
 
 impl SecondChallengeVerifier {
     pub fn new(db: Database) -> Self {
-        SecondChallengeVerifier { db: db }
+        SecondChallengeVerifier { db }
     }
 }
 
@@ -31,15 +31,15 @@ impl Handler<VerifyChallenge> for SecondChallengeVerifier {
     type Result = ResponseActFuture<Self, JsonResult<bool>>;
 
     fn handle(&mut self, msg: VerifyChallenge, _ctx: &mut Self::Context) -> Self::Result {
-        let mut db = self.db.clone();
+        let db = self.db.clone();
 
         Box::pin(
             async move {
                 debug!("Received second challenge: {:?}", msg);
                 db.verify_second_challenge(msg)
                     .await
-                    .map(|b| JsonResult::Ok(b))
-                    .unwrap_or(JsonResult::Err("Backend error, contact admin".to_string()))
+                    .map(JsonResult::Ok)
+                    .unwrap_or_else(|_| JsonResult::Err("Backend error, contact admin".to_string()))
             }
             .into_actor(self),
         )

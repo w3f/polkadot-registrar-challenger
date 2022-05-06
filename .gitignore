@@ -2,6 +2,9 @@ target
 www/dist
 www/build
 config*
+!config/sample.adapter_listener.yaml
+!config/sample.session_notifier.yaml
 !helmfile.d/config
+!www/config.json
 scripts/load-env.sh
 node_modules

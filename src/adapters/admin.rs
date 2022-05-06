@@ -1,5 +1,4 @@
-use crate::actors::connector::create_context;
-use crate::primitives::{ChainAddress, JudgementStateBlanked};
+use crate::primitives::{ChainAddress, ChainName, IdentityContext, JudgementStateBlanked};
 use crate::Database;
 use std::str::FromStr;
 
@@ -20,14 +19,14 @@ impl FromStr for Command {
         let s = s.trim().replace("  ", " ");
 
         if s.starts_with("status") {
-            let parts: Vec<&str> = s.split(" ").skip(1).collect();
+            let parts: Vec<&str> = s.split(' ').skip(1).collect();
             if parts.len() != 1 {
                 return Err(Response::UnknownCommand);
             }
 
             Ok(Command::Status(ChainAddress::from(parts[0].to_string())))
         } else if s.starts_with("verify") {
-            let parts: Vec<&str> = s.split(" ").skip(1).collect();
+            let parts: Vec<&str> = s.split(' ').skip(1).collect();
             if parts.len() < 2 {
                 return Err(Response::UnknownCommand);
             }
@@ -35,14 +34,14 @@ impl FromStr for Command {
             Ok(Command::Verify(
                 ChainAddress::from(parts[0].to_string()),
                 parts[1..]
-                    .into_iter()
+                    .iter()
                     .map(|s| RawFieldName::from_str(s))
                     .collect::<Result<Vec<RawFieldName>>>()?,
             ))
         } else if s.starts_with("help") {
-            let parts: Vec<&str> = s.split(" ").collect();
+            let count = s.split(' ').count();
 
-            if parts.len() > 1 {
+            if count > 1 {
                 return Err(Response::UnknownCommand);
             }
 
@@ -60,6 +59,7 @@ pub enum Response {
     UnknownCommand,
     IdentityNotFound,
     InvalidSyntax(Option<String>),
+    FullyVerified(ChainAddress),
     InternalError,
     Help,
 }
@@ -72,7 +72,7 @@ impl std::fmt::Display for Response {
                 format!("Verified the following fields: {}", {
                     let mut all = String::new();
                     for field in fields {
-                        all.push_str(&format!("{}, ", field.to_string()));
+                        all.push_str(&format!("{}, ", field));
                     }
 
                     // Remove `, ` suffix.
@@ -82,32 +82,30 @@ impl std::fmt::Display for Response {
                     all
                 })
             }
-            Response::UnknownCommand => {
-                format!("The provided command is unknown")
-            }
+            Response::UnknownCommand => "The provided command is unknown".to_string(),
             Response::IdentityNotFound => {
-                format!("There is no pending judgement request for the provided identity")
+                "There is no pending judgement request for the provided identity".to_string()
             }
             Response::InvalidSyntax(input) => {
                 format!(
                     "Invalid input{}",
                     match input {
                         Some(input) => format!(" '{}'", input),
-                        None => format!(""),
+                        None => "".to_string(),
                     }
                 )
             }
             Response::InternalError => {
-                format!("An internal error occured. Please contact the architects.")
+                "An internal error occured. Please contact the architects.".to_string()
             }
-            Response::Help => {
-                format!(
-                    "\
+            Response::Help => "\
                 status <ADDR>\t\t\tShow the current verification status of the specified address.\n\
                 verify <ADDR> <FIELD>...\tVerify one or multiple fields of the specified address.\n\
                 "
-                )
-            }
+            .to_string(),
+            Response::FullyVerified(_) => {
+                "Identity has been fully verified. The extrinsic will be submitted in a couple of minutes".to_string()
+            },
         };
 
         write!(f, "{}", msg)
@@ -122,6 +120,8 @@ pub enum RawFieldName {
     Web,
     Twitter,
     Matrix,
+    // Represents the full identity
+    All,
 }
 
 impl std::fmt::Display for RawFieldName {
@@ -134,6 +134,7 @@ impl std::fmt::Display for RawFieldName {
                 RawFieldName::Web => "web",
                 RawFieldName::Twitter => "twitter",
                 RawFieldName::Matrix => "matrix",
+                RawFieldName::All => "all",
             }
         })
     }
@@ -144,7 +145,7 @@ impl FromStr for RawFieldName {
 
     fn from_str(s: &str) -> Result<Self> {
         // Convenience handler.
-        let s = s.trim().replace("-", "").replace("_", "").to_lowercase();
+        let s = s.trim().replace('-', "").replace('_', "").to_lowercase();
 
         let f = match s.as_str() {
             "legalname" => RawFieldName::LegalName,
@@ -153,6 +154,7 @@ impl FromStr for RawFieldName {
             "web" => RawFieldName::Web,
             "twitter" => RawFieldName::Twitter,
             "matrix" => RawFieldName::Matrix,
+            "all" => RawFieldName::All,
             _ => return Err(Response::InvalidSyntax(Some(s.to_string()))),
         };
 
@@ -160,6 +162,7 @@ impl FromStr for RawFieldName {
     }
 }
 
+#[allow(clippy::needless_lifetimes)]
 pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
     let local = |db: &'a Database, command: Command| async move {
         match command {
@@ -175,6 +178,13 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
             }
             Command::Verify(addr, fields) => {
                 let context = create_context(addr.clone());
+
+                // Check if _all_ should be verified (respectively the full identity)
+                if fields.iter().any(|f| matches!(f, RawFieldName::All))
+                    && db.full_manual_verification(&context).await?
+                {
+                    return Ok(Response::FullyVerified(addr));
+                }
 
                 // Verify each passed on field.
                 for field in &fields {
@@ -197,6 +207,18 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
             Response::InternalError
         }
     }
+}
+
+/// Convenience function for creating a full identity context when only the
+/// address itself is present. Only supports Kusama and Polkadot for now.
+pub fn create_context(address: ChainAddress) -> IdentityContext {
+    let chain = if address.as_str().starts_with('1') {
+        ChainName::Polkadot
+    } else {
+        ChainName::Kusama
+    };
+
+    IdentityContext { address, chain }
 }
 
 #[cfg(test)]
@@ -248,6 +270,15 @@ mod tests {
             Command::Verify(
                 ChainAddress::from("Alice".to_string()),
                 vec![RawFieldName::Email, RawFieldName::DisplayName]
+            )
+        );
+
+        let resp = Command::from_str("verify Alice all").unwrap();
+        assert_eq!(
+            resp,
+            Command::Verify(
+                ChainAddress::from("Alice".to_string()),
+                vec![RawFieldName::All]
             )
         );
 

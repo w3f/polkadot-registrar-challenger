@@ -1,21 +1,23 @@
 use super::*;
-use crate::actors::api::VerifyChallenge;
-use crate::actors::api::{JsonResult, ResponseAccountState};
+use crate::api::VerifyChallenge;
+use crate::api::{JsonResult, ResponseAccountState};
+use crate::connector::WatcherMessage;
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, JudgementState,
-    MessageId, NotificationMessage, Timestamp,
+    ExpectedMessage, ExternalMessage, ExternalMessageType, IdentityContext, MessageId,
+    NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
 use futures::{FutureExt, SinkExt, StreamExt};
 
 #[actix::test]
 async fn current_judgement_state_single_identity() {
-    let (db, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _inj) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -33,14 +35,16 @@ async fn current_judgement_state_single_identity() {
 
 #[actix::test]
 async fn current_judgement_state_multiple_inserts() {
-    let (db, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
     // Multiple inserts of the same request. Must not cause bad behavior.
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&alice).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+
+    connector.inject(alice_judgement_request()).await;
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -58,14 +62,15 @@ async fn current_judgement_state_multiple_inserts() {
 
 #[actix::test]
 async fn current_judgement_state_multiple_identities() {
-    let (db, mut api, _) = new_env().await;
+    let (_db, connector, mut api, _) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -91,15 +96,79 @@ async fn current_judgement_state_multiple_identities() {
 }
 
 #[actix::test]
+async fn current_judgement_state_field_updated() {
+    let (_db, connector, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement request.
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state (Alice).
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // New request with modified entries.
+    let mut request = JudgementRequest::alice();
+    request
+        .accounts
+        .entry(AccountType::Email)
+        .and_modify(|entry| *entry = "alice_second@email.com".to_string());
+    request.accounts.remove(&AccountType::Matrix);
+
+    // Send request
+    connector
+        .inject(WatcherMessage::new_judgement_request(request))
+        .await;
+
+    // The expected message (identity updated).
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+
+    match resp {
+        JsonResult::Ok(resp) => {
+            assert!(resp.state.fields.iter().any(|field| {
+                field.value == IdentityFieldValue::Email("alice_second@email.com".to_string())
+            }));
+            assert!(!resp
+                .state
+                .fields
+                .iter()
+                .any(|field| { field.value == F::ALICE_MATRIX() }));
+
+            assert_eq!(resp.notifications.len(), 1);
+            assert_eq!(
+                resp.notifications[0],
+                NotificationMessage::IdentityUpdated {
+                    context: alice.context.clone()
+                }
+            );
+        }
+        _ => panic!(),
+    }
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
 async fn verify_invalid_message_bad_challenge() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -151,14 +220,15 @@ async fn verify_invalid_message_bad_challenge() {
 
 #[actix::test]
 async fn verify_invalid_message_bad_origin() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement request.
-    let alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -201,14 +271,15 @@ async fn verify_invalid_message_bad_origin() {
 
 #[actix::test]
 async fn verify_valid_message() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -267,18 +338,25 @@ async fn verify_valid_message() {
 
 #[actix::test]
 async fn verify_valid_message_duplicate_account_name() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let mut bob = JudgementState::bob();
+    connector.inject(alice_judgement_request()).await;
+    // Note: Bob specified the same Matrix handle as Alice.
+    connector
+        .inject(WatcherMessage::new_judgement_request({
+            let mut req = JudgementRequest::bob();
+            req.accounts
+                .entry(AccountType::Matrix)
+                .and_modify(|e| *e = "@alice:matrix.org".to_string());
+            req
+        }))
+        .await;
 
-    // Bob also has the same Matrix account as Alice.
-    bob.get_field_mut(&F::BOB_MATRIX()).value = F::ALICE_MATRIX();
-
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let mut bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -339,15 +417,15 @@ async fn verify_valid_message_duplicate_account_name() {
 
 #[actix::test]
 async fn verify_valid_message_awaiting_second_challenge() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -455,15 +533,15 @@ async fn verify_valid_message_awaiting_second_challenge() {
 
 #[actix::test]
 async fn verify_invalid_message_awaiting_second_challenge() {
-    let (db, mut api, injector) = new_env().await;
+    let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
 
     // Insert judgement requests.
-    let mut alice = JudgementState::alice();
-    let bob = JudgementState::bob();
-
-    db.add_judgement_request(&alice).await.unwrap();
-    db.add_judgement_request(&bob).await.unwrap();
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
 
     // Subscribe to endpoint.
     stream.send(IdentityContext::alice().to_ws()).await.unwrap();
@@ -557,4 +635,220 @@ async fn verify_invalid_message_awaiting_second_challenge() {
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
+async fn verify_full_identity() {
+    let (db, connector, mut api, _injector) = new_env().await;
+    let mut stream_alice = api.ws_at("/api/account_status").await.unwrap();
+    let mut stream_bob = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement requests.
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let mut alice = states[0].clone();
+    let bob = states[1].clone();
+
+    // Subscribe to endpoint.
+    stream_alice
+        .send(IdentityContext::alice().to_ws())
+        .await
+        .unwrap();
+    stream_bob
+        .send(IdentityContext::bob().to_ws())
+        .await
+        .unwrap();
+
+    // Check initial state
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Verify Display name (does not create notification).
+    db.set_display_name_valid(&alice).await.unwrap();
+    let passed = alice
+        .get_field_mut(&F::ALICE_DISPLAY_NAME())
+        .expected_display_name_check_mut()
+        .0;
+    *passed = true;
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_DISPLAY_NAME(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Verify Twitter.
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Twitter("@alice".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_TWITTER())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice
+        .get_field_mut(&F::ALICE_TWITTER())
+        .expected_message_mut()
+        .verify_message(&msg);
+    assert!(changed);
+
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_TWITTER(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Verify Email (first challenge).
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Email("alice@email.com".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_EMAIL())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_message_mut()
+        .verify_message(&msg);
+    assert!(changed);
+
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::AwaitingSecondChallenge {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Second challenge
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_second_mut()
+        .set_verified();
+
+    db.verify_second_challenge(VerifyChallenge {
+        entry: F::ALICE_EMAIL(),
+        challenge: alice
+            .get_field(&F::ALICE_EMAIL())
+            .expected_second()
+            .value
+            .to_string(),
+    })
+    .await
+    .unwrap();
+
+    // Check updated state with notification.
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::SecondFieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_EMAIL(),
+        }],
+    };
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Verify Matrix.
+    let msg = ExternalMessage {
+        origin: ExternalMessageType::Matrix("@alice:matrix.org".to_string()),
+        id: MessageId::from(0u32),
+        timestamp: Timestamp::now(),
+        values: alice
+            .get_field(&F::ALICE_MATRIX())
+            .expected_message()
+            .to_message_parts(),
+    };
+
+    let changed = alice
+        .get_field_mut(&F::ALICE_MATRIX())
+        .expected_message_mut()
+        .verify_message(&msg);
+    assert!(changed);
+
+    db.verify_message(&msg).await.unwrap();
+
+    // Check updated state with notification.
+    // Identity is fully verified now.
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    // The completion timestamp is not that important, as long as it's `Some`.
+    let completion_timestamp = match &resp {
+        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        _ => panic!(),
+    };
+
+    assert!(completion_timestamp.is_some());
+    alice.is_fully_verified = true;
+    alice.completion_timestamp = completion_timestamp;
+
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::FieldVerified {
+            context: alice.context.clone(),
+            field: F::ALICE_MATRIX(),
+        }],
+    };
+
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
+    let exp_resp = ResponseAccountState {
+        state: alice.clone().into(),
+        notifications: vec![NotificationMessage::IdentityFullyVerified {
+            context: alice.context.clone(),
+        }],
+    };
+
+    assert_eq!(resp, JsonResult::Ok(exp_resp));
+
+    // Bob remains unchanged.
+    let resp: JsonResult<ResponseAccountState> = stream_bob.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
+    );
+
+    // Empty stream.
+    assert!(stream_alice.next().now_or_never().is_none());
 }

@@ -20,10 +20,10 @@ impl ExtractSender<String> for String {
     type Error = anyhow::Error;
 
     fn extract_sender(self) -> Result<String> {
-        if self.contains("<") {
-            let parts = self.split("<");
+        if self.contains('<') {
+            let parts = self.split('<');
             if let Some(email) = parts.into_iter().nth(1) {
-                Ok(email.replace(">", ""))
+                Ok(email.replace('>', ""))
             } else {
                 Err(anyhow!("unrecognized data"))
             }
@@ -33,7 +33,7 @@ impl ExtractSender<String> for String {
     }
 }
 
-pub struct SmtpImapClientBuilder {
+pub struct EmailClientBuilder {
     server: Option<String>,
     imap_server: Option<String>,
     inbox: Option<String>,
@@ -41,9 +41,9 @@ pub struct SmtpImapClientBuilder {
     password: Option<String>,
 }
 
-impl SmtpImapClientBuilder {
+impl EmailClientBuilder {
     pub fn new() -> Self {
-        SmtpImapClientBuilder {
+        EmailClientBuilder {
             server: None,
             imap_server: None,
             inbox: None,
@@ -71,8 +71,9 @@ impl SmtpImapClientBuilder {
         self.password = Some(password);
         self
     }
-    pub fn build(self) -> Result<SmtpImapClient> {
-        Ok(SmtpImapClient {
+    #[allow(clippy::or_fun_call)]
+    pub fn build(self) -> Result<EmailClient> {
+        Ok(EmailClient {
             smtp_server: self.server.ok_or(anyhow!("SMTP server not specified"))?,
             imap_server: self
                 .imap_server
@@ -88,7 +89,7 @@ impl SmtpImapClientBuilder {
 }
 
 #[derive(Clone)]
-pub struct SmtpImapClient {
+pub struct EmailClient {
     smtp_server: String,
     imap_server: String,
     inbox: String,
@@ -98,7 +99,7 @@ pub struct SmtpImapClient {
     cache: HashSet<MessageId>,
 }
 
-impl SmtpImapClient {
+impl EmailClient {
     fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         let tls = native_tls::TlsConnector::builder().build()?;
         let client = imap::connect((self.imap_server.as_str(), 993), &self.imap_server, &tls)?;
@@ -140,13 +141,13 @@ impl SmtpImapClient {
                     .headers
                     .iter()
                     .find(|header| header.get_key_ref() == "From")
-                    .ok_or(anyhow!("unrecognized data"))?
+                    .ok_or_else(|| anyhow!("unrecognized data"))?
                     .get_value()
                     .extract_sender()?;
 
                 let id = message
                     .uid
-                    .ok_or(anyhow!("missing UID for email message"))?
+                    .ok_or_else(|| anyhow!("missing UID for email message"))?
                     .into();
 
                 // Skip message if it was already processed.
@@ -161,7 +162,7 @@ impl SmtpImapClient {
                     origin: ExternalMessageType::Email(sender),
                     id: message
                         .uid
-                        .ok_or(anyhow!("missing UID for email message"))?
+                        .ok_or_else(|| anyhow!("missing UID for email message"))?
                         .into(),
                     timestamp: Timestamp::now(),
                     values: vec![],
@@ -220,7 +221,7 @@ impl SmtpImapClient {
 }
 
 #[async_trait]
-impl Adapter for SmtpImapClient {
+impl Adapter for EmailClient {
     type MessageType = ExpectedMessage;
 
     fn name(&self) -> &'static str {
@@ -230,6 +231,6 @@ impl Adapter for SmtpImapClient {
         self.request_messages()
     }
     async fn send_message(&mut self, to: &str, content: Self::MessageType) -> Result<()> {
-        Self::send_message(&self, to, content.value.as_str()).await
+        Self::send_message(self, to, content.value.as_str()).await
     }
 }

@@ -1,0 +1,10 @@
+db:
+  uri: mongodb://localhost:27017/
+  name: registrar_db
+instance:
+  role: session_notifier
+  config:
+    api_address: 0.0.0.0:8000
+    display_name:
+      enabled: true
+      limit: 0.85

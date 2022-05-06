@@ -14,15 +14,15 @@ use tokio::sync::Mutex;
 use tokio::time::{self, Duration};
 use url::Url;
 
-const REJOIN_DELAY: u64 = 3;
+const REJOIN_DELAY: u64 = 10;
 const REJOIN_MAX_ATTEMPTS: usize = 5;
 
 #[derive(Clone)]
 pub struct MatrixClient {
+    // TODO: This should just be a channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
 }
 
-// TODO: Change workflow to chain methods.
 impl MatrixClient {
     pub async fn new(
         homeserver: &str,
@@ -66,14 +66,14 @@ impl MatrixClient {
             client
                 .sync_token()
                 .await
-                .ok_or(anyhow!("Failed to acquire sync token"))?,
+                .ok_or_else(|| anyhow!("Failed to acquire sync token"))?,
         );
 
         actix::spawn(async move {
             client.clone().sync(settings).await;
         });
 
-        Ok(MatrixClient { messages: messages })
+        Ok(MatrixClient { messages })
     }
 }
 
@@ -82,7 +82,6 @@ pub struct MatrixHandle(String);
 
 struct Listener {
     client: Client,
-    // TODO: Should probably just be a mpsc channel.
     messages: Arc<Mutex<Vec<ExternalMessage>>>,
     db: Database,
     admins: Vec<MatrixHandle>,
@@ -96,10 +95,10 @@ impl Listener {
         admins: Vec<MatrixHandle>,
     ) -> Self {
         Self {
-            client: client,
-            messages: messages,
-            db: db,
-            admins: admins,
+            client,
+            messages,
+            db,
+            admins,
         }
     }
 }
@@ -113,7 +112,6 @@ impl EventHandler for Listener {
         _: Option<MemberEventContent>,
     ) {
         if let Room::Invited(room) = room {
-            let mut delay = REJOIN_DELAY;
             let mut rejoin_attempts = 0;
 
             while let Err(err) = self.client.join_room_by_id(room.room_id()).await {
@@ -121,17 +119,16 @@ impl EventHandler for Listener {
                     "Failed to join room {} ({:?}), retrying in {}s",
                     room.room_id(),
                     err,
-                    delay,
+                    REJOIN_DELAY,
                 );
 
-                time::sleep(Duration::from_secs(delay)).await;
+                time::sleep(Duration::from_secs(REJOIN_DELAY)).await;
 
                 if rejoin_attempts == REJOIN_MAX_ATTEMPTS {
-                    error!("Can't join room {} ({:?})", room.room_id(), err);
+                    error!("Can't join room {}, exiting ({:?})", room.room_id(), err);
                     return;
                 }
 
-                delay *= 2;
                 rejoin_attempts += 1;
             }
 
@@ -158,7 +155,7 @@ impl EventHandler for Listener {
             // Check for admin message
             let sender = event.sender.to_string();
             if self.admins.contains(&MatrixHandle(sender)) {
-                let resp = match Command::from_str(&msg_body) {
+                let resp = match Command::from_str(msg_body) {
                     // If a valid admin command was found, execute it.
                     Ok(cmd) => Some(process_admin(&self.db, cmd).await),
                     Err(err @ Response::InvalidSyntax(_)) => Some(err),

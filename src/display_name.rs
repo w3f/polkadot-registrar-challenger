@@ -1,4 +1,4 @@
-use crate::actors::connector::DisplayNameEntry;
+use crate::connector::DisplayNameEntry;
 use crate::database::Database;
 use crate::primitives::{ChainName, IdentityContext, JudgementState};
 use crate::{DisplayNameConfig, Result};
@@ -14,10 +14,7 @@ pub struct DisplayNameVerifier {
 
 impl DisplayNameVerifier {
     pub fn new(db: Database, config: DisplayNameConfig) -> Self {
-        DisplayNameVerifier {
-            db: db,
-            config: config,
-        }
+        DisplayNameVerifier { db, config }
     }
     pub async fn check_similarities(
         &self,
@@ -38,7 +35,7 @@ impl DisplayNameVerifier {
                 }
             }
 
-            if is_too_similar(&name, &existing.display_name, self.config.limit) {
+            if is_too_similar(name, &existing.display_name, self.config.limit) {
                 // Only show up to `VIOLATIONS_CAP` violations.
                 if violations.len() == VIOLATIONS_CAP {
                     break;
@@ -70,7 +67,7 @@ impl DisplayNameVerifier {
                 .insert_display_name_violations(&state.context, &violations)
                 .await?;
         } else {
-            self.db.set_display_name_valid(&state).await?;
+            self.db.set_display_name_valid(state).await?;
         }
 
         Ok(())
