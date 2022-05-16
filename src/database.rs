@@ -90,8 +90,8 @@ impl Database {
                 }
             }
 
-            // If nothing was modified, return.
-            if !has_changed {
+            // If nothing was modified, return (detect removed entries).
+            if !has_changed && request.fields.len() == current.fields.len() {
                 return Ok(false);
             }
 

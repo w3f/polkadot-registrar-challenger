@@ -159,6 +159,62 @@ async fn current_judgement_state_field_updated() {
 }
 
 #[actix::test]
+async fn current_judgement_state_single_entry_removed() {
+    let (_db, connector, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Insert judgement request.
+    connector.inject(alice_judgement_request()).await;
+    connector.inject(bob_judgement_request()).await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state (Alice).
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // New request with single entry removed.
+    let mut request = JudgementRequest::alice();
+    request.accounts.remove(&AccountType::Matrix);
+
+    // Send request
+    connector
+        .inject(WatcherMessage::new_judgement_request(request))
+        .await;
+
+    // The expected message (identity updated).
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+
+    match resp {
+        JsonResult::Ok(resp) => {
+            assert!(!resp
+                .state
+                .fields
+                .iter()
+                .any(|field| { field.value == F::ALICE_MATRIX() }));
+
+            assert_eq!(resp.notifications.len(), 1);
+            assert_eq!(
+                resp.notifications[0],
+                NotificationMessage::IdentityUpdated {
+                    context: alice.context.clone()
+                }
+            );
+        }
+        _ => panic!(),
+    }
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
 async fn verify_invalid_message_bad_challenge() {
     let (_db, connector, mut api, injector) = new_env().await;
     let mut stream = api.ws_at("/api/account_status").await.unwrap();
