@@ -12,7 +12,7 @@ use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
@@ -35,17 +35,18 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
-/// This
+// Keeps track of the latest, fetched events to avoid sending old messages or
+// duplicates.
 pub struct EventCursor {
     timestamp: Timestamp,
-    last_ids: HashSet<String>,
+    fetched_ids: HashMap<String, Timestamp>,
 }
 
 impl EventCursor {
     pub fn new() -> Self {
         EventCursor {
             timestamp: Timestamp::now(),
-            last_ids: Default::default(),
+            fetched_ids: HashMap::new(),
         }
     }
 }
@@ -575,13 +576,12 @@ impl Database {
             .await?;
 
         let mut events = vec![];
-        let mut fetched_ids = HashSet::new();
 
         while let Some(doc) = cursor.next().await {
             let wrapper = from_document::<EventWrapper>(doc?)?;
             let hex_id = wrapper.id.to_hex();
 
-            if event_tracker.last_ids.contains(&hex_id) {
+            if event_tracker.fetched_ids.contains_key(&hex_id) {
                 continue;
             }
 
@@ -590,11 +590,13 @@ impl Database {
             events.push(wrapper);
 
             // Track event in EventCursor
-            fetched_ids.insert(hex_id);
+            event_tracker.fetched_ids.insert(hex_id, timestamp);
             event_tracker.timestamp = event_tracker.timestamp.max(timestamp);
         }
 
-        event_tracker.last_ids = fetched_ids;
+        // Clean cache, only keep ids of the last 10 seconds.
+        let current = event_tracker.timestamp.raw();
+        event_tracker.fetched_ids.retain(|_, timestamp| timestamp.raw() > current - 10);
 
         // Sort by id, ascending.
         events.sort_by(|a, b| a.id.cmp(&b.id));

@@ -62,7 +62,7 @@ async fn run_mocker() -> Result<()> {
     loop {
         let ty_msg: u32 = rng.gen_range(0..2);
         let ty_validity = rng.gen_range(0..1);
-        let reset = rng.gen_range(0..5);
+        let reset = rng.gen_range(0..9);
 
         if reset == 0 {
             warn!("Resetting Identity");
@@ -134,6 +134,6 @@ async fn run_mocker() -> Result<()> {
             })
             .await;
 
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_secs(4)).await;
     }
 }
