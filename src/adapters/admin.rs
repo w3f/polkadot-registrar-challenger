@@ -84,7 +84,7 @@ impl std::fmt::Display for Response {
             }
             Response::UnknownCommand => "The provided command is unknown".to_string(),
             Response::IdentityNotFound => {
-                "There is no pending judgement request for the provided identity".to_string()
+                "Identity was not found or invalid query executed".to_string()
             }
             Response::InvalidSyntax(input) => {
                 format!(
