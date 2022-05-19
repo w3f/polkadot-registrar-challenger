@@ -95,9 +95,6 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
         run_session_notifier(t_db, actor).await;
     });
 
-    // Let tasks startup
-    sleep(Duration::from_secs(5)).await;
-
     // Setup connector mocker
     let connector = ConnectorMocker::new(db.clone());
 

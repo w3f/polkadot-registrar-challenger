@@ -8,7 +8,7 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::options::UpdateOptions;
+use mongodb::options::{FindOptions, UpdateOptions};
 use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
@@ -552,17 +552,16 @@ impl Database {
         &mut self,
         event_tracker: &mut EventCursor,
     ) -> Result<Vec<NotificationMessage>> {
-        #[derive(Deserialize)]
+        #[derive(Debug, Deserialize)]
         struct EventWrapper {
             #[serde(rename = "_id")]
-            id: String,
+            id: bson::oid::ObjectId,
             #[serde(flatten)]
             event: Event,
         }
 
         let coll = self.db.collection(EVENT_COLLECTION);
 
-        let mut fetched_ids = HashSet::new();
         let mut cursor = coll
             .find(
                 doc! {
@@ -575,24 +574,34 @@ impl Database {
             .await?;
 
         let mut events = vec![];
+        let mut fetched_ids = HashSet::new();
+
         while let Some(doc) = cursor.next().await {
             let wrapper = from_document::<EventWrapper>(doc?)?;
+            let hex_id = wrapper.id.to_hex();
 
-            if event_tracker.last_ids.contains(&wrapper.id) {
+            if event_tracker.last_ids.contains(&hex_id) {
                 continue;
             }
 
             // Save event
-            events.push(wrapper.event.event);
+            let timestamp = wrapper.event.timestamp;
+            events.push(wrapper);
 
             // Track event in EventCursor
-            fetched_ids.insert(wrapper.id);
-            event_tracker.timestamp = event_tracker.timestamp.max(wrapper.event.timestamp);
+            fetched_ids.insert(hex_id);
+            event_tracker.timestamp = event_tracker.timestamp.max(timestamp);
         }
 
         event_tracker.last_ids = fetched_ids;
 
-        Ok(events)
+        // Sort by timestamp, ascending.
+        events.sort_by(|a, b| a.event.timestamp.raw().cmp(&b.event.timestamp.raw()));
+
+        Ok(events
+            .into_iter()
+            .map(|wrapper| wrapper.event.event)
+            .collect())
     }
     pub async fn fetch_judgement_state(
         &self,
@@ -833,8 +842,8 @@ impl Database {
     async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
-        coll.insert_one(<T as Into<Event>>::into(event).to_bson()?, None)
-            .await?;
+        let event = <T as Into<Event>>::into(event);
+        coll.insert_one(event.to_bson()?, None).await?;
 
         Ok(())
     }
