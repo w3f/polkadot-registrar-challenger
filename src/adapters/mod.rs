@@ -1,6 +1,6 @@
 use crate::database::{Database, EventCursor};
 use crate::primitives::{
-    ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage, Timestamp,
+    ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage,
 };
 use crate::{AdapterConfig, Result};
 use tokio::time::{interval, Duration};

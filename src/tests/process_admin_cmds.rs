@@ -227,7 +227,7 @@ async fn command_verify_all() {
 
     // The completion timestamp is not that important, as long as it's `Some`.
     let completion_timestamp = match &resp {
-        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        JsonResult::Ok(r) => r.state.completion_timestamp,
         _ => panic!(),
     };
 
