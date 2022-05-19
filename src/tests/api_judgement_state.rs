@@ -7,7 +7,7 @@ use crate::primitives::{
     NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{FutureExt, StreamExt};
 
 #[actix::test]
 async fn current_judgement_state_single_identity() {

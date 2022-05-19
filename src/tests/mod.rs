@@ -27,12 +27,6 @@ mod process_admin_cmds;
 // Convenience type
 pub type F = IdentityFieldValue;
 
-// Given that many concurrent process are in play (async, websockets, channels,
-// etc) and not everything happens at the same time, we use a very conservative
-// timeout for certain operations when running tests, like when injecting
-// messages or waiting for events to happen.
-pub const TEST_TIMEOUT: u64 = 5;
-
 trait ToWsMessage {
     fn to_ws(&self) -> Message;
 }
@@ -98,9 +92,6 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
 
     // Setup connector mocker
     let connector = ConnectorMocker::new(db.clone());
-
-    // Give some time to start up.
-    sleep(Duration::from_secs(TEST_TIMEOUT)).await;
 
     //(server, connector, injector)
     (db, connector, server, injector)

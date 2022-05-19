@@ -241,15 +241,8 @@ pub mod tests {
             }
         }
         pub async fn send(&self, msg: ExternalMessage) {
-            use tokio::time::sleep;
-
-            {
-                let mut lock = self.messages.lock().await;
-                (*lock).push(msg);
-            }
-
-            // Give the adapter enough time to fetch and process messages.
-            sleep(Duration::from_secs(crate::tests::TEST_TIMEOUT)).await;
+            let mut lock = self.messages.lock().await;
+            (*lock).push(msg);
         }
     }
 
