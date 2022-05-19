@@ -643,12 +643,24 @@ impl Database {
         // Create event.
         if res.modified_count == 1 {
             // Verify all possible fields. Unused fields are silently ignored.
-            let _ = self.verify_manually(context, &RawFieldName::LegalName, false).await?;
-            let _ = self.verify_manually(context, &RawFieldName::DisplayName, false).await?;
-            let _ = self.verify_manually(context, &RawFieldName::Email, false).await?;
-            let _ = self.verify_manually(context, &RawFieldName::Web, false).await?;
-            let _ = self.verify_manually(context, &RawFieldName::Twitter, false).await?;
-            let _ = self.verify_manually(context, &RawFieldName::Matrix, false).await?;
+            let _ = self
+                .verify_manually(context, &RawFieldName::LegalName, false)
+                .await?;
+            let _ = self
+                .verify_manually(context, &RawFieldName::DisplayName, false)
+                .await?;
+            let _ = self
+                .verify_manually(context, &RawFieldName::Email, false)
+                .await?;
+            let _ = self
+                .verify_manually(context, &RawFieldName::Web, false)
+                .await?;
+            let _ = self
+                .verify_manually(context, &RawFieldName::Twitter, false)
+                .await?;
+            let _ = self
+                .verify_manually(context, &RawFieldName::Matrix, false)
+                .await?;
 
             self.insert_event(NotificationMessage::FullManualVerification {
                 context: context.clone(),

@@ -61,7 +61,8 @@ async fn command_verify_multiple_challenge_types() {
     // Display name and email are now verified.
     *alice
         .get_field_mut(&F::ALICE_DISPLAY_NAME())
-        .expected_display_name_check_mut().0 = true;
+        .expected_display_name_check_mut()
+        .0 = true;
 
     alice
         .get_field_mut(&F::ALICE_EMAIL())
@@ -241,7 +242,8 @@ async fn command_verify_all() {
     // All fields are now verified.
     *alice
         .get_field_mut(&F::ALICE_DISPLAY_NAME())
-        .expected_display_name_check_mut().0 = true;
+        .expected_display_name_check_mut()
+        .0 = true;
 
     alice
         .get_field_mut(&F::ALICE_EMAIL())
@@ -288,7 +290,9 @@ async fn command_verify_missing_field() {
     request.accounts.remove(&AccountType::Email);
 
     // Insert judgement request.
-    connector.inject(WatcherMessage::new_judgement_request(request)).await;
+    connector
+        .inject(WatcherMessage::new_judgement_request(request))
+        .await;
     let states = connector.inserted_states().await;
     let alice = states[0].clone();
 
@@ -305,17 +309,11 @@ async fn command_verify_missing_field() {
     // Manually verify a field that does not exist.
     let resp = process_admin(
         &db,
-        Command::Verify(
-            alice.context.address.clone(),
-            vec![RawFieldName::Email],
-        ),
+        Command::Verify(alice.context.address.clone(), vec![RawFieldName::Email]),
     )
     .await;
 
-    assert_eq!(
-        resp,
-        Response::IdentityNotFound,
-    );
+    assert_eq!(resp, Response::IdentityNotFound,);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
