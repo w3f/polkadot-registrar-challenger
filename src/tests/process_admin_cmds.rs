@@ -313,7 +313,7 @@ async fn command_verify_missing_field() {
     )
     .await;
 
-    assert_eq!(resp, Response::IdentityNotFound,);
+    assert_eq!(resp, Response::IdentityNotFound);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());
