@@ -833,8 +833,8 @@ impl Database {
     async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
-        let event: Event = event.into();
-        coll.insert_one(event.to_bson()?, None).await?;
+        coll.insert_one(<T as Into<Event>>::into(event).to_bson()?, None)
+            .await?;
 
         Ok(())
     }
