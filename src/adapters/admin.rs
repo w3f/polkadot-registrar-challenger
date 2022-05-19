@@ -184,12 +184,14 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
                 if fields.iter().any(|f| matches!(f, RawFieldName::All)) {
                     if db.full_manual_verification(&context).await? {
                         return Ok(Response::FullyVerified(addr));
+                    } else {
+                        return Ok(Response::IdentityNotFound);
                     }
                 }
 
                 // Verify each passed on field.
                 for field in &fields {
-                    if db.verify_manually(&context, field).await?.is_none() {
+                    if db.verify_manually(&context, field, true).await?.is_none() {
                         return Ok(Response::IdentityNotFound);
                     }
                 }

@@ -59,10 +59,9 @@ async fn command_verify_multiple_challenge_types() {
     );
 
     // Display name and email are now verified.
-    let (passed, _) = alice
+    *alice
         .get_field_mut(&F::ALICE_DISPLAY_NAME())
-        .expected_display_name_check_mut();
-    *passed = true;
+        .expected_display_name_check_mut().0 = true;
 
     alice
         .get_field_mut(&F::ALICE_EMAIL())
@@ -238,6 +237,33 @@ async fn command_verify_all() {
     alice.is_fully_verified = true;
     alice.judgement_submitted = false;
     alice.completion_timestamp = completion_timestamp;
+
+    // All fields are now verified.
+    *alice
+        .get_field_mut(&F::ALICE_DISPLAY_NAME())
+        .expected_display_name_check_mut().0 = true;
+
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_message_mut()
+        .set_verified();
+
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_second_mut()
+        .set_verified();
+
+    alice
+        .get_field_mut(&F::ALICE_TWITTER())
+        .expected_message_mut()
+        .set_verified();
+
+    alice
+        .get_field_mut(&F::ALICE_MATRIX())
+        .expected_message_mut()
+        .set_verified();
+
+    assert!(alice.check_full_verification());
 
     let expected = ResponseAccountState {
         state: alice.clone().into(),

@@ -150,6 +150,8 @@ impl Database {
         &self,
         context: &IdentityContext,
         field: &RawFieldName,
+        // Whether it should check if the idenity has been fully verified.
+        full_check: bool,
     ) -> Result<Option<()>> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
@@ -212,27 +214,29 @@ impl Database {
         }
 
         // Create event.
-        self.insert_event(NotificationMessage::ManuallyVerified {
-            context: context.clone(),
-            field: field.clone(),
-        })
-        .await?;
-
-        // Get the full state.
-        let doc = coll
-            .find_one(
-                doc! {
-                    "context": context.to_bson()?,
-                },
-                None,
-            )
+        if full_check {
+            self.insert_event(NotificationMessage::ManuallyVerified {
+                context: context.clone(),
+                field: field.clone(),
+            })
             .await?;
 
-        // Check the new state.
-        if let Some(state) = doc {
-            self.process_fully_verified(&state).await?;
-        } else {
-            return Ok(None);
+            // Get the full state.
+            let doc = coll
+                .find_one(
+                    doc! {
+                        "context": context.to_bson()?,
+                    },
+                    None,
+                )
+                .await?;
+
+            // Check the new state.
+            if let Some(state) = doc {
+                self.process_fully_verified(&state).await?;
+            } else {
+                return Ok(None);
+            }
         }
 
         Ok(Some(()))
@@ -638,6 +642,14 @@ impl Database {
 
         // Create event.
         if res.modified_count == 1 {
+            // Verify all possible fields. Unused fields are silently ignored.
+            let _ = self.verify_manually(context, &RawFieldName::LegalName, false).await?;
+            let _ = self.verify_manually(context, &RawFieldName::DisplayName, false).await?;
+            let _ = self.verify_manually(context, &RawFieldName::Email, false).await?;
+            let _ = self.verify_manually(context, &RawFieldName::Web, false).await?;
+            let _ = self.verify_manually(context, &RawFieldName::Twitter, false).await?;
+            let _ = self.verify_manually(context, &RawFieldName::Matrix, false).await?;
+
             self.insert_event(NotificationMessage::FullManualVerification {
                 context: context.clone(),
             })
