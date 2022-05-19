@@ -603,7 +603,7 @@ impl Database {
 
         Ok(events
             .into_iter()
-            .map(|wrapper| wrapper.event.event)
+            .map(|wrapper| wrapper.event.message)
             .collect())
     }
     pub async fn fetch_judgement_state(
