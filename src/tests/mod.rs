@@ -1,18 +1,21 @@
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
-use crate::api::JsonResult;
+use crate::api::{JsonResult, ResponseAccountState};
 use crate::connector::{AccountType, JudgementRequest, WatcherMessage};
 use crate::database::Database;
 use crate::notifier::run_session_notifier;
-use crate::primitives::IdentityFieldValue;
+use crate::primitives::{IdentityFieldValue, IdentityContext};
 use crate::{api::tests::run_test_server, connector::tests::ConnectorMocker};
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
+use actix_codec::{AsyncRead, AsyncWrite, Framed};
+use actix_http::ws::Codec;
 use rand::{thread_rng, Rng};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::time::{sleep, Duration};
+use futures::{FutureExt, SinkExt, StreamExt};
 
 mod api_judgement_state;
 mod background_tasks;
@@ -47,6 +50,18 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
             _ => panic!(),
         }
     }
+}
+
+pub async fn subscribe_context(stream: &mut Framed<impl AsyncRead + AsyncWrite + std::marker::Unpin, Codec>, context: IdentityContext) -> JsonResult<ResponseAccountState> {
+    stream.send(context.to_ws()).await.unwrap();
+    let mut resp = stream.next().await.into();
+
+    while matches!(resp, JsonResult::Err(_)) {{
+        sleep(Duration::from_millis(500)).await;
+        resp = stream.next().await.into();
+    }}
+
+    resp
 }
 
 pub fn alice_judgement_request() -> WatcherMessage {
