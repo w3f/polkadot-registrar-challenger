@@ -358,7 +358,7 @@ impl From<u32> for MessageId {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Timestamp(u64);
 
@@ -377,6 +377,13 @@ impl Timestamp {
     pub fn with_offset(offset: u64) -> Self {
         let now = Self::now();
         Timestamp(now.0 + offset)
+    }
+    pub fn max(self, other: Timestamp) -> Self {
+        if self.0 >= other.0 {
+            self
+        } else {
+            other
+        }
     }
     pub fn raw(&self) -> u64 {
         self.0

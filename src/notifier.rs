@@ -1,6 +1,6 @@
 use crate::api::{LookupServer, NotifyAccountState};
-use crate::database::Database;
-use crate::primitives::{IdentityContext, JudgementState, Timestamp};
+use crate::database::{Database, EventCursor};
+use crate::primitives::{IdentityContext, JudgementState};
 use crate::Result;
 use actix::prelude::*;
 use std::collections::HashMap;
@@ -10,9 +10,9 @@ pub async fn run_session_notifier(mut db: Database, server: Addr<LookupServer>) 
     async fn local(
         db: &mut Database,
         server: &Addr<LookupServer>,
-        event_counter: &mut u64,
+        cursor: &mut EventCursor,
     ) -> Result<()> {
-        let (events, new_counter) = db.fetch_events(*event_counter).await?;
+        let events = db.fetch_events(cursor).await?;
         let mut cache: HashMap<IdentityContext, JudgementState> = HashMap::new();
 
         for event in events {
@@ -38,14 +38,12 @@ pub async fn run_session_notifier(mut db: Database, server: Addr<LookupServer>) 
             });
         }
 
-        *event_counter = new_counter;
-
         Ok(())
     }
 
-    let mut event_counter = Timestamp::now().raw();
+    let mut cursor = EventCursor::new();
     loop {
-        if let Err(err) = local(&mut db, &server, &mut event_counter).await {
+        if let Err(err) = local(&mut db, &server, &mut cursor).await {
             error!("Error in session notifier event loop: {:?}", err);
         }
 

@@ -12,6 +12,7 @@ use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
+use std::collections::HashSet;
 
 const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
@@ -31,6 +32,20 @@ impl<T: Serialize> ToBson for T {
     }
     fn to_document(&self) -> Result<Document> {
         Ok(to_document(self)?)
+    }
+}
+
+pub struct EventCursor {
+    timestamp: Timestamp,
+    last_ids: HashSet<String>,
+}
+
+impl EventCursor {
+    pub fn new() -> Self {
+        EventCursor {
+            timestamp: Timestamp::now(),
+            last_ids: Default::default(),
+        }
     }
 }
 
@@ -535,15 +550,24 @@ impl Database {
     }
     pub async fn fetch_events(
         &mut self,
-        mut after: u64,
-    ) -> Result<(Vec<NotificationMessage>, u64)> {
+        event_tracker: &mut EventCursor,
+    ) -> Result<Vec<NotificationMessage>> {
+        #[derive(Deserialize)]
+        struct EventWrapper {
+            #[serde(rename = "_id")]
+            id: String,
+            #[serde(flatten)]
+            event: Event,
+        }
+
         let coll = self.db.collection(EVENT_COLLECTION);
 
+        let mut fetched_ids = HashSet::new();
         let mut cursor = coll
             .find(
                 doc! {
                     "timestamp": {
-                        "$gt": after.to_bson()?,
+                        "$gte": event_tracker.timestamp.raw().to_bson()?,
                     }
                 },
                 None,
@@ -552,14 +576,23 @@ impl Database {
 
         let mut events = vec![];
         while let Some(doc) = cursor.next().await {
-            let event = from_document::<Event>(doc?)?;
+            let wrapper = from_document::<EventWrapper>(doc?)?;
 
-            // Track latest Id.
-            after = after.max(event.timestamp.raw());
-            events.push(event.event);
+            if event_tracker.last_ids.contains(&wrapper.id) {
+                continue;
+            }
+
+            // Save event
+            events.push(wrapper.event.event);
+
+            // Track event in EventCursor
+            fetched_ids.insert(wrapper.id);
+            event_tracker.timestamp = event_tracker.timestamp.max(wrapper.event.timestamp);
         }
 
-        Ok((events, after))
+        event_tracker.last_ids = fetched_ids;
+
+        Ok(events)
     }
     pub async fn fetch_judgement_state(
         &self,

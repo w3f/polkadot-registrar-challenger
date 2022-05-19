@@ -1,4 +1,4 @@
-use crate::database::Database;
+use crate::database::{Database, EventCursor};
 use crate::primitives::{
     ExpectedMessage, ExternalMessage, IdentityFieldValue, NotificationMessage, Timestamp,
 };
@@ -158,7 +158,7 @@ impl AdapterListener {
         let mut interval = interval(Duration::from_secs(timeout));
 
         let mut db = self.db.clone();
-        let mut event_counter = Timestamp::now().raw();
+        let mut cursor = EventCursor::new();
         actix::spawn(async move {
             loop {
                 // Timeout (skipped the first time);
@@ -185,8 +185,8 @@ impl AdapterListener {
                 }
 
                 // Check if a second challenge must be sent to the user directly.
-                match db.fetch_events(event_counter).await {
-                    Ok((events, new_counter)) => {
+                match db.fetch_events(&mut cursor).await {
+                    Ok(events) => {
                         for event in &events {
                             if let NotificationMessage::AwaitingSecondChallenge { context, field } =
                                 event
@@ -207,8 +207,6 @@ impl AdapterListener {
                                 }
                             }
                         }
-
-                        event_counter = new_counter;
                     }
                     Err(err) => {
                         error!(
