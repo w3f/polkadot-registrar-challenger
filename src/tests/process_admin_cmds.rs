@@ -59,10 +59,10 @@ async fn command_verify_multiple_challenge_types() {
     );
 
     // Display name and email are now verified.
-    let (passed, _) = alice
+    *alice
         .get_field_mut(&F::ALICE_DISPLAY_NAME())
-        .expected_display_name_check_mut();
-    *passed = true;
+        .expected_display_name_check_mut()
+        .0 = true;
 
     alice
         .get_field_mut(&F::ALICE_EMAIL())
@@ -239,6 +239,34 @@ async fn command_verify_all() {
     alice.judgement_submitted = false;
     alice.completion_timestamp = completion_timestamp;
 
+    // All fields are now verified.
+    *alice
+        .get_field_mut(&F::ALICE_DISPLAY_NAME())
+        .expected_display_name_check_mut()
+        .0 = true;
+
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_message_mut()
+        .set_verified();
+
+    alice
+        .get_field_mut(&F::ALICE_EMAIL())
+        .expected_second_mut()
+        .set_verified();
+
+    alice
+        .get_field_mut(&F::ALICE_TWITTER())
+        .expected_message_mut()
+        .set_verified();
+
+    alice
+        .get_field_mut(&F::ALICE_MATRIX())
+        .expected_message_mut()
+        .set_verified();
+
+    assert!(alice.check_full_verification());
+
     let expected = ResponseAccountState {
         state: alice.clone().into(),
         notifications: vec![NotificationMessage::FullManualVerification {
@@ -247,6 +275,45 @@ async fn command_verify_all() {
     };
 
     assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
+}
+
+#[actix::test]
+async fn command_verify_missing_field() {
+    let (db, connector, mut api, _) = new_env().await;
+    let mut stream = api.ws_at("/api/account_status").await.unwrap();
+
+    // Remove Email
+    let mut request = JudgementRequest::alice();
+    request.accounts.remove(&AccountType::Email);
+
+    // Insert judgement request.
+    connector
+        .inject(WatcherMessage::new_judgement_request(request))
+        .await;
+    let states = connector.inserted_states().await;
+    let alice = states[0].clone();
+
+    // Subscribe to endpoint.
+    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+
+    // Check current state.
+    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
+    assert_eq!(
+        resp,
+        JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
+    );
+
+    // Manually verify a field that does not exist.
+    let resp = process_admin(
+        &db,
+        Command::Verify(alice.context.address.clone(), vec![RawFieldName::Email]),
+    )
+    .await;
+
+    assert_eq!(resp, Response::IdentityNotFound);
 
     // Empty stream.
     assert!(stream.next().now_or_never().is_none());

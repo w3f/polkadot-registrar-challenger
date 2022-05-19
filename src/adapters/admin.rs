@@ -84,7 +84,7 @@ impl std::fmt::Display for Response {
             }
             Response::UnknownCommand => "The provided command is unknown".to_string(),
             Response::IdentityNotFound => {
-                "There is no pending judgement request for the provided identity".to_string()
+                "Identity was not found or invalid query executed".to_string()
             }
             Response::InvalidSyntax(input) => {
                 format!(
@@ -180,15 +180,18 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
                 let context = create_context(addr.clone());
 
                 // Check if _all_ should be verified (respectively the full identity)
-                if fields.iter().any(|f| matches!(f, RawFieldName::All))
-                    && db.full_manual_verification(&context).await?
-                {
-                    return Ok(Response::FullyVerified(addr));
+                #[allow(clippy::collapsible_if)]
+                if fields.iter().any(|f| matches!(f, RawFieldName::All)) {
+                    if db.full_manual_verification(&context).await? {
+                        return Ok(Response::FullyVerified(addr));
+                    } else {
+                        return Ok(Response::IdentityNotFound);
+                    }
                 }
 
                 // Verify each passed on field.
                 for field in &fields {
-                    if db.verify_manually(&context, field).await?.is_none() {
+                    if db.verify_manually(&context, field, true).await?.is_none() {
                         return Ok(Response::IdentityNotFound);
                     }
                 }
