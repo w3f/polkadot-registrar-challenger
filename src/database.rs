@@ -8,7 +8,7 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::options::{FindOptions, UpdateOptions};
+use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
@@ -35,6 +35,7 @@ impl<T: Serialize> ToBson for T {
     }
 }
 
+/// This
 pub struct EventCursor {
     timestamp: Timestamp,
     last_ids: HashSet<String>,
@@ -595,8 +596,8 @@ impl Database {
 
         event_tracker.last_ids = fetched_ids;
 
-        // Sort by timestamp, ascending.
-        events.sort_by(|a, b| a.event.timestamp.raw().cmp(&b.event.timestamp.raw()));
+        // Sort by id, ascending.
+        events.sort_by(|a, b| a.id.cmp(&b.id));
 
         Ok(events
             .into_iter()
