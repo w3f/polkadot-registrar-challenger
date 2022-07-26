@@ -7,6 +7,6 @@ releases:
   - name: mongodb
     namespace: registrar-v2
     chart: bitnami/mongodb
-    version: 11.1.5
+    version: 11.1.6
     values:
       - ./config/mongodb.yaml.gotmpl
