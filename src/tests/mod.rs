@@ -1,14 +1,17 @@
 use crate::adapters::tests::MessageInjector;
 use crate::adapters::AdapterListener;
-use crate::api::JsonResult;
+use crate::api::{JsonResult, ResponseAccountState};
 use crate::connector::{AccountType, JudgementRequest, WatcherMessage};
 use crate::database::Database;
 use crate::notifier::run_session_notifier;
-use crate::primitives::IdentityFieldValue;
+use crate::primitives::{IdentityContext, IdentityFieldValue};
 use crate::{api::tests::run_test_server, connector::tests::ConnectorMocker};
+use actix_codec::{AsyncRead, AsyncWrite, Framed};
+use actix_http::ws::Codec;
 use actix_http::ws::{Frame, ProtocolError};
 use actix_test::TestServer;
 use actix_web_actors::ws::Message;
+use futures::{FutureExt, SinkExt, StreamExt};
 use rand::{thread_rng, Rng};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -23,12 +26,6 @@ mod process_admin_cmds;
 
 // Convenience type
 pub type F = IdentityFieldValue;
-
-// Given that many concurrent process are in play (async, websockets, channels,
-// etc) and not everything happens at the same time, we use a very conservative
-// timeout for certain operations when running tests, like when injecting
-// messages or waiting for events to happen.
-pub const TEST_TIMEOUT: u64 = 5;
 
 trait ToWsMessage {
     fn to_ws(&self) -> Message;
@@ -47,6 +44,23 @@ impl<T: DeserializeOwned> From<Option<Result<Frame, ProtocolError>>> for JsonRes
             _ => panic!(),
         }
     }
+}
+
+pub async fn subscribe_context(
+    stream: &mut Framed<impl AsyncRead + AsyncWrite + std::marker::Unpin, Codec>,
+    context: IdentityContext,
+) -> JsonResult<ResponseAccountState> {
+    stream.send(context.to_ws()).await.unwrap();
+    let mut resp = stream.next().await.into();
+
+    while matches!(resp, JsonResult::Err(_)) {
+        {
+            sleep(Duration::from_millis(500)).await;
+            resp = stream.next().await.into();
+        }
+    }
+
+    resp
 }
 
 pub fn alice_judgement_request() -> WatcherMessage {
@@ -83,9 +97,6 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
 
     // Setup connector mocker
     let connector = ConnectorMocker::new(db.clone());
-
-    // Give some time to start up.
-    sleep(Duration::from_secs(TEST_TIMEOUT)).await;
 
     //(server, connector, injector)
     (db, connector, server, injector)

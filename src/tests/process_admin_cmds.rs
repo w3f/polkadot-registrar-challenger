@@ -4,7 +4,7 @@ use crate::api::{JsonResult, ResponseAccountState};
 use crate::primitives::{
     IdentityContext, IdentityFieldValue, JudgementStateBlanked, NotificationMessage,
 };
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{FutureExt, StreamExt};
 
 #[actix::test]
 async fn command_status() {
@@ -31,10 +31,9 @@ async fn command_verify_multiple_challenge_types() {
     let mut alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -150,10 +149,9 @@ async fn command_verify_unsupported_field() {
     let mut alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -204,10 +202,9 @@ async fn command_verify_all() {
     let mut alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -230,7 +227,7 @@ async fn command_verify_all() {
 
     // The completion timestamp is not that important, as long as it's `Some`.
     let completion_timestamp = match &resp {
-        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        JsonResult::Ok(r) => r.state.completion_timestamp,
         _ => panic!(),
     };
 
@@ -297,10 +294,9 @@ async fn command_verify_missing_field() {
     let alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))

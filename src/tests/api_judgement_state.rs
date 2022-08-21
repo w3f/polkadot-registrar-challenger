@@ -7,7 +7,7 @@ use crate::primitives::{
     NotificationMessage, Timestamp,
 };
 use actix_http::StatusCode;
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{FutureExt, StreamExt};
 
 #[actix::test]
 async fn current_judgement_state_single_identity() {
@@ -20,10 +20,9 @@ async fn current_judgement_state_single_identity() {
     let alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
@@ -47,10 +46,9 @@ async fn current_judgement_state_multiple_inserts() {
     connector.inject(alice_judgement_request()).await;
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
@@ -73,19 +71,17 @@ async fn current_judgement_state_multiple_identities() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state (Alice).
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice))
     );
 
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
     // Check current state (Bob).
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob))
@@ -107,10 +103,9 @@ async fn current_judgement_state_field_updated() {
     let alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state (Alice).
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -170,10 +165,9 @@ async fn current_judgement_state_single_entry_removed() {
     let alice = states[0].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state (Alice).
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -227,10 +221,9 @@ async fn verify_invalid_message_bad_challenge() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -262,9 +255,8 @@ async fn verify_invalid_message_bad_challenge() {
     assert_eq!(resp, JsonResult::Ok(expected));
 
     // Other judgement states must be unaffected (Bob).
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -287,10 +279,9 @@ async fn verify_invalid_message_bad_origin() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -313,9 +304,8 @@ async fn verify_invalid_message_bad_origin() {
     assert!(stream.next().now_or_never().is_none());
 
     // Other judgement states must be unaffected (Bob).
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -338,10 +328,9 @@ async fn verify_valid_message() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -380,9 +369,8 @@ async fn verify_valid_message() {
     assert_eq!(resp, JsonResult::Ok(expected));
 
     // Other judgement states must be unaffected (Bob).
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -415,10 +403,9 @@ async fn verify_valid_message_duplicate_account_name() {
     let mut bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -457,11 +444,10 @@ async fn verify_valid_message_duplicate_account_name() {
     assert_eq!(resp, JsonResult::Ok(expected));
 
     // Other judgement states must be unaffected (Bob), but will receive a "failed attempt".
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
     *bob.get_field_mut(&F::ALICE_MATRIX()).failed_attempts_mut() = 1;
 
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -484,10 +470,9 @@ async fn verify_valid_message_awaiting_second_challenge() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -575,9 +560,8 @@ async fn verify_valid_message_awaiting_second_challenge() {
     assert_eq!(resp, JsonResult::Ok(expected));
 
     // Other judgement state must be unaffected (Bob).
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -600,10 +584,9 @@ async fn verify_invalid_message_awaiting_second_challenge() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
@@ -681,9 +664,8 @@ async fn verify_invalid_message_awaiting_second_challenge() {
     assert_eq!(resp, JsonResult::Ok(expected));
 
     // Other judgement state must be unaffected (Bob).
-    stream.send(IdentityContext::bob().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::bob()).await;
 
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(
         resp,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
@@ -707,19 +689,12 @@ async fn verify_full_identity() {
     let bob = states[1].clone();
 
     // Subscribe to endpoint.
-    stream_alice
-        .send(IdentityContext::alice().to_ws())
-        .await
-        .unwrap();
-    stream_bob
-        .send(IdentityContext::bob().to_ws())
-        .await
-        .unwrap();
+    let resp_alice = subscribe_context(&mut stream_alice, IdentityContext::alice()).await;
+    let resp_bob = subscribe_context(&mut stream_bob, IdentityContext::bob()).await;
 
     // Check initial state
-    let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
     assert_eq!(
-        resp,
+        resp_alice,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(alice.clone()))
     );
 
@@ -870,7 +845,7 @@ async fn verify_full_identity() {
     let resp: JsonResult<ResponseAccountState> = stream_alice.next().await.into();
     // The completion timestamp is not that important, as long as it's `Some`.
     let completion_timestamp = match &resp {
-        JsonResult::Ok(r) => r.state.completion_timestamp.clone(),
+        JsonResult::Ok(r) => r.state.completion_timestamp,
         _ => panic!(),
     };
 
@@ -899,9 +874,8 @@ async fn verify_full_identity() {
     assert_eq!(resp, JsonResult::Ok(exp_resp));
 
     // Bob remains unchanged.
-    let resp: JsonResult<ResponseAccountState> = stream_bob.next().await.into();
     assert_eq!(
-        resp,
+        resp_bob,
         JsonResult::Ok(ResponseAccountState::with_no_notifications(bob.clone()))
     );
 

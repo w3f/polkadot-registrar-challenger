@@ -12,6 +12,7 @@ use mongodb::options::UpdateOptions;
 use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
+use std::collections::HashMap;
 
 const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
@@ -31,6 +32,22 @@ impl<T: Serialize> ToBson for T {
     }
     fn to_document(&self) -> Result<Document> {
         Ok(to_document(self)?)
+    }
+}
+
+// Keeps track of the latest, fetched events to avoid sending old messages or
+// duplicates.
+pub struct EventCursor {
+    timestamp: Timestamp,
+    fetched_ids: HashMap<String, Timestamp>,
+}
+
+impl EventCursor {
+    pub fn new() -> Self {
+        EventCursor {
+            timestamp: Timestamp::now(),
+            fetched_ids: HashMap::new(),
+        }
     }
 }
 
@@ -535,15 +552,23 @@ impl Database {
     }
     pub async fn fetch_events(
         &mut self,
-        mut after: u64,
-    ) -> Result<(Vec<NotificationMessage>, u64)> {
+        event_tracker: &mut EventCursor,
+    ) -> Result<Vec<NotificationMessage>> {
+        #[derive(Debug, Deserialize)]
+        struct EventWrapper {
+            #[serde(rename = "_id")]
+            id: bson::oid::ObjectId,
+            #[serde(flatten)]
+            event: Event,
+        }
+
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let mut cursor = coll
             .find(
                 doc! {
                     "timestamp": {
-                        "$gt": after.to_bson()?,
+                        "$gte": event_tracker.timestamp.raw().to_bson()?,
                     }
                 },
                 None,
@@ -551,15 +576,35 @@ impl Database {
             .await?;
 
         let mut events = vec![];
-        while let Some(doc) = cursor.next().await {
-            let event = from_document::<Event>(doc?)?;
 
-            // Track latest Id.
-            after = after.max(event.timestamp.raw());
-            events.push(event.event);
+        while let Some(doc) = cursor.next().await {
+            let wrapper = from_document::<EventWrapper>(doc?)?;
+            let hex_id = wrapper.id.to_hex();
+
+            if event_tracker.fetched_ids.contains_key(&hex_id) {
+                continue;
+            }
+
+            // Save event
+            let timestamp = wrapper.event.timestamp;
+            events.push(wrapper);
+
+            // Track event in EventCursor
+            event_tracker.fetched_ids.insert(hex_id, timestamp);
+            event_tracker.timestamp = event_tracker.timestamp.max(timestamp);
         }
 
-        Ok((events, after))
+        // Clean cache, only keep ids of the last 10 seconds.
+        let current = event_tracker.timestamp.raw();
+        event_tracker.fetched_ids.retain(|_, timestamp| timestamp.raw() > current - 10);
+
+        // Sort by id, ascending.
+        events.sort_by(|a, b| a.id.cmp(&b.id));
+
+        Ok(events
+            .into_iter()
+            .map(|wrapper| wrapper.event.message)
+            .collect())
     }
     pub async fn fetch_judgement_state(
         &self,
@@ -800,7 +845,7 @@ impl Database {
     async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
-        let event: Event = event.into();
+        let event = <T as Into<Event>>::into(event);
         coll.insert_one(event.to_bson()?, None).await?;
 
         Ok(())

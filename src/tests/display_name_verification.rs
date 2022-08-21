@@ -4,7 +4,7 @@ use crate::connector::DisplayNameEntry;
 use crate::display_name::DisplayNameVerifier;
 use crate::primitives::{IdentityContext, IdentityFieldValue};
 use crate::DisplayNameConfig;
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 
 impl From<&str> for DisplayNameEntry {
     fn from(val: &str) -> Self {
@@ -36,7 +36,7 @@ async fn valid_display_name() {
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Set expected result.
     let field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
@@ -52,8 +52,10 @@ async fn valid_display_name() {
     };
 
     // Check current state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
 }
 
 #[actix::test]
@@ -80,7 +82,7 @@ async fn invalid_display_name() {
     verifier.verify_display_name(&alice).await.unwrap();
 
     // Subscribe to endpoint.
-    stream.send(IdentityContext::alice().to_ws()).await.unwrap();
+    let resp = subscribe_context(&mut stream, IdentityContext::alice()).await;
 
     // Set expected result.
     let field = alice.get_field_mut(&IdentityFieldValue::DisplayName("Alice".to_string()));
@@ -96,6 +98,8 @@ async fn invalid_display_name() {
     };
 
     // Check expected state.
-    let resp: JsonResult<ResponseAccountState> = stream.next().await.into();
     assert_eq!(resp, JsonResult::Ok(expected));
+
+    // Empty stream.
+    assert!(stream.next().now_or_never().is_none());
 }
