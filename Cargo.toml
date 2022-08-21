@@ -50,7 +50,7 @@ sha2 = "0.10.1"
 base64 = "0.13.0"
 url = "2.1.1"
 rand = "0.8.4"
-hex = "0.4.2"
+hex = "0.4.3"
 strsim = "0.10.0"
 
 [dev-dependencies]
