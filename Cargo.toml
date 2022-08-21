@@ -20,7 +20,7 @@ tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 tokio = { version = "1.15.0", features = ["macros", "time", "process", "rt-multi-thread" ] }
 futures = "0.3.19"
 mongodb = { version = "2.0.0-beta", features = ["bson-u2i"] }
-bson = "2.0.0-beta"
+bson = "2.4.0"
 reqwest = "0.11.9"
 urlencoding = "1.3.3"
 async-trait = "0.1.40"
