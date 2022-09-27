@@ -8,11 +8,12 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::options::UpdateOptions;
+use mongodb::options::{UpdateOptions, TransactionOptions};
 use mongodb::{Client, ClientSession, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::time::Duration;
 
 const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
@@ -64,6 +65,14 @@ impl Database {
 
         Ok(Database { client, db })
     }
+    async fn start_transaction(&self) -> Result<ClientSession> {
+        let mut options = TransactionOptions::default();
+        options.max_commit_time = Some(Duration::from_secs(30));
+
+        let mut session = self.client.start_session(None).await?;
+        session.start_transaction(Some(options)).await?;
+        Ok(session)
+    }
     /// Simply checks if a connection could be established to the database.
     pub async fn connectivity_check(&self) -> Result<()> {
         self.db
@@ -73,8 +82,7 @@ impl Database {
             .map(|_| ())
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<bool> {
-        let mut session = self.client.start_session(None).await?;
-        session.start_transaction(None).await?;
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
@@ -148,8 +156,22 @@ impl Database {
             // Check full verification status.
             self.process_fully_verified(&current, &mut session).await?;
         } else {
-            coll.insert_one_with_session(request.to_document()?, None, &mut session)
-                .await?;
+            // Insert new identity.
+            coll.update_one_with_session(
+                doc! {
+                    "context": request.context.to_bson()?,
+                },
+                doc! {
+                    "$setOnInsert": request.to_document()?,
+                },
+                {
+                    let mut opt = UpdateOptions::default();
+                    opt.upsert = Some(true);
+                    Some(opt)
+                },
+                &mut session,
+            )
+            .await?;
         }
 
         session.commit_transaction().await?;
@@ -184,16 +206,16 @@ impl Database {
         session: Option<&mut ClientSession>,
     ) -> Result<Option<()>> {
         // If no `session` is provided, create a new local session.
-        let mut local_session = self.client.start_session(None).await?;
+        let mut local_session = self.start_transaction().await?;
 
         let session = if let Some(session) = session {
             std::mem::drop(local_session);
+            session.start_transaction(None).await?;
             session
         } else {
             &mut local_session
         };
 
-        session.start_transaction(None).await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Set the appropriate types for verification.
@@ -290,8 +312,7 @@ impl Database {
         Ok(Some(()))
     }
     pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
-        let mut session = self.client.start_session(None).await?;
-        session.start_transaction(None).await?;
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -478,8 +499,7 @@ impl Database {
         Ok(())
     }
     pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
-        let mut session = self.client.start_session(None).await?;
-        session.start_transaction(None).await?;
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
@@ -727,8 +747,7 @@ impl Database {
     // (Warning) This fully verifies the identity without having to verify
     // individual fields.
     pub async fn full_manual_verification(&self, context: &IdentityContext) -> Result<bool> {
-        let mut session = self.client.start_session(None).await?;
-        session.start_transaction(None).await?;
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Create a timed delay for issuing judgments. Between 30 seconds to
@@ -799,8 +818,7 @@ impl Database {
         }
     }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
-        let mut session = self.client.start_session(None).await?;
-        session.start_transaction(None).await?;
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let res = coll
@@ -875,8 +893,7 @@ impl Database {
         Ok(names)
     }
     pub async fn set_display_name_valid(&self, state: &JudgementState) -> Result<()> {
-        let mut session = self.client.start_session(None).await?;
-        session.start_transaction(None).await?;
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         coll.update_one_with_session(
@@ -910,6 +927,8 @@ impl Database {
         .await?;
 
         self.process_fully_verified(state, &mut session).await?;
+
+        session.commit_transaction().await?;
 
         Ok(())
     }
@@ -945,7 +964,8 @@ impl Database {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let event = <T as Into<Event>>::into(event);
-        coll.insert_one_with_session(event.to_bson()?, None, session).await?;
+        coll.insert_one_with_session(event.to_bson()?, None, session)
+            .await?;
 
         Ok(())
     }
