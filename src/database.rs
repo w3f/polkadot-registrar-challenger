@@ -9,7 +9,7 @@ use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
-use mongodb::{Client, Database as MongoDb, ClientSession};
+use mongodb::{Client, ClientSession, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -131,20 +131,24 @@ impl Database {
                     }
                 },
                 None,
-                &mut session
+                &mut session,
             )
             .await?;
 
             // Create event.
-            self.insert_event(NotificationMessage::IdentityUpdated {
-                context: request.context.clone(),
-            }, &mut session)
+            self.insert_event(
+                NotificationMessage::IdentityUpdated {
+                    context: request.context.clone(),
+                },
+                &mut session,
+            )
             .await?;
 
             // Check full verification status.
             self.process_fully_verified(&current, &mut session).await?;
         } else {
-            coll.insert_one_with_session(request.to_document()?, None, &mut session).await?;
+            coll.insert_one_with_session(request.to_document()?, None, &mut session)
+                .await?;
         }
 
         session.commit_transaction().await?;
@@ -240,7 +244,7 @@ impl Database {
                 },
                 update,
                 None,
-                session
+                session,
             )
             .await?;
 
@@ -250,10 +254,13 @@ impl Database {
 
         // Create event.
         if full_check {
-            self.insert_event(NotificationMessage::ManuallyVerified {
-                context: context.clone(),
-                field: field.clone(),
-            }, session)
+            self.insert_event(
+                NotificationMessage::ManuallyVerified {
+                    context: context.clone(),
+                    field: field.clone(),
+                },
+                session,
+            )
             .await?;
 
             // Get the full state.
@@ -263,7 +270,7 @@ impl Database {
                         "context": context.to_bson()?,
                     },
                     None,
-                    session
+                    session,
                 )
                 .await?;
 
@@ -334,14 +341,17 @@ impl Database {
                                         }
                                     },
                                     None,
-                                    &mut session
+                                    &mut session,
                                 )
                                 .await?;
 
-                                self.insert_event(NotificationMessage::FieldVerified {
-                                    context: context.clone(),
-                                    field: field_value.clone(),
-                                }, &mut session)
+                                self.insert_event(
+                                    NotificationMessage::FieldVerified {
+                                        context: context.clone(),
+                                        field: field_value.clone(),
+                                    },
+                                    &mut session,
+                                )
                                 .await?;
 
                                 if second.is_some() {
@@ -350,7 +360,7 @@ impl Database {
                                             context: context.clone(),
                                             field: field_value,
                                         },
-                                        &mut session
+                                        &mut session,
                                     )
                                     .await?;
                                 }
@@ -367,14 +377,17 @@ impl Database {
                                         }
                                     },
                                     None,
-                                    &mut session
+                                    &mut session,
                                 )
                                 .await?;
 
-                                self.insert_event(NotificationMessage::FieldVerificationFailed {
-                                    context: context.clone(),
-                                    field: field_value,
-                                }, &mut session)
+                                self.insert_event(
+                                    NotificationMessage::FieldVerificationFailed {
+                                        context: context.clone(),
+                                        field: field_value,
+                                    },
+                                    &mut session,
+                                )
                                 .await?;
                             }
                         }
@@ -396,7 +409,11 @@ impl Database {
         Ok(())
     }
     /// Check if all fields have been verified.
-    async fn process_fully_verified(&self, state: &JudgementState, session: &mut ClientSession) -> Result<()> {
+    async fn process_fully_verified(
+        &self,
+        state: &JudgementState,
+        session: &mut ClientSession,
+    ) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         if state.check_full_verification() {
@@ -421,14 +438,17 @@ impl Database {
                         }
                     },
                     None,
-                    session
+                    session,
                 )
                 .await?;
 
             if res.modified_count > 0 {
-                self.insert_event(NotificationMessage::IdentityFullyVerified {
-                    context: state.context.clone(),
-                }, session)
+                self.insert_event(
+                    NotificationMessage::IdentityFullyVerified {
+                        context: state.context.clone(),
+                    },
+                    session,
+                )
                 .await?;
             }
         } else {
@@ -446,7 +466,7 @@ impl Database {
                         }
                     },
                     None,
-                    session
+                    session,
                 )
                 .await?;
         }
@@ -469,7 +489,7 @@ impl Database {
                     "fields.value": request.entry.to_bson()?,
                 },
                 None,
-                &mut session
+                &mut session,
             )
             .await?;
 
@@ -515,16 +535,22 @@ impl Database {
                         )
                         .await?;
 
-                        self.insert_event(NotificationMessage::SecondFieldVerified {
-                            context: context.clone(),
-                            field: field_value.clone(),
-                        }, &mut session)
+                        self.insert_event(
+                            NotificationMessage::SecondFieldVerified {
+                                context: context.clone(),
+                                field: field_value.clone(),
+                            },
+                            &mut session,
+                        )
                         .await?;
                     } else {
-                        self.insert_event(NotificationMessage::SecondFieldVerificationFailed {
-                            context: context.clone(),
-                            field: field_value.clone(),
-                        }, &mut session)
+                        self.insert_event(
+                            NotificationMessage::SecondFieldVerificationFailed {
+                                context: context.clone(),
+                                field: field_value.clone(),
+                            },
+                            &mut session,
+                        )
                         .await?;
                     }
                 }
@@ -720,7 +746,7 @@ impl Database {
                     }
                 },
                 None,
-                &mut session
+                &mut session,
             )
             .await?;
 
@@ -731,7 +757,12 @@ impl Database {
                 .verify_manually(context, &RawFieldName::LegalName, false, Some(&mut session))
                 .await?;
             let _ = self
-                .verify_manually(context, &RawFieldName::DisplayName, false, Some(&mut session))
+                .verify_manually(
+                    context,
+                    &RawFieldName::DisplayName,
+                    false,
+                    Some(&mut session),
+                )
                 .await?;
             let _ = self
                 .verify_manually(context, &RawFieldName::Email, false, Some(&mut session))
@@ -746,9 +777,12 @@ impl Database {
                 .verify_manually(context, &RawFieldName::Matrix, false, Some(&mut session))
                 .await?;
 
-            self.insert_event(NotificationMessage::FullManualVerification {
-                context: context.clone(),
-            }, &mut session)
+            self.insert_event(
+                NotificationMessage::FullManualVerification {
+                    context: context.clone(),
+                },
+                &mut session,
+            )
             .await?;
 
             session.commit_transaction().await?;
@@ -774,15 +808,18 @@ impl Database {
                     }
                 },
                 None,
-                &mut session
+                &mut session,
             )
             .await?;
 
         // Create event.
         if res.modified_count == 1 {
-            self.insert_event(NotificationMessage::JudgementProvided {
-                context: context.clone(),
-            }, &mut session)
+            self.insert_event(
+                NotificationMessage::JudgementProvided {
+                    context: context.clone(),
+                },
+                &mut session,
+            )
             .await?;
         }
 
@@ -850,15 +887,18 @@ impl Database {
         .await?;
 
         // Create event
-        self.insert_event(NotificationMessage::FieldVerified {
-            context: state.context.clone(),
-            field: state
-                .fields
-                .iter()
-                .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
-                .map(|field| field.value.clone())
-                .expect("Failed to retrieve display name. This is a bug"),
-        }, &mut session)
+        self.insert_event(
+            NotificationMessage::FieldVerified {
+                context: state.context.clone(),
+                field: state
+                    .fields
+                    .iter()
+                    .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
+                    .map(|field| field.value.clone())
+                    .expect("Failed to retrieve display name. This is a bug"),
+            },
+            &mut session,
+        )
         .await?;
 
         self.process_fully_verified(state, &mut session).await?;
@@ -889,7 +929,11 @@ impl Database {
 
         Ok(())
     }
-    async fn insert_event<T: Into<Event>>(&self, event: T, session: &mut ClientSession) -> Result<()> {
+    async fn insert_event<T: Into<Event>>(
+        &self,
+        event: T,
+        session: &mut ClientSession,
+    ) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let event = <T as Into<Event>>::into(event);

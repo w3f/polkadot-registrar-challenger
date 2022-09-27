@@ -191,7 +191,11 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
 
                 // Verify each passed on field.
                 for field in &fields {
-                    if db.verify_manually(&context, field, true, None).await?.is_none() {
+                    if db
+                        .verify_manually(&context, field, true, None)
+                        .await?
+                        .is_none()
+                    {
                         return Ok(Response::IdentityNotFound);
                     }
                 }
