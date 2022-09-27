@@ -74,6 +74,7 @@ impl Database {
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<bool> {
         let mut session = self.client.start_session(None).await?;
+        session.start_transaction(None).await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
@@ -182,15 +183,17 @@ impl Database {
         full_check: bool,
         session: Option<&mut ClientSession>,
     ) -> Result<Option<()>> {
-        // TODO: Comment
+        // If no `session` is provided, create a new local session.
         let mut local_session = self.client.start_session(None).await?;
 
-        let mut session = if let Some(session) = session {
+        let session = if let Some(session) = session {
+            std::mem::drop(local_session);
             session
         } else {
             &mut local_session
         };
 
+        session.start_transaction(None).await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Set the appropriate types for verification.
@@ -288,6 +291,7 @@ impl Database {
     }
     pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
         let mut session = self.client.start_session(None).await?;
+        session.start_transaction(None).await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
@@ -475,6 +479,7 @@ impl Database {
     }
     pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
         let mut session = self.client.start_session(None).await?;
+        session.start_transaction(None).await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
@@ -723,6 +728,7 @@ impl Database {
     // individual fields.
     pub async fn full_manual_verification(&self, context: &IdentityContext) -> Result<bool> {
         let mut session = self.client.start_session(None).await?;
+        session.start_transaction(None).await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Create a timed delay for issuing judgments. Between 30 seconds to
@@ -794,6 +800,7 @@ impl Database {
     }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
         let mut session = self.client.start_session(None).await?;
+        session.start_transaction(None).await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let res = coll
@@ -869,6 +876,7 @@ impl Database {
     }
     pub async fn set_display_name_valid(&self, state: &JudgementState) -> Result<()> {
         let mut session = self.client.start_session(None).await?;
+        session.start_transaction(None).await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
         coll.update_one_with_session(
@@ -937,7 +945,7 @@ impl Database {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let event = <T as Into<Event>>::into(event);
-        coll.insert_one(event.to_bson()?, None).await?;
+        coll.insert_one_with_session(event.to_bson()?, None, session).await?;
 
         Ok(())
     }
