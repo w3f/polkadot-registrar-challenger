@@ -9,11 +9,9 @@ use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
-use mongodb::{Client, Database as MongoDb, ClientSession};
+use mongodb::{Client, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
-use tokio::sync::Mutex;
-use std::sync::Arc;
 use std::collections::HashMap;
 
 const IDENTITY_COLLECTION: &str = "identities";
@@ -55,21 +53,16 @@ impl EventCursor {
 
 #[derive(Debug, Clone)]
 pub struct Database {
+    client: Client,
     db: MongoDb,
-    // Writes to the database are quite rare for the Registrar, maybe one write
-    // every couple of minutes/hours. We use the `session` to execute
-    // transactions and this does not need to be overly optimzied. Keeping this
-    // inside a Mutex is fine.
-    session: Arc<Mutex<ClientSession>>,
 }
 
 impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
         let client = Client::with_uri_str(uri).await?;
-        Ok(Database {
-            db: client.database(db),
-            session: Arc::new(Mutex::new(client.start_session(None).await?)),
-        })
+        let db = client.database(db);
+
+        Ok(Database { client, db })
     }
     /// Simply checks if a connection could be established to the database.
     pub async fn connectivity_check(&self) -> Result<()> {
@@ -605,7 +598,9 @@ impl Database {
 
         // Clean cache, only keep ids of the last 10 seconds.
         let current = event_tracker.timestamp.raw();
-        event_tracker.fetched_ids.retain(|_, timestamp| timestamp.raw() > current - 10);
+        event_tracker
+            .fetched_ids
+            .retain(|_, timestamp| timestamp.raw() > current - 10);
 
         // Sort by id, ascending.
         events.sort_by(|a, b| a.id.cmp(&b.id));
