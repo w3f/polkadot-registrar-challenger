@@ -26,7 +26,7 @@ const HEARTBEAT_INTERVAL: u64 = 60;
 #[cfg(not(test))]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 30;
 #[cfg(not(test))]
-const DISPLAY_NAMES_INTERVAL: u64 = 10;
+const DISPLAY_NAMES_INTERVAL: u64 = 30;
 #[cfg(not(test))]
 const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 10;
 const RECONNECTION_TIMEOUT: u64 = 10;
