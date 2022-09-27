@@ -9,7 +9,7 @@ use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
-use mongodb::{Client, Database as MongoDb};
+use mongodb::{Client, Database as MongoDb, ClientSession};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -73,16 +73,18 @@ impl Database {
             .map(|_| ())
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<bool> {
+        let mut session = self.client.start_session(None).await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
         // field gets updated during pending judgement process).
         let doc = coll
-            .find_one(
+            .find_one_with_session(
                 doc! {
                     "context": request.context.to_bson()?,
                 },
                 None,
+                &mut session,
             )
             .await?;
 
@@ -111,6 +113,7 @@ impl Database {
 
             // If nothing was modified, return (detect removed entries).
             if !has_changed && request.fields.len() == current.fields.len() {
+                session.abort_transaction().await?;
                 return Ok(false);
             }
 
@@ -119,7 +122,7 @@ impl Database {
 
             // Update the final fields in the database. All deprecated fields
             // are overwritten.
-            coll.update_one(
+            coll.update_one_with_session(
                 doc! {
                     "context": request.context.to_bson()?
                 },
@@ -129,20 +132,23 @@ impl Database {
                     }
                 },
                 None,
+                &mut session
             )
             .await?;
 
             // Create event.
             self.insert_event(NotificationMessage::IdentityUpdated {
                 context: request.context.clone(),
-            })
+            }, &mut session)
             .await?;
 
             // Check full verification status.
-            self.process_fully_verified(&current).await?;
+            self.process_fully_verified(&current, &mut session).await?;
         } else {
-            coll.insert_one(request.to_document()?, None).await?;
+            coll.insert_one_with_session(request.to_document()?, None, &mut session).await?;
         }
+
+        session.commit_transaction().await?;
 
         Ok(true)
     }
@@ -370,7 +376,7 @@ impl Database {
         Ok(())
     }
     /// Check if all fields have been verified.
-    async fn process_fully_verified(&self, state: &JudgementState) -> Result<()> {
+    async fn process_fully_verified(&self, state: &JudgementState, session: &mut ClientSession) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         if state.check_full_verification() {
@@ -382,7 +388,7 @@ impl Database {
             let issue_at = Timestamp::with_offset(offset);
 
             let res = coll
-                .update_one(
+                .update_one_with_session(
                     doc! {
                         "context": state.context.to_bson()?,
                         "is_fully_verified": false,
@@ -395,19 +401,20 @@ impl Database {
                         }
                     },
                     None,
+                    session
                 )
                 .await?;
 
             if res.modified_count > 0 {
                 self.insert_event(NotificationMessage::IdentityFullyVerified {
                     context: state.context.clone(),
-                })
+                }, session)
                 .await?;
             }
         } else {
             // Reset verification state if identity was changed.
             let _ = coll
-                .update_one(
+                .update_one_with_session(
                     doc! {
                         "context": state.context.to_bson()?,
                         "is_fully_verified": true,
@@ -419,6 +426,7 @@ impl Database {
                         }
                     },
                     None,
+                    session
                 )
                 .await?;
         }
@@ -749,10 +757,10 @@ impl Database {
 
         Ok(())
     }
-    pub async fn insert_display_name(&self, name: &DisplayNameEntry) -> Result<()> {
+    pub async fn insert_display_name(&self, name: &DisplayNameEntry, session: &mut ClientSession) -> Result<()> {
         let coll = self.db.collection::<DisplayNameEntry>(DISPLAY_NAMES);
 
-        coll.update_one(
+        coll.update_one_with_session(
             doc! {
                 "display_name": name.display_name.to_bson()?,
                 "context": name.context.to_bson()?,
@@ -765,6 +773,7 @@ impl Database {
                 opt.upsert = Some(true);
                 Some(opt)
             },
+            session
         )
         .await?;
 
@@ -846,7 +855,7 @@ impl Database {
 
         Ok(())
     }
-    async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
+    async fn insert_event<T: Into<Event>>(&self, event: T, session: &mut ClientSession) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let event = <T as Into<Event>>::into(event);
