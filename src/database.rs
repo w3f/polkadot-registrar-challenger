@@ -56,6 +56,10 @@ impl EventCursor {
 #[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
+    // Writes to the database are quite rare for the Registrar, maybe one write
+    // every couple of minutes/hours. We use the `session` to execute
+    // transactions and this does not need to be overly optimzied. Keeping this
+    // inside a Mutex is fine.
     session: Arc<Mutex<ClientSession>>,
 }
 
