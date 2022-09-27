@@ -235,15 +235,6 @@ impl Connector {
 
         Ok(actor)
     }
-    // Send a heartbeat to the Watcher every couple of seconds.
-    #[allow(unused)]
-    fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
-        info!("Starting heartbeat background task");
-
-        ctx.run_interval(Duration::new(HEARTBEAT_INTERVAL, 0), |_act, ctx| {
-            ctx.address().do_send(ClientCommand::Ping)
-        });
-    }
     // Process any tangling submissions, meaning any verified requests that were
     // submitted to the Watcher but the issued extrinsic was not direclty
     // confirmed back. This usually does not happen, but can.
@@ -325,8 +316,6 @@ impl Actor for Connector {
                 endpoint = self.endpoint.as_str()
             );
 
-            // Note: heartbeat task remains disabled.
-            //self.start_heartbeat_task(ctx);
             self.start_pending_judgements_task(ctx);
             self.start_dangling_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
