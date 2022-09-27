@@ -9,9 +9,11 @@ use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
 use mongodb::options::UpdateOptions;
-use mongodb::{Client, Database as MongoDb};
+use mongodb::{Client, Database as MongoDb, ClientSession};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 use std::collections::HashMap;
 
 const IDENTITY_COLLECTION: &str = "identities";
@@ -54,12 +56,15 @@ impl EventCursor {
 #[derive(Debug, Clone)]
 pub struct Database {
     db: MongoDb,
+    session: Arc<Mutex<ClientSession>>,
 }
 
 impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
+        let client = Client::with_uri_str(uri).await?;
         Ok(Database {
-            db: Client::with_uri_str(uri).await?.database(db),
+            db: client.database(db),
+            session: Arc::new(Mutex::new(client.start_session(None).await?)),
         })
     }
     /// Simply checks if a connection could be established to the database.
