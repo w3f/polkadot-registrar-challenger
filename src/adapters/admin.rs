@@ -211,6 +211,7 @@ pub async fn process_admin<'a>(db: &'a Database, command: Command) -> Response {
         Ok(resp) => resp,
         Err(err) => {
             error!("Admin tool: {:?}", err);
+            dbg!(err);
             Response::InternalError
         }
     }

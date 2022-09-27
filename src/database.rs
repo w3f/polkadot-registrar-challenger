@@ -203,14 +203,14 @@ impl Database {
         field: &RawFieldName,
         // Whether it should check if the idenity has been fully verified.
         full_check: bool,
-        session: Option<&mut ClientSession>,
+        provided_session: Option<&mut ClientSession>,
     ) -> Result<Option<()>> {
         // If no `session` is provided, create a new local session.
         let mut local_session = self.start_transaction().await?;
+        let should_commit = provided_session.is_none();
 
-        let session = if let Some(session) = session {
+        let session = if let Some(session) = provided_session {
             std::mem::drop(local_session);
-            session.start_transaction(None).await?;
             session
         } else {
             &mut local_session
@@ -307,7 +307,9 @@ impl Database {
             }
         }
 
-        session.commit_transaction().await?;
+        if should_commit {
+            session.commit_transaction().await?;
+        }
 
         Ok(Some(()))
     }
