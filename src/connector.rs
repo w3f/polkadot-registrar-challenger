@@ -176,7 +176,6 @@ pub enum ClientCommand {
     ProvideJudgement(IdentityContext),
     RequestPendingJudgements,
     RequestDisplayNames,
-    Ping,
 }
 
 /// Handles incoming and outgoing websocket messages to and from the Watcher.
@@ -447,12 +446,6 @@ impl Handler<ClientCommand> for Connector {
                     .into(),
                 ))
                 .map_err(|err| anyhow!("failed to request display names: {:?}", err))?;
-            }
-            ClientCommand::Ping => {
-                debug!("Sending ping to Watcher over websocket stream");
-
-                sink.write(Message::Text("ping".to_string().into()))
-                    .map_err(|err| anyhow!("failed to send ping over websocket: {:?}", err))?;
             }
         }
 
@@ -784,7 +777,6 @@ pub mod tests {
                         counter.request_pending_judgements += 1
                     }
                     ClientCommand::RequestDisplayNames => counter.request_display_names += 1,
-                    ClientCommand::Ping => counter.ping += 1,
                 }
 
                 outgoing.push(msg);
@@ -799,7 +791,6 @@ pub mod tests {
         pub provide_judgement: usize,
         pub request_pending_judgements: usize,
         pub request_display_names: usize,
-        pub ping: usize,
     }
 
     impl Connector {

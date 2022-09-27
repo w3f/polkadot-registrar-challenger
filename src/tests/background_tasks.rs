@@ -12,5 +12,4 @@ async fn background_basic_outgoing_watcher_messages() {
     assert!(counter.provide_judgement == 0);
     assert!(counter.request_pending_judgements > 5);
     assert!(counter.request_display_names > 5);
-    assert!(counter.ping == 0);
 }
