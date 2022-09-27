@@ -178,6 +178,7 @@ impl Database {
         // Whether it should check if the idenity has been fully verified.
         full_check: bool,
     ) -> Result<Option<()>> {
+        let mut session = self.client.start_session(None).await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Set the appropriate types for verification.
@@ -224,17 +225,19 @@ impl Database {
 
         // Update field.
         let res = coll
-            .update_one(
+            .update_one_with_session(
                 doc! {
                     "context": context.to_bson()?,
                     "fields.value.type": field.to_string(),
                 },
                 update,
                 None,
+                &mut session
             )
             .await?;
 
         if res.modified_count == 0 {
+            session.abort_transaction().await?;
             return Ok(None);
         }
 
@@ -243,26 +246,29 @@ impl Database {
             self.insert_event(NotificationMessage::ManuallyVerified {
                 context: context.clone(),
                 field: field.clone(),
-            })
+            }, &mut session)
             .await?;
 
             // Get the full state.
             let doc = coll
-                .find_one(
+                .find_one_with_session(
                     doc! {
                         "context": context.to_bson()?,
                     },
                     None,
+                    &mut session
                 )
                 .await?;
 
             // Check the new state.
             if let Some(state) = doc {
-                self.process_fully_verified(&state).await?;
+                self.process_fully_verified(&state, &mut session).await?;
             } else {
                 return Ok(None);
             }
         }
+
+        session.commit_transaction().await?;
 
         Ok(Some(()))
     }
