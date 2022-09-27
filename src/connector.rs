@@ -22,9 +22,9 @@ use tokio::time::sleep;
 use tracing::Instrument;
 
 // In seconds
-const HEARTBEAT_INTERVAL: u64 = 30;
+const HEARTBEAT_INTERVAL: u64 = 60;
 #[cfg(not(test))]
-const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
+const PENDING_JUDGEMENTS_INTERVAL: u64 = 30;
 #[cfg(not(test))]
 const DISPLAY_NAMES_INTERVAL: u64 = 10;
 #[cfg(not(test))]
