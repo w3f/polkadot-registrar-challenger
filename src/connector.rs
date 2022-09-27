@@ -772,6 +772,7 @@ pub mod tests {
             std::mem::take(&mut states)
         }
         /// A list of messages that were sent to the Watcher (mocked).
+        #[cfg(test)]
         pub fn outgoing(&mut self) -> (Vec<ClientCommand>, OutgoingCounter) {
             let mut outgoing = vec![];
             let mut counter = OutgoingCounter::default();
