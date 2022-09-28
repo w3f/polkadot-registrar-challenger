@@ -194,9 +194,9 @@ impl IdentityFieldValue {
             (IdentityFieldValue::Web(val), AccountType::Web) => val == value,
             (IdentityFieldValue::Twitter(val), AccountType::Twitter) => val == value,
             (IdentityFieldValue::Matrix(val), AccountType::Matrix) => val == value,
-            (IdentityFieldValue::PGPFingerprint(_), AccountType::PGPFingerprint) => false,
-            (IdentityFieldValue::Image(_), AccountType::Image) => false,
-            (IdentityFieldValue::Additional(_), AccountType::Additional) => false,
+            (IdentityFieldValue::PGPFingerprint(_), AccountType::PGPFingerprint) => true,
+            (IdentityFieldValue::Image(_), AccountType::Image) => true,
+            (IdentityFieldValue::Additional(_), AccountType::Additional) => true,
             _ => false,
         }
     }
