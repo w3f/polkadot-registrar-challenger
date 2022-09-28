@@ -482,6 +482,7 @@ impl Handler<WatcherMessage> for Connector {
                 }
             }
 
+            // Create judgement state and prepare to insert into database.
             let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
 
             // Add the judgement state that's about to get inserted into the
