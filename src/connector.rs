@@ -478,7 +478,7 @@ impl Handler<WatcherMessage> for Connector {
             // If the fields of the request are the same as the current state, return.
             if let Some(current_state) = db.fetch_judgement_state(&id).await? {
                 if current_state.has_same_fields_as(&accounts) {
-                    return Ok(())
+                    return Ok(());
                 }
             }
 

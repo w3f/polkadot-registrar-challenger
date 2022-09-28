@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use actix::Message;
 
 use crate::adapters::admin::RawFieldName;
-use crate::connector::{DisplayNameEntry, AccountType};
+use crate::connector::{AccountType, DisplayNameEntry};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -347,7 +347,10 @@ impl JudgementState {
         }
 
         for (account, value) in other {
-            let matches = self.fields.iter().any(|field| field.value.matches_type(account, value));
+            let matches = self
+                .fields
+                .iter()
+                .any(|field| field.value.matches_type(account, value));
             if !matches {
                 return false;
             }
@@ -678,9 +681,11 @@ mod tests {
             (AccountType::DisplayName, "alice".to_string()),
             (AccountType::Email, "alice@gmail.com".to_string()),
             (AccountType::Twitter, "@alice".to_string()),
-        ].into();
+        ]
+        .into();
 
-        let state = JudgementState::new(id, accounts.clone().into_iter().map(|a| a.into()).collect());
+        let state =
+            JudgementState::new(id, accounts.clone().into_iter().map(|a| a.into()).collect());
 
         assert!(state.has_same_fields_as(&accounts));
 
@@ -690,7 +695,8 @@ mod tests {
             // Email changed
             (AccountType::Email, "alice2@gmail.com".to_string()),
             (AccountType::Twitter, "@alice".to_string()),
-        ].into();
+        ]
+        .into();
 
         assert!(!state.has_same_fields_as(&accounts_new));
         assert!(state.has_same_fields_as(&accounts));
@@ -700,7 +706,8 @@ mod tests {
             // Does not contain display name
             (AccountType::Email, "alice@gmail.com".to_string()),
             (AccountType::Twitter, "@alice".to_string()),
-        ].into();
+        ]
+        .into();
 
         assert!(!state.has_same_fields_as(&accounts_trimmed));
         assert!(state.has_same_fields_as(&accounts));

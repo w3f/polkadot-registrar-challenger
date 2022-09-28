@@ -8,7 +8,7 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::options::{UpdateOptions, TransactionOptions};
+use mongodb::options::{TransactionOptions, UpdateOptions};
 use mongodb::{Client, ClientSession, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
