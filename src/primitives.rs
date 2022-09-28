@@ -669,4 +669,40 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn has_same_fields_as() {
+        let id = IdentityContext::alice();
+        let accounts: HashMap<AccountType, String> = [
+            (AccountType::LegalName, "Alice".to_string()),
+            (AccountType::DisplayName, "alice".to_string()),
+            (AccountType::Email, "alice@gmail.com".to_string()),
+            (AccountType::Twitter, "@alice".to_string()),
+        ].into();
+
+        let state = JudgementState::new(id, accounts.clone().into_iter().map(|a| a.into()).collect());
+
+        assert!(state.has_same_fields_as(&accounts));
+
+        let accounts_new: HashMap<AccountType, String> = [
+            (AccountType::LegalName, "Alice".to_string()),
+            (AccountType::DisplayName, "alice".to_string()),
+            // Email changed
+            (AccountType::Email, "alice2@gmail.com".to_string()),
+            (AccountType::Twitter, "@alice".to_string()),
+        ].into();
+
+        assert!(!state.has_same_fields_as(&accounts_new));
+        assert!(state.has_same_fields_as(&accounts));
+
+        let accounts_trimmed: HashMap<AccountType, String> = [
+            (AccountType::LegalName, "Alice".to_string()),
+            // Does not contain display name
+            (AccountType::Email, "alice@gmail.com".to_string()),
+            (AccountType::Twitter, "@alice".to_string()),
+        ].into();
+
+        assert!(!state.has_same_fields_as(&accounts_trimmed));
+        assert!(state.has_same_fields_as(&accounts));
+    }
 }
