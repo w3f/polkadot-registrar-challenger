@@ -464,6 +464,7 @@ impl Handler<WatcherMessage> for Connector {
             id: IdentityContext,
             mut accounts: HashMap<AccountType, String>,
             dn_verifier: &DisplayNameVerifier,
+            // Only used in testing.
             inserted_states: &Arc<RwLock<Vec<JudgementState>>>,
         ) -> Result<()> {
             // Decode display name if appropriate.
@@ -472,6 +473,13 @@ impl Handler<WatcherMessage> for Connector {
                 .find(|(ty, _)| *ty == &AccountType::DisplayName)
             {
                 try_decode_hex(val);
+            }
+
+            // If the fields of the request are the same as the current state, return.
+            if let Some(current_state) = db.fetch_judgement_state(&id).await? {
+                if current_state.has_same_fields_as(&accounts) {
+                    return Ok(())
+                }
             }
 
             let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
@@ -486,17 +494,9 @@ impl Handler<WatcherMessage> for Connector {
                 (*l).push(state.clone());
             }
 
-            // Insert identity into the database.
-            let was_updated = db.add_judgement_request(&state).await?;
-            // Only verify display name if there have been changes to the state.
-            if was_updated {
-                // Get the latest state.
-                let state = db.fetch_judgement_state(&state.context).await?.expect(
-                    "failed to fetch judgement state for display name verification. This is a bug.",
-                );
-
-                dn_verifier.verify_display_name(&state).await?;
-            }
+            // Insert identity into the database and verify display name.
+            let _ = db.add_judgement_request(&state).await?;
+            dn_verifier.verify_display_name(&state).await?;
 
             Ok(())
         }
