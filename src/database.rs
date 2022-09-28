@@ -8,11 +8,12 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::options::UpdateOptions;
-use mongodb::{Client, Database as MongoDb};
+use mongodb::options::{TransactionOptions, UpdateOptions};
+use mongodb::{Client, ClientSession, Database as MongoDb};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::time::Duration;
 
 const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
@@ -53,14 +54,24 @@ impl EventCursor {
 
 #[derive(Debug, Clone)]
 pub struct Database {
+    client: Client,
     db: MongoDb,
 }
 
 impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
-        Ok(Database {
-            db: Client::with_uri_str(uri).await?.database(db),
-        })
+        let client = Client::with_uri_str(uri).await?;
+        let db = client.database(db);
+
+        Ok(Database { client, db })
+    }
+    async fn start_transaction(&self) -> Result<ClientSession> {
+        let mut options = TransactionOptions::default();
+        options.max_commit_time = Some(Duration::from_secs(30));
+
+        let mut session = self.client.start_session(None).await?;
+        session.start_transaction(Some(options)).await?;
+        Ok(session)
     }
     /// Simply checks if a connection could be established to the database.
     pub async fn connectivity_check(&self) -> Result<()> {
@@ -71,16 +82,18 @@ impl Database {
             .map(|_| ())
     }
     pub async fn add_judgement_request(&self, request: &JudgementState) -> Result<bool> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Check if a request of the same address exists yet (occurs when a
         // field gets updated during pending judgement process).
         let doc = coll
-            .find_one(
+            .find_one_with_session(
                 doc! {
                     "context": request.context.to_bson()?,
                 },
                 None,
+                &mut session,
             )
             .await?;
 
@@ -117,7 +130,7 @@ impl Database {
 
             // Update the final fields in the database. All deprecated fields
             // are overwritten.
-            coll.update_one(
+            coll.update_one_with_session(
                 doc! {
                     "context": request.context.to_bson()?
                 },
@@ -127,20 +140,41 @@ impl Database {
                     }
                 },
                 None,
+                &mut session,
             )
             .await?;
 
             // Create event.
-            self.insert_event(NotificationMessage::IdentityUpdated {
-                context: request.context.clone(),
-            })
+            self.insert_event(
+                NotificationMessage::IdentityUpdated {
+                    context: request.context.clone(),
+                },
+                &mut session,
+            )
             .await?;
 
             // Check full verification status.
-            self.process_fully_verified(&current).await?;
+            self.process_fully_verified(&current, &mut session).await?;
         } else {
-            coll.insert_one(request.to_document()?, None).await?;
+            // Insert new identity.
+            coll.update_one_with_session(
+                doc! {
+                    "context": request.context.to_bson()?,
+                },
+                doc! {
+                    "$setOnInsert": request.to_document()?,
+                },
+                {
+                    let mut opt = UpdateOptions::default();
+                    opt.upsert = Some(true);
+                    Some(opt)
+                },
+                &mut session,
+            )
+            .await?;
         }
+
+        session.commit_transaction().await?;
 
         Ok(true)
     }
@@ -169,7 +203,19 @@ impl Database {
         field: &RawFieldName,
         // Whether it should check if the idenity has been fully verified.
         full_check: bool,
+        provided_session: Option<&mut ClientSession>,
     ) -> Result<Option<()>> {
+        // If no `session` is provided, create a new local session.
+        let mut local_session = self.start_transaction().await?;
+        let should_commit = provided_session.is_none();
+
+        let session = if let Some(session) = provided_session {
+            std::mem::drop(local_session);
+            session
+        } else {
+            &mut local_session
+        };
+
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Set the appropriate types for verification.
@@ -216,13 +262,14 @@ impl Database {
 
         // Update field.
         let res = coll
-            .update_one(
+            .update_one_with_session(
                 doc! {
                     "context": context.to_bson()?,
                     "fields.value.type": field.to_string(),
                 },
                 update,
                 None,
+                session,
             )
             .await?;
 
@@ -232,47 +279,57 @@ impl Database {
 
         // Create event.
         if full_check {
-            self.insert_event(NotificationMessage::ManuallyVerified {
-                context: context.clone(),
-                field: field.clone(),
-            })
+            self.insert_event(
+                NotificationMessage::ManuallyVerified {
+                    context: context.clone(),
+                    field: field.clone(),
+                },
+                session,
+            )
             .await?;
 
             // Get the full state.
             let doc = coll
-                .find_one(
+                .find_one_with_session(
                     doc! {
                         "context": context.to_bson()?,
                     },
                     None,
+                    session,
                 )
                 .await?;
 
             // Check the new state.
             if let Some(state) = doc {
-                self.process_fully_verified(&state).await?;
+                self.process_fully_verified(&state, session).await?;
             } else {
                 return Ok(None);
             }
         }
 
+        if should_commit {
+            session.commit_transaction().await?;
+        }
+
         Ok(Some(()))
     }
     pub async fn verify_message(&self, message: &ExternalMessage) -> Result<()> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection(IDENTITY_COLLECTION);
 
         // Fetch the current field state based on the message origin.
         let mut cursor = coll
-            .find(
+            .find_with_session(
                 doc! {
                     "fields.value": message.origin.to_bson()?,
                 },
                 None,
+                &mut session,
             )
             .await?;
 
         // If a field was found, update it.
-        while let Some(doc) = cursor.next().await {
+        while let Some(doc) = cursor.next(&mut session).await {
             let mut id_state: JudgementState = from_document(doc?)?;
             let field_state = id_state
                 .fields
@@ -300,7 +357,7 @@ impl Database {
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
                                 // specified).
-                                coll.update_one(
+                                coll.update_one_with_session(
                                     doc! {
                                         "context": context.to_bson()?,
                                         "fields.value": message.origin.to_bson()?,
@@ -311,13 +368,17 @@ impl Database {
                                         }
                                     },
                                     None,
+                                    &mut session,
                                 )
                                 .await?;
 
-                                self.insert_event(NotificationMessage::FieldVerified {
-                                    context: context.clone(),
-                                    field: field_value.clone(),
-                                })
+                                self.insert_event(
+                                    NotificationMessage::FieldVerified {
+                                        context: context.clone(),
+                                        field: field_value.clone(),
+                                    },
+                                    &mut session,
+                                )
                                 .await?;
 
                                 if second.is_some() {
@@ -326,12 +387,13 @@ impl Database {
                                             context: context.clone(),
                                             field: field_value,
                                         },
+                                        &mut session,
                                     )
                                     .await?;
                                 }
                             } else {
                                 // Update field state.
-                                coll.update_many(
+                                coll.update_many_with_session(
                                     doc! {
                                         "context": context.to_bson()?,
                                         "fields.value": message.origin.to_bson()?,
@@ -342,13 +404,17 @@ impl Database {
                                         }
                                     },
                                     None,
+                                    &mut session,
                                 )
                                 .await?;
 
-                                self.insert_event(NotificationMessage::FieldVerificationFailed {
-                                    context: context.clone(),
-                                    field: field_value,
-                                })
+                                self.insert_event(
+                                    NotificationMessage::FieldVerificationFailed {
+                                        context: context.clone(),
+                                        field: field_value,
+                                    },
+                                    &mut session,
+                                )
                                 .await?;
                             }
                         }
@@ -362,13 +428,19 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&id_state).await?;
+            self.process_fully_verified(&id_state, &mut session).await?;
         }
+
+        session.commit_transaction().await?;
 
         Ok(())
     }
     /// Check if all fields have been verified.
-    async fn process_fully_verified(&self, state: &JudgementState) -> Result<()> {
+    async fn process_fully_verified(
+        &self,
+        state: &JudgementState,
+        session: &mut ClientSession,
+    ) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         if state.check_full_verification() {
@@ -380,7 +452,7 @@ impl Database {
             let issue_at = Timestamp::with_offset(offset);
 
             let res = coll
-                .update_one(
+                .update_one_with_session(
                     doc! {
                         "context": state.context.to_bson()?,
                         "is_fully_verified": false,
@@ -393,19 +465,23 @@ impl Database {
                         }
                     },
                     None,
+                    session,
                 )
                 .await?;
 
             if res.modified_count > 0 {
-                self.insert_event(NotificationMessage::IdentityFullyVerified {
-                    context: state.context.clone(),
-                })
+                self.insert_event(
+                    NotificationMessage::IdentityFullyVerified {
+                        context: state.context.clone(),
+                    },
+                    session,
+                )
                 .await?;
             }
         } else {
             // Reset verification state if identity was changed.
             let _ = coll
-                .update_one(
+                .update_one_with_session(
                     doc! {
                         "context": state.context.to_bson()?,
                         "is_fully_verified": true,
@@ -417,6 +493,7 @@ impl Database {
                         }
                     },
                     None,
+                    session,
                 )
                 .await?;
         }
@@ -424,6 +501,7 @@ impl Database {
         Ok(())
     }
     pub async fn verify_second_challenge(&self, mut request: VerifyChallenge) -> Result<bool> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let mut verified = false;
@@ -433,15 +511,16 @@ impl Database {
 
         // Query database.
         let mut cursor = coll
-            .find(
+            .find_with_session(
                 doc! {
                     "fields.value": request.entry.to_bson()?,
                 },
                 None,
+                &mut session,
             )
             .await?;
 
-        while let Some(state) = cursor.next().await {
+        while let Some(state) = cursor.next(&mut session).await {
             let mut state = state?;
             let field_state = state
                 .fields
@@ -468,7 +547,7 @@ impl Database {
                         second.set_verified();
                         verified = true;
 
-                        coll.update_one(
+                        coll.update_one_with_session(
                             doc! {
                                 "fields.value": request.entry.to_bson()?,
                                 "fields.challenge.content.second.value": request.challenge.to_bson()?,
@@ -479,19 +558,26 @@ impl Database {
                                 }
                             },
                             None,
+                            &mut session
                         )
                         .await?;
 
-                        self.insert_event(NotificationMessage::SecondFieldVerified {
-                            context: context.clone(),
-                            field: field_value.clone(),
-                        })
+                        self.insert_event(
+                            NotificationMessage::SecondFieldVerified {
+                                context: context.clone(),
+                                field: field_value.clone(),
+                            },
+                            &mut session,
+                        )
                         .await?;
                     } else {
-                        self.insert_event(NotificationMessage::SecondFieldVerificationFailed {
-                            context: context.clone(),
-                            field: field_value.clone(),
-                        })
+                        self.insert_event(
+                            NotificationMessage::SecondFieldVerificationFailed {
+                                context: context.clone(),
+                                field: field_value.clone(),
+                            },
+                            &mut session,
+                        )
                         .await?;
                     }
                 }
@@ -501,8 +587,10 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state).await?;
+            self.process_fully_verified(&state, &mut session).await?;
         }
+
+        session.commit_transaction().await?;
 
         Ok(verified)
     }
@@ -596,7 +684,9 @@ impl Database {
 
         // Clean cache, only keep ids of the last 10 seconds.
         let current = event_tracker.timestamp.raw();
-        event_tracker.fetched_ids.retain(|_, timestamp| timestamp.raw() > current - 10);
+        event_tracker
+            .fetched_ids
+            .retain(|_, timestamp| timestamp.raw() > current - 10);
 
         // Sort by id, ascending.
         events.sort_by(|a, b| a.id.cmp(&b.id));
@@ -659,6 +749,7 @@ impl Database {
     // (Warning) This fully verifies the identity without having to verify
     // individual fields.
     pub async fn full_manual_verification(&self, context: &IdentityContext) -> Result<bool> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         // Create a timed delay for issuing judgments. Between 30 seconds to
@@ -669,7 +760,7 @@ impl Database {
         let issue_at = Timestamp::with_offset(offset);
 
         let res = coll
-            .update_one(
+            .update_one_with_session(
                 doc! {
                     "context": context.to_bson()?,
                 },
@@ -682,6 +773,7 @@ impl Database {
                     }
                 },
                 None,
+                &mut session,
             )
             .await?;
 
@@ -689,39 +781,50 @@ impl Database {
         if res.modified_count == 1 {
             // Verify all possible fields. Unused fields are silently ignored.
             let _ = self
-                .verify_manually(context, &RawFieldName::LegalName, false)
+                .verify_manually(context, &RawFieldName::LegalName, false, Some(&mut session))
                 .await?;
             let _ = self
-                .verify_manually(context, &RawFieldName::DisplayName, false)
+                .verify_manually(
+                    context,
+                    &RawFieldName::DisplayName,
+                    false,
+                    Some(&mut session),
+                )
                 .await?;
             let _ = self
-                .verify_manually(context, &RawFieldName::Email, false)
+                .verify_manually(context, &RawFieldName::Email, false, Some(&mut session))
                 .await?;
             let _ = self
-                .verify_manually(context, &RawFieldName::Web, false)
+                .verify_manually(context, &RawFieldName::Web, false, Some(&mut session))
                 .await?;
             let _ = self
-                .verify_manually(context, &RawFieldName::Twitter, false)
+                .verify_manually(context, &RawFieldName::Twitter, false, Some(&mut session))
                 .await?;
             let _ = self
-                .verify_manually(context, &RawFieldName::Matrix, false)
+                .verify_manually(context, &RawFieldName::Matrix, false, Some(&mut session))
                 .await?;
 
-            self.insert_event(NotificationMessage::FullManualVerification {
-                context: context.clone(),
-            })
+            self.insert_event(
+                NotificationMessage::FullManualVerification {
+                    context: context.clone(),
+                },
+                &mut session,
+            )
             .await?;
 
+            session.commit_transaction().await?;
             Ok(true)
         } else {
+            session.commit_transaction().await?;
             Ok(false)
         }
     }
     pub async fn set_judged(&self, context: &IdentityContext) -> Result<()> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
 
         let res = coll
-            .update_one(
+            .update_one_with_session(
                 doc! {
                     "context": context.to_bson()?,
                     "judgement_submitted": false,
@@ -732,16 +835,22 @@ impl Database {
                     }
                 },
                 None,
+                &mut session,
             )
             .await?;
 
         // Create event.
         if res.modified_count == 1 {
-            self.insert_event(NotificationMessage::JudgementProvided {
-                context: context.clone(),
-            })
+            self.insert_event(
+                NotificationMessage::JudgementProvided {
+                    context: context.clone(),
+                },
+                &mut session,
+            )
             .await?;
         }
+
+        session.commit_transaction().await?;
 
         Ok(())
     }
@@ -786,9 +895,10 @@ impl Database {
         Ok(names)
     }
     pub async fn set_display_name_valid(&self, state: &JudgementState) -> Result<()> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.update_one(
+        coll.update_one_with_session(
             doc! {
                 "context": state.context.to_bson()?,
                 "fields.value.type": "display_name",
@@ -799,22 +909,28 @@ impl Database {
                 }
             },
             None,
+            &mut session,
         )
         .await?;
 
         // Create event
-        self.insert_event(NotificationMessage::FieldVerified {
-            context: state.context.clone(),
-            field: state
-                .fields
-                .iter()
-                .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
-                .map(|field| field.value.clone())
-                .expect("Failed to retrieve display name. This is a bug"),
-        })
+        self.insert_event(
+            NotificationMessage::FieldVerified {
+                context: state.context.clone(),
+                field: state
+                    .fields
+                    .iter()
+                    .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
+                    .map(|field| field.value.clone())
+                    .expect("Failed to retrieve display name. This is a bug"),
+            },
+            &mut session,
+        )
         .await?;
 
-        self.process_fully_verified(state).await?;
+        self.process_fully_verified(state, &mut session).await?;
+
+        session.commit_transaction().await?;
 
         Ok(())
     }
@@ -842,11 +958,16 @@ impl Database {
 
         Ok(())
     }
-    async fn insert_event<T: Into<Event>>(&self, event: T) -> Result<()> {
+    async fn insert_event<T: Into<Event>>(
+        &self,
+        event: T,
+        session: &mut ClientSession,
+    ) -> Result<()> {
         let coll = self.db.collection(EVENT_COLLECTION);
 
         let event = <T as Into<Event>>::into(event);
-        coll.insert_one(event.to_bson()?, None).await?;
+        coll.insert_one_with_session(event.to_bson()?, None, session)
+            .await?;
 
         Ok(())
     }

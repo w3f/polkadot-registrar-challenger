@@ -21,7 +21,7 @@ async fn run_mocker() -> Result<()> {
     let mut rng = thread_rng();
 
     let db_config = DatabaseConfig {
-        uri: "mongodb://localhost:27017".to_string(),
+        uri: "mongodb://localhost:27017/?replicaSet=rs0".to_string(),
         name: format!("registrar_test_{}", rng.gen_range(u32::MIN..u32::MAX)),
     };
 

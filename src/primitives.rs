@@ -1,7 +1,9 @@
+use std::collections::HashMap;
+
 use actix::Message;
 
 use crate::adapters::admin::RawFieldName;
-use crate::connector::DisplayNameEntry;
+use crate::connector::{AccountType, DisplayNameEntry};
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -184,6 +186,20 @@ pub enum IdentityFieldValue {
 }
 
 impl IdentityFieldValue {
+    pub fn matches_type(&self, ty: &AccountType, value: &str) -> bool {
+        match (self, ty) {
+            (IdentityFieldValue::LegalName(val), AccountType::LegalName) => val == value,
+            (IdentityFieldValue::DisplayName(val), AccountType::DisplayName) => val == value,
+            (IdentityFieldValue::Email(val), AccountType::Email) => val == value,
+            (IdentityFieldValue::Web(val), AccountType::Web) => val == value,
+            (IdentityFieldValue::Twitter(val), AccountType::Twitter) => val == value,
+            (IdentityFieldValue::Matrix(val), AccountType::Matrix) => val == value,
+            (IdentityFieldValue::PGPFingerprint(_), AccountType::PGPFingerprint) => true,
+            (IdentityFieldValue::Image(_), AccountType::Image) => true,
+            (IdentityFieldValue::Additional(_), AccountType::Additional) => true,
+            _ => false,
+        }
+    }
     pub fn matches_origin(&self, message: &ExternalMessage) -> bool {
         match self {
             IdentityFieldValue::Email(n1) => match &message.origin {
@@ -203,6 +219,9 @@ impl IdentityFieldValue {
     }
 }
 
+// The blanked judgement state sent to the frontend UI. Does not include the
+// secondary challenge. NOTE: `JudgementState` could be converted to take a
+// generic and `JudgementStateBlanked` could just be a type alias.
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct JudgementStateBlanked {
@@ -321,6 +340,23 @@ impl JudgementState {
                 IdentityFieldValue::DisplayName(name) => name.as_str(),
                 _ => panic!("Failed to get display name. This is a bug."),
             })
+    }
+    pub fn has_same_fields_as(&self, other: &HashMap<AccountType, String>) -> bool {
+        if other.len() != self.fields.len() {
+            return false;
+        }
+
+        for (account, value) in other {
+            let matches = self
+                .fields
+                .iter()
+                .any(|field| field.value.matches_type(account, value));
+            if !matches {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -635,5 +671,45 @@ mod tests {
                 _ => panic!(),
             }
         }
+    }
+
+    #[test]
+    fn has_same_fields_as() {
+        let id = IdentityContext::alice();
+        let accounts: HashMap<AccountType, String> = [
+            (AccountType::LegalName, "Alice".to_string()),
+            (AccountType::DisplayName, "alice".to_string()),
+            (AccountType::Email, "alice@gmail.com".to_string()),
+            (AccountType::Twitter, "@alice".to_string()),
+        ]
+        .into();
+
+        let state =
+            JudgementState::new(id, accounts.clone().into_iter().map(|a| a.into()).collect());
+
+        assert!(state.has_same_fields_as(&accounts));
+
+        let accounts_new: HashMap<AccountType, String> = [
+            (AccountType::LegalName, "Alice".to_string()),
+            (AccountType::DisplayName, "alice".to_string()),
+            // Email changed
+            (AccountType::Email, "alice2@gmail.com".to_string()),
+            (AccountType::Twitter, "@alice".to_string()),
+        ]
+        .into();
+
+        assert!(!state.has_same_fields_as(&accounts_new));
+        assert!(state.has_same_fields_as(&accounts));
+
+        let accounts_trimmed: HashMap<AccountType, String> = [
+            (AccountType::LegalName, "Alice".to_string()),
+            // Does not contain display name
+            (AccountType::Email, "alice@gmail.com".to_string()),
+            (AccountType::Twitter, "@alice".to_string()),
+        ]
+        .into();
+
+        assert!(!state.has_same_fields_as(&accounts_trimmed));
+        assert!(state.has_same_fields_as(&accounts));
     }
 }

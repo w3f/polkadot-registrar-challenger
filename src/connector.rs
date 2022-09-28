@@ -22,11 +22,11 @@ use tokio::time::sleep;
 use tracing::Instrument;
 
 // In seconds
-const HEARTBEAT_INTERVAL: u64 = 30;
+const HEARTBEAT_INTERVAL: u64 = 60;
 #[cfg(not(test))]
-const PENDING_JUDGEMENTS_INTERVAL: u64 = 10;
+const PENDING_JUDGEMENTS_INTERVAL: u64 = 30;
 #[cfg(not(test))]
-const DISPLAY_NAMES_INTERVAL: u64 = 10;
+const DISPLAY_NAMES_INTERVAL: u64 = 30;
 #[cfg(not(test))]
 const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 10;
 const RECONNECTION_TIMEOUT: u64 = 10;
@@ -176,7 +176,6 @@ pub enum ClientCommand {
     ProvideJudgement(IdentityContext),
     RequestPendingJudgements,
     RequestDisplayNames,
-    Ping,
 }
 
 /// Handles incoming and outgoing websocket messages to and from the Watcher.
@@ -234,15 +233,6 @@ impl Connector {
         });
 
         Ok(actor)
-    }
-    // Send a heartbeat to the Watcher every couple of seconds.
-    #[allow(unused)]
-    fn start_heartbeat_task(&self, ctx: &mut Context<Self>) {
-        info!("Starting heartbeat background task");
-
-        ctx.run_interval(Duration::new(HEARTBEAT_INTERVAL, 0), |_act, ctx| {
-            ctx.address().do_send(ClientCommand::Ping)
-        });
     }
     // Process any tangling submissions, meaning any verified requests that were
     // submitted to the Watcher but the issued extrinsic was not direclty
@@ -325,8 +315,6 @@ impl Actor for Connector {
                 endpoint = self.endpoint.as_str()
             );
 
-            // Note: heartbeat task remains disabled.
-            //self.start_heartbeat_task(ctx);
             self.start_pending_judgements_task(ctx);
             self.start_dangling_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
@@ -459,12 +447,6 @@ impl Handler<ClientCommand> for Connector {
                 ))
                 .map_err(|err| anyhow!("failed to request display names: {:?}", err))?;
             }
-            ClientCommand::Ping => {
-                debug!("Sending ping to Watcher over websocket stream");
-
-                sink.write(Message::Text("ping".to_string().into()))
-                    .map_err(|err| anyhow!("failed to send ping over websocket: {:?}", err))?;
-            }
         }
 
         Ok(())
@@ -482,6 +464,7 @@ impl Handler<WatcherMessage> for Connector {
             id: IdentityContext,
             mut accounts: HashMap<AccountType, String>,
             dn_verifier: &DisplayNameVerifier,
+            // Only used in testing.
             inserted_states: &Arc<RwLock<Vec<JudgementState>>>,
         ) -> Result<()> {
             // Decode display name if appropriate.
@@ -492,6 +475,14 @@ impl Handler<WatcherMessage> for Connector {
                 try_decode_hex(val);
             }
 
+            // If the fields of the request are the same as the current state, return.
+            if let Some(current_state) = db.fetch_judgement_state(&id).await? {
+                if current_state.has_same_fields_as(&accounts) {
+                    return Ok(());
+                }
+            }
+
+            // Create judgement state and prepare to insert into database.
             let state = JudgementState::new(id, accounts.into_iter().map(|a| a.into()).collect());
 
             // Add the judgement state that's about to get inserted into the
@@ -504,17 +495,9 @@ impl Handler<WatcherMessage> for Connector {
                 (*l).push(state.clone());
             }
 
-            // Insert identity into the database.
-            let was_updated = db.add_judgement_request(&state).await?;
-            // Only verify display name if there have been changes to the state.
-            if was_updated {
-                // Get the latest state.
-                let state = db.fetch_judgement_state(&state.context).await?.expect(
-                    "failed to fetch judgement state for display name verification. This is a bug.",
-                );
-
-                dn_verifier.verify_display_name(&state).await?;
-            }
+            // Insert identity into the database and verify display name.
+            let _ = db.add_judgement_request(&state).await?;
+            dn_verifier.verify_display_name(&state).await?;
 
             Ok(())
         }
@@ -783,6 +766,7 @@ pub mod tests {
             std::mem::take(&mut states)
         }
         /// A list of messages that were sent to the Watcher (mocked).
+        #[cfg(test)]
         pub fn outgoing(&mut self) -> (Vec<ClientCommand>, OutgoingCounter) {
             let mut outgoing = vec![];
             let mut counter = OutgoingCounter::default();
@@ -794,7 +778,6 @@ pub mod tests {
                         counter.request_pending_judgements += 1
                     }
                     ClientCommand::RequestDisplayNames => counter.request_display_names += 1,
-                    ClientCommand::Ping => counter.ping += 1,
                 }
 
                 outgoing.push(msg);
@@ -809,7 +792,6 @@ pub mod tests {
         pub provide_judgement: usize,
         pub request_pending_judgements: usize,
         pub request_display_names: usize,
-        pub ping: usize,
     }
 
     impl Connector {

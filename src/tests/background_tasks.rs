@@ -2,7 +2,7 @@ use super::*;
 use tokio::time::{sleep, Duration};
 
 #[actix::test]
-async fn background_outgoing_watcher_messages() {
+async fn background_basic_outgoing_watcher_messages() {
     let (_db, mut connector, _api, _inj) = new_env().await;
 
     // Wait until enough messages have been sent to the Watcher (mocked).
@@ -12,7 +12,4 @@ async fn background_outgoing_watcher_messages() {
     assert!(counter.provide_judgement == 0);
     assert!(counter.request_pending_judgements > 5);
     assert!(counter.request_display_names > 5);
-    assert!(counter.ping == 0);
 }
-
-// TODO: Test others, including judgement candidates
