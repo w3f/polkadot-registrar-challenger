@@ -186,6 +186,19 @@ pub enum IdentityFieldValue {
 }
 
 impl IdentityFieldValue {
+    pub fn as_account_type(&self) -> (AccountType, String) {
+        match self {
+            IdentityFieldValue::LegalName(val) => (AccountType::LegalName, val.to_string()),
+            IdentityFieldValue::DisplayName(val) => (AccountType::DisplayName, val.to_string()),
+            IdentityFieldValue::Email(val) => (AccountType::Email, val.to_string()),
+            IdentityFieldValue::Web(val) => (AccountType::Web, val.to_string()),
+            IdentityFieldValue::Twitter(val) => (AccountType::Twitter, val.to_string()),
+            IdentityFieldValue::Matrix(val) => (AccountType::Matrix, val.to_string()),
+            IdentityFieldValue::PGPFingerprint(_) => (AccountType::PGPFingerprint, String::new()),
+            IdentityFieldValue::Image(_) => (AccountType::Image, String::new()),
+            IdentityFieldValue::Additional(_) => (AccountType::Additional, String::new()),
+        }
+    }
     pub fn matches_type(&self, ty: &AccountType, value: &str) -> bool {
         match (self, ty) {
             (IdentityFieldValue::LegalName(val), AccountType::LegalName) => val == value,
@@ -357,6 +370,16 @@ impl JudgementState {
         }
 
         true
+    }
+    pub fn as_account_types(&self) -> HashMap<AccountType, String> {
+        let mut map = HashMap::new();
+
+        for field in self.fields {
+            let (ty, val) = field.value.as_account_type();
+            map.insert(ty, val);
+        }
+
+        map
     }
 }
 
