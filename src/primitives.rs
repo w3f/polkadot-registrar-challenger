@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
-use actix::Message;
-
 use crate::adapters::admin::RawFieldName;
-use crate::connector::{AccountType, DisplayNameEntry};
+use crate::connector::{AccountType, DisplayNameEntry, VerifiedEntry};
+use actix::Message;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -371,15 +369,15 @@ impl JudgementState {
 
         true
     }
-    pub fn as_account_types(&self) -> HashMap<AccountType, String> {
-        let mut map = HashMap::new();
+    pub fn as_verified_entries(&self) -> Vec<VerifiedEntry> {
+        let mut list = vec![];
 
-        for field in self.fields {
-            let (ty, val) = field.value.as_account_type();
-            map.insert(ty, val);
+        for field in &self.fields {
+            let (account_ty, value) = field.value.as_account_type();
+            list.push(VerifiedEntry { account_ty, value });
         }
 
-        map
+        list
     }
 }
 

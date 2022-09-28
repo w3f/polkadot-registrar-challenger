@@ -103,10 +103,17 @@ pub enum EventType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JudgementResponse {
     pub address: ChainAddress,
     pub judgement: Judgement,
-    pub verified: HashMap<AccountType, String>,
+    pub verified: Vec<VerifiedEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifiedEntry {
+    pub account_ty: AccountType,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -407,8 +414,11 @@ impl Handler<ClientCommand> for Connector {
 
         match msg {
             ClientCommand::ProvideJudgement(state) => {
-                debug!("Providing judgement over websocket stream: {:?}", state.context);
-                let verified = state.as_account_types();
+                debug!(
+                    "Providing judgement over websocket stream: {:?}",
+                    state.context
+                );
+                let verified = state.as_verified_entries();
 
                 sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
