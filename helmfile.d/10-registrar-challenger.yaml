@@ -19,6 +19,7 @@ releases:
 - name: registrar-challenger-adapter-listener
   namespace: registrar-v2
   chart: w3f/polkadot-registrar-challenger
+  version: v0.4.2
   values:
     - ./config/registrar-challenger-values.yaml.gotmpl
     - ./config/adapter_listener/registrar-challenger-values.yaml.gotmpl
@@ -26,6 +27,7 @@ releases:
 - name: registrar-challenger-session-notifier
   namespace: registrar-v2
   chart: w3f/polkadot-registrar-challenger
+  version: v0.4.2
   values:
     - ./config/registrar-challenger-values.yaml.gotmpl
     - ./config/session_notifier/registrar-challenger-values.yaml.gotmpl
