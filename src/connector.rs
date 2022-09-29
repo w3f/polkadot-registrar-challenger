@@ -103,7 +103,6 @@ pub enum EventType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct JudgementResponse {
     pub address: ChainAddress,
     pub judgement: Judgement,
@@ -112,6 +111,7 @@ pub struct JudgementResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifiedEntry {
+    #[serde(rename = "accountTy")]
     pub account_ty: AccountType,
     pub value: String,
 }
