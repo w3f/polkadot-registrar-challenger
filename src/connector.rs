@@ -103,9 +103,17 @@ pub enum EventType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JudgementResponse {
     pub address: ChainAddress,
     pub judgement: Judgement,
+    pub verified: Vec<VerifiedEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifiedEntry {
+    pub account_ty: AccountType,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,7 +181,7 @@ pub enum WatcherMessage {
 #[derive(Debug, Clone, Message)]
 #[rtype(result = "crate::Result<()>")]
 pub enum ClientCommand {
-    ProvideJudgement(IdentityContext),
+    ProvideJudgement(JudgementState),
     RequestPendingJudgements,
     RequestDisplayNames,
 }
@@ -290,7 +298,7 @@ impl Connector {
                         Ok(completed) => {
                             for state in completed {
                                 info!("Notifying Watcher about judgement: {:?}", state.context);
-                                addr.do_send(ClientCommand::ProvideJudgement(state.context));
+                                addr.do_send(ClientCommand::ProvideJudgement(state));
                             }
                         }
                         Err(err) => {
@@ -405,15 +413,20 @@ impl Handler<ClientCommand> for Connector {
         }
 
         match msg {
-            ClientCommand::ProvideJudgement(id) => {
-                debug!("Providing judgement over websocket stream: {:?}", id);
+            ClientCommand::ProvideJudgement(state) => {
+                debug!(
+                    "Providing judgement over websocket stream: {:?}",
+                    state.context
+                );
+                let verified = state.as_verified_entries();
 
                 sink.write(Message::Text(
                     serde_json::to_string(&ResponseMessage {
                         event: EventType::JudgementResult,
                         data: JudgementResponse {
-                            address: id.address,
+                            address: state.context.address,
                             judgement: Judgement::Reasonable,
+                            verified,
                         },
                     })
                     .unwrap()
