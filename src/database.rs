@@ -913,21 +913,6 @@ impl Database {
         )
         .await?;
 
-        // Create event
-        self.insert_event(
-            NotificationMessage::FieldVerified {
-                context: state.context.clone(),
-                field: state
-                    .fields
-                    .iter()
-                    .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
-                    .map(|field| field.value.clone())
-                    .expect("Failed to retrieve display name. This is a bug"),
-            },
-            &mut session,
-        )
-        .await?;
-
         self.process_fully_verified(state, &mut session).await?;
 
         session.commit_transaction().await?;
