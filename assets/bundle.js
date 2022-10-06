@@ -359,10 +359,10 @@ class ActionListerner {
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_) => {
-            let action = this.specify_action.innerHTML;
+            let action = this.specify_action.innerText;
             if (action == "Check Judgement") {
                 window.location.href = "?network="
-                    + this.specify_network.innerHTML.toLowerCase()
+                    + this.specify_network.innerText.toLowerCase()
                     + "&address="
                     + this.search_bar.value;
             }
@@ -374,10 +374,10 @@ class ActionListerner {
             .addEventListener("input", (_) => {
             this.manager.resetButton();
             if (this.search_bar.value.startsWith("1")) {
-                this.specify_network.innerHTML = "Polkadot";
+                this.specify_network.innerText = "Polkadot";
             }
             else {
-                this.specify_network.innerHTML = "Kusama";
+                this.specify_network.innerText = "Kusama";
             }
         });
         // Bind 'Enter' key to action button.
@@ -404,7 +404,7 @@ class ActionListerner {
         let network = params.get("network");
         let address = params.get("address");
         if (network != null && address != null) {
-            this.specify_network.innerHTML = (0, content_1.capitalizeFirstLetter)(network);
+            this.specify_network.innerText = (0, content_1.capitalizeFirstLetter)(network);
             this.search_bar.value = address;
             this.executeAction();
         }
@@ -412,9 +412,9 @@ class ActionListerner {
     // Executes the main logic, either the judgement state or display name check.
     executeAction() {
         this.manager.setButtonLoadingSpinner();
-        const action = this.specify_action.innerHTML;
+        const action = this.specify_action.innerText;
         const user_input = this.search_bar.value;
-        const network = this.specify_network.innerHTML.toLowerCase();
+        const network = this.specify_network.innerText.toLowerCase();
         if (action == "Check Judgement") {
             const socket = new WebSocket(config.ws_url);
             window.setInterval(() => {
