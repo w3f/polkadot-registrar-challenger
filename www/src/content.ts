@@ -176,9 +176,11 @@ export class ContentManager {
         this.div_display_name_overview.innerHTML = `
             <div class="col-10 ">
                 <h2>Display name check</h2>
-                <p>The display name <strong>${name}</strong> is ${validity}</p>
+                <p>The display name <strong id="display-name-strong"></strong> is ${validity}</p>
             </div>
         `;
+
+        document.getElementById("display-name-strong")!.innerText = name;
     }
     setDisplayNameViolation(name: string, violations: Violation[], show_hint: boolean) {
         let listed = "";
@@ -194,13 +196,15 @@ export class ContentManager {
         this.div_display_name_overview.innerHTML = `
             <div class="col-10 ">
                 <h2>Display name check</h2>
-                <p>The display name <strong>${name}</strong> is ${BadgeInvalid}. It's too similar to (an) existing display name(s):</p>
+                <p>The display name <strong id="display-name-strong"></strong> is ${BadgeInvalid}. It's too similar to (an) existing display name(s):</p>
                 <ul>
                     ${listed}
                 </ul>
                 ${hint}
             </div>
         `;
+
+        document.getElementById("display-name-strong")!.textContent = name;
     }
     setVerificationOverviewContent(table: string) {
         this.div_verification_overview.innerHTML = `
