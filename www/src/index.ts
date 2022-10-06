@@ -66,10 +66,10 @@ class ActionListerner {
         // Handler for executing action and communicating with the backend API.
         this.btn_execute_action
             .addEventListener("click", (_: Event) => {
-                let action = this.specify_action.innerHTML;
+                let action = this.specify_action.innerText;
                 if (action == "Check Judgement") {
                     window.location.href = "?network="
-                        + this.specify_network.innerHTML.toLowerCase()
+                        + this.specify_network.innerText.toLowerCase()
                         + "&address="
                         + this.search_bar.value;
                 } else if (action == "Validate Display Name") {
@@ -82,9 +82,9 @@ class ActionListerner {
                 this.manager.resetButton();
 
                 if (this.search_bar.value.startsWith("1")) {
-                    this.specify_network.innerHTML = "Polkadot";
+                    this.specify_network.innerText = "Polkadot";
                 } else {
-                    this.specify_network.innerHTML = "Kusama";
+                    this.specify_network.innerText = "Kusama";
                 }
             });
 
@@ -115,7 +115,7 @@ class ActionListerner {
         let address = params.get("address");
 
         if (network != null && address != null) {
-            this.specify_network.innerHTML = capitalizeFirstLetter(network);
+            this.specify_network.innerText = capitalizeFirstLetter(network);
             this.search_bar.value = address;
             this.executeAction();
         }
@@ -124,9 +124,9 @@ class ActionListerner {
     executeAction() {
         this.manager.setButtonLoadingSpinner();
 
-        const action = this.specify_action.innerHTML;
+        const action = this.specify_action.innerText;
         const user_input = this.search_bar.value;
-        const network = this.specify_network.innerHTML.toLowerCase();
+        const network = this.specify_network.innerText.toLowerCase();
 
         if (action == "Check Judgement") {
             const socket = new WebSocket(config.ws_url);
