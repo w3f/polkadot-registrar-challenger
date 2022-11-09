@@ -32,14 +32,38 @@ mod primitives;
 mod tests;
 
 #[derive(Debug, Deserialize)]
-pub struct Config {
+#[serde(rename_all = "snake_case")]
+struct Config {
+    pub log_level: LogLevel,
     pub db: DatabaseConfig,
     pub instance: InstanceType,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogLevel {
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    fn to_tracing(self) -> tracing::Level {
+        match self {
+            LogLevel::Error => tracing::Level::ERROR,
+            LogLevel::Warn => tracing::Level::WARN,
+            LogLevel::Info => tracing::Level::INFO,
+            LogLevel::Debug => tracing::Level::DEBUG,
+            LogLevel::Trace => tracing::Level::TRACE,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "role", content = "config")]
-pub enum InstanceType {
+enum InstanceType {
     AdapterListener(AdapterConfig),
     SessionNotifier(NotifierConfig),
     SingleInstance(SingleInstanceConfig),
@@ -47,14 +71,14 @@ pub enum InstanceType {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct SingleInstanceConfig {
+struct SingleInstanceConfig {
     pub adapter: AdapterConfig,
     pub notifier: NotifierConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
-pub struct DatabaseConfig {
+struct DatabaseConfig {
     pub uri: String,
     pub name: String,
 }
@@ -155,6 +179,13 @@ async fn config_session_notifier(db: Database, not_config: NotifierConfig) -> Re
 pub async fn run() -> Result<()> {
     let root = open_config()?;
     let (db_config, instance) = (root.db, root.instance);
+
+    tracing_subscriber::fmt()
+        .with_max_level(root.log_level.to_tracing())
+        .with_env_filter("system")
+        .init();
+
+    tracing::info!("Starting registrar service");
 
     info!("Initializing connection to database");
     let db = Database::new(&db_config.uri, &db_config.name).await?;
