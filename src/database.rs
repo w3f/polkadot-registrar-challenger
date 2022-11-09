@@ -914,6 +914,7 @@ impl Database {
                 doc! {
                     "context": state.context.to_bson()?,
                     "fields.value.type": "display_name",
+                    "fields.value.challenge.content.passed": false
                 },
                 doc! {
                     "$set": {
@@ -925,22 +926,24 @@ impl Database {
             )
             .await?;
 
-        if res.modified_count != 0 {
-            // Create event
-            self.insert_event(
-                NotificationMessage::FieldVerified {
-                    context: state.context.clone(),
-                    field: state
-                        .fields
-                        .iter()
-                        .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
-                        .map(|field| field.value.clone())
-                        .expect("Failed to retrieve display name. This is a bug"),
-                },
-                &mut session,
-            )
-            .await?;
+        if res.modified_count == 0 {
+            return Ok(())
         }
+
+        // Create event
+        self.insert_event(
+            NotificationMessage::FieldVerified {
+                context: state.context.clone(),
+                field: state
+                    .fields
+                    .iter()
+                    .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
+                    .map(|field| field.value.clone())
+                    .expect("Failed to retrieve display name. This is a bug"),
+            },
+            &mut session,
+        )
+        .await?;
 
         self.process_fully_verified(&state.context, &mut session)
             .await?;
