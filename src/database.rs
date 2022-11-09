@@ -205,12 +205,15 @@ impl Database {
     ) -> Result<Option<()>> {
         // If no `session` is provided, create a new local session.
         let mut local_session = self.start_transaction().await?;
-        let should_commit = provided_session.is_none();
+        let should_commit;
 
         let session = if let Some(session) = provided_session {
+            should_commit = false;
+            local_session.abort_transaction().await?;
             std::mem::drop(local_session);
             session
         } else {
+            should_commit = true;
             &mut local_session
         };
 
