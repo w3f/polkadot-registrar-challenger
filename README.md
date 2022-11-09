@@ -167,3 +167,18 @@ $ cat config.json
 }
 $ yarn build # output in dist/
 ```
+
+### Testing
+
+The unit test need a Mongodb instance with enabled replica set listening on
+`localhost:27017`:
+
+```console
+mongod --replicaSet "rs0"
+```
+
+Make sure to initialize the replicaset in the mongo shell:
+
+```
+rs.initiate()
+```

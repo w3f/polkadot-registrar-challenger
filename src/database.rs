@@ -152,7 +152,8 @@ impl Database {
             .await?;
 
             // Check full verification status.
-            self.process_fully_verified(&current.context, &mut session).await?;
+            self.process_fully_verified(&current.context, &mut session)
+                .await?;
         } else {
             // Insert new identity.
             coll.update_one_with_session(
@@ -331,7 +332,7 @@ impl Database {
         // If a field was found, update it.
         while let Some(doc) = cursor.next(&mut session).await {
             let state: JudgementState = from_document(doc?)?;
-            let field_state =state 
+            let field_state = state
                 .fields
                 .iter()
                 .find(|field| field.value.matches_origin(message))
@@ -346,10 +347,7 @@ impl Database {
             let challenge = &field_state.challenge;
             if !challenge.is_verified() {
                 match challenge {
-                    ChallengeType::ExpectedMessage {
-                        expected,
-                        second,
-                    } => {
+                    ChallengeType::ExpectedMessage { expected, second } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
                             if expected.is_message_valid(message) {
@@ -428,7 +426,8 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state.context, &mut session).await?;
+            self.process_fully_verified(&state.context, &mut session)
+                .await?;
         }
 
         session.commit_transaction().await?;
@@ -598,7 +597,8 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state.context, &mut session).await?;
+            self.process_fully_verified(&state.context, &mut session)
+                .await?;
         }
 
         session.commit_transaction().await?;
@@ -909,20 +909,21 @@ impl Database {
         let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        let res = coll.update_one_with_session(
-            doc! {
-                "context": state.context.to_bson()?,
-                "fields.value.type": "display_name",
-            },
-            doc! {
-                "$set": {
-                    "fields.$.challenge.content.passed": true,
-                }
-            },
-            None,
-            &mut session,
-        )
-        .await?;
+        let res = coll
+            .update_one_with_session(
+                doc! {
+                    "context": state.context.to_bson()?,
+                    "fields.value.type": "display_name",
+                },
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.passed": true,
+                    }
+                },
+                None,
+                &mut session,
+            )
+            .await?;
 
         if res.modified_count != 0 {
             // Create event
@@ -941,7 +942,8 @@ impl Database {
             .await?;
         }
 
-        self.process_fully_verified(&state.context, &mut session).await?;
+        self.process_fully_verified(&state.context, &mut session)
+            .await?;
 
         session.commit_transaction().await?;
 
