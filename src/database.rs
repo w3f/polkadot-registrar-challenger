@@ -209,7 +209,6 @@ impl Database {
 
         let session = if let Some(session) = provided_session {
             should_commit = false;
-            local_session.abort_transaction().await?;
             std::mem::drop(local_session);
             session
         } else {
