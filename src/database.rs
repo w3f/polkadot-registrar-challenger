@@ -964,7 +964,6 @@ impl Database {
             doc! {
                 "context": context.to_bson()?,
                 "fields.value.type": "display_name",
-                "fields.challenge.content.passed": false,
             },
             doc! {
                 "$set": {
