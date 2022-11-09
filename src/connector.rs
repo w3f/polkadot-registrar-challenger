@@ -597,7 +597,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     error!("Received error from Watcher: {:?}", parsed.data);
                 }
                 EventType::NewJudgementRequest => {
-                    debug!(
+                    info!(
                         "Received new judgement request from Watcher: {:?}",
                         parsed.data
                     );
@@ -613,9 +613,8 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                         .await??;
                 }
                 EventType::DisplayNamesResponse => {
-                    debug!("Received display names from the Watcher");
-
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
+                    debug!("Received {} display names from the Watcher", data.len());
                     conn.send(WatcherMessage::ActiveDisplayNames(data))
                         .await??;
                 }

@@ -937,9 +937,10 @@ impl Database {
         context: &IdentityContext,
         violations: &Vec<DisplayNameEntry>,
     ) -> Result<()> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.update_one(
+        coll.update_one_with_session(
             doc! {
                 "context": context.to_bson()?,
                 "fields.value.type": "display_name",
@@ -951,8 +952,11 @@ impl Database {
                 }
             },
             None,
+            &mut session,
         )
         .await?;
+
+        session.commit_transaction().await?;
 
         Ok(())
     }
