@@ -729,12 +729,17 @@ async fn verify_full_identity() {
             .to_message_parts(),
     };
 
-    let changed = alice
+    // Verify whether message is valid.
+    let exp_message = alice
         .get_field_mut(&F::ALICE_TWITTER())
-        .expected_message_mut()
-        .is_message_valid(&msg);
+        .expected_message_mut();
+
+    let changed = exp_message.is_message_valid(&msg);
+
     assert!(changed);
 
+    // Set valid.
+    exp_message.set_verified();
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.
@@ -760,12 +765,16 @@ async fn verify_full_identity() {
             .to_message_parts(),
     };
 
-    let changed = alice
+    let exp_message = alice
         .get_field_mut(&F::ALICE_EMAIL())
-        .expected_message_mut()
-        .is_message_valid(&msg);
+        .expected_message_mut();
+
+    let changed = exp_message.is_message_valid(&msg);
+
     assert!(changed);
 
+    // Set valid
+    exp_message.set_verified();
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.
@@ -831,12 +840,16 @@ async fn verify_full_identity() {
             .to_message_parts(),
     };
 
-    let changed = alice
+    let exp_message = alice
         .get_field_mut(&F::ALICE_MATRIX())
-        .expected_message_mut()
-        .is_message_valid(&msg);
+        .expected_message_mut();
+
+    let changed = exp_message.is_message_valid(&msg);
+
     assert!(changed);
 
+    // Set valid
+    exp_message.set_verified();
     db.verify_message(&msg).await.unwrap();
 
     // Check updated state with notification.
