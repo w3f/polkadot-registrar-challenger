@@ -964,10 +964,10 @@ impl Database {
             doc! {
                 "context": context.to_bson()?,
                 "fields.value.type": "display_name",
+                "fields.value.challenge.content.passed": false,
             },
             doc! {
                 "$set": {
-                    "fields.$.challenge.content.passed": false,
                     "fields.$.challenge.content.violations": violations.to_bson()?
                 }
             },
