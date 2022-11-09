@@ -914,7 +914,7 @@ impl Database {
                 doc! {
                     "context": state.context.to_bson()?,
                     "fields.value.type": "display_name",
-                    "fields.value.challenge.content.passed": false
+                    "fields.challenge.content.passed": false
                 },
                 doc! {
                     "$set": {
@@ -960,11 +960,11 @@ impl Database {
         let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.update_one_with_session(
+        let res = coll.update_one_with_session(
             doc! {
                 "context": context.to_bson()?,
                 "fields.value.type": "display_name",
-                "fields.value.challenge.content.passed": false,
+                "fields.challenge.content.passed": false,
             },
             doc! {
                 "$set": {
@@ -976,7 +976,9 @@ impl Database {
         )
         .await?;
 
-        session.commit_transaction().await?;
+        if res.modified_count != 0 {
+            session.commit_transaction().await?;
+        }
 
         Ok(())
     }
