@@ -242,22 +242,6 @@ impl Connector {
 
         Ok(actor)
     }
-    // Process any tangling submissions, meaning any verified requests that were
-    // submitted to the Watcher but the issued extrinsic was not direclty
-    // confirmed back. This usually does not happen, but can.
-    fn start_dangling_judgements_task(&self, ctx: &mut Context<Self>) {
-        info!("Starting dangling judgement pruning task");
-
-        ctx.run_interval(Duration::new(60, 0), |act, _ctx| {
-            let db = act.db.clone();
-
-            actix::spawn(async move {
-                if let Err(err) = db.process_dangling_judgement_states().await {
-                    error!("Error when pruning dangling judgements: {:?}", err);
-                }
-            });
-        });
-    }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
         info!("Starting pending judgement requester background task");
@@ -324,7 +308,6 @@ impl Actor for Connector {
             );
 
             self.start_pending_judgements_task(ctx);
-            self.start_dangling_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
             self.start_judgement_candidates_task(ctx);
         });
@@ -624,9 +607,8 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                         .await??;
                 }
                 EventType::PendingJudgementsResponse => {
-                    debug!("Received pending judgments from Watcher: {:?}", parsed.data);
-
                     let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
+                    debug!("Received {} pending judgments from Watcher", data.len());
                     conn.send(WatcherMessage::PendingJudgementsRequests(data))
                         .await??;
                 }
