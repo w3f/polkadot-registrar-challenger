@@ -150,16 +150,16 @@ impl ExpectedMessage {
             is_verified: false,
         }
     }
-    pub fn verify_message(&mut self, message: &ExternalMessage) -> bool {
+    pub fn is_message_valid(&self, message: &ExternalMessage) -> bool {
         for value in &message.values {
             if value.0.contains(&self.value) {
-                self.set_verified();
                 return true;
             }
         }
 
         false
     }
+    #[cfg(test)]
     pub fn set_verified(&mut self) {
         self.is_verified = true;
     }

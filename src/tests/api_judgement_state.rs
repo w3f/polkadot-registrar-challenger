@@ -732,7 +732,7 @@ async fn verify_full_identity() {
     let changed = alice
         .get_field_mut(&F::ALICE_TWITTER())
         .expected_message_mut()
-        .verify_message(&msg);
+        .is_message_valid(&msg);
     assert!(changed);
 
     db.verify_message(&msg).await.unwrap();
@@ -763,7 +763,7 @@ async fn verify_full_identity() {
     let changed = alice
         .get_field_mut(&F::ALICE_EMAIL())
         .expected_message_mut()
-        .verify_message(&msg);
+        .is_message_valid(&msg);
     assert!(changed);
 
     db.verify_message(&msg).await.unwrap();
@@ -834,7 +834,7 @@ async fn verify_full_identity() {
     let changed = alice
         .get_field_mut(&F::ALICE_MATRIX())
         .expected_message_mut()
-        .verify_message(&msg);
+        .is_message_valid(&msg);
     assert!(changed);
 
     db.verify_message(&msg).await.unwrap();

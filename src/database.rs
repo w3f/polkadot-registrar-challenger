@@ -152,7 +152,7 @@ impl Database {
             .await?;
 
             // Check full verification status.
-            self.process_fully_verified(&current, &mut session).await?;
+            self.process_fully_verified(&current.context, &mut session).await?;
         } else {
             // Insert new identity.
             coll.update_one_with_session(
@@ -301,7 +301,7 @@ impl Database {
 
             // Check the new state.
             if let Some(state) = doc {
-                self.process_fully_verified(&state, session).await?;
+                self.process_fully_verified(&state.context, session).await?;
             } else {
                 return Ok(None);
             }
@@ -330,29 +330,29 @@ impl Database {
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next(&mut session).await {
-            let mut id_state: JudgementState = from_document(doc?)?;
-            let field_state = id_state
+            let state: JudgementState = from_document(doc?)?;
+            let field_state =state 
                 .fields
-                .iter_mut()
+                .iter()
                 .find(|field| field.value.matches_origin(message))
                 .unwrap();
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
 
-            let context = id_state.context.clone();
+            let context = state.context.clone();
             let field_value = field_state.value.clone();
 
-            let challenge = &mut field_state.challenge;
+            let challenge = &field_state.challenge;
             if !challenge.is_verified() {
                 match challenge {
                     ChallengeType::ExpectedMessage {
-                        ref mut expected,
+                        expected,
                         second,
                     } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
-                            if expected.verify_message(message) {
+                            if expected.is_message_valid(message) {
                                 // Update field state. Be more specific with the query in order
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
@@ -428,7 +428,7 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&id_state, &mut session).await?;
+            self.process_fully_verified(&state.context, &mut session).await?;
         }
 
         session.commit_transaction().await?;
@@ -438,10 +438,22 @@ impl Database {
     /// Check if all fields have been verified.
     async fn process_fully_verified(
         &self,
-        state: &JudgementState,
+        context: &IdentityContext,
         session: &mut ClientSession,
     ) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Get the full state.
+        let state = coll
+            .find_one_with_session(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                None,
+                session,
+            )
+            .await?
+            .expect("Failed to retrieve full state for processing (this is a bug)");
 
         if state.check_full_verification() {
             // Create a timed delay for issuing judgments. Between 30 seconds to
@@ -469,7 +481,7 @@ impl Database {
                 )
                 .await?;
 
-            if res.modified_count > 0 {
+            if res.modified_count != 0 {
                 self.insert_event(
                     NotificationMessage::IdentityFullyVerified {
                         context: state.context.clone(),
@@ -544,7 +556,6 @@ impl Database {
 
                     let second = second.as_mut().unwrap();
                     if request.challenge.contains(&second.value) {
-                        second.set_verified();
                         verified = true;
 
                         coll.update_one_with_session(
@@ -587,7 +598,7 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state, &mut session).await?;
+            self.process_fully_verified(&state.context, &mut session).await?;
         }
 
         session.commit_transaction().await?;
@@ -898,7 +909,7 @@ impl Database {
         let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.update_one_with_session(
+        let res = coll.update_one_with_session(
             doc! {
                 "context": state.context.to_bson()?,
                 "fields.value.type": "display_name",
@@ -913,22 +924,24 @@ impl Database {
         )
         .await?;
 
-        // Create event
-        self.insert_event(
-            NotificationMessage::FieldVerified {
-                context: state.context.clone(),
-                field: state
-                    .fields
-                    .iter()
-                    .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
-                    .map(|field| field.value.clone())
-                    .expect("Failed to retrieve display name. This is a bug"),
-            },
-            &mut session,
-        )
-        .await?;
+        if res.modified_count != 0 {
+            // Create event
+            self.insert_event(
+                NotificationMessage::FieldVerified {
+                    context: state.context.clone(),
+                    field: state
+                        .fields
+                        .iter()
+                        .find(|field| matches!(field.value, IdentityFieldValue::DisplayName(_)))
+                        .map(|field| field.value.clone())
+                        .expect("Failed to retrieve display name. This is a bug"),
+                },
+                &mut session,
+            )
+            .await?;
+        }
 
-        self.process_fully_verified(state, &mut session).await?;
+        self.process_fully_verified(&state.context, &mut session).await?;
 
         session.commit_transaction().await?;
 
