@@ -8,8 +8,8 @@ use crate::primitives::{
 use crate::Result;
 use bson::{doc, from_document, to_bson, to_document, Bson, Document};
 use futures::StreamExt;
-use mongodb::options::{TransactionOptions, UpdateOptions};
-use mongodb::{Client, ClientSession, Database as MongoDb};
+use mongodb::options::{IndexOptions, TransactionOptions, UpdateOptions};
+use mongodb::{Client, ClientSession, Database as MongoDb, IndexModel};
 use rand::{thread_rng, Rng};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -60,6 +60,23 @@ impl Database {
     pub async fn new(uri: &str, db: &str) -> Result<Self> {
         let client = Client::with_uri_str(uri).await?;
         let db = client.database(db);
+
+        // Create collection (required for index creation)
+        db.create_collection(IDENTITY_COLLECTION, None).await?;
+
+        // Create a unique constraint.
+        let model = IndexModel::builder()
+            .keys(doc! { "context": 1 })
+            .options({
+                let mut ops = IndexOptions::default();
+                ops.unique = Some(true);
+                ops
+            })
+            .build();
+
+        db.collection::<JudgementState>(IDENTITY_COLLECTION)
+            .create_index(model, None)
+            .await?;
 
         Ok(Database { client, db })
     }

@@ -50,13 +50,13 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    fn to_tracing(&self) -> tracing::Level {
+    fn as_str(&self) -> &'static str {
         match self {
-            LogLevel::Error => tracing::Level::ERROR,
-            LogLevel::Warn => tracing::Level::WARN,
-            LogLevel::Info => tracing::Level::INFO,
-            LogLevel::Debug => tracing::Level::DEBUG,
-            LogLevel::Trace => tracing::Level::TRACE,
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Trace => "trace",
         }
     }
 }
@@ -181,11 +181,10 @@ pub async fn run() -> Result<()> {
     let (db_config, instance) = (root.db, root.instance);
 
     tracing_subscriber::fmt()
-        .with_max_level(root.log_level.to_tracing())
-        .with_env_filter("system")
+        .with_env_filter(format!("system={}", root.log_level.as_str()))
         .init();
 
-    tracing::info!("Starting registrar service");
+    info!("Starting registrar service");
 
     info!("Initializing connection to database");
     let db = Database::new(&db_config.uri, &db_config.name).await?;
