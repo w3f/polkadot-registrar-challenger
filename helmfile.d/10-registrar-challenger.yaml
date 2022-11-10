@@ -16,6 +16,7 @@ releases:
     - ./config/session_notifier/registrar-challenger-values.yaml.gotmpl
 {{- end }}
 
+{{- if eq .Environment.Name "production" }} 
 - name: registrar-challenger-adapter-listener
   namespace: registrar-v2
   chart: w3f/polkadot-registrar-challenger
@@ -31,3 +32,4 @@ releases:
   values:
     - ./config/registrar-challenger-values.yaml.gotmpl
     - ./config/session_notifier/registrar-challenger-values.yaml.gotmpl
+{{- end }}    
