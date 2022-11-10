@@ -960,7 +960,7 @@ impl Database {
         let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        let res = coll.update_one_with_session(
+        coll.update_one_with_session(
             doc! {
                 "context": context.to_bson()?,
                 "fields.value.type": "display_name",
@@ -975,9 +975,7 @@ impl Database {
         )
         .await?;
 
-        if res.modified_count != 0 {
-            session.commit_transaction().await?;
-        }
+        session.commit_transaction().await?;
 
         Ok(())
     }

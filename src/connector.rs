@@ -492,9 +492,11 @@ impl Handler<WatcherMessage> for Connector {
                 (*l).push(state.clone());
             }
 
-            // Insert identity into the database and verify display name.
-            let _ = db.add_judgement_request(&state).await?;
-            dn_verifier.verify_display_name(&state).await?;
+            // Insert identity into the database and verify display name if the
+            // database entry was modified (or newly inserted).
+            if db.add_judgement_request(&state).await? {
+                dn_verifier.verify_display_name(&state).await?;
+            }
 
             Ok(())
         }
