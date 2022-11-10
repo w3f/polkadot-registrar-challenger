@@ -19,8 +19,6 @@ const IDENTITY_COLLECTION: &str = "identities";
 const EVENT_COLLECTION: &str = "event_log";
 const DISPLAY_NAMES: &str = "display_names";
 
-const DANGLING_THRESHOLD: u64 = 3600; // one hour
-
 /// Convenience trait. Converts a value to BSON.
 trait ToBson {
     fn to_bson(&self) -> Result<Bson>;
@@ -154,7 +152,8 @@ impl Database {
             .await?;
 
             // Check full verification status.
-            self.process_fully_verified(&current, &mut session).await?;
+            self.process_fully_verified(&current.context, &mut session)
+                .await?;
         } else {
             // Insert new identity.
             coll.update_one_with_session(
@@ -207,12 +206,14 @@ impl Database {
     ) -> Result<Option<()>> {
         // If no `session` is provided, create a new local session.
         let mut local_session = self.start_transaction().await?;
-        let should_commit = provided_session.is_none();
+        let should_commit;
 
         let session = if let Some(session) = provided_session {
+            should_commit = false;
             std::mem::drop(local_session);
             session
         } else {
+            should_commit = true;
             &mut local_session
         };
 
@@ -301,7 +302,7 @@ impl Database {
 
             // Check the new state.
             if let Some(state) = doc {
-                self.process_fully_verified(&state, session).await?;
+                self.process_fully_verified(&state.context, session).await?;
             } else {
                 return Ok(None);
             }
@@ -330,29 +331,26 @@ impl Database {
 
         // If a field was found, update it.
         while let Some(doc) = cursor.next(&mut session).await {
-            let mut id_state: JudgementState = from_document(doc?)?;
-            let field_state = id_state
+            let state: JudgementState = from_document(doc?)?;
+            let field_state = state
                 .fields
-                .iter_mut()
+                .iter()
                 .find(|field| field.value.matches_origin(message))
                 .unwrap();
 
             // If the message contains the challenge, set it as valid (or
             // invalid if otherwise).
 
-            let context = id_state.context.clone();
+            let context = state.context.clone();
             let field_value = field_state.value.clone();
 
-            let challenge = &mut field_state.challenge;
+            let challenge = &field_state.challenge;
             if !challenge.is_verified() {
                 match challenge {
-                    ChallengeType::ExpectedMessage {
-                        ref mut expected,
-                        second,
-                    } => {
+                    ChallengeType::ExpectedMessage { expected, second } => {
                         // Only proceed if the expected challenge has not been verified yet.
                         if !expected.is_verified {
-                            if expected.verify_message(message) {
+                            if expected.is_message_valid(message) {
                                 // Update field state. Be more specific with the query in order
                                 // to verify the correct field (in theory, there could be
                                 // multiple pending requests with the same external account
@@ -428,7 +426,8 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&id_state, &mut session).await?;
+            self.process_fully_verified(&state.context, &mut session)
+                .await?;
         }
 
         session.commit_transaction().await?;
@@ -438,10 +437,22 @@ impl Database {
     /// Check if all fields have been verified.
     async fn process_fully_verified(
         &self,
-        state: &JudgementState,
+        context: &IdentityContext,
         session: &mut ClientSession,
     ) -> Result<()> {
         let coll = self.db.collection::<JudgementState>(IDENTITY_COLLECTION);
+
+        // Get the full state.
+        let state = coll
+            .find_one_with_session(
+                doc! {
+                    "context": context.to_bson()?,
+                },
+                None,
+                session,
+            )
+            .await?
+            .expect("Failed to retrieve full state for processing (this is a bug)");
 
         if state.check_full_verification() {
             // Create a timed delay for issuing judgments. Between 30 seconds to
@@ -469,7 +480,7 @@ impl Database {
                 )
                 .await?;
 
-            if res.modified_count > 0 {
+            if res.modified_count != 0 {
                 self.insert_event(
                     NotificationMessage::IdentityFullyVerified {
                         context: state.context.clone(),
@@ -544,7 +555,6 @@ impl Database {
 
                     let second = second.as_mut().unwrap();
                     if request.challenge.contains(&second.value) {
-                        second.set_verified();
                         verified = true;
 
                         coll.update_one_with_session(
@@ -587,7 +597,8 @@ impl Database {
             }
 
             // Check if the identity is fully verified.
-            self.process_fully_verified(&state, &mut session).await?;
+            self.process_fully_verified(&state.context, &mut session)
+                .await?;
         }
 
         session.commit_transaction().await?;
@@ -898,20 +909,26 @@ impl Database {
         let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.update_one_with_session(
-            doc! {
-                "context": state.context.to_bson()?,
-                "fields.value.type": "display_name",
-            },
-            doc! {
-                "$set": {
-                    "fields.$.challenge.content.passed": true,
-                }
-            },
-            None,
-            &mut session,
-        )
-        .await?;
+        let res = coll
+            .update_one_with_session(
+                doc! {
+                    "context": state.context.to_bson()?,
+                    "fields.value.type": "display_name",
+                    "fields.challenge.content.passed": false
+                },
+                doc! {
+                    "$set": {
+                        "fields.$.challenge.content.passed": true,
+                    }
+                },
+                None,
+                &mut session,
+            )
+            .await?;
+
+        if res.modified_count == 0 {
+            return Ok(());
+        }
 
         // Create event
         self.insert_event(
@@ -928,7 +945,8 @@ impl Database {
         )
         .await?;
 
-        self.process_fully_verified(state, &mut session).await?;
+        self.process_fully_verified(&state.context, &mut session)
+            .await?;
 
         session.commit_transaction().await?;
 
@@ -939,22 +957,25 @@ impl Database {
         context: &IdentityContext,
         violations: &Vec<DisplayNameEntry>,
     ) -> Result<()> {
+        let mut session = self.start_transaction().await?;
         let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
 
-        coll.update_one(
+        coll.update_one_with_session(
             doc! {
                 "context": context.to_bson()?,
                 "fields.value.type": "display_name",
             },
             doc! {
                 "$set": {
-                    "fields.$.challenge.content.passed": false,
                     "fields.$.challenge.content.violations": violations.to_bson()?
                 }
             },
             None,
+            &mut session,
         )
         .await?;
+
+        session.commit_transaction().await?;
 
         Ok(())
     }
@@ -968,39 +989,6 @@ impl Database {
         let event = <T as Into<Event>>::into(event);
         coll.insert_one_with_session(event.to_bson()?, None, session)
             .await?;
-
-        Ok(())
-    }
-    /// Removes all dangling judgements after the `DANGLING_THRESHOLD` threshold
-    /// has been reached. See `crate::connector::start_dangling_judgements_task`
-    /// for more information.
-    pub async fn process_dangling_judgement_states(&self) -> Result<()> {
-        let coll = self.db.collection::<()>(IDENTITY_COLLECTION);
-
-        let threshold = (Timestamp::now().raw() - DANGLING_THRESHOLD).to_bson()?;
-
-        let res = coll
-            .update_many(
-                doc! {
-                    "is_fully_verified": true,
-                    "judgement_submitted": false,
-                    "completion_timestamp": {
-                        "$lt": threshold,
-                    }
-                },
-                doc! {
-                    "$set": {
-                        "judgement_submitted": true
-                    }
-                },
-                None,
-            )
-            .await?;
-
-        let count = res.modified_count;
-        if count > 0 {
-            debug!("Disabled {} tangling identities", count);
-        }
 
         Ok(())
     }

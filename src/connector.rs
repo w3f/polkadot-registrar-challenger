@@ -23,13 +23,14 @@ use tracing::Instrument;
 
 // In seconds
 const HEARTBEAT_INTERVAL: u64 = 60;
+const RECONNECTION_TIMEOUT: u64 = 10;
+
 #[cfg(not(test))]
-const PENDING_JUDGEMENTS_INTERVAL: u64 = 30;
+const PENDING_JUDGEMENTS_INTERVAL: u64 = 120;
 #[cfg(not(test))]
-const DISPLAY_NAMES_INTERVAL: u64 = 30;
+const DISPLAY_NAMES_INTERVAL: u64 = 60;
 #[cfg(not(test))]
 const JUDGEMENT_CANDIDATES_INTERVAL: u64 = 10;
-const RECONNECTION_TIMEOUT: u64 = 10;
 
 #[cfg(test)]
 const PENDING_JUDGEMENTS_INTERVAL: u64 = 1;
@@ -242,22 +243,6 @@ impl Connector {
 
         Ok(actor)
     }
-    // Process any tangling submissions, meaning any verified requests that were
-    // submitted to the Watcher but the issued extrinsic was not direclty
-    // confirmed back. This usually does not happen, but can.
-    fn start_dangling_judgements_task(&self, ctx: &mut Context<Self>) {
-        info!("Starting dangling judgement pruning task");
-
-        ctx.run_interval(Duration::new(60, 0), |act, _ctx| {
-            let db = act.db.clone();
-
-            actix::spawn(async move {
-                if let Err(err) = db.process_dangling_judgement_states().await {
-                    error!("Error when pruning dangling judgements: {:?}", err);
-                }
-            });
-        });
-    }
     // Request pending judgements every couple of seconds.
     fn start_pending_judgements_task(&self, ctx: &mut Context<Self>) {
         info!("Starting pending judgement requester background task");
@@ -324,7 +309,6 @@ impl Actor for Connector {
             );
 
             self.start_pending_judgements_task(ctx);
-            self.start_dangling_judgements_task(ctx);
             self.start_active_display_names_task(ctx);
             self.start_judgement_candidates_task(ctx);
         });
@@ -508,9 +492,11 @@ impl Handler<WatcherMessage> for Connector {
                 (*l).push(state.clone());
             }
 
-            // Insert identity into the database and verify display name.
-            let _ = db.add_judgement_request(&state).await?;
-            dn_verifier.verify_display_name(&state).await?;
+            // Insert identity into the database and verify display name if the
+            // database entry was modified (or newly inserted).
+            if db.add_judgement_request(&state).await? {
+                dn_verifier.verify_display_name(&state).await?;
+            }
 
             Ok(())
         }
@@ -614,7 +600,7 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                     error!("Received error from Watcher: {:?}", parsed.data);
                 }
                 EventType::NewJudgementRequest => {
-                    debug!(
+                    info!(
                         "Received new judgement request from Watcher: {:?}",
                         parsed.data
                     );
@@ -624,16 +610,14 @@ impl StreamHandler<std::result::Result<Frame, WsProtocolError>> for Connector {
                         .await??;
                 }
                 EventType::PendingJudgementsResponse => {
-                    debug!("Received pending judgments from Watcher: {:?}", parsed.data);
-
                     let data: Vec<JudgementRequest> = serde_json::from_value(parsed.data)?;
+                    debug!("Received {} pending judgments from Watcher", data.len());
                     conn.send(WatcherMessage::PendingJudgementsRequests(data))
                         .await??;
                 }
                 EventType::DisplayNamesResponse => {
-                    debug!("Received display names from the Watcher");
-
                     let data: Vec<DisplayNameEntryRaw> = serde_json::from_value(parsed.data)?;
+                    debug!("Received {} display names from the Watcher", data.len());
                     conn.send(WatcherMessage::ActiveDisplayNames(data))
                         .await??;
                 }

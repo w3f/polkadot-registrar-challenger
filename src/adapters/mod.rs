@@ -168,7 +168,7 @@ impl AdapterListener {
                 match adapter.fetch_messages().await {
                     Ok(messages) => {
                         for message in messages {
-                            debug!("Processing message from: {:?}", message.origin);
+                            info!("Processing message from: {:?}", message.origin);
                             let _ = db
                                 .verify_message(&message)
                                 .await
@@ -193,7 +193,7 @@ impl AdapterListener {
                             {
                                 if let IdentityFieldValue::Email(to) = field {
                                     if adapter.name() == "email" {
-                                        debug!("Sending second challenge to {}", to);
+                                        info!("Sending second challenge to {}", to);
                                         if let Ok(challenge) = db
                                             .fetch_second_challenge(context, field)
                                             .await

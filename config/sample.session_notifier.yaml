@@ -1,3 +1,4 @@
+log_level: info
 db:
   uri: mongodb://localhost:27017/
   name: registrar_db

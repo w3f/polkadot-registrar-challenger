@@ -82,6 +82,10 @@ async fn new_env() -> (Database, ConnectorMocker, TestServer, MessageInjector) {
     .await
     .unwrap();
 
+    db.connectivity_check()
+        .await
+        .expect("Failed to open database");
+
     // Setup API
     let (server, actor) = run_test_server(db.clone()).await;
 
