@@ -183,8 +183,9 @@ Make sure to initialize the replicaset in the mongo shell:
 rs.initiate()
 ```
 
-To run the tests, set a thread threshold otherwise there might be some
-connection timeouts which result in an error when all tests runs all at once.
+To run the tests, set a low thread threshold otherwise there might be some
+database connection timeouts which result in an error when all tests runs all at
+once.
 
 ```console
 cargo test -- --test-threads=3
