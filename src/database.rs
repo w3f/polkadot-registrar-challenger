@@ -61,8 +61,15 @@ impl Database {
         let client = Client::with_uri_str(uri).await?;
         let db = client.database(db);
 
-        // Create collection (required for index creation)
-        db.create_collection(IDENTITY_COLLECTION, None).await?;
+        // Create collection if not exist (required for index creation)
+        if !db
+            .list_collection_names(None)
+            .await?
+            .iter()
+            .any(|e| e == IDENTITY_COLLECTION)
+        {
+            db.create_collection(IDENTITY_COLLECTION, None).await?;
+        }
 
         // Create a unique constraint.
         let model = IndexModel::builder()
