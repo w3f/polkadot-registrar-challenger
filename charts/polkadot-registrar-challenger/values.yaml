@@ -45,6 +45,8 @@ config:
           limit: 0.85
       notifier:
         api_address: 127.0.0.1:80
+        cors_allow_origin:
+          - 'https://mydomain.com'
         display_name:
           enabled: true
           limit: 0.85
