@@ -174,7 +174,7 @@ The unit test need a Mongodb instance with enabled replica set listening on
 `localhost:27017`:
 
 ```console
-mongod --replicaSet "rs0"
+mongod --replSet "rs0"
 ```
 
 Make sure to initialize the replicaset in the mongo shell:
