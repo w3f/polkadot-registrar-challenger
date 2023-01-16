@@ -27,6 +27,7 @@ async fn run_mocker() -> Result<()> {
 
     let notifier_config = NotifierConfig {
         api_address: "localhost:8888".to_string(),
+        cors_allow_origin: vec!["localhost".to_string()],
         display_name: DisplayNameConfig {
             enabled: true,
             limit: 0.85,

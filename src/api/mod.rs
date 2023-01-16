@@ -4,7 +4,7 @@ use crate::{NotifierConfig, Result};
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_cors::Cors;
-use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, http};
 use actix_web_actors::ws;
 use display_name_check::{check_display_name, DisplayNameChecker};
 use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
@@ -33,15 +33,26 @@ pub async fn run_rest_api_server(
     config: NotifierConfig,
     db: Database,
 ) -> Result<Addr<LookupServer>> {
+    let api_address = config.api_address.clone();
+
     // Add configured actor to the registry.
     let actor = LookupServer::new(db.clone()).start();
     SystemRegistry::set(actor.clone());
     SystemRegistry::set(SecondChallengeVerifier::new(db.clone()).start());
-    SystemRegistry::set(DisplayNameChecker::new(db, config.display_name).start());
+    SystemRegistry::set(DisplayNameChecker::new(db, config.display_name.clone()).start());
 
     // Run the WS server.
     let server = HttpServer::new(move || {
-        let cors = Cors::permissive();
+        // Setup CORS
+        let mut cors = Cors::default()
+            .allowed_methods(vec!["GET", "POST"])
+            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT, http::header::CONTENT_TYPE])
+            .max_age(3600);
+
+        // Allow each specified domain.
+        for origin in &config.cors_allow_origin {
+            cors = cors.allowed_origin(origin.as_str());
+        }
 
         App::new()
             .wrap(cors)
@@ -56,7 +67,7 @@ pub async fn run_rest_api_server(
                 web::post().to(check_display_name),
             )
     })
-    .bind(config.api_address.as_str())?;
+    .bind(api_address.as_str())?;
 
     actix::spawn(async move {
         let _ = server.run().await;

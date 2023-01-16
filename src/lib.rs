@@ -83,10 +83,11 @@ struct DatabaseConfig {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct NotifierConfig {
     pub api_address: String,
+    pub cors_allow_origin: Vec<String>,
     pub display_name: DisplayNameConfig,
 }
 
