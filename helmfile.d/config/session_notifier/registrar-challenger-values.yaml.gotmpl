@@ -5,6 +5,8 @@ config:
     role: session_notifier
     config:
       api_address: 0.0.0.0:8000
+      cors_allow_origin:
+        - 'https://registrar.web3.foundation/'
       display_name:
         enabled: true
         limit: 0.85
