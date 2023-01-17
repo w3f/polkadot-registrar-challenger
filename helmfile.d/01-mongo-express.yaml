@@ -1,12 +1,12 @@
-environments:
-  production:
-repositories:
-  - name: w3f
-    url: https://w3f.github.io/helm-charts/
-releases:
-  - name: registrar-mongo-express
-    namespace: registrar-v2
-    chart: w3f/mongo-express
-    version: v0.3.1
-    values:
-      - ./config/mongo-express.yaml.gotmpl
+#environments:
+#  production:
+#repositories:
+#  - name: w3f
+#    url: https://w3f.github.io/helm-charts/
+#releases:
+#  - name: registrar-mongo-express
+#    namespace: registrar-v2
+#    chart: w3f/mongo-express
+#    version: v0.3.1
+#    values:
+#      - ./config/mongo-express.yaml.gotmpl
