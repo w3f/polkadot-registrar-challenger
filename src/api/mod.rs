@@ -4,7 +4,7 @@ use crate::{NotifierConfig, Result};
 use actix::prelude::*;
 use actix::registry::SystemRegistry;
 use actix_cors::Cors;
-use actix_web::{web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer, http};
+use actix_web::{http, web, App, Error as ActixError, HttpRequest, HttpResponse, HttpServer};
 use actix_web_actors::ws;
 use display_name_check::{check_display_name, DisplayNameChecker};
 use second_challenge::{verify_second_challenge, SecondChallengeVerifier};
@@ -46,7 +46,11 @@ pub async fn run_rest_api_server(
         // Setup CORS
         let mut cors = Cors::default()
             .allowed_methods(vec!["GET", "POST"])
-            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT, http::header::CONTENT_TYPE])
+            .allowed_headers(vec![
+                http::header::AUTHORIZATION,
+                http::header::ACCEPT,
+                http::header::CONTENT_TYPE,
+            ])
             .max_age(3600);
 
         // Allow each specified domain.
