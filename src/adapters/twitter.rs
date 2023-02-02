@@ -250,7 +250,7 @@ impl TwitterClient {
         mac.update(base.as_bytes());
 
         // Create the resulting hash.
-        let sig = base64::engine::general_purpose::STANDARD.encode(mac.finalize().into_bytes());
+        let sig = base64::engine::general_purpose::STANDARD_NO_PAD.encode(mac.finalize().into_bytes());
 
         // Insert the signature;
         fields.push(("oauth_signature", &sig));
