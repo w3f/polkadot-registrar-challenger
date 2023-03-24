@@ -1,6 +1,7 @@
 use crate::adapters::Adapter;
 use crate::primitives::{ExternalMessage, ExternalMessageType, MessageId, Timestamp};
 use crate::Result;
+use base64::engine::{general_purpose, Engine};
 use hmac::{Hmac, Mac};
 use rand::{thread_rng, Rng};
 use reqwest::header::{self, HeaderValue};
@@ -249,7 +250,7 @@ impl TwitterClient {
         mac.update(base.as_bytes());
 
         // Create the resulting hash.
-        let sig = base64::encode(mac.finalize().into_bytes());
+        let sig = general_purpose::STANDARD.encode(mac.finalize().into_bytes());
 
         // Insert the signature;
         fields.push(("oauth_signature", &sig));
