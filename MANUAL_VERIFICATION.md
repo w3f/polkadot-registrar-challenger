@@ -140,3 +140,5 @@ FYI, the official Registrar accounts (to proxy as) are:
 
 * Kusama: H4XieK3r3dq3VEvRtqZR7wN7a1UEkXxf14orRsEfdFjmgkF
 * Polkadot: 12j3Cz8qskCGJxmSJpVL2z2t3Fpmw3KoBaBaRGPnuibFc7o8
+
+The proxy accounts themselves are in the 1password vault.
