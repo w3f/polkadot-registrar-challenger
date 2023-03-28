@@ -5,10 +5,8 @@ use crate::primitives::{
     ExpectedMessage, ExternalMessage, ExternalMessageType, MessageId, Timestamp,
 };
 use crate::Result;
-use lettre::smtp::authentication::Credentials;
-use lettre::smtp::SmtpClient;
-use lettre::Transport;
-use lettre_email::EmailBuilder;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{Message, SmtpTransport, Transport};
 
 trait ExtractSender<T> {
     type Error;
@@ -196,25 +194,24 @@ impl EmailClient {
     }
     async fn send_message(&self, to: &str, message: &str) -> Result<()> {
         // SMTP transport
-        let mut smtp = SmtpClient::new_simple(&self.smtp_server)?
+        let smtp = SmtpTransport::relay(&self.smtp_server)?
             .credentials(Credentials::new(
                 self.user.to_string(),
                 self.password.to_string(),
             ))
-            .transport();
+            .build();
 
-        let email = EmailBuilder::new()
+        let email = Message::builder()
             // Addresses can be specified by the tuple (email, alias)
-            .to(to)
-            .from(self.user.as_str())
+            .to(to.parse()?)
+            .from(self.user.as_str().parse()?)
             .subject("W3F Registrar Verification Service")
-            .text(format!(
+            .body(format!(
                 "Insert the following challenge into the web interface: {}",
                 message
-            ))
-            .build()?;
+            ))?;
 
-        let _ = smtp.send(email.into())?;
+        let _ = smtp.send(&email)?;
 
         Ok(())
     }
