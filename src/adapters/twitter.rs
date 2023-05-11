@@ -144,6 +144,9 @@ impl TwitterClient {
             .await?
             .parse()?;
 
+        // Check response code
+        assert_eq!(messages.status(), StatusCode::OK);
+
         // Skip message if it was already processed.
         messages.retain(|message| !self.cache.contains(&message.id.into()));
 
