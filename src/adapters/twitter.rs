@@ -138,7 +138,7 @@ impl TwitterClient {
         // Request message on parse those into a simpler type.
         let mut messages = self
             .get_request::<ApiMessageRequest>(
-                "https://api.twitter.com/1.1/direct_messages/events/list.json",
+                "https://api.twitter.com/2/dm_events",
                 None,
             )
             .await?
@@ -347,7 +347,7 @@ impl TwitterClient {
 
         let user_objects = self
             .get_request::<Vec<UserObject>>(
-                "https://api.twitter.com/1.1/users/lookup.json",
+                "https://api.twitter.com/2/users/by",
                 Some(&params),
             )
             .await?;
