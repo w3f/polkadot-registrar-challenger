@@ -53,4 +53,4 @@ hex = "0.4.3"
 strsim = "0.10.0"
 
 [dev-dependencies]
-actix-http = "3.0.0-beta.6"
+actix-http = "3.6.0"
