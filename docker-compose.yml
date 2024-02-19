@@ -1,0 +1,31 @@
+version: '3.1'
+
+services:
+  challenger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # command: ["/bin/bash", "-c", "tail -f /dev/null"]
+    restart: always
+    volumes:
+      - type: bind
+        source: ./config/
+        target: /etc/registrar/
+
+  watcher:
+    image: web3f/polkadot-registrar-watcher:v0.4.8
+    container_name: watcher
+    restart: always 
+    volumes:
+      - type: bind
+        source: ./configWatcher/
+        target: /app/config
+
+  db:
+    image: mongo
+    container_name: db
+    restart: always
+    ports:
+      - "27017:27017"
+
+  

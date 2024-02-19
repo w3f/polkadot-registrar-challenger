@@ -136,10 +136,14 @@ impl TwitterClient {
     async fn request_messages(&mut self) -> Result<Vec<ExternalMessage>> {
         debug!("Requesting Twitter messages");
         // Request message on parse those into a simpler type.
+        let url = String::from("https://api.twitter.com/2/dm_events");
+        let mut params = vec![];
+        params.push(("event_types", "MessageCreate"));
+        params.push(("dm_event.fields", "id,text,created_at,sender_id"));
         let mut messages = self
             .get_request::<ApiMessageRequest>(
-                "https://api.twitter.com/1.1/direct_messages/events/list.json",
-                None,
+                &url,
+                Some(&params),
             )
             .await?
             .parse()?;
@@ -170,9 +174,8 @@ impl TwitterClient {
         to_lookup.dedup();
 
         // Lookup Twitter Ids and insert those into the cache.
-        debug!("Looking up Twitter Ids");
         if !to_lookup.is_empty() {
-            let lookup_results = self.lookup_twitter_id(Some(&to_lookup), None).await?;
+            let lookup_results = self.lookup_twitter_id(Some(&to_lookup)).await?;
             self.twitter_ids.extend(lookup_results);
         }
 
@@ -304,8 +307,8 @@ impl TwitterClient {
     async fn lookup_twitter_id(
         &self,
         twitter_ids: Option<&[&TwitterId]>,
-        accounts: Option<&[&String]>,
     ) -> Result<HashMap<TwitterId, String>> {
+        let url = String::from("https://api.twitter.com/2/users");
         let mut params = vec![];
 
         // Lookups for UserIds
@@ -319,94 +322,65 @@ impl TwitterClient {
             // Remove trailing `,`.
             lookup.pop();
 
-            params.push(("user_id", lookup.as_str()))
-        }
-
-        // Lookups for Accounts
-        let mut lookup = String::new();
-        if let Some(accounts) = accounts {
-            for account in accounts {
-                lookup.push_str(&account.as_str().replace('@', ""));
-                lookup.push(',');
-            }
-
-            // Remove trailing `,`.
-            lookup.pop();
-
-            params.push(("screen_name", lookup.as_str()))
+            params.push(("ids", lookup.as_str()))
         }
 
         #[derive(Deserialize)]
-        // Only `screen_name` required.
-        struct UserObject {
-            id: TwitterId,
-            screen_name: String,
+        struct UserResponse {
+            data: Vec<UserData>,
+        }
+
+        #[derive(Deserialize)]
+        // Only `name` required.
+        struct UserData {
+            id: String,
+            name: String,
         }
 
         debug!("Params: {:?}", params);
 
-        let user_objects = self
-            .get_request::<Vec<UserObject>>(
-                "https://api.twitter.com/1.1/users/lookup.json",
-                Some(&params),
-            )
-            .await?;
+        let user_response = self.get_request::<UserResponse>(&url, Some(&params)).await?;
 
-        if user_objects.is_empty() {
+        if user_response.data.is_empty() {
             return Err(anyhow!("unrecognized data"));
         }
 
-        Ok(user_objects
+        let result = user_response.data
             .into_iter()
-            .map(|obj| (obj.id, format!("@{}", obj.screen_name.to_lowercase())))
-            .collect())
+            .map(|user| {
+                let id = TwitterId(user.id.parse().expect("Failed to parse user ID"));
+                (id, format!("@{}", user.name.to_lowercase()))
+            })
+            .collect();    
+        Ok(result)
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ApiMessageRequest {
-    events: Vec<ApiEvent>,
+    data: Vec<ApiMessage>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct ApiEvent {
-    #[serde(rename = "type")]
-    t_type: String,
-    id: String,
-    created_timestamp: Option<String>,
-    message_create: ApiMessageCreate,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ApiMessageCreate {
-    target: ApiTarget,
+struct ApiMessage {
     sender_id: Option<String>,
-    message_data: ApiMessageData,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ApiTarget {
-    recipient_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ApiMessageData {
-    text: String,
+    id: String,
+    created_at: Option<String>,
+    text: String
 }
 
 impl ApiMessageRequest {
     fn parse(self) -> Result<Vec<ReceivedMessageContext>> {
         let mut messages = vec![];
 
-        for event in self.events {
+        for m in self.data {
             let message = ReceivedMessageContext {
-                sender: event
-                    .message_create
+                sender: m
                     .sender_id
                     .ok_or_else(|| anyhow!("unrecognized data"))?
                     .try_into()?,
-                message: event.message_create.message_data.text,
-                id: event.id.parse().map_err(|_| anyhow!("unrecognized data"))?,
+                message: m.text,
+                id: m.id.parse().map_err(|_| anyhow!("unrecognized data"))?,
             };
 
             messages.push(message);
