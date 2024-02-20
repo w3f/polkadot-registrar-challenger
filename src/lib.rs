@@ -64,16 +64,16 @@ impl LogLevel {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "role", content = "config")]
 enum InstanceType {
-    AdapterListener(AdapterConfig),
-    SessionNotifier(NotifierConfig),
-    SingleInstance(SingleInstanceConfig),
+    AdapterListener(AdapterNotifierConfig),
+    SessionNotifier(AdapterNotifierConfig),
+    SingleInstance(AdapterNotifierConfig),
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
-struct SingleInstanceConfig {
-    pub adapter: AdapterConfig,
-    pub notifier: NotifierConfig,
+struct AdapterNotifierConfig {
+    pub adapter: Option<AdapterConfig>,
+    pub notifier: Option<NotifierConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -194,15 +194,15 @@ pub async fn run() -> Result<()> {
     match instance {
         InstanceType::AdapterListener(config) => {
             info!("Starting adapter listener instance");
-            config_adapter_listener(db, config).await?;
+            config_adapter_listener(db, config.adapter.unwrap()).await?;
         }
         InstanceType::SessionNotifier(config) => {
             info!("Starting session notifier instance");
-            config_session_notifier(db, config).await?;
+            config_session_notifier(db, config.notifier.unwrap()).await?;
         }
         InstanceType::SingleInstance(config) => {
             info!("Starting adapter listener and session notifier instances");
-            let (adapter_config, notifier_config) = (config.adapter, config.notifier);
+            let (adapter_config, notifier_config) = (config.adapter.unwrap(), config.notifier.unwrap());
 
             config_adapter_listener(db.clone(), adapter_config).await?;
             config_session_notifier(db, notifier_config).await?;
