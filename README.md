@@ -2,6 +2,8 @@
 
 # Polkadot Registrar Service (beta)
 
+❗❗❗ THIS PROJECT IS DECOMMISSIONED AND NO LONGER UPDATED ❗❗❗
+
 An automated registrar service for [Polkadot on-chain identities](https://wiki.polkadot.network/docs/learn-identity).
 
 * App: https://registrar.web3.foundation/
