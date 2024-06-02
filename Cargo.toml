@@ -23,7 +23,7 @@ mongodb = "2.4.0"
 bson = "2.6.1"
 reqwest = "0.11.15"
 urlencoding = "2.1.2"
-async-trait = "0.1.67"
+async-trait = "0.1.79"
 actix = { version = "0.13.0", features = ["macros"]}
 actix-web = "4.3.1"
 actix-broker = "0.4.3"
