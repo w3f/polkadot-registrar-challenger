@@ -21,7 +21,7 @@ tokio = { version = "1.26.0", features = ["macros", "time", "process", "rt-multi
 futures = "0.3.27"
 mongodb = "2.4.0"
 bson = "2.6.1"
-reqwest = "0.11.15"
+reqwest = "0.12.2"
 urlencoding = "2.1.2"
 async-trait = "0.1.67"
 actix = { version = "0.13.0", features = ["macros"]}
